@@ -8,11 +8,6 @@ function verifyToken(req, res, next) {
     return res.error('Access denied. No token provided.', 401);
   }
 
-  if (token === 'mock-admin-token') {
-    req.user = { id: 'mock-admin', email: 'admin@local.test', role: 'super_admin', organizationCode: 'DEMO' };
-    return next();
-  }
-
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;

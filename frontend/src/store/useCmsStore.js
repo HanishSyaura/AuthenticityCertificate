@@ -1,24 +1,6 @@
 import { create } from 'zustand';
 import useAdminAuthStore from './useAdminAuthStore';
-import { ADMIN_KEYS } from '../utils/adminKeys';
-import { readJson, writeJson } from '../utils/storage';
 import { createAdminApi } from '../utils/adminApi';
-
-function getLocalPages() {
-  return readJson(ADMIN_KEYS.cmsPages, []);
-}
-
-function getLocalLayouts() {
-  return readJson(ADMIN_KEYS.cmsLayouts, {});
-}
-
-function writeLocalPages(pages) {
-  writeJson(ADMIN_KEYS.cmsPages, pages);
-}
-
-function writeLocalLayouts(layouts) {
-  writeJson(ADMIN_KEYS.cmsLayouts, layouts);
-}
 
 function safeSlugify(input) {
   return String(input || '')
@@ -30,8 +12,8 @@ function safeSlugify(input) {
 }
 
 const useCmsStore = create((set, get) => ({
-  pages: getLocalPages(),
-  layoutsByPageKey: getLocalLayouts(),
+  pages: [],
+  layoutsByPageKey: {},
   selectedPageId: null,
   loading: false,
   error: null,
@@ -39,12 +21,11 @@ const useCmsStore = create((set, get) => ({
   selectPage: (pageId) => set({ selectedPageId: pageId }),
 
   fetchPages: async () => {
-    const { mode, token, orgCode } = useAdminAuthStore.getState();
+    const { token, orgCode } = useAdminAuthStore.getState();
     set({ loading: true, error: null });
 
-    if (mode === 'mock' || !token) {
-      const pages = getLocalPages();
-      set({ pages, loading: false });
+    if (!token) {
+      set({ pages: [], loading: false, error: 'Not authenticated' });
       return;
     }
 
@@ -52,43 +33,30 @@ const useCmsStore = create((set, get) => ({
       const api = createAdminApi({ token, orgCode });
       const res = await api.get('/cms/pages');
       const pages = res?.data?.data || [];
-      writeLocalPages(pages);
       set({ pages, loading: false });
     } catch (e) {
-      const pages = getLocalPages();
-      set({ pages, loading: false, error: 'Backend unavailable. Using mock CMS storage.' });
-      useAdminAuthStore.getState().setMode('mock');
+      const msg = e?.response?.data?.message || e?.message || 'Failed to load pages';
+      set({ pages: [], loading: false, error: msg });
     }
   },
 
   createPage: async ({ name, slug }) => {
-    const { mode, token, orgCode } = useAdminAuthStore.getState();
+    const { token, orgCode } = useAdminAuthStore.getState();
     const safeSlug = safeSlugify(slug || name);
     const pages = get().pages;
 
-    if (mode === 'mock' || !token) {
-      const next = {
-        id: Date.now(),
-        name,
-        slug: safeSlug
-      };
-      const updated = [next, ...pages];
-      writeLocalPages(updated);
-      set({ pages: updated });
-      return next;
-    }
+    if (!token) throw new Error('Not authenticated');
 
     try {
       const api = createAdminApi({ token, orgCode });
       const res = await api.post('/cms/page', { name, slug: safeSlug });
       const created = res?.data?.data;
       const updated = [created, ...pages];
-      writeLocalPages(updated);
       set({ pages: updated });
       return created;
-    } catch {
-      useAdminAuthStore.getState().setMode('mock');
-      return get().createPage({ name, slug: safeSlug });
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Failed to create page';
+      throw new Error(msg);
     }
   },
 
@@ -98,32 +66,20 @@ const useCmsStore = create((set, get) => ({
     const language = get().language || 'en';
     const key = `${page.id}:${language}`;
 
-    const localLayouts = getLocalLayouts();
-    const existing = localLayouts[key] || localLayouts[String(page.id)];
-    if (existing) {
-      set({ layoutsByPageKey: localLayouts });
-      return;
-    }
-
-    const { mode } = useAdminAuthStore.getState();
-    if (mode === 'mock') {
-      set({ layoutsByPageKey: localLayouts });
-      return;
-    }
+    const current = get().layoutsByPageKey || {};
+    const existing = current[key] || current[String(page.id)];
+    if (existing) return;
 
     try {
       const api = createAdminApi({ token: null });
       const res = await api.get(`/cms/page/${encodeURIComponent(page.slug)}`, { params: { language } });
       const dbLayout = res?.data?.data?.effectiveLayout || res?.data?.data?.layout?.layoutJson;
       if (Array.isArray(dbLayout)) {
-        const next = { ...localLayouts, [key]: dbLayout };
-        writeLocalLayouts(next);
+        const next = { ...current, [key]: dbLayout };
         set({ layoutsByPageKey: next });
         return;
       }
-      set({ layoutsByPageKey: localLayouts });
     } catch {
-      set({ layoutsByPageKey: localLayouts });
     }
   },
 
@@ -132,27 +88,24 @@ const useCmsStore = create((set, get) => ({
 
   saveLayout: async ({ pageId, layoutJson, language }) => {
     const lang = language || get().language || 'en';
-    const { mode, token, orgCode } = useAdminAuthStore.getState();
-    const localLayouts = getLocalLayouts();
-    const nextLayouts = { ...localLayouts, [`${pageId}:${lang}`]: layoutJson };
-    writeLocalLayouts(nextLayouts);
+    const { token, orgCode } = useAdminAuthStore.getState();
+    const nextLayouts = { ...(get().layoutsByPageKey || {}), [`${pageId}:${lang}`]: layoutJson };
     set({ layoutsByPageKey: nextLayouts });
 
-    if (mode === 'mock' || !token) return;
+    if (!token) throw new Error('Not authenticated');
 
     try {
       const api = createAdminApi({ token, orgCode });
       await api.post('/cms/layout', { pageId, layoutJson, language: lang });
-    } catch {
-      useAdminAuthStore.getState().setMode('mock');
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Failed to save layout';
+      throw new Error(msg);
     }
   },
 
   publishPage: async ({ pageId }) => {
-    const { mode, token, orgCode } = useAdminAuthStore.getState();
-    if (mode === 'mock' || !token) {
-      return { pageId, published: true };
-    }
+    const { token, orgCode } = useAdminAuthStore.getState();
+    if (!token) throw new Error('Not authenticated');
     const api = createAdminApi({ token, orgCode });
     const res = await api.post('/cms/publish', { pageId });
     return res?.data?.data;

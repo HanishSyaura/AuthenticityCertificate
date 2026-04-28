@@ -238,7 +238,7 @@ proxy_set_header X-Forwarded-Proto $scheme;
 
 ## Step 8 — Validate production
 
-- Open `https://domain.com/verify/BN-TEST-123`
+- Open `https://domain.com/verify/<CERTIFICATE_ID>`
 - Health check:
   - `https://domain.com/health` (kalau diproxy) atau direct `http://127.0.0.1:5000/health`
 

@@ -12,6 +12,10 @@ const roleSchema = z.object({
   role: z.enum(['super_admin', 'admin', 'operator'])
 });
 
+const resetPasswordSchema = z.object({
+  password: z.string().min(8)
+});
+
 async function list(req, res) {
   try {
     const users = await usersService.listUsers();
@@ -59,10 +63,22 @@ async function remove(req, res) {
   }
 }
 
+async function resetPassword(req, res) {
+  try {
+    const { id } = req.params;
+    const data = resetPasswordSchema.parse(req.body);
+    await usersService.setUserPassword({ id, password: data.password });
+    res.success({ id: Number(id) }, 'Password updated');
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    res.error(e.message, 400);
+  }
+}
+
 module.exports = {
   list,
   create,
   updateRole,
-  remove
+  remove,
+  resetPassword
 };
-

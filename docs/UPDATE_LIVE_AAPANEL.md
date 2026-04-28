@@ -57,7 +57,7 @@ pm2 status wmscertauth-api
 Lepas run, test di browser:
 - `https://wmscertauth.clbgroups.com/health`
 - `https://wmscertauth.clbgroups.com/admin/dashboard`
-- `https://wmscertauth.clbgroups.com/verify/BN-TEST-123`
+- `https://wmscertauth.clbgroups.com/verify/<CERTIFICATE_ID>`
 
 ---
 

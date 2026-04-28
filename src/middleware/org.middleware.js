@@ -10,7 +10,8 @@ async function attachOrganization(req, res, next) {
   if (req.organization?.id) return next();
   const headerCode = readOrgCode(req);
   const fallbackCode = req.user?.organizationCode || null;
-  const code = headerCode || fallbackCode || 'DEMO';
+  const code = headerCode || fallbackCode || null;
+  if (!code) return next();
   try {
     const org = await orgService.getByCode(code);
     if (org && !org.deletedAt) req.organization = org;

@@ -20,10 +20,9 @@ function renderWithRoute(path, element) {
 describe('admin pages', () => {
   beforeEach(() => {
     useAdminAuthStore.setState({
-      mode: 'backend',
       token: 'test-token',
       user: { id: 1, email: 'admin@local.test', name: 'Admin', role: 'super_admin' },
-      orgCode: 'DEMO'
+      orgCode: 'TEST'
     });
   });
 
@@ -36,10 +35,9 @@ describe('admin pages', () => {
 
   it('guards Users page for non-super-admin', () => {
     useAdminAuthStore.setState({
-      mode: 'backend',
       token: 'test-token',
       user: { id: 2, email: 'op@local.test', name: 'Operator', role: 'admin' },
-      orgCode: 'DEMO'
+      orgCode: 'TEST'
     });
     render(
       <MemoryRouter initialEntries={['/admin/users']}>
@@ -51,4 +49,3 @@ describe('admin pages', () => {
     expect(screen.getByText(/Super Admin/i)).toBeInTheDocument();
   });
 });
-

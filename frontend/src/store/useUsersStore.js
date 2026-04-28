@@ -74,8 +74,21 @@ const useUsersStore = create((set, get) => ({
       set({ loading: false, error: msg });
       throw e;
     }
+  },
+
+  resetUserPassword: async ({ id, newPassword }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.post(`/users/${encodeURIComponent(id)}/reset-password`, { password: newPassword });
+      set({ loading: false, lastSyncAt: Date.now() });
+      return res?.data?.data || { ok: true };
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Failed to reset password';
+      set({ loading: false, error: msg });
+      throw e;
+    }
   }
 }));
 
 export default useUsersStore;
-

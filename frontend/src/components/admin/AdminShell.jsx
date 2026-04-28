@@ -23,9 +23,8 @@ export default function AdminShell() {
   const navigate = useNavigate();
   const { t } = useT();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const { user, mode, orgCode, setOrgCode, logout } = useAdminAuthStore((s) => ({
+  const { user, orgCode, setOrgCode, logout } = useAdminAuthStore((s) => ({
     user: s.user,
-    mode: s.mode,
     orgCode: s.orgCode,
     setOrgCode: s.setOrgCode,
     logout: s.logout
@@ -52,9 +51,6 @@ export default function AdminShell() {
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3">
             <LanguageSwitcher size="xs" />
-            <span className={`ac-badge ${mode === 'mock' ? 'ac-badge-mock' : 'ac-badge-backend'}`}>
-              {mode === 'mock' ? t('modeDemo') : t('modeServer')}
-            </span>
             <div className="text-right">
               <div className="text-xs font-medium text-zinc-900">{user?.name || 'Admin'}</div>
               <div className="text-[11px] text-zinc-500">{user?.email}</div>
@@ -95,14 +91,6 @@ export default function AdminShell() {
                 />
               </div>
               <div className="mt-2 text-[11px] text-zinc-500">{t('orgCodeHint')}</div>
-            </div>
-            <div className="mt-4 rounded-lg bg-zinc-50 p-3 text-xs text-zinc-600">
-              {t('publicVerifyPage')}:
-              <div className="mt-2">
-                <Link className="text-zinc-900 underline" to="/verify/BN-TEST-123">
-                  /verify/BN-TEST-123
-                </Link>
-              </div>
             </div>
           </aside>
 

@@ -17,54 +17,6 @@ function normalizeLang(lang) {
   return 'en';
 }
 
-function mockCert(id) {
-  return {
-    certificateId: id,
-    type: 'unit',
-    status: 'VALID',
-    issuedAt: new Date().toISOString(),
-    product: {
-      name: 'Premium Bird Nest (Gold Edition)',
-      code: 'PBN-G-001'
-    },
-    batch: {
-      batchNo: 'BATCH-2024-04'
-    },
-    layout: [
-      {
-        id: 'block-1',
-        type: 'text',
-        x: 20,
-        y: 100,
-        w: 360,
-        h: 70,
-        content: {
-          text: 'AUTHENTICITY VERIFIED'
-        }
-      },
-      {
-        id: 'block-2',
-        type: 'image',
-        x: 20,
-        y: 180,
-        w: 420,
-        h: 240,
-        content: {
-          url: 'https://coresg-normal.trae.ai/api/ide/v1/text_to_image?prompt=premium%20bird%20nest%20packaging%20luxury&image_size=landscape_4_3'
-        }
-      },
-      {
-        id: 'block-3',
-        type: 'certificate',
-        x: 20,
-        y: 440,
-        w: 420,
-        h: 260
-      }
-    ]
-  };
-}
-
 router.use(attachOrganization);
 
 function chooseStatus({ effectiveStatus, overrideStatus }) {
@@ -115,10 +67,6 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
   });
 
   const overrideStatus = scanlog.getCertificateStatusOverride(certificateId);
-
-  if (certificateId === 'BN-ERROR') {
-    return res.error('Certificate not found', 404);
-  }
 
   const dbTimeoutMs = 350;
   try {
@@ -182,39 +130,10 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
       },
       'Verification successful'
     );
-  } catch {
+  } catch (e) {
     dbGate.markDbFailure({ cooldownMs: 10_000 });
-    const orgId = typeof req.organization?.id === 'number' ? req.organization.id : 1;
-    const lite = certificateService.getCertificateLite({ organizationId: orgId, certificateId });
-    const demo = lite
-      ? {
-          certificateId: lite.certificateId,
-          type: lite.type,
-          status: lite.status,
-          issuedAt: lite.issuedAt || lite.createdAt,
-          expiresAt: lite.expiresAt || null,
-          product: null,
-          batch: lite.batchId ? { batchNo: String(lite.batchId) } : null,
-          layout: null
-        }
-      : mockCert(certificateId);
-
-    const effectiveStatus = certificateService.computeEffectiveStatus(demo);
-    const status = chooseStatus({ effectiveStatus, overrideStatus });
-    return res.success(
-      {
-        ...demo,
-        status,
-        statusStored: demo.status,
-        verifiedVia,
-        identity: identity || null,
-        risk: {
-          score: scanEntry.riskScore,
-          flags: scanEntry.riskFlags
-        }
-      },
-      'Verification successful'
-    );
+    const msg = e?.message === 'db_timeout' ? 'Service temporarily unavailable' : 'Service unavailable';
+    return res.error(msg, 503);
   }
 }
 

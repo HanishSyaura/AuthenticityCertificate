@@ -16,7 +16,8 @@ export default function AdminUsers() {
   const role = authUser?.role || 'admin';
   const canManage = role === 'super_admin';
 
-  const { users, loading, error, lastSyncAt, fetchUsers, createUser, updateUserRole, deleteUser } = useUsersStore((s) => ({
+  const { users, loading, error, lastSyncAt, fetchUsers, createUser, updateUserRole, deleteUser, resetUserPassword } =
+    useUsersStore((s) => ({
     users: s.users,
     loading: s.loading,
     error: s.error,
@@ -24,11 +25,15 @@ export default function AdminUsers() {
     fetchUsers: s.fetchUsers,
     createUser: s.createUser,
     updateUserRole: s.updateUserRole,
-    deleteUser: s.deleteUser
+    deleteUser: s.deleteUser,
+    resetUserPassword: s.resetUserPassword
   }));
 
   const [query, setQuery] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [showReset, setShowReset] = useState(false);
+  const [resetUser, setResetUser] = useState(null);
+  const [resetPassword, setResetPassword] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -140,17 +145,31 @@ export default function AdminUsers() {
                       <div className="mt-1 text-[11px] text-zinc-500">{formatDate(u.updatedAt || u.createdAt)}</div>
                     </div>
                     <div className="flex justify-end">
-                      <button
-                        type="button"
-                        className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                        disabled={disabled}
-                        onClick={async () => {
-                          if (!window.confirm(t('confirmDeleteUser'))) return;
-                          await deleteUser({ id: u.id });
-                        }}
-                      >
-                        {t('delete')}
-                      </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                      disabled={disabled}
+                      onClick={() => {
+                        setResetUser(u);
+                        setResetPassword('');
+                        setShowReset(true);
+                      }}
+                    >
+                      {t('resetPassword')}
+                    </button>
+                    <button
+                      type="button"
+                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                      disabled={disabled}
+                      onClick={async () => {
+                        if (!window.confirm(t('confirmDeleteUser'))) return;
+                        await deleteUser({ id: u.id });
+                      }}
+                    >
+                      {t('deactivate')}
+                    </button>
+                  </div>
                     </div>
                   </div>
                 );
@@ -235,6 +254,54 @@ export default function AdminUsers() {
                 }}
               >
                 {t('create')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showReset ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5">
+            <div className="mb-4 text-sm font-semibold text-zinc-900">{t('resetPassword')}</div>
+            <div className="text-xs text-zinc-600">
+              {resetUser?.email}
+              <div className="mt-1 text-[11px] text-zinc-500">{t('resetPasswordHint')}</div>
+            </div>
+            <div className="mt-4">
+              <div className="mb-1 text-xs font-semibold text-zinc-600">{t('newPassword')}</div>
+              <input
+                type="password"
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
+                className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+              />
+              <div className="mt-1 text-[11px] text-zinc-500">{t('minPasswordHint')}</div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                onClick={() => {
+                  setShowReset(false);
+                  setResetUser(null);
+                  setResetPassword('');
+                }}
+              >
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                className="ac-btn px-3 py-2 text-xs"
+                disabled={!resetUser?.id || !resetPassword}
+                onClick={async () => {
+                  await resetUserPassword({ id: resetUser.id, newPassword: resetPassword });
+                  setShowReset(false);
+                  setResetUser(null);
+                  setResetPassword('');
+                }}
+              >
+                {t('save')}
               </button>
             </div>
           </div>
