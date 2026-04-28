@@ -28,7 +28,7 @@ export default function AdminLogin() {
 
   return (
     <div className="min-h-screen">
-      <div className="mx-auto flex min-h-screen max-w-6xl items-center justify-center px-4 py-8">
+      <div className="mx-auto flex min-h-screen w-full max-w-screen-2xl items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
         <div className="ac-card w-full max-w-md p-6">
           <div className="mb-6">
             <div className="flex items-center justify-between gap-3">

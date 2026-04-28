@@ -43,7 +43,7 @@ export default function AdminAnalytics() {
   const rows = useMemo(() => scans?.items || [], [scans]);
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6 lg:p-8">
       <div className="mb-6">
         <h2 className="text-base font-semibold text-zinc-900">{t('analytics')}</h2>
         <p className="mt-1 text-sm text-zinc-600">{t('analyticsSubtitle')}</p>
@@ -156,4 +156,3 @@ export default function AdminAnalytics() {
     </div>
   );
 }
-

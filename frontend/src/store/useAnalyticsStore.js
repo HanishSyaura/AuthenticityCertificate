@@ -50,10 +50,10 @@ const useAnalyticsStore = create((set, get) => ({
   certificateTimeline: null,
 
   fetchOverview: async () => {
-    const { token } = useAdminAuthStore.getState();
+    const { token, orgCode } = useAdminAuthStore.getState();
     set({ loading: true, error: null });
     try {
-      const api = createAdminApi({ token });
+      const api = createAdminApi({ token, orgCode });
       const res = await api.get('/analytics/overview');
       set({ overview: res?.data?.data || null, loading: false });
     } catch {
@@ -62,10 +62,10 @@ const useAnalyticsStore = create((set, get) => ({
   },
 
   fetchScans: async ({ limit = 200, offset = 0 } = {}) => {
-    const { token } = useAdminAuthStore.getState();
+    const { token, orgCode } = useAdminAuthStore.getState();
     set({ loading: true, error: null });
     try {
-      const api = createAdminApi({ token });
+      const api = createAdminApi({ token, orgCode });
       const res = await api.get('/analytics/scans', { params: { limit, offset } });
       set({ scans: res?.data?.data || { total: 0, items: [] }, loading: false });
     } catch {
@@ -74,10 +74,10 @@ const useAnalyticsStore = create((set, get) => ({
   },
 
   fetchCertificate: async (certificateId) => {
-    const { token } = useAdminAuthStore.getState();
+    const { token, orgCode } = useAdminAuthStore.getState();
     set({ loading: true, error: null, selectedCertificate: certificateId });
     try {
-      const api = createAdminApi({ token });
+      const api = createAdminApi({ token, orgCode });
       const res = await api.get(`/analytics/cert/${encodeURIComponent(certificateId)}`);
       set({ certificateTimeline: res?.data?.data || null, loading: false });
     } catch {
@@ -86,9 +86,9 @@ const useAnalyticsStore = create((set, get) => ({
   },
 
   setOverrideStatus: async ({ certificateId, status }) => {
-    const { token } = useAdminAuthStore.getState();
+    const { token, orgCode } = useAdminAuthStore.getState();
     try {
-      const api = createAdminApi({ token });
+      const api = createAdminApi({ token, orgCode });
       await api.post(`/analytics/cert/${encodeURIComponent(certificateId)}/status`, { status });
       await get().fetchCertificate(certificateId);
     } catch (e) {

@@ -8,6 +8,10 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminCmsBuilder from './pages/admin/AdminCmsBuilder';
 import AdminCertificateTemplateBuilder from './pages/admin/AdminCertificateTemplateBuilder';
 import AdminAnalytics from './pages/admin/AdminAnalytics';
+import AdminRecords from './pages/admin/AdminRecords';
+import AdminRecordDetail from './pages/admin/AdminRecordDetail';
+import AdminUsers from './pages/admin/AdminUsers';
+import AdminAudit from './pages/admin/AdminAudit';
 
 function App() {
   return (
@@ -27,9 +31,13 @@ function App() {
         >
           <Route index element={<AdminDashboard />} />
           <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="records" element={<AdminRecords />} />
+          <Route path="records/:id" element={<AdminRecordDetail />} />
           <Route path="cms" element={<AdminCmsBuilder />} />
           <Route path="cert-templates" element={<AdminCertificateTemplateBuilder />} />
           <Route path="analytics" element={<AdminAnalytics />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="audit" element={<AdminAudit />} />
         </Route>
       </Routes>
     </Router>

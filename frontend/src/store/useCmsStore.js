@@ -39,7 +39,7 @@ const useCmsStore = create((set, get) => ({
   selectPage: (pageId) => set({ selectedPageId: pageId }),
 
   fetchPages: async () => {
-    const { mode, token } = useAdminAuthStore.getState();
+    const { mode, token, orgCode } = useAdminAuthStore.getState();
     set({ loading: true, error: null });
 
     if (mode === 'mock' || !token) {
@@ -49,7 +49,7 @@ const useCmsStore = create((set, get) => ({
     }
 
     try {
-      const api = createAdminApi({ token });
+      const api = createAdminApi({ token, orgCode });
       const res = await api.get('/cms/pages');
       const pages = res?.data?.data || [];
       writeLocalPages(pages);
@@ -62,7 +62,7 @@ const useCmsStore = create((set, get) => ({
   },
 
   createPage: async ({ name, slug }) => {
-    const { mode, token } = useAdminAuthStore.getState();
+    const { mode, token, orgCode } = useAdminAuthStore.getState();
     const safeSlug = safeSlugify(slug || name);
     const pages = get().pages;
 
@@ -79,7 +79,7 @@ const useCmsStore = create((set, get) => ({
     }
 
     try {
-      const api = createAdminApi({ token });
+      const api = createAdminApi({ token, orgCode });
       const res = await api.post('/cms/page', { name, slug: safeSlug });
       const created = res?.data?.data;
       const updated = [created, ...pages];
@@ -132,7 +132,7 @@ const useCmsStore = create((set, get) => ({
 
   saveLayout: async ({ pageId, layoutJson, language }) => {
     const lang = language || get().language || 'en';
-    const { mode, token } = useAdminAuthStore.getState();
+    const { mode, token, orgCode } = useAdminAuthStore.getState();
     const localLayouts = getLocalLayouts();
     const nextLayouts = { ...localLayouts, [`${pageId}:${lang}`]: layoutJson };
     writeLocalLayouts(nextLayouts);
@@ -141,7 +141,7 @@ const useCmsStore = create((set, get) => ({
     if (mode === 'mock' || !token) return;
 
     try {
-      const api = createAdminApi({ token });
+      const api = createAdminApi({ token, orgCode });
       await api.post('/cms/layout', { pageId, layoutJson, language: lang });
     } catch {
       useAdminAuthStore.getState().setMode('mock');
@@ -149,11 +149,11 @@ const useCmsStore = create((set, get) => ({
   },
 
   publishPage: async ({ pageId }) => {
-    const { mode, token } = useAdminAuthStore.getState();
+    const { mode, token, orgCode } = useAdminAuthStore.getState();
     if (mode === 'mock' || !token) {
       return { pageId, published: true };
     }
-    const api = createAdminApi({ token });
+    const api = createAdminApi({ token, orgCode });
     const res = await api.post('/cms/publish', { pageId });
     return res?.data?.data;
   }

@@ -51,11 +51,40 @@ async function writeAudit({ req, action, targetType, targetId, metadata }) {
   return entry;
 }
 
-function listAudits({ limit = 200, offset = 0 } = {}) {
+async function listAudits({ limit = 200, offset = 0 } = {}) {
   const l = Math.max(1, Math.min(1000, Number(limit) || 200));
   const o = Math.max(0, Number(offset) || 0);
-  const ordered = [...audits].sort((a, b) => b.timestamp - a.timestamp);
-  return { total: ordered.length, items: ordered.slice(o, o + l) };
+
+  try {
+    const [total, rows] = await Promise.all([
+      prisma.auditLog.count(),
+      prisma.auditLog.findMany({
+        orderBy: { createdAt: 'desc' },
+        skip: o,
+        take: l
+      })
+    ]);
+
+    const items = rows.map((r) => ({
+      id: r.id,
+      action: r.action,
+      targetType: r.targetType,
+      targetId: r.targetId,
+      userId: r.userId,
+      actorEmail: r.actorEmail,
+      organizationId: r.organizationId,
+      ip: r.ip,
+      userAgent: r.userAgent,
+      metadata: r.metadata,
+      timestamp: r.createdAt ? new Date(r.createdAt).getTime() : null,
+      createdAt: r.createdAt
+    }));
+
+    return { total, items };
+  } catch {
+    const ordered = [...audits].sort((a, b) => b.timestamp - a.timestamp);
+    return { total: ordered.length, items: ordered.slice(o, o + l) };
+  }
 }
 
 function auditAction(action, { targetType, getTargetId, getMetadata } = {}) {

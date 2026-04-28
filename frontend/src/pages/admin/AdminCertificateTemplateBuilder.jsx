@@ -98,13 +98,13 @@ export default function AdminCertificateTemplateBuilder() {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6 lg:p-8">
       <div className="mb-4">
         <h2 className="text-base font-semibold text-zinc-900">{t('certTplHeading')}</h2>
         <p className="mt-1 text-sm text-zinc-600">{t('certTplSubheading')}</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_1fr_280px]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[280px_minmax(0,1fr)_320px]">
         <div className="rounded-xl border border-zinc-200 bg-white p-3">
           <div className="mb-3 text-xs font-semibold text-zinc-500">{t('certTemplates')}</div>
           <div className="space-y-1">

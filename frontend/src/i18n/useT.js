@@ -6,9 +6,13 @@ export function useT() {
   const lang = useI18nStore((s) => s.lang);
 
   const t = useMemo(() => {
-    return (key) => {
+    return (key, vars) => {
       const table = STRINGS[lang] || STRINGS.en;
-      return table?.[key] ?? STRINGS.en?.[key] ?? key;
+      const raw = table?.[key] ?? STRINGS.en?.[key] ?? key;
+      if (!vars || typeof raw !== 'string') return raw;
+      return Object.keys(vars).reduce((acc, k) => {
+        return acc.split(`{{${k}}}`).join(String(vars[k]));
+      }, raw);
     };
   }, [lang]);
 
@@ -20,4 +24,3 @@ export function useT() {
 
   return { t, lang, locale };
 }
-

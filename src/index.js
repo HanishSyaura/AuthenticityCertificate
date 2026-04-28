@@ -23,7 +23,33 @@ require('./modules/bulk/bulk.service').registerHandlers();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+function parseAllowedOrigins() {
+  const raw = process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || '';
+  return String(raw)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+const configuredOrigins = parseAllowedOrigins();
+const devOrigins = ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003', 'http://localhost:3004'];
+const prodFallbackOrigins = process.env.APP_ORIGIN ? [String(process.env.APP_ORIGIN).trim()] : [];
+const allowlist =
+  configuredOrigins.length > 0
+    ? configuredOrigins
+    : process.env.NODE_ENV === 'production'
+      ? prodFallbackOrigins
+      : devOrigins;
+
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (allowlist.length === 0) return cb(null, true);
+      return cb(null, allowlist.includes(origin));
+    }
+  })
+);
 app.use(express.json());
 
 // Standardized Response Format Middleware
@@ -46,7 +72,7 @@ app.use(
   rateLimit({
     windowMs: 60_000,
     max: 120,
-    keyFn: (req) => `${req.ip}|${req.path}|${req.params?.id || ''}`,
+    keyFn: (req) => `${req.headers['x-forwarded-for'] || req.ip}|${req.path}|${req.params?.id || ''}`,
     message: 'Too many verification requests'
   }),
   publicRoutes

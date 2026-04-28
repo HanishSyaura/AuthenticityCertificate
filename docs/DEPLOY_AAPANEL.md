@@ -60,6 +60,10 @@ Contoh minimum:
 - `DATABASE_URL=mysql://USER:PASSWORD@127.0.0.1:3306/DBNAME`
 - `REDIS_URL=redis://127.0.0.1:6379` (optional)
 
+Recommended untuk production:
+
+- `CORS_ORIGIN=https://wmscertauth.clbgroups.com` (lock frontend origin; boleh letak multiple dengan comma)
+
 Disyorkan:
 
 - `NODE_ENV=production`
@@ -260,6 +264,10 @@ Setiap kali update code:
 - `node smoke-phase10.js`
 - `node smoke-phase11.js`
 - `node smoke-phase12.js`
+
+Rujuk juga runbook copy/paste:
+
+- `docs/UPDATE_LIVE_AAPANEL.md`
 
 ## Rollback cepat
 

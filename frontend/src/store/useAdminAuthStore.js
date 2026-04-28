@@ -22,6 +22,7 @@ const useAdminAuthStore = create((set, get) => ({
   mode: normalizeMode(readJson(ADMIN_KEYS.mode, 'backend')),
   token: readJson(ADMIN_KEYS.token, null),
   user: readJson(ADMIN_KEYS.user, null),
+  orgCode: String(readJson(ADMIN_KEYS.orgCode, 'DEMO') || 'DEMO').trim() || 'DEMO',
   loading: false,
   error: null,
 
@@ -29,6 +30,12 @@ const useAdminAuthStore = create((set, get) => ({
     const next = normalizeMode(mode);
     writeJson(ADMIN_KEYS.mode, next);
     set({ mode: next });
+  },
+
+  setOrgCode: (orgCode) => {
+    const next = String(orgCode || '').trim().toUpperCase() || 'DEMO';
+    writeJson(ADMIN_KEYS.orgCode, next);
+    set({ orgCode: next });
   },
 
   logout: () => {
