@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji",
+      "Segoe UI Emoji";
+  }
+
+  body {
+    @apply text-zinc-900 antialiased;
+    background:
+      radial-gradient(900px 500px at 15% 10%, rgba(37, 99, 235, 0.14), rgba(255, 255, 255, 0)),
+      radial-gradient(900px 500px at 85% 20%, rgba(245, 158, 11, 0.12), rgba(255, 255, 255, 0)),
+      linear-gradient(180deg, #f8fafc 0%, #ffffff 60%, #ffffff 100%);
+    min-height: 100vh;
+  }
+
+  a {
+    @apply text-brand-700;
+  }
+
+  ::selection {
+    background: rgba(59, 130, 246, 0.2);
+  }
+}
+
+@layer components {
+  .ac-card {
+    @apply rounded-2xl border border-zinc-200 bg-white/80 shadow-sm backdrop-blur;
+  }
+
+  .ac-card-header {
+    @apply px-5 pt-5;
+  }
+
+  .ac-card-title {
+    @apply text-base font-semibold tracking-tight text-zinc-900;
+  }
+
+  .ac-card-subtitle {
+    @apply mt-1 text-sm text-zinc-600;
+  }
+
+  .ac-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition;
+  }
+
+  .ac-btn-primary {
+    @apply bg-zinc-900 text-white hover:bg-zinc-800;
+  }
+
+  .ac-btn-soft {
+    @apply border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50;
+  }
+
+  .ac-badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+
+  .ac-badge-mock {
+    @apply bg-amber-100 text-amber-800;
+  }
+
+  .ac-badge-backend {
+    @apply bg-emerald-100 text-emerald-800;
+  }
+
+  .ac-input {
+    @apply w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none focus:border-zinc-400;
+  }
+}

@@ -1,0 +1,96 @@
+const express = require('express');
+const cors = require('cors');
+const dotenv = require('dotenv');
+const authRoutes = require('./modules/auth/auth.routes');
+const productRoutes = require('./modules/product/product.routes');
+const certificateRoutes = require('./modules/certificate/certificate.routes');
+const publicRoutes = require('./modules/public/public.routes');
+const publicV1Routes = require('./modules/public/publicV1.routes');
+const cmsRoutes = require('./modules/cms/cms.routes');
+const analyticsRoutes = require('./modules/analytics/analytics.routes');
+const usersRoutes = require('./modules/users/users.routes');
+const auditRoutes = require('./modules/audit/audit.routes');
+const organizationsRoutes = require('./modules/organizations/organizations.routes');
+const bulkRoutes = require('./modules/bulk/bulk.routes');
+const fraudRoutes = require('./modules/fraud/fraud.routes');
+const integrationsRoutes = require('./modules/integrations/integrations.routes');
+const { rateLimit } = require('./middleware/rateLimit.middleware');
+
+dotenv.config();
+
+require('./modules/bulk/bulk.service').registerHandlers();
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+app.use(cors());
+app.use(express.json());
+
+// Standardized Response Format Middleware
+app.use((req, res, next) => {
+  res.success = (data, message = 'OK') => {
+    res.json({ success: true, data, message });
+  };
+  res.error = (message, status = 500) => {
+    res.status(status).json({ success: false, message });
+  };
+  next();
+});
+
+// Routes
+app.use('/auth', authRoutes);
+app.use('/products', productRoutes);
+app.use('/certificates', certificateRoutes);
+app.use(
+  '/public',
+  rateLimit({
+    windowMs: 60_000,
+    max: 120,
+    keyFn: (req) => `${req.ip}|${req.path}|${req.params?.id || ''}`,
+    message: 'Too many verification requests'
+  }),
+  publicRoutes
+);
+
+app.use('/api/v1/public', publicV1Routes);
+app.use('/cms', cmsRoutes);
+app.use('/analytics', analyticsRoutes);
+app.use('/users', usersRoutes);
+app.use('/audit', auditRoutes);
+app.use('/organizations', organizationsRoutes);
+app.use('/bulk', bulkRoutes);
+app.use('/fraud', fraudRoutes);
+app.use('/integrations', integrationsRoutes);
+
+app.get('/health', async (req, res) => {
+  let db = 'unknown';
+  try {
+    const prisma = require('./config/prisma');
+    await Promise.race([
+      prisma.$queryRaw`SELECT 1`,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 500))
+    ]);
+    db = 'ok';
+  } catch {
+    db = 'unavailable';
+  }
+  res.success({ status: 'ok', db }, 'OK');
+});
+
+// Root route
+app.get('/', (req, res) => {
+  res.success({ version: '1.0.0' }, 'Product Authenticity Verification System API');
+});
+
+// Centralized Error Handling Middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    success: false,
+    message: err.message || 'Internal Server Error'
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});

@@ -1,0 +1,325 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+}
+
+model Organization {
+  id        Int       @id @default(autoincrement())
+  name      String
+  code      String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  users           User[]
+  products        Product[]
+  batches         Batch[]
+  certificates    Certificate[]
+  scanLogs        ScanLog[]
+  fraudFlags      FraudFlag[]
+  tagIdentities   TagIdentity[]
+  apiKeys         ApiKey[]
+  webhooks        WebhookEndpoint[]
+  pages           CmsPage[]
+  layouts         CmsLayout[]
+  cmsVersions     CmsVersion[]
+  cmsTranslations CmsTranslation[]
+  templates       CertificateTemplate[]
+  auditLogs       AuditLog[]
+}
+
+model ApiKey {
+  id              Int          @id @default(autoincrement())
+  organizationId  Int
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  name            String
+  key             String       @unique
+  rateLimitPerMin Int          @default(120)
+  createdAt       DateTime     @default(now())
+  revokedAt       DateTime?
+  deletedAt       DateTime?
+
+  @@index([organizationId])
+}
+
+model WebhookEndpoint {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  url            String
+  secret         String
+  eventsJson     Json
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  @@index([organizationId, isActive])
+}
+
+enum UserRole {
+  super_admin
+  admin
+  operator
+}
+
+model User {
+  id             Int           @id @default(autoincrement())
+  name           String
+  email          String        @unique
+  password       String
+  role           UserRole      @default(admin)
+  organizationId Int?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+
+  auditLogs          AuditLog[]
+  resolvedFraudFlags FraudFlag[]
+}
+
+model AuditLog {
+  id             Int           @id @default(autoincrement())
+  userId         Int?
+  user           User?         @relation(fields: [userId], references: [id])
+  organizationId Int?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  actorEmail     String?
+  action         String
+  targetType     String?
+  targetId       String?
+  ip             String?
+  userAgent      String?
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+
+  @@index([action])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
+
+model Product {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  code           String
+  cmsPageId      Int? // Linked CMS Page
+  cmsPage        CmsPage?     @relation(fields: [cmsPageId], references: [id])
+  batches        Batch[]
+
+  versionNo Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([organizationId, code])
+}
+
+model Batch {
+  id             Int           @id @default(autoincrement())
+  organizationId Int
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  batchNo        String
+  productId      Int
+  product        Product       @relation(fields: [productId], references: [id])
+  certificates   Certificate[]
+
+  versionNo Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([organizationId, batchNo])
+}
+
+model Certificate {
+  certificateId  String       @id // Format: BN-XXXXXXXXXX
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  type           String // batch | unit
+  status         String       @default("PENDING") // PENDING, VALID, SUSPICIOUS, REVOKED, EXPIRED
+  batchId        Int
+  batch          Batch        @relation(fields: [batchId], references: [id])
+  scanLogs       ScanLog[]
+  fraudFlags     FraudFlag[]
+  createdAt      DateTime     @default(now())
+
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  issuedAt       DateTime? // set when activated/bound
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  reissuedFromId String?
+  reissuedToId   String?
+
+  identities TagIdentity[]
+
+  @@index([certificateId])
+}
+
+model ScanLog {
+  id             Int           @id @default(autoincrement())
+  certificateId  String
+  certificate    Certificate   @relation(fields: [certificateId], references: [certificateId])
+  organizationId Int?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  nfcUid         String?
+  epc            String?
+  ip             String
+  userAgent      String
+  deviceHash     String?
+  country        String?
+  latitude       Float?
+  longitude      Float?
+  timestamp      DateTime      @default(now())
+
+  @@index([organizationId, timestamp])
+  @@index([certificateId, timestamp])
+}
+
+enum FraudSeverity {
+  low
+  medium
+  high
+}
+
+enum FraudStatus {
+  open
+  resolved
+}
+
+model FraudFlag {
+  id               Int           @id @default(autoincrement())
+  organizationId   Int
+  organization     Organization  @relation(fields: [organizationId], references: [id])
+  certificateId    String
+  certificate      Certificate   @relation(fields: [certificateId], references: [certificateId])
+  reason           String
+  severity         FraudSeverity @default(medium)
+  status           FraudStatus   @default(open)
+  createdAt        DateTime      @default(now())
+  resolvedAt       DateTime?
+  resolvedByUserId Int?
+  resolvedByUser   User?         @relation(fields: [resolvedByUserId], references: [id])
+
+  @@index([organizationId, status])
+  @@index([certificateId, status])
+  @@index([createdAt])
+}
+
+model TagIdentity {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  certificateId  String
+  certificate    Certificate  @relation(fields: [certificateId], references: [certificateId])
+  nfcUid         String?
+  epc            String?
+  assignedAt     DateTime     @default(now())
+  lastSeenAt     DateTime?
+  unassignedAt   DateTime?
+
+  @@unique([organizationId, nfcUid])
+  @@unique([organizationId, epc])
+  @@index([certificateId])
+}
+
+model CmsPage {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  slug           String
+  layout         CmsLayout?
+  products       Product[]
+
+  metaTitle       String?
+  metaDescription String?
+  ogImage         String?
+
+  draftVersionId     Int?
+  draftVersion       CmsVersion? @relation("DraftVersion", fields: [draftVersionId], references: [id])
+  publishedVersionId Int?
+  publishedVersion   CmsVersion? @relation("PublishedVersion", fields: [publishedVersionId], references: [id])
+
+  versions     CmsVersion[]
+  translations CmsTranslation[]
+
+  versionNo Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([organizationId, slug])
+}
+
+model CmsVersion {
+  id                Int          @id @default(autoincrement())
+  organizationId    Int
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  pageId            Int
+  page              CmsPage      @relation(fields: [pageId], references: [id])
+  draftForPages     CmsPage[]    @relation("DraftVersion")
+  publishedForPages CmsPage[]    @relation("PublishedVersion")
+  versionNo         Int
+  status            String       @default("draft")
+  layoutJson        Json
+  createdAt         DateTime     @default(now())
+
+  @@unique([pageId, versionNo])
+  @@index([organizationId, pageId])
+}
+
+model CmsTranslation {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  pageId         Int
+  page           CmsPage      @relation(fields: [pageId], references: [id])
+  language       String
+  contentJson    Json
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([pageId, language])
+  @@index([organizationId, pageId])
+}
+
+model CmsLayout {
+  id             Int          @id @default(autoincrement())
+  pageId         Int          @unique
+  page           CmsPage      @relation(fields: [pageId], references: [id])
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  layoutJson     Json // FULL drag-drop structure
+
+  updatedAt DateTime @updatedAt
+}
+
+model CertificateTemplate {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  background     String // URL to background image
+  layoutJson     Json // Overlay field positions
+
+  versionNo Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+}

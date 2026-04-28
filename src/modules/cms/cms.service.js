@@ -1,0 +1,248 @@
+const prisma = require('../../config/prisma');
+
+const memPages = [];
+const memLayouts = new Map();
+const memVersions = new Map();
+const memTranslations = new Map();
+
+async function withTimeout(promise, ms) {
+  return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), ms))]);
+}
+
+function normalizeLang(lang) {
+  const l = String(lang || 'en').toLowerCase();
+  if (l === 'ms' || l === 'bm') return 'ms';
+  if (l === 'zh' || l === 'zh-cn' || l === 'cn') return 'zh';
+  return 'en';
+}
+
+async function createPage(data) {
+  try {
+    return await withTimeout(
+      prisma.cmsPage.create({
+        data: {
+          organizationId: Number(data.organizationId),
+          name: data.name,
+          slug: data.slug,
+          metaTitle: data.metaTitle || null,
+          metaDescription: data.metaDescription || null,
+          ogImage: data.ogImage || null
+        }
+      }),
+      300
+    );
+  } catch {
+    const next = {
+      id: Date.now(),
+      organizationId: Number(data.organizationId),
+      name: data.name,
+      slug: data.slug,
+      metaTitle: data.metaTitle || null,
+      metaDescription: data.metaDescription || null,
+      ogImage: data.ogImage || null,
+      draftVersionId: null,
+      publishedVersionId: null,
+      versionNo: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
+      layout: null
+    };
+    memPages.unshift(next);
+    return next;
+  }
+}
+
+async function getPageBySlug({ organizationId, slug, language }) {
+  const lang = normalizeLang(language);
+  try {
+    return await withTimeout(
+      (async () => {
+        const page = await prisma.cmsPage.findFirst({
+          where: { organizationId: Number(organizationId), slug, deletedAt: null },
+          include: { layout: true, publishedVersion: true, draftVersion: true }
+        });
+        if (!page) return null;
+        const translation = await prisma.cmsTranslation.findFirst({
+          where: { organizationId: Number(organizationId), pageId: page.id, language: lang }
+        });
+        const effectiveLayout =
+          (translation && translation.contentJson) ||
+          page?.publishedVersion?.layoutJson ||
+          page?.draftVersion?.layoutJson ||
+          page?.layout?.layoutJson ||
+          null;
+        return { ...page, effectiveLayout, language: lang };
+      })(),
+      300
+    );
+  } catch {
+    const page = memPages.find((p) => p.organizationId === Number(organizationId) && p.slug === slug && !p.deletedAt) || null;
+    if (!page) return null;
+    const translation = memTranslations.get(`${page.id}:${lang}`) || null;
+    const publishedVersion = page.publishedVersionId ? memVersions.get(String(page.publishedVersionId)) : null;
+    const draftVersion = page.draftVersionId ? memVersions.get(String(page.draftVersionId)) : null;
+    const layout = memLayouts.get(String(page.id)) || null;
+    const effectiveLayout = translation || publishedVersion?.layoutJson || draftVersion?.layoutJson || layout?.layoutJson || null;
+    return { ...page, layout, publishedVersion, draftVersion, effectiveLayout, language: lang };
+  }
+}
+
+async function saveLayout({ organizationId, pageId, layoutJson, language }) {
+  const lang = normalizeLang(language);
+  try {
+    const pid = parseInt(pageId);
+    await withTimeout(
+      prisma.cmsTranslation.upsert({
+        where: { pageId_language: { pageId: pid, language: lang } },
+        update: { organizationId: Number(organizationId), contentJson: layoutJson },
+        create: { organizationId: Number(organizationId), pageId: pid, language: lang, contentJson: layoutJson }
+      }),
+      300
+    );
+
+    const page = await withTimeout(prisma.cmsPage.findUnique({ where: { id: pid } }), 300);
+
+    if (lang === 'en') {
+      if (page?.draftVersionId) {
+        await withTimeout(prisma.cmsVersion.update({ where: { id: page.draftVersionId }, data: { layoutJson } }), 300);
+      } else {
+        const latest = await withTimeout(
+          prisma.cmsVersion.findFirst({ where: { pageId: pid }, orderBy: { versionNo: 'desc' } }),
+          300
+        );
+        const nextNo = (latest?.versionNo || 0) + 1;
+        const created = await withTimeout(
+          prisma.cmsVersion.create({
+            data: { organizationId: Number(organizationId), pageId: pid, versionNo: nextNo, status: 'draft', layoutJson }
+          }),
+          300
+        );
+        await withTimeout(prisma.cmsPage.update({ where: { id: pid }, data: { draftVersionId: created.id } }), 300);
+      }
+    }
+
+    return { pageId: pid, language: lang, saved: true };
+  } catch {
+    const next = {
+      id: Date.now(),
+      organizationId: Number(organizationId),
+      pageId: parseInt(pageId),
+      layoutJson,
+      updatedAt: new Date()
+    };
+    memLayouts.set(String(pageId), next);
+
+    memTranslations.set(`${pageId}:${lang}`, layoutJson);
+
+    if (lang === 'en') {
+      const pIdx = memPages.findIndex((p) => p.id === parseInt(pageId) && p.organizationId === Number(organizationId));
+      if (pIdx !== -1) {
+        const page = memPages[pIdx];
+        if (page.draftVersionId) {
+          const v = memVersions.get(String(page.draftVersionId));
+          if (v) memVersions.set(String(page.draftVersionId), { ...v, layoutJson });
+        } else {
+          const id = Date.now();
+          const v = {
+            id,
+            organizationId: Number(organizationId),
+            pageId: parseInt(pageId),
+            versionNo: 1,
+            status: 'draft',
+            layoutJson,
+            createdAt: new Date()
+          };
+          memVersions.set(String(id), v);
+          memPages[pIdx] = { ...page, draftVersionId: id };
+        }
+      }
+    }
+
+    return { pageId: parseInt(pageId), language: lang, saved: true };
+  }
+}
+
+async function publishPage({ organizationId, pageId }) {
+  const pid = parseInt(pageId);
+  try {
+    const page = await withTimeout(prisma.cmsPage.findUnique({ where: { id: pid } }), 300);
+    const draft = page?.draftVersionId ? await withTimeout(prisma.cmsVersion.findUnique({ where: { id: page.draftVersionId } }), 300) : null;
+    const baseLayout = draft?.layoutJson;
+    if (!baseLayout) throw new Error('No draft layout to publish');
+
+    const latest = await withTimeout(prisma.cmsVersion.findFirst({ where: { pageId: pid }, orderBy: { versionNo: 'desc' } }), 300);
+    const nextNo = (latest?.versionNo || 0) + 1;
+    const published = await withTimeout(
+      prisma.cmsVersion.create({
+        data: { organizationId: Number(organizationId), pageId: pid, versionNo: nextNo, status: 'published', layoutJson: baseLayout }
+      }),
+      300
+    );
+    await withTimeout(prisma.cmsPage.update({ where: { id: pid }, data: { publishedVersionId: published.id } }), 300);
+    return { pageId: pid, publishedVersionId: published.id, versionNo: nextNo };
+  } catch {
+    const idx = memPages.findIndex((p) => p.id === pid && p.organizationId === Number(organizationId));
+    if (idx === -1) throw new Error('Page not found');
+    const page = memPages[idx];
+    const draft = page.draftVersionId ? memVersions.get(String(page.draftVersionId)) : null;
+    if (!draft?.layoutJson) throw new Error('No draft layout to publish');
+    const id = Date.now();
+    const v = { id, organizationId: Number(organizationId), pageId: pid, versionNo: 1, status: 'published', layoutJson: draft.layoutJson, createdAt: new Date() };
+    memVersions.set(String(id), v);
+    memPages[idx] = { ...page, publishedVersionId: id };
+    return { pageId: pid, publishedVersionId: id, versionNo: v.versionNo };
+  }
+}
+
+async function updateMeta({ organizationId, pageId, metaTitle, metaDescription, ogImage }) {
+  const pid = parseInt(pageId);
+  try {
+    return await withTimeout(
+      prisma.cmsPage.update({
+        where: { id: pid },
+        data: {
+          metaTitle: metaTitle === undefined ? undefined : metaTitle,
+          metaDescription: metaDescription === undefined ? undefined : metaDescription,
+          ogImage: ogImage === undefined ? undefined : ogImage,
+          versionNo: { increment: 1 }
+        }
+      }),
+      300
+    );
+  } catch {
+    const idx = memPages.findIndex((p) => p.id === pid && p.organizationId === Number(organizationId));
+    if (idx === -1) throw new Error('Page not found');
+    const current = memPages[idx];
+    const next = {
+      ...current,
+      metaTitle: metaTitle === undefined ? current.metaTitle : metaTitle,
+      metaDescription: metaDescription === undefined ? current.metaDescription : metaDescription,
+      ogImage: ogImage === undefined ? current.ogImage : ogImage,
+      versionNo: (current.versionNo || 1) + 1,
+      updatedAt: new Date()
+    };
+    memPages[idx] = next;
+    return next;
+  }
+}
+
+async function getAllPages({ organizationId }) {
+  try {
+    return await withTimeout(
+      prisma.cmsPage.findMany({ where: { organizationId: Number(organizationId), deletedAt: null } }),
+      250
+    );
+  } catch {
+    return memPages.filter((p) => p.organizationId === Number(organizationId) && !p.deletedAt);
+  }
+}
+
+module.exports = {
+  createPage,
+  getPageBySlug,
+  saveLayout,
+  publishPage,
+  updateMeta,
+  getAllPages
+};
