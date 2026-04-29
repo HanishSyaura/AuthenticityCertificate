@@ -24,6 +24,7 @@ async function createPage(data) {
           organizationId: Number(data.organizationId),
           name: data.name,
           slug: data.slug,
+          kind: data.kind || 'landing',
           metaTitle: data.metaTitle || null,
           metaDescription: data.metaDescription || null,
           ogImage: data.ogImage || null
@@ -37,6 +38,7 @@ async function createPage(data) {
       organizationId: Number(data.organizationId),
       name: data.name,
       slug: data.slug,
+      kind: data.kind || 'landing',
       metaTitle: data.metaTitle || null,
       metaDescription: data.metaDescription || null,
       ogImage: data.ogImage || null,
@@ -227,14 +229,36 @@ async function updateMeta({ organizationId, pageId, metaTitle, metaDescription, 
   }
 }
 
-async function getAllPages({ organizationId }) {
+async function getAllPages({ organizationId, kind }) {
+  const k = typeof kind === 'string' && kind ? kind : null;
   try {
     return await withTimeout(
-      prisma.cmsPage.findMany({ where: { organizationId: Number(organizationId), deletedAt: null } }),
+      prisma.cmsPage.findMany({ where: { organizationId: Number(organizationId), deletedAt: null, ...(k ? { kind: k } : {}) } }),
       250
     );
   } catch {
-    return memPages.filter((p) => p.organizationId === Number(organizationId) && !p.deletedAt);
+    return memPages.filter((p) => p.organizationId === Number(organizationId) && !p.deletedAt && (k ? p.kind === k : true));
+  }
+}
+
+async function deletePage({ organizationId, pageId }) {
+  const pid = parseInt(pageId);
+  try {
+    const res = await withTimeout(
+      prisma.cmsPage.updateMany({
+        where: { id: pid, organizationId: Number(organizationId), deletedAt: null },
+        data: { deletedAt: new Date() }
+      }),
+      300
+    );
+    if (!res.count) throw new Error('Page not found');
+    return { id: pid };
+  } catch {
+    const idx = memPages.findIndex((p) => p.id === pid && p.organizationId === Number(organizationId) && !p.deletedAt);
+    if (idx === -1) throw new Error('Page not found');
+    memPages[idx] = { ...memPages[idx], deletedAt: new Date() };
+    memLayouts.delete(String(pid));
+    return { id: pid };
   }
 }
 
@@ -244,5 +268,6 @@ module.exports = {
   saveLayout,
   publishPage,
   updateMeta,
-  getAllPages
+  getAllPages,
+  deletePage
 };

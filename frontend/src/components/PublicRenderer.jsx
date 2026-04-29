@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useT } from '../i18n/useT';
 
-const PublicRenderer = ({ layout, data }) => {
+const PublicRenderer = ({ layout, data, className = '' }) => {
   const { t, locale } = useT();
   const layoutSafe = Array.isArray(layout) ? layout : null;
 
@@ -120,7 +120,7 @@ const PublicRenderer = ({ layout, data }) => {
   };
 
   return (
-    <div className="relative w-full min-h-screen bg-white">
+    <div className={`relative w-full bg-white ${className || ''}`}>
       {layoutSafe ? blocks.map(renderBlock) : null}
     </div>
   );

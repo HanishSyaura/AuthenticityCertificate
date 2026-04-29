@@ -80,7 +80,9 @@ const VerifyPage = () => {
           </div>
 
           {certificate.layout ? (
-            <PublicRenderer layout={certificate.layout} data={certificate} />
+            <div className="min-h-screen bg-white">
+              <PublicRenderer layout={certificate.layout} data={certificate} />
+            </div>
           ) : (
             <div className="ac-card mx-auto max-w-2xl p-6 text-center">
               <h1 className="text-xl font-semibold text-zinc-900">{certificate.product?.name || t('product')}</h1>

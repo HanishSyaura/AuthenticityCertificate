@@ -18,14 +18,17 @@ async function listTemplates({ organizationId }) {
   );
 }
 
-async function createTemplate({ organizationId, name, background, layoutJson }) {
+async function createTemplate({ organizationId, name, background, layoutJson, placeholders, canvasWidth, canvasHeight }) {
   return await withTimeout(
     prisma.certificateTemplate.create({
       data: {
         organizationId: Number(organizationId),
         name,
         background: background || '',
-        layoutJson: layoutJson || []
+        layoutJson: layoutJson || [],
+        placeholders: placeholders || null,
+        canvasWidth: Number.isFinite(Number(canvasWidth)) && Number(canvasWidth) > 0 ? Number(canvasWidth) : 390,
+        canvasHeight: Number.isFinite(Number(canvasHeight)) && Number(canvasHeight) > 0 ? Number(canvasHeight) : 844
       }
     }),
     1500
@@ -37,6 +40,9 @@ async function updateTemplate({ organizationId, id, patch }) {
   if (patch.name !== undefined) data.name = patch.name;
   if (patch.background !== undefined) data.background = patch.background || '';
   if (patch.layoutJson !== undefined) data.layoutJson = patch.layoutJson || [];
+  if (patch.placeholders !== undefined) data.placeholders = patch.placeholders || null;
+  if (patch.canvasWidth !== undefined) data.canvasWidth = patch.canvasWidth;
+  if (patch.canvasHeight !== undefined) data.canvasHeight = patch.canvasHeight;
 
   const res = await withTimeout(
     prisma.certificateTemplate.updateMany({
@@ -67,4 +73,3 @@ module.exports = {
   updateTemplate,
   deleteTemplate
 };
-

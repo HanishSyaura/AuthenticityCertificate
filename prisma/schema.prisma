@@ -127,8 +127,10 @@ model Product {
   remark         String?
   origin         String?
   description    String?
-  cmsPageId      Int? // Linked CMS Page
-  cmsPage        CmsPage?     @relation(fields: [cmsPageId], references: [id])
+  cmsPageId      Int? // Linked CMS landing page
+  cmsPage        CmsPage?     @relation("LandingPage", fields: [cmsPageId], references: [id])
+  cmsCertificatePageId Int? // Linked CMS certificate page
+  cmsCertificatePage   CmsPage? @relation("CertificatePage", fields: [cmsCertificatePageId], references: [id])
   certificateTemplateId Int?
   certificateTemplate   CertificateTemplate? @relation(fields: [certificateTemplateId], references: [id])
   batches        Batch[]
@@ -314,8 +316,10 @@ model CmsPage {
   organization   Organization @relation(fields: [organizationId], references: [id])
   name           String
   slug           String
+  kind           String       @default("landing")
   layout         CmsLayout?
-  products       Product[]
+  landingProducts     Product[] @relation("LandingPage")
+  certificateProducts Product[] @relation("CertificatePage")
 
   metaTitle       String?
   metaDescription String?
@@ -335,6 +339,7 @@ model CmsPage {
   deletedAt DateTime?
 
   @@unique([organizationId, slug])
+  @@index([organizationId, kind])
 }
 
 model CmsVersion {
@@ -386,6 +391,9 @@ model CertificateTemplate {
   name           String
   background     String // URL to background image
   layoutJson     Json // Overlay field positions
+  placeholders   Json?
+  canvasWidth    Int          @default(390)
+  canvasHeight   Int          @default(844)
 
   products Product[]
 

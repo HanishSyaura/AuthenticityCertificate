@@ -19,6 +19,13 @@ function getValue(path, data) {
   return cur ?? '';
 }
 
+const DEVICE_PRESETS = [
+  { id: 'fit', label: 'Fit', w: null, h: null },
+  { id: 'iphone-se', label: 'iPhone SE', w: 320, h: 568 },
+  { id: 'iphone-14', label: 'iPhone 14', w: 390, h: 844 },
+  { id: 'pixel-7', label: 'Pixel 7', w: 412, h: 915 }
+];
+
 export default function AdminCertificateTemplateBuilder() {
   const { t } = useT();
   const { templates, error, fetchTemplates, createTemplate, updateTemplate, deleteTemplate } = useCertTemplatesStore((s) => ({
@@ -45,10 +52,18 @@ export default function AdminCertificateTemplateBuilder() {
   const [bgUploading, setBgUploading] = useState(false);
   const [bgError, setBgError] = useState(null);
   const [bgFileKey, setBgFileKey] = useState(0);
+  const [devicePresetId, setDevicePresetId] = useState('fit');
 
   const fieldsRef = useRef([]);
 
   const selected = useMemo(() => templates.find((it) => String(it.id) === String(selectedId)) || null, [templates, selectedId]);
+  const canvasW = Number(selected?.canvasWidth) > 0 ? Number(selected.canvasWidth) : 390;
+  const canvasH = Number(selected?.canvasHeight) > 0 ? Number(selected.canvasHeight) : 844;
+  const devicePreset = useMemo(() => DEVICE_PRESETS.find((d) => d.id === devicePresetId) || DEVICE_PRESETS[0], [devicePresetId]);
+  const scale = useMemo(() => {
+    if (!devicePreset || !devicePreset.w) return 1;
+    return Math.max(0.1, Math.min(2, Number(devicePreset.w) / canvasW));
+  }, [canvasW, devicePreset]);
 
   const fields = useMemo(() => {
     const layout = Array.isArray(selected?.layoutJson) ? selected.layoutJson : [];
@@ -182,7 +197,7 @@ export default function AdminCertificateTemplateBuilder() {
               <input
                 key={newBgFileKey}
                 type="file"
-                accept="image/*"
+                accept="image/*,video/*"
                 disabled={newBgUploading}
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
@@ -212,11 +227,11 @@ export default function AdminCertificateTemplateBuilder() {
                     name: nm,
                     background: String(newBackground || '').trim() || '',
                     layoutJson: [
-                      { id: makeId('field'), path: 'certificateId', label: t('certificateId'), x: 80, y: 110, w: 300, h: 60 },
-                      { id: makeId('field'), path: 'product.name', label: t('product'), x: 80, y: 190, w: 520, h: 60 },
-                      { id: makeId('field'), path: 'batch.batchNo', label: t('batch'), x: 80, y: 270, w: 300, h: 60 },
-                      { id: makeId('field'), path: 'issuedAt', label: t('issued'), x: 80, y: 350, w: 300, h: 60 },
-                      { id: makeId('field'), path: 'status', label: t('status'), x: 80, y: 430, w: 240, h: 60 }
+                      { id: makeId('field'), path: 'certificateId', label: t('certificateId'), x: 20, y: 40, w: 350, h: 56 },
+                      { id: makeId('field'), path: 'product.name', label: t('product'), x: 20, y: 110, w: 350, h: 56 },
+                      { id: makeId('field'), path: 'batch.batchNo', label: t('batch'), x: 20, y: 180, w: 350, h: 56 },
+                      { id: makeId('field'), path: 'issuedAt', label: t('issued'), x: 20, y: 250, w: 350, h: 56 },
+                      { id: makeId('field'), path: 'status', label: t('status'), x: 20, y: 320, w: 220, h: 56 }
                     ]
                   }).then((created) => {
                     if (created?.id != null) setSelectedId(created.id);
@@ -244,6 +259,17 @@ export default function AdminCertificateTemplateBuilder() {
                   <div className="text-sm font-semibold text-zinc-900">{selected.name}</div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={devicePresetId}
+                    onChange={(e) => setDevicePresetId(e.target.value)}
+                    className="ac-input w-36 rounded-lg px-3 py-2 text-xs font-semibold"
+                  >
+                    {DEVICE_PRESETS.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.label}
+                      </option>
+                    ))}
+                  </select>
                   <div className="flex items-center gap-2">
                     <input
                       value={previewId}
@@ -259,7 +285,7 @@ export default function AdminCertificateTemplateBuilder() {
                     type="button"
                     onClick={() => {
                       const current = Array.isArray(selected.layoutJson) ? selected.layoutJson : [];
-                      void setFields([...current, { id: makeId('field'), path: 'status', label: t('status'), x: 80, y: 430, w: 240, h: 60 }]);
+                      void setFields([...current, { id: makeId('field'), path: 'status', label: t('status'), x: 20, y: 400, w: 240, h: 56 }]);
                     }}
                     className="ac-btn ac-btn-soft rounded-lg px-3 py-2 text-xs"
                   >
@@ -283,8 +309,9 @@ export default function AdminCertificateTemplateBuilder() {
               {previewError ? <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">{previewError}</div> : null}
 
               <CanvasStage
-                width={920}
-                height={640}
+                width={canvasW}
+                height={canvasH}
+                scale={scale}
                 backgroundUrl={selected.background || ''}
                 items={fields}
                 setItems={setCanvasItems}
@@ -319,7 +346,7 @@ export default function AdminCertificateTemplateBuilder() {
                 <input
                   key={bgFileKey}
                   type="file"
-                  accept="image/*"
+                  accept="image/*,video/*"
                   disabled={bgUploading}
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
@@ -340,6 +367,31 @@ export default function AdminCertificateTemplateBuilder() {
                   className="mt-2 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
                 {bgError ? <div className="mt-2 text-xs text-rose-700">{bgError}</div> : null}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-700">{t('canvasWidth')}</label>
+                  <input
+                    type="number"
+                    min={240}
+                    max={1200}
+                    value={canvasW}
+                    onChange={(e) => void updateSelected({ canvasWidth: Number(e.target.value) || 390 })}
+                    className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-700">{t('canvasHeight')}</label>
+                  <input
+                    type="number"
+                    min={240}
+                    max={2400}
+                    value={canvasH}
+                    onChange={(e) => void updateSelected({ canvasHeight: Number(e.target.value) || 844 })}
+                    className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                  />
+                </div>
               </div>
 
               {!selectedField ? (
@@ -385,7 +437,7 @@ export default function AdminCertificateTemplateBuilder() {
                     <button
                       type="button"
                       onClick={() => {
-                        const next = selected.fields.filter((f) => f.id !== selectedField.id);
+                        const next = (fieldsRef.current || []).filter((f) => f.id !== selectedField.id);
                         setSelectedFieldId(null);
                         setFields(next);
                       }}

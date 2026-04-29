@@ -17,6 +17,14 @@ router.post(
   cmsController.createPage
 );
 router.get('/pages', verifyToken, requireRole(['super_admin', 'admin', 'operator']), requireOrganization, cmsController.listPages);
+router.delete(
+  '/page/:id',
+  verifyToken,
+  requireRole(['super_admin', 'admin']),
+  requireOrganization,
+  auditAction('DELETE_CMS_PAGE', { targetType: 'cms_page', getTargetId: (req) => String(req.params?.id || '') }),
+  cmsController.removePage
+);
 router.post(
   '/layout',
   verifyToken,

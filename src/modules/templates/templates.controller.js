@@ -4,13 +4,19 @@ const templatesService = require('./templates.service');
 const createSchema = z.object({
   name: z.string().min(1),
   background: z.string().optional(),
-  layoutJson: z.any().optional()
+  layoutJson: z.any().optional(),
+  placeholders: z.any().optional(),
+  canvasWidth: z.number().int().optional(),
+  canvasHeight: z.number().int().optional()
 });
 
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
   background: z.string().optional(),
-  layoutJson: z.any().optional()
+  layoutJson: z.any().optional(),
+  placeholders: z.any().optional(),
+  canvasWidth: z.number().int().optional(),
+  canvasHeight: z.number().int().optional()
 });
 
 async function list(req, res) {
@@ -29,7 +35,10 @@ async function create(req, res) {
       organizationId: req.organization.id,
       name: data.name,
       background: data.background,
-      layoutJson: data.layoutJson
+      layoutJson: data.layoutJson,
+      placeholders: data.placeholders,
+      canvasWidth: data.canvasWidth,
+      canvasHeight: data.canvasHeight
     });
     res.success(created, 'Template created');
   } catch (e) {
@@ -66,4 +75,3 @@ module.exports = {
   update,
   remove
 };
-

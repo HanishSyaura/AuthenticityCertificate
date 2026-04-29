@@ -4,6 +4,7 @@ const { z } = require('zod');
 const pageSchema = z.object({
   name: z.string().min(1),
   slug: z.string().min(1),
+  kind: z.string().optional(),
   metaTitle: z.string().optional(),
   metaDescription: z.string().optional(),
   ogImage: z.string().optional()
@@ -95,10 +96,21 @@ async function getPage(req, res) {
 
 async function listPages(req, res) {
   try {
-    const pages = await cmsService.getAllPages({ organizationId: req.organization.id });
+    const kind = typeof req.query?.kind === 'string' ? req.query.kind : undefined;
+    const pages = await cmsService.getAllPages({ organizationId: req.organization.id, kind });
     res.success(pages);
   } catch (error) {
     res.error(error.message);
+  }
+}
+
+async function removePage(req, res) {
+  try {
+    const { id } = req.params;
+    const result = await cmsService.deletePage({ organizationId: req.organization.id, pageId: Number(id) });
+    res.success(result, 'CMS Page deleted successfully');
+  } catch (error) {
+    res.error(error.message, 400);
   }
 }
 
@@ -108,5 +120,6 @@ module.exports = {
   publish,
   updateMeta,
   getPage,
-  listPages
+  listPages,
+  removePage
 };

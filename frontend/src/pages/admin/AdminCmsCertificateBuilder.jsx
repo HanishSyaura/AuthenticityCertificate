@@ -2,6 +2,6 @@ import React from 'react';
 import AdminCmsBuilder from './AdminCmsBuilder';
 
 export default function AdminCmsCertificateBuilder() {
-  return <AdminCmsBuilder />;
+  return <AdminCmsBuilder kind="certificate" />;
 }
 

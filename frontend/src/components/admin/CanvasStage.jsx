@@ -12,6 +12,7 @@ function snap(n, grid) {
 export default function CanvasStage({
   width,
   height,
+  scale = 1,
   items,
   setItems,
   selectedId,
@@ -43,8 +44,8 @@ export default function CanvasStage({
       const rect = stageRef.current?.getBoundingClientRect();
       if (!rect) return;
 
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      const x = (e.clientX - rect.left) / scale;
+      const y = (e.clientY - rect.top) / scale;
 
       applyUpdate((prev) =>
         prev.map((it) => {
@@ -88,8 +89,8 @@ export default function CanvasStage({
 
     const rect = stageRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = (e.clientX - rect.left) / scale;
+    const y = (e.clientY - rect.top) / scale;
 
     if (kind === 'resize') {
       dragRef.current = {
@@ -114,43 +115,56 @@ export default function CanvasStage({
 
   return (
     <div className="w-full overflow-auto">
-      <div
-        ref={stageRef}
-        className="relative mx-auto rounded-xl border border-zinc-200 bg-white shadow-sm"
-        style={{ width, height }}
-        onPointerDown={() => setSelectedId(null)}
-      >
-        {backgroundUrl ? (
-          <img
-            src={backgroundUrl}
-            alt="Background"
-            className="absolute inset-0 h-full w-full rounded-xl object-cover"
-            draggable={false}
-          />
-        ) : null}
-
-        {items.map((it) => {
-          const selected = it.id === selectedId;
-          return (
-            <div
-              key={it.id}
-              className={`absolute rounded-lg ${selected ? 'ring-2 ring-brand-500' : 'ring-1 ring-zinc-200/80'} bg-white/70 backdrop-blur-sm`}
-              style={{ left: it.x, top: it.y, width: it.w, height: it.h }}
-              onPointerDown={(e) => onItemPointerDown(e, it, 'drag')}
-            >
-              <div className="h-full w-full overflow-hidden rounded-lg">
-                {it.render ? it.render(it) : null}
-              </div>
-
-              <div
-                role="button"
-                tabIndex={0}
-                className={`absolute -bottom-2 -right-2 h-4 w-4 rounded bg-brand-600 ${selected ? '' : 'hidden'}`}
-                onPointerDown={(e) => onItemPointerDown(e, it, 'resize')}
+      <div className="mx-auto" style={{ width: width * scale, height: height * scale }}>
+        <div
+          ref={stageRef}
+          className="relative rounded-xl border border-zinc-200 bg-white shadow-sm"
+          style={{ width, height, transform: `scale(${scale})`, transformOrigin: 'top left' }}
+          onPointerDown={() => setSelectedId(null)}
+        >
+          {backgroundUrl ? (
+            /\.(mp4|webm|ogg)(\?.*)?$/i.test(String(backgroundUrl || '')) ? (
+              <video
+                src={backgroundUrl}
+                className="absolute inset-0 h-full w-full rounded-xl object-cover"
+                muted
+                playsInline
+                autoPlay
+                loop
               />
-            </div>
-          );
-        })}
+            ) : (
+              <img
+                src={backgroundUrl}
+                alt="Background"
+                className="absolute inset-0 h-full w-full rounded-xl object-cover"
+                draggable={false}
+              />
+            )
+          ) : null}
+
+          {items.map((it) => {
+            const selected = it.id === selectedId;
+            return (
+              <div
+                key={it.id}
+                className={`absolute rounded-lg ${selected ? 'ring-2 ring-brand-500' : 'ring-1 ring-zinc-200/80'} bg-white/70 backdrop-blur-sm`}
+                style={{ left: it.x, top: it.y, width: it.w, height: it.h }}
+                onPointerDown={(e) => onItemPointerDown(e, it, 'drag')}
+              >
+                <div className="h-full w-full overflow-hidden rounded-lg">
+                  {it.render ? it.render(it) : null}
+                </div>
+
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className={`absolute -bottom-2 -right-2 h-4 w-4 rounded bg-brand-600 ${selected ? '' : 'hidden'}`}
+                  onPointerDown={(e) => onItemPointerDown(e, it, 'resize')}
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

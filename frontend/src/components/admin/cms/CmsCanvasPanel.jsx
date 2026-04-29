@@ -20,6 +20,13 @@ function sampleCert(id = 'CERTIFICATE_ID') {
   };
 }
 
+const DEVICE_PRESETS = [
+  { id: 'fit', label: 'Fit', w: null, h: null },
+  { id: 'iphone-se', label: 'iPhone SE', w: 320, h: 568 },
+  { id: 'iphone-14', label: 'iPhone 14', w: 390, h: 844 },
+  { id: 'pixel-7', label: 'Pixel 7', w: 412, h: 915 }
+];
+
 export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayout, selectedBlockId, setSelectedBlockId }) {
   const { t } = useT();
   const token = useAdminAuthStore((s) => s.token);
@@ -28,6 +35,15 @@ export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayo
   const [previewCertId, setPreviewCertId] = useState('');
   const [previewData, setPreviewData] = useState(null);
   const [previewError, setPreviewError] = useState(null);
+  const [devicePresetId, setDevicePresetId] = useState('fit');
+
+  const baseW = 390;
+  const baseH = 844;
+  const devicePreset = useMemo(() => DEVICE_PRESETS.find((d) => d.id === devicePresetId) || DEVICE_PRESETS[0], [devicePresetId]);
+  const scale = useMemo(() => {
+    if (!devicePreset || !devicePreset.w) return 1;
+    return Math.max(0.1, Math.min(2, Number(devicePreset.w) / baseW));
+  }, [devicePreset]);
 
   useEffect(() => {
     layoutRef.current = layout;
@@ -91,6 +107,17 @@ export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayo
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={devicePresetId}
+            onChange={(e) => setDevicePresetId(e.target.value)}
+            className="ac-input w-36 rounded-lg px-3 py-2 text-xs font-semibold"
+          >
+            {DEVICE_PRESETS.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.label}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             onClick={() => {
@@ -200,14 +227,21 @@ export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayo
             </div>
             {previewError ? <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{previewError}</div> : null}
           </div>
-          <div className="max-h-[740px] overflow-auto bg-white">
-            <PublicRenderer layout={layout} data={previewData || sampleCert()} />
+          <div className="overflow-auto bg-white">
+            <div className="mx-auto" style={{ width: (devicePreset?.w || baseW), height: (devicePreset?.h || baseH) }}>
+              <div style={{ width: baseW * scale, height: baseH * scale }} className="mx-auto">
+                <div style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }} className="overflow-hidden rounded-xl border border-zinc-200">
+                  <PublicRenderer layout={layout} data={previewData || sampleCert()} />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       ) : (
         <CanvasStage
-          width={420}
-          height={740}
+          width={baseW}
+          height={baseH}
+          scale={scale}
           items={blocks}
           setItems={setCanvasItems}
           selectedId={selectedBlockId}

@@ -106,6 +106,13 @@ async function ensureProductSchemaCompat() {
   await ensureColumn(tableName, 'cmsPageId', `ALTER TABLE \`${tableName}\` ADD COLUMN \`cmsPageId\` INT NULL`, null, null);
   await ensureColumn(
     tableName,
+    'cmsCertificatePageId',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`cmsCertificatePageId\` INT NULL`,
+    null,
+    null
+  );
+  await ensureColumn(
+    tableName,
     'certificateTemplateId',
     `ALTER TABLE \`${tableName}\` ADD COLUMN \`certificateTemplateId\` INT NULL`,
     null,

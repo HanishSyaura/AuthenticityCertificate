@@ -17,12 +17,15 @@ const useCmsStore = create((set, get) => ({
   selectedPageId: null,
   loading: false,
   error: null,
+  kind: 'landing',
 
   selectPage: (pageId) => set({ selectedPageId: pageId }),
+  setKind: (kind) => set({ kind }),
 
   fetchPages: async () => {
     const { token } = useAdminAuthStore.getState();
     set({ loading: true, error: null });
+    const kind = get().kind || 'landing';
 
     if (!token) {
       set({ pages: [], loading: false, error: 'Not authenticated' });
@@ -31,7 +34,7 @@ const useCmsStore = create((set, get) => ({
 
     try {
       const api = createAdminApi({ token });
-      const res = await api.get('/cms/pages');
+      const res = await api.get('/cms/pages', { params: { kind } });
       const pages = res?.data?.data || [];
       set({ pages, loading: false });
     } catch (e) {
@@ -44,12 +47,13 @@ const useCmsStore = create((set, get) => ({
     const { token } = useAdminAuthStore.getState();
     const safeSlug = safeSlugify(slug || name);
     const pages = get().pages;
+    const kind = get().kind || 'landing';
 
     if (!token) throw new Error('Not authenticated');
 
     try {
       const api = createAdminApi({ token });
-      const res = await api.post('/cms/page', { name, slug: safeSlug });
+      const res = await api.post('/cms/page', { name, slug: safeSlug, kind });
       const created = res?.data?.data;
       const updated = [created, ...pages];
       set({ pages: updated });
@@ -110,6 +114,15 @@ const useCmsStore = create((set, get) => ({
     const api = createAdminApi({ token });
     const res = await api.post('/cms/publish', { pageId });
     return res?.data?.data;
+  },
+
+  deletePage: async ({ pageId }) => {
+    const { token } = useAdminAuthStore.getState();
+    if (!token) throw new Error('Not authenticated');
+    const api = createAdminApi({ token });
+    await api.delete(`/cms/page/${encodeURIComponent(pageId)}`);
+    const pages = (get().pages || []).filter((p) => String(p.id) !== String(pageId));
+    set({ pages });
   }
 }));
 

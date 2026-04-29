@@ -5,7 +5,7 @@ import CmsCanvasPanel from '../../components/admin/cms/CmsCanvasPanel';
 import CmsInspectorPanel from '../../components/admin/cms/CmsInspectorPanel';
 import { useT } from '../../i18n/useT';
 
-export default function AdminCmsBuilder() {
+export default function AdminCmsBuilder({ kind = 'landing' }) {
   const { t } = useT();
   const {
     pages,
@@ -19,6 +19,8 @@ export default function AdminCmsBuilder() {
     publishPage,
     language,
     setLanguage,
+    setKind,
+    deletePage,
     error
   } = useCmsStore((s) => ({
     pages: s.pages,
@@ -32,6 +34,8 @@ export default function AdminCmsBuilder() {
     publishPage: s.publishPage,
     language: s.language,
     setLanguage: s.setLanguage,
+    setKind: s.setKind,
+    deletePage: s.deletePage,
     error: s.error
   }));
 
@@ -55,8 +59,9 @@ export default function AdminCmsBuilder() {
   );
 
   useEffect(() => {
+    setKind(kind);
     fetchPages();
-  }, [fetchPages]);
+  }, [fetchPages, kind, setKind]);
 
   useEffect(() => {
     if (!selectedPageId && pages[0]?.id) {
@@ -79,8 +84,8 @@ export default function AdminCmsBuilder() {
     <div className="ac-page">
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-base font-semibold text-zinc-900">{t('cmsHeading')}</h2>
-          <p className="mt-1 text-sm text-zinc-600">{t('cmsSubheading')}</p>
+          <h2 className="text-base font-semibold text-zinc-900">{kind === 'certificate' ? t('cmsCertificateHeading') : t('cmsHeading')}</h2>
+          <p className="mt-1 text-sm text-zinc-600">{kind === 'certificate' ? t('cmsCertificateSubheading') : t('cmsSubheading')}</p>
           {error ? <div className="mt-2 text-xs text-amber-700">{error}</div> : null}
         </div>
 
@@ -137,6 +142,10 @@ export default function AdminCmsBuilder() {
           onCreatePage={async ({ name, slug }) => {
             const created = await createPage({ name, slug });
             selectPage(created.id);
+            setSelectedBlockId(null);
+          }}
+          onDeletePage={async (id) => {
+            await deletePage({ pageId: id });
             setSelectedBlockId(null);
           }}
         />

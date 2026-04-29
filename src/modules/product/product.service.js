@@ -52,6 +52,7 @@ function normalizeRawProduct(row) {
     origin: p.origin ?? null,
     description: p.description ?? null,
     cmsPageId: p.cmsPageId ?? null,
+    cmsCertificatePageId: p.cmsCertificatePageId ?? null,
     certificateTemplateId: p.certificateTemplateId ?? null,
     versionNo: p.versionNo ?? 1,
     createdAt: p.createdAt ?? null,
@@ -77,6 +78,7 @@ async function rawListProducts({ organizationId }) {
     'origin',
     'description',
     'cmsPageId',
+    'cmsCertificatePageId',
     'certificateTemplateId',
     'versionNo',
     'createdAt',
@@ -114,6 +116,7 @@ const productSelectWithoutSku = {
   origin: true,
   description: true,
   cmsPageId: true,
+  cmsCertificatePageId: true,
   certificateTemplateId: true,
   versionNo: true,
   createdAt: true,
@@ -136,6 +139,7 @@ async function createProduct(data) {
         origin: null,
         description: null,
         cmsPageId: null,
+        cmsCertificatePageId: null,
         certificateTemplateId: null
       }
     }),
@@ -191,6 +195,9 @@ async function updateProduct({ organizationId, productId, patch }) {
   if (patch.category !== undefined) data.category = patch.category;
   if (patch.status !== undefined) data.status = patch.status;
   if (patch.remark !== undefined) data.remark = patch.remark;
+  if (patch.cmsPageId !== undefined) data.cmsPageId = patch.cmsPageId == null ? null : Number(patch.cmsPageId);
+  if (patch.cmsCertificatePageId !== undefined) data.cmsCertificatePageId = patch.cmsCertificatePageId == null ? null : Number(patch.cmsCertificatePageId);
+  if (patch.certificateTemplateId !== undefined) data.certificateTemplateId = patch.certificateTemplateId == null ? null : Number(patch.certificateTemplateId);
 
   const res = await withTimeout(
     prisma.product.updateMany({

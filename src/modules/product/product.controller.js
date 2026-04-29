@@ -16,7 +16,10 @@ const updateProductSchema = z.object({
   product_code: z.string().min(1).optional(),
   category: z.string().min(1).optional(),
   status: z.string().min(1).optional(),
-  remark: z.string().nullable().optional()
+  remark: z.string().nullable().optional(),
+  cmsPageId: z.number().int().nullable().optional(),
+  cmsCertificatePageId: z.number().int().nullable().optional(),
+  certificateTemplateId: z.number().int().nullable().optional()
 });
 
 const batchSchema = z.object({
