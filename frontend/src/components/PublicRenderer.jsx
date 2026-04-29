@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useT } from '../i18n/useT';
 
-const PublicRenderer = ({ layout, data, className = '' }) => {
+const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed = false }) => {
   const { t, locale } = useT();
   const layoutSafe = Array.isArray(layout) ? layout : null;
 
@@ -65,6 +65,21 @@ const PublicRenderer = ({ layout, data, className = '' }) => {
           const productName = data?.product?.name || '-';
           const batchNo = data?.batch?.batchNo || '-';
           const issued = data?.issuedAt ? new Date(data.issuedAt) : null;
+          const certLayout = !disableCertificateEmbed && Array.isArray(data?.certificateLayout) ? data.certificateLayout : null;
+          if (certLayout) {
+            const baseW = 390;
+            const baseH = 844;
+            const scale = Math.max(0.1, Math.min(4, Math.min((block.__rect.w || baseW) / baseW, (block.__rect.h || baseH) / baseH)));
+            return (
+              <div key={block.id} style={style} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+                <div style={{ width: baseW * scale, height: baseH * scale }} className="mx-auto">
+                  <div style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+                    <PublicRenderer layout={certLayout} data={data} disableCertificateEmbed />
+                  </div>
+                </div>
+              </div>
+            );
+          }
         return (
           <div
             key={block.id}

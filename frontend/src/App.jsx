@@ -7,16 +7,9 @@ import AdminProtected from './components/admin/AdminProtected';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminCmsBuilder from './pages/admin/AdminCmsBuilder';
 import AdminCertificateTemplateBuilder from './pages/admin/AdminCertificateTemplateBuilder';
-import AdminAnalytics from './pages/admin/AdminAnalytics';
 import AdminRecords from './pages/admin/AdminRecords';
 import AdminRecordDetail from './pages/admin/AdminRecordDetail';
 import AdminUsers from './pages/admin/AdminUsers';
-import AdminAudit from './pages/admin/AdminAudit';
-import AdminBulkImport from './pages/admin/AdminBulkImport';
-import AdminCertificates from './pages/admin/AdminCertificates';
-import AdminIdentities from './pages/admin/AdminIdentities';
-import AdminFraud from './pages/admin/AdminFraud';
-import AdminIntegrations from './pages/admin/AdminIntegrations';
 import AdminGuide from './pages/admin/AdminGuide';
 import AdminEpc from './pages/admin/AdminEpc';
 import AdminSettings from './pages/admin/AdminSettings';
@@ -47,15 +40,8 @@ function App() {
           <Route path="cms" element={<AdminCmsBuilder />} />
           <Route path="cms-certificate" element={<AdminCmsCertificateBuilder />} />
           <Route path="cert-templates" element={<AdminCertificateTemplateBuilder />} />
-          <Route path="analytics" element={<AdminAnalytics />} />
-          <Route path="fraud" element={<AdminFraud />} />
-          <Route path="integrations" element={<AdminIntegrations />} />
-          <Route path="certificates" element={<AdminCertificates />} />
-          <Route path="identities" element={<AdminIdentities />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="settings" element={<AdminSettings />} />
-          <Route path="audit" element={<AdminAudit />} />
-          <Route path="bulk" element={<AdminBulkImport />} />
         </Route>
       </Routes>
     </Router>

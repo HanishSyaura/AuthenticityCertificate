@@ -1,656 +1,402 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import useRecordsStore from '../../store/useRecordsStore';
 import useEpcStore from '../../store/useEpcStore';
+import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import { useT } from '../../i18n/useT';
-import EpcGeneratePanel from '../../components/admin/epc/EpcGeneratePanel';
-import EpcBulkPanel from '../../components/admin/epc/EpcBulkPanel';
 
-function formatDate(input) {
+function formatDateTime(input) {
   if (!input) return '';
   const d = new Date(input);
   if (Number.isNaN(d.getTime())) return '';
   return d.toISOString().slice(0, 19).replace('T', ' ');
 }
 
-function normalizeSkuCode(skuOrCode) {
-  const raw = String(skuOrCode || '').trim();
-  const digits = raw.replace(/\D+/g, '');
-  if (!digits) return '00';
-  const last2 = digits.length >= 2 ? digits.slice(-2) : digits.padStart(2, '0');
-  return last2;
+function toBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function RichInput({ value, onChange }) {
+  const [draft, setDraft] = useState(value || '');
+  useEffect(() => setDraft(value || ''), [value]);
+  return (
+    <div className="rounded-xl border border-zinc-200 bg-white">
+      <div className="flex flex-wrap gap-2 border-b border-zinc-200 bg-zinc-50 p-2">
+        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onClick={() => setDraft((v) => `<b>${v}</b>`)}>
+          B
+        </button>
+        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onClick={() => setDraft((v) => `<i>${v}</i>`)}>
+          I
+        </button>
+        <button type="button" className="ml-auto rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onClick={() => onChange(draft)}>
+          Save
+        </button>
+      </div>
+      <textarea value={draft} onChange={(e) => setDraft(e.target.value)} className="h-24 w-full resize-none rounded-b-xl px-3 py-2 text-xs outline-none" />
+    </div>
+  );
 }
 
 export default function AdminEpc() {
   const { t } = useT();
-  const navigate = useNavigate();
 
   const { products, fetchProducts } = useRecordsStore((s) => ({
     products: s.products,
     fetchProducts: s.fetchProducts
   }));
 
+  const { templates, fetchTemplates } = useCertTemplatesStore((s) => ({
+    templates: s.templates,
+    fetchTemplates: s.fetchTemplates
+  }));
+
   const {
     corpCodes,
     batches,
-    batchTotal,
-    items,
-    itemTotal,
     loading,
     error,
     lastGenerated,
     fetchCorpCodes,
     fetchBatches,
-    fetchItems,
     generateBatch,
     exportBatchXlsx,
+    importProductionXlsx,
+    markProductionDone,
+    deleteBatch,
     clearLastGenerated
   } = useEpcStore((s) => ({
     corpCodes: s.corpCodes,
     batches: s.batches,
-    batchTotal: s.batchTotal,
-    items: s.items,
-    itemTotal: s.itemTotal,
     loading: s.loading,
     error: s.error,
     lastGenerated: s.lastGenerated,
     fetchCorpCodes: s.fetchCorpCodes,
     fetchBatches: s.fetchBatches,
-    fetchItems: s.fetchItems,
     generateBatch: s.generateBatch,
     exportBatchXlsx: s.exportBatchXlsx,
+    importProductionXlsx: s.importProductionXlsx,
+    markProductionDone: s.markProductionDone,
+    deleteBatch: s.deleteBatch,
     clearLastGenerated: s.clearLastGenerated
   }));
 
-  const [tab, setTab] = useState('items');
-  const [showGenerate, setShowGenerate] = useState(false);
+  const [tab, setTab] = useState('create');
 
   const [corpPrefix, setCorpPrefix] = useState('');
   const [productId, setProductId] = useState('');
   const [batchName, setBatchName] = useState('');
   const [batchQty, setBatchQty] = useState(1);
   const [remark, setRemark] = useState('');
-  const [selectedBatchId, setSelectedBatchId] = useState('');
-
-  const [filterCorp, setFilterCorp] = useState('');
-  const [filterProductId, setFilterProductId] = useState('');
-  const [filterCategory, setFilterCategory] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-
-  const [selectedIds, setSelectedIds] = useState(() => new Set());
-
-  const [batchLimit, setBatchLimit] = useState(10);
-  const [batchPage, setBatchPage] = useState(1);
-  const [itemLimit, setItemLimit] = useState(10);
-  const [itemPage, setItemPage] = useState(1);
+  const [certificateTemplateId, setCertificateTemplateId] = useState('');
+  const [templateData, setTemplateData] = useState({});
 
   useEffect(() => {
     void fetchProducts();
+    void fetchTemplates();
     void fetchCorpCodes();
-    void fetchBatches({ limit: batchLimit, offset: 0 });
-    void fetchItems({ limit: itemLimit, offset: 0 });
-  }, [fetchProducts, fetchCorpCodes, fetchBatches, fetchItems]);
+    void fetchBatches({ limit: 50, offset: 0 });
+  }, [fetchBatches, fetchCorpCodes, fetchProducts, fetchTemplates]);
 
   useEffect(() => {
-    setSelectedIds(new Set());
-  }, [tab]);
+    if (!corpPrefix && Array.isArray(corpCodes) && corpCodes[0]) setCorpPrefix(corpCodes[0]);
+  }, [corpCodes, corpPrefix]);
 
-  const productOptions = useMemo(() => {
-    const list = Array.isArray(products) ? products : [];
-    return list
-      .slice()
-      .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')))
-      .map((p) => ({
-        id: String(p.id),
-        sku: p.sku || '',
-        name: p.name || '',
-        category: p.category || ''
-      }));
-  }, [products]);
+  const selectedProduct = useMemo(() => (Array.isArray(products) ? products : []).find((p) => String(p.id) === String(productId)) || null, [products, productId]);
 
-  const productCategoryById = useMemo(() => {
-    const map = new Map();
-    for (const p of productOptions) {
-      if (!p?.id) continue;
-      map.set(String(p.id), String(p.category || '').trim().toLowerCase());
+  useEffect(() => {
+    if (!selectedProduct) return;
+    if (selectedProduct.certificateTemplateId != null) {
+      setCertificateTemplateId(String(selectedProduct.certificateTemplateId));
     }
-    return map;
-  }, [productOptions]);
+  }, [selectedProduct]);
 
-  const categoryOptions = useMemo(() => {
-    const set = new Set();
-    for (const p of productOptions) {
-      const c = String(p.category || '').trim();
-      if (c) set.add(c);
+  const selectedTemplate = useMemo(
+    () => (Array.isArray(templates) ? templates : []).find((x) => String(x.id) === String(certificateTemplateId)) || null,
+    [certificateTemplateId, templates]
+  );
+
+  const placeholders = useMemo(() => {
+    const raw = selectedTemplate?.placeholders;
+    return Array.isArray(raw) ? raw : [];
+  }, [selectedTemplate]);
+
+  useEffect(() => {
+    const next = {};
+    for (const p of placeholders) {
+      const key = String(p?.key || '').trim();
+      if (!key) continue;
+      next[key] = templateData?.[key] ?? '';
     }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [productOptions]);
-
-  const filteredItems = useMemo(() => {
-    const from = dateFrom ? new Date(dateFrom) : null;
-    const to = dateTo ? new Date(`${dateTo}T23:59:59.999`) : null;
-    const corp = String(filterCorp || '').trim();
-    const prodId = String(filterProductId || '').trim();
-    const cat = String(filterCategory || '').trim().toLowerCase();
-
-    const selectedProduct = prodId ? productOptions.find((p) => p.id === prodId) : null;
-    const skuCode = selectedProduct ? normalizeSkuCode(selectedProduct.sku) : '';
-
-    return (Array.isArray(items) ? items : []).filter((it) => {
-      if (corp && String(it?.batch?.corpPrefix || '').trim() !== corp) return false;
-      if (prodId && String(it?.batch?.product?.id || '') !== prodId) return false;
-      if (cat) {
-        const rowProdId = String(it?.batch?.product?.id || '');
-        const rowCat = productCategoryById.get(rowProdId) || '';
-        if (rowCat !== cat) return false;
-      }
-      if (skuCode && !String(it?.epcCode || '').includes(skuCode)) return false;
-      if (from || to) {
-        const d = it?.createdAt ? new Date(it.createdAt) : null;
-        if (!d || Number.isNaN(d.getTime())) return false;
-        if (from && d < from) return false;
-        if (to && d > to) return false;
-      }
-      return true;
-    });
-  }, [items, dateFrom, dateTo, filterCorp, filterProductId, filterCategory, productOptions, productCategoryById]);
-
-  const filteredBatches = useMemo(() => {
-    const from = dateFrom ? new Date(dateFrom) : null;
-    const to = dateTo ? new Date(`${dateTo}T23:59:59.999`) : null;
-    const corp = String(filterCorp || '').trim();
-    const prodId = String(filterProductId || '').trim();
-    const cat = String(filterCategory || '').trim().toLowerCase();
-
-    return (Array.isArray(batches) ? batches : []).filter((b) => {
-      if (corp && String(b?.corpPrefix || '').trim() !== corp) return false;
-      if (prodId && String(b?.product?.id || '') !== prodId) return false;
-      if (cat) {
-        const rowProdId = String(b?.product?.id || '');
-        const rowCat = productCategoryById.get(rowProdId) || '';
-        if (rowCat !== cat) return false;
-      }
-      if (from || to) {
-        const d = b?.createdAt ? new Date(b.createdAt) : null;
-        if (!d || Number.isNaN(d.getTime())) return false;
-        if (from && d < from) return false;
-        if (to && d > to) return false;
-      }
-      return true;
-    });
-  }, [batches, dateFrom, dateTo, filterCorp, filterProductId, filterCategory, productCategoryById]);
-
-  const displayedItems = tab === 'items' ? filteredItems : [];
-  const displayedBatches = tab === 'batches' ? filteredBatches : [];
-
-  const totalItemsPages = Math.max(1, Math.ceil((itemTotal || 0) / itemLimit));
-  const totalBatchPages = Math.max(1, Math.ceil((batchTotal || 0) / batchLimit));
-
-  const allChecked = useMemo(() => {
-    const list = tab === 'items' ? displayedItems : displayedBatches;
-    if (!list || list.length === 0) return false;
-    for (const row of list) {
-      if (!selectedIds.has(String(row.id))) return false;
-    }
-    return true;
-  }, [displayedItems, displayedBatches, selectedIds, tab]);
-
-  const canExport = useMemo(() => {
-    if (tab === 'batches') return selectedIds.size === 1;
-    if (tab === 'items') {
-      if (selectedBatchId) return true;
-      if (selectedIds.size !== 1) return false;
-      const id = Array.from(selectedIds)[0];
-      const it = displayedItems.find((x) => String(x.id) === id);
-      return Boolean(it?.batch?.id);
-    }
-    return false;
-  }, [tab, selectedIds, selectedBatchId, displayedItems]);
-
-  const handleToggleAll = () => {
-    const list = tab === 'items' ? displayedItems : displayedBatches;
-    const next = new Set(selectedIds);
-    if (allChecked) {
-      for (const row of list) next.delete(String(row.id));
-    } else {
-      for (const row of list) next.add(String(row.id));
-    }
-    setSelectedIds(next);
-  };
-
-  const handleToggleOne = (id) => {
-    const key = String(id);
-    const next = new Set(selectedIds);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    setSelectedIds(next);
-  };
-
-  const handleClearFilters = () => {
-    setFilterCorp('');
-    setFilterProductId('');
-    setFilterCategory('');
-    setDateFrom('');
-    setDateTo('');
-    setSelectedBatchId('');
-    setSelectedIds(new Set());
-    setBatchPage(1);
-    setItemPage(1);
-    void fetchBatches({ limit: batchLimit, offset: 0 });
-    void fetchItems({ limit: itemLimit, offset: 0 });
-  };
-
-  const handleInquire = () => {
-    setSelectedIds(new Set());
-    if (tab === 'batches') {
-      const offset = Math.max(batchPage - 1, 0) * batchLimit;
-      void fetchBatches({ limit: batchLimit, offset });
-      return;
-    }
-    if (tab === 'items') {
-      const offset = Math.max(itemPage - 1, 0) * itemLimit;
-      void fetchItems({ batchId: selectedBatchId ? Number(selectedBatchId) : undefined, limit: itemLimit, offset });
-      return;
-    }
-  };
+    setTemplateData(next);
+  }, [certificateTemplateId]);
 
   return (
-    <div className="px-5 py-4">
-      <div className="mb-3 text-xs text-zinc-500">Stock / Product / EPC</div>
-
-      <div className="mb-3 flex items-end justify-between gap-3">
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-base font-semibold text-zinc-900">{t('epc')}</div>
+          <div className="mt-1 text-sm text-zinc-600">{t('guideStepBatchesBody')}</div>
+        </div>
         <div className="flex items-center gap-2">
-          <button type="button" className="border-b-2 border-blue-600 px-2 pb-2 text-sm font-semibold text-blue-700">
-            EPC
-          </button>
-        </div>
-        <button
-          type="button"
-          className="rounded border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 hover:bg-zinc-50"
-          onClick={() => {
-            if (tab === 'batches') void fetchBatches({ limit: batchLimit, offset: (batchPage - 1) * batchLimit });
-            if (tab === 'items') void fetchItems({ batchId: selectedBatchId ? Number(selectedBatchId) : undefined, limit: itemLimit, offset: (itemPage - 1) * itemLimit });
-          }}
-        >
-          {t('refresh')}
-        </button>
-      </div>
-
-      {error ? <div className="mb-4 rounded border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
-
-      <div className="mb-3 rounded border border-zinc-200 bg-white p-4">
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
-          <div className="lg:col-span-3">
-            <div className="mb-1 text-[11px] font-semibold text-zinc-500">Corp Code</div>
-            <select value={filterCorp} onChange={(e) => setFilterCorp(e.target.value)} className="h-9 w-full rounded border border-zinc-200 bg-white px-3 text-sm">
-              <option value="">All</option>
-              {corpCodes.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="lg:col-span-3">
-            <div className="mb-1 text-[11px] font-semibold text-zinc-500">SKU code</div>
-            <select
-              value={filterProductId}
-              onChange={(e) => {
-                setFilterProductId(e.target.value);
-                setSelectedBatchId('');
-              }}
-              className="h-9 w-full rounded border border-zinc-200 bg-white px-3 text-sm"
-            >
-              <option value="">All</option>
-              {productOptions.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.sku || '-'}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="lg:col-span-3">
-            <div className="mb-1 text-[11px] font-semibold text-zinc-500">Category</div>
-            <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="h-9 w-full rounded border border-zinc-200 bg-white px-3 text-sm">
-              <option value="">Select</option>
-              {categoryOptions.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="lg:col-span-3">
-            <div className="mb-1 text-[11px] font-semibold text-zinc-500">Date</div>
-            <div className="flex items-center gap-2">
-              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 w-full rounded border border-zinc-200 bg-white px-3 text-sm" />
-              <div className="text-xs text-zinc-500">to</div>
-              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 w-full rounded border border-zinc-200 bg-white px-3 text-sm" />
-            </div>
-          </div>
-          <div className="lg:col-span-12">
-            <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-              <button type="button" className="rounded bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700" onClick={handleInquire}>
-                Inquire
-              </button>
-              <button type="button" className="rounded border border-zinc-200 bg-white px-4 py-2 text-xs font-semibold text-zinc-800 hover:bg-zinc-50" onClick={handleClearFilters}>
-                Clear
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <button type="button" className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700" onClick={() => navigate('/admin/records')}>
-          Add New Product
-        </button>
-        <button type="button" className="rounded bg-amber-500 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-600" onClick={() => setShowGenerate(true)}>
-          Generate EPC
-        </button>
-        <button
-          type="button"
-          className="rounded bg-emerald-500 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={!canExport || loading}
-          onClick={() => {
-            if (tab === 'batches') {
-              const id = Number(Array.from(selectedIds)[0]);
-              if (!id) return;
-              void exportBatchXlsx(id);
-              return;
-            }
-            if (tab === 'items') {
-              if (selectedBatchId) {
-                void exportBatchXlsx(Number(selectedBatchId));
-                return;
-              }
-              const rowId = Array.from(selectedIds)[0];
-              const it = displayedItems.find((x) => String(x.id) === String(rowId));
-              const bid = it?.batch?.id;
-              if (!bid) return;
-              void exportBatchXlsx(bid);
-            }
-          }}
-        >
-          Export EPC List
-        </button>
-        <button type="button" className="rounded bg-zinc-400 px-3 py-2 text-xs font-semibold text-white opacity-60" disabled>
-          Import Custom Field Values
-        </button>
-        <button type="button" className="rounded bg-zinc-400 px-3 py-2 text-xs font-semibold text-white opacity-60" disabled>
-          Customize Field
-        </button>
-        <button type="button" className="rounded bg-rose-500 px-3 py-2 text-xs font-semibold text-white opacity-60" disabled>
-          Delete
-        </button>
-
-        <div className="ml-auto flex items-center gap-2">
           <button
             type="button"
-            className={`rounded border px-3 py-2 text-xs font-semibold ${tab === 'items' ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'}`}
-            onClick={() => setTab('items')}
+            onClick={() => setTab('create')}
+            className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+              tab === 'create' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
+            }`}
           >
-            EPC
+            {t('epcBatchCreation')}
           </button>
           <button
             type="button"
-            className={`rounded border px-3 py-2 text-xs font-semibold ${tab === 'batches' ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'}`}
             onClick={() => setTab('batches')}
+            className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+              tab === 'batches' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
+            }`}
           >
-            Batch
+            {t('epcBatches')}
           </button>
           <button
             type="button"
-            className={`rounded border px-3 py-2 text-xs font-semibold ${tab === 'bulk' ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'}`}
-            onClick={() => setTab('bulk')}
+            onClick={() => setTab('production')}
+            className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+              tab === 'production' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
+            }`}
           >
-            Bulk
+            {t('productionOrders')}
           </button>
         </div>
       </div>
 
-      {tab === 'bulk' ? (
-        <div className="rounded border border-zinc-200 bg-white p-4">
-          <EpcBulkPanel t={t} />
-        </div>
-      ) : (
-        <div className="rounded border border-zinc-200 bg-white">
-          <div className="overflow-x-auto">
-            <table className="min-w-[1400px] w-full border-collapse">
-              <thead className="bg-zinc-50">
-                {tab === 'items' ? (
-                  <tr className="text-left text-xs font-semibold text-zinc-600">
-                    <th className="w-10 border-b border-zinc-200 px-3 py-2">
-                      <input type="checkbox" checked={allChecked} onChange={handleToggleAll} />
-                    </th>
-                    <th className="border-b border-zinc-200 px-3 py-2">EPC code</th>
-                    <th className="border-b border-zinc-200 px-3 py-2">Corp code</th>
-                    <th className="border-b border-zinc-200 px-3 py-2">SKU code</th>
-                    <th className="border-b border-zinc-200 px-3 py-2">Serial number</th>
-                    <th className="border-b border-zinc-200 px-3 py-2">Batch Number</th>
-                    <th className="border-b border-zinc-200 px-3 py-2">Product Name</th>
-                    <th className="border-b border-zinc-200 px-3 py-2">Net Weight</th>
-                    <th className="border-b border-zinc-200 px-3 py-2">Date of Production</th>
-                    <th className="border-b border-zinc-200 px-3 py-2">CAIQ Label</th>
-                    <th className="border-b border-zinc-200 px-3 py-2">Country of Origin</th>
-                  </tr>
-                ) : (
-                  <tr className="text-left text-xs font-semibold text-zinc-600">
-                    <th className="w-10 border-b border-zinc-200 px-3 py-2">
-                      <input type="checkbox" checked={allChecked} onChange={handleToggleAll} />
-                    </th>
-                    <th className="border-b border-zinc-200 px-3 py-2">Corp code</th>
-                    <th className="border-b border-zinc-200 px-3 py-2">SKU code</th>
-                    <th className="border-b border-zinc-200 px-3 py-2">Batch Number</th>
-                    <th className="border-b border-zinc-200 px-3 py-2">Qty</th>
-                    <th className="border-b border-zinc-200 px-3 py-2">Created At</th>
-                    <th className="border-b border-zinc-200 px-3 py-2 text-right">Actions</th>
-                  </tr>
-                )}
-              </thead>
-              <tbody className="text-sm text-zinc-800">
-                {tab === 'items'
-                  ? displayedItems.map((it) => (
-                      <tr key={it.id} className="hover:bg-zinc-50">
-                        <td className="border-b border-zinc-100 px-3 py-2">
-                          <input type="checkbox" checked={selectedIds.has(String(it.id))} onChange={() => handleToggleOne(it.id)} />
-                        </td>
-                        <td className="border-b border-zinc-100 px-3 py-2 font-mono text-xs text-blue-700">{it.epcCode}</td>
-                        <td className="border-b border-zinc-100 px-3 py-2 font-mono text-xs">{it.batch?.corpPrefix || '-'}</td>
-                        <td className="border-b border-zinc-100 px-3 py-2 font-mono text-xs">{it.batch?.sku || it.batch?.product?.sku || '-'}</td>
-                        <td className="border-b border-zinc-100 px-3 py-2 font-mono text-xs">{it.runningNo?.toString ? it.runningNo.toString() : String(it.runningNo || '-')}</td>
-                        <td className="border-b border-zinc-100 px-3 py-2">{it.batch?.batchName || '-'}</td>
-                        <td className="border-b border-zinc-100 px-3 py-2">{it.batch?.product?.name || '-'}</td>
-                        <td className="border-b border-zinc-100 px-3 py-2 text-zinc-500">--</td>
-                        <td className="border-b border-zinc-100 px-3 py-2 text-zinc-500">--</td>
-                        <td className="border-b border-zinc-100 px-3 py-2 text-zinc-500">--</td>
-                        <td className="border-b border-zinc-100 px-3 py-2 text-zinc-500">--</td>
-                      </tr>
-                    ))
-                  : displayedBatches.map((b) => (
-                      <tr key={b.id} className="hover:bg-zinc-50">
-                        <td className="border-b border-zinc-100 px-3 py-2">
-                          <input type="checkbox" checked={selectedIds.has(String(b.id))} onChange={() => handleToggleOne(b.id)} />
-                        </td>
-                        <td className="border-b border-zinc-100 px-3 py-2 font-mono text-xs">{b.corpPrefix}</td>
-                        <td className="border-b border-zinc-100 px-3 py-2 font-mono text-xs">{b.sku || b.product?.sku || '-'}</td>
-                        <td className="border-b border-zinc-100 px-3 py-2">{b.batchName}</td>
-                        <td className="border-b border-zinc-100 px-3 py-2">{b.batchQty}</td>
-                        <td className="border-b border-zinc-100 px-3 py-2 text-xs text-zinc-600">{formatDate(b.createdAt)}</td>
-                        <td className="border-b border-zinc-100 px-3 py-2 text-right">
-                          <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
-                              className="rounded border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 hover:bg-zinc-50"
-                              onClick={async () => {
-                                setSelectedBatchId(String(b.id));
-                                setTab('items');
-                                setItemPage(1);
-                                await fetchItems({ batchId: b.id, limit: itemLimit, offset: 0 });
-                              }}
-                            >
-                              View EPC
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 hover:bg-zinc-50"
-                              onClick={() => void exportBatchXlsx(b.id)}
-                            >
-                              Export
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+      {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
 
-                {!loading && tab === 'items' && displayedItems.length === 0 ? (
-                  <tr>
-                    <td colSpan={11} className="px-4 py-10 text-center text-sm text-zinc-600">
-                      {t('noEpc')}
-                    </td>
-                  </tr>
-                ) : null}
-                {!loading && tab === 'batches' && displayedBatches.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-zinc-600">
-                      {t('noBatches')}
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
+      {tab === 'create' ? (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_420px]">
+          <div className="rounded-xl border border-zinc-200 bg-white p-4">
+            <div className="mb-3 text-xs font-semibold text-zinc-600">{t('certificateData')}</div>
+            {placeholders.length === 0 ? <div className="text-xs text-zinc-500">{t('selectField')}</div> : null}
+            <div className="space-y-3">
+              {placeholders.map((p) => {
+                const key = String(p?.key || '').trim();
+                const label = String(p?.label || key);
+                const type = String(p?.type || 'text');
+                if (!key) return null;
+                return (
+                  <div key={key}>
+                    <div className="mb-1 text-[11px] font-semibold text-zinc-600">{label}</div>
+                    {type === 'rich_text' ? (
+                      <RichInput value={String(templateData?.[key] || '')} onChange={(v) => setTemplateData((prev) => ({ ...(prev || {}), [key]: v }))} />
+                    ) : (
+                      <input
+                        value={String(templateData?.[key] || '')}
+                        onChange={(e) => setTemplateData((prev) => ({ ...(prev || {}), [key]: e.target.value }))}
+                        className="ac-input"
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 px-4 py-3 text-xs text-zinc-600">
-            <div className="flex items-center gap-2">
-              <div>Total {tab === 'items' ? itemTotal : batchTotal}</div>
-            </div>
-            <div className="flex items-center gap-3">
-              <select
-                value={tab === 'items' ? itemLimit : batchLimit}
-                onChange={(e) => {
-                  const v = Number(e.target.value) || 10;
-                  if (tab === 'items') {
-                    setItemLimit(v);
-                    setItemPage(1);
-                    void fetchItems({ batchId: selectedBatchId ? Number(selectedBatchId) : undefined, limit: v, offset: 0 });
-                  } else {
-                    setBatchLimit(v);
-                    setBatchPage(1);
-                    void fetchBatches({ limit: v, offset: 0 });
-                  }
-                }}
-                className="h-8 rounded border border-zinc-200 bg-white px-2"
-              >
-                <option value={10}>10/page</option>
-                <option value={20}>20/page</option>
-                <option value={50}>50/page</option>
-              </select>
+          <div className="rounded-xl border border-zinc-200 bg-white p-4">
+            <div className="mb-3 text-xs font-semibold text-zinc-600">{t('epcBatchCreation')}</div>
+            <div className="space-y-3">
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('corpCode')}</div>
+                <select value={corpPrefix} onChange={(e) => setCorpPrefix(e.target.value)} className="ac-input">
+                  {corpCodes.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-              <div className="flex items-center gap-1">
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('product')}</div>
+                <select value={productId} onChange={(e) => setProductId(e.target.value)} className="ac-input">
+                  <option value="">{t('selectProduct')}</option>
+                  {(Array.isArray(products) ? products : [])
+                    .slice()
+                    .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')))
+                    .map((p) => (
+                      <option key={p.id} value={String(p.id)}>
+                        {p.name} ({p.sku})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('certTemplate')}</div>
+                <select value={certificateTemplateId} onChange={(e) => setCertificateTemplateId(e.target.value)} className="ac-input">
+                  <option value="">{t('none')}</option>
+                  {(Array.isArray(templates) ? templates : []).map((tpl) => (
+                    <option key={tpl.id} value={String(tpl.id)}>
+                      {tpl.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('batchName')}</div>
+                <input value={batchName} onChange={(e) => setBatchName(e.target.value)} className="ac-input" />
+              </div>
+
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('batchQty')}</div>
+                <input type="number" min={1} max={5000} value={batchQty} onChange={(e) => setBatchQty(Number(e.target.value) || 1)} className="ac-input" />
+              </div>
+
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
+                <textarea value={remark} onChange={(e) => setRemark(e.target.value)} className="h-20 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-400" />
+              </div>
+
+              <div className="flex justify-end gap-2">
                 <button
                   type="button"
-                  className="rounded border border-zinc-200 bg-white px-2 py-1 font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
-                  disabled={tab === 'items' ? itemPage <= 1 : batchPage <= 1}
+                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
                   onClick={() => {
-                    if (tab === 'items') {
-                      const next = Math.max(itemPage - 1, 1);
-                      setItemPage(next);
-                      void fetchItems({ batchId: selectedBatchId ? Number(selectedBatchId) : undefined, limit: itemLimit, offset: (next - 1) * itemLimit });
-                    } else {
-                      const next = Math.max(batchPage - 1, 1);
-                      setBatchPage(next);
-                      void fetchBatches({ limit: batchLimit, offset: (next - 1) * batchLimit });
-                    }
+                    setBatchName('');
+                    setBatchQty(1);
+                    setRemark('');
+                    setTemplateData({});
+                    clearLastGenerated();
                   }}
                 >
-                  ‹
+                  {t('clear')}
                 </button>
-                <div className="min-w-[70px] text-center">
-                  {tab === 'items' ? itemPage : batchPage} / {tab === 'items' ? totalItemsPages : totalBatchPages}
-                </div>
                 <button
                   type="button"
-                  className="rounded border border-zinc-200 bg-white px-2 py-1 font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
-                  disabled={tab === 'items' ? itemPage >= totalItemsPages : batchPage >= totalBatchPages}
-                  onClick={() => {
-                    if (tab === 'items') {
-                      const next = Math.min(itemPage + 1, totalItemsPages);
-                      setItemPage(next);
-                      void fetchItems({ batchId: selectedBatchId ? Number(selectedBatchId) : undefined, limit: itemLimit, offset: (next - 1) * itemLimit });
-                    } else {
-                      const next = Math.min(batchPage + 1, totalBatchPages);
-                      setBatchPage(next);
-                      void fetchBatches({ limit: batchLimit, offset: (next - 1) * batchLimit });
-                    }
+                  className="ac-btn ac-btn-primary px-3 py-2 text-xs"
+                  disabled={loading || !corpPrefix || !productId || !batchName || !batchQty}
+                  onClick={async () => {
+                    const created = await generateBatch({
+                      corpPrefix,
+                      productId,
+                      batchName: String(batchName).trim(),
+                      batchQty,
+                      remark: String(remark || '').trim() || undefined,
+                      certificateTemplateId: certificateTemplateId ? Number(certificateTemplateId) : null,
+                      templateData
+                    });
+                    const batchId = created?.batch?.id;
+                    if (batchId) await exportBatchXlsx(batchId);
+                    await fetchBatches({ limit: 50, offset: 0 });
                   }}
                 >
-                  ›
+                  {loading ? t('generating') : t('generate')}
                 </button>
               </div>
+
+              {lastGenerated?.batch ? (
+                <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+                  {t('latestBatch')}: <span className="font-mono">{lastGenerated.batch.batchName}</span> (#{lastGenerated.batch.id})
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
-      {showGenerate ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/30 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded border border-zinc-200 bg-white p-4">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <div className="text-sm font-semibold text-zinc-900">{t('generateEpc')}</div>
-              <button
-                type="button"
-                className="rounded border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
-                onClick={() => setShowGenerate(false)}
-              >
-                {t('close')}
-              </button>
-            </div>
-            <EpcGeneratePanel
-              t={t}
-              corpCodes={corpCodes}
-              corpPrefix={corpPrefix}
-              setCorpPrefix={setCorpPrefix}
-              products={products}
-              productId={productId}
-              setProductId={setProductId}
-              batchName={batchName}
-              setBatchName={setBatchName}
-              batchQty={batchQty}
-              setBatchQty={setBatchQty}
-              remark={remark}
-              setRemark={setRemark}
-              loading={loading}
-              lastGenerated={lastGenerated}
-              onClear={() => {
-                setBatchName('');
-                setBatchQty(1);
-                setRemark('');
-                clearLastGenerated();
-              }}
-              onGenerate={async () => {
-                const pid = Number(productId);
-                if (!corpPrefix || !pid || !String(batchName || '').trim()) return;
-                const created = await generateBatch({
-                  corpPrefix,
-                  productId: pid,
-                  batchName: String(batchName || '').trim(),
-                  batchQty,
-                  remark: String(remark || '').trim() || undefined
-                });
-                const newBatchId = created?.batch?.id;
-                await fetchBatches({ limit: batchLimit, offset: 0 });
-                if (newBatchId) {
-                  setSelectedBatchId(String(newBatchId));
-                  setTab('items');
-                  setItemPage(1);
-                  await fetchItems({ batchId: newBatchId, limit: itemLimit, offset: 0 });
-                } else {
-                  await fetchItems({ limit: itemLimit, offset: 0 });
-                }
-              }}
-            />
+      {tab === 'batches' ? (
+        <div className="rounded-xl border border-zinc-200 bg-white">
+          <div className="border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-600">{t('epcBatches')}</div>
+          <div className="divide-y divide-zinc-100">
+            {(Array.isArray(batches) ? batches : []).map((b) => (
+              <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-zinc-900">
+                    {b.batchName} <span className="text-xs text-zinc-500">#{b.id}</span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-zinc-500">
+                    {b.product?.name || '-'} • {b.batchQty} • {formatDateTime(b.createdAt)}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchXlsx(b.id)}>
+                    {t('exportXlsx')}
+                  </button>
+                  <button
+                    type="button"
+                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                    onClick={async () => {
+                      if (!window.confirm(t('confirmDelete'))) return;
+                      await deleteBatch({ batchId: b.id });
+                      await fetchBatches({ limit: 50, offset: 0 });
+                    }}
+                  >
+                    {t('delete')}
+                  </button>
+                </div>
+              </div>
+            ))}
+            {(!batches || batches.length === 0) && !loading ? <div className="px-4 py-6 text-xs text-zinc-500">{t('noBatches')}</div> : null}
+          </div>
+        </div>
+      ) : null}
+
+      {tab === 'production' ? (
+        <div className="rounded-xl border border-zinc-200 bg-white">
+          <div className="border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-600">{t('productionOrders')}</div>
+          <div className="divide-y divide-zinc-100">
+            {(Array.isArray(batches) ? batches : []).map((b) => {
+              const done = Boolean(b.productionDoneAt);
+              const uploaded = Boolean(b.productionUploadedAt);
+              return (
+                <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-zinc-900">
+                      {b.batchName} <span className="text-xs text-zinc-500">#{b.id}</span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-zinc-500">
+                      {uploaded ? `Uploaded: ${formatDateTime(b.productionUploadedAt)}` : 'Not uploaded'} • {done ? `Done: ${formatDateTime(b.productionDoneAt)}` : 'Not done'}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchXlsx(b.id)}>
+                      {t('download')}
+                    </button>
+                    <label className="ac-btn ac-btn-soft px-3 py-2 text-xs">
+                      {t('importXlsx')}
+                      <input
+                        type="file"
+                        accept=".xlsx"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const base64 = await toBase64(file);
+                          await importProductionXlsx({ batchId: b.id, base64 });
+                          await fetchBatches({ limit: 50, offset: 0 });
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="ac-btn ac-btn-primary px-3 py-2 text-xs"
+                      disabled={loading || done}
+                      onClick={async () => {
+                        await markProductionDone({ batchId: b.id });
+                        await fetchBatches({ limit: 50, offset: 0 });
+                      }}
+                    >
+                      {t('markDone')}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            {(!batches || batches.length === 0) && !loading ? <div className="px-4 py-6 text-xs text-zinc-500">{t('noBatches')}</div> : null}
           </div>
         </div>
       ) : null}

@@ -190,6 +190,11 @@ model EpcBatch {
   batchName String
   batchQty  Int
   remark    String?
+  certificateTemplateId Int?
+  certificateTemplate   CertificateTemplate? @relation(fields: [certificateTemplateId], references: [id])
+  templateData Json?
+  productionUploadedAt DateTime?
+  productionDoneAt     DateTime?
 
   createdAt DateTime @default(now())
 
@@ -210,6 +215,9 @@ model EpcItem {
 
   epcCode   String
   runningNo BigInt
+  netWeight String?
+  productionDate DateTime?
+  caiqNumber String?
   createdAt DateTime @default(now())
 
   @@unique([organizationId, epcCode])

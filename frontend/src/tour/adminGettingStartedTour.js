@@ -7,28 +7,13 @@ export function getAdminGettingStartedTourSteps(t) {
     },
     {
       selector: '[data-tour="nav-records"]',
-      title: t('records'),
+      title: t('productModule'),
       body: t('recordsSubtitle')
     },
     {
       selector: '[data-tour="nav-epc"]',
       title: t('epc'),
-      body: t('epcSubtitle')
-    },
-    {
-      selector: '[data-tour="nav-certificates"]',
-      title: t('certificates'),
-      body: t('certificatesSubtitle')
-    },
-    {
-      selector: '[data-tour="nav-identities"]',
-      title: t('identities'),
-      body: t('identitiesSubtitle')
-    },
-    {
-      selector: '[data-tour="nav-cms"]',
-      title: t('cmsBuilder'),
-      body: t('cmsSubheading')
+      body: t('guideStepBatchesBody')
     },
     {
       selector: '[data-tour="nav-cert-templates"]',
@@ -36,15 +21,19 @@ export function getAdminGettingStartedTourSteps(t) {
       body: t('certTplSubheading')
     },
     {
-      selector: '[data-tour="nav-analytics"]',
-      title: t('analytics'),
-      body: t('analyticsSubtitle')
+      selector: '[data-tour="nav-cms"]',
+      title: t('cmsLanding'),
+      body: t('cmsSubheading')
     },
     {
-      selector: '[data-tour="nav-integrations"]',
-      title: t('integrations'),
-      body: t('integrationsSubtitle')
+      selector: '[data-tour="nav-cms-certificate"]',
+      title: t('cmsCertificate'),
+      body: t('cmsCertificateSubheading')
+    },
+    {
+      selector: '[data-tour="nav-settings"]',
+      title: t('settings'),
+      body: t('systemSettingsHint')
     }
   ];
 }
-

@@ -4,6 +4,7 @@ import { useT } from '../../i18n/useT';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
 import useMediaStore from '../../store/useMediaStore';
+import useRecordsStore from '../../store/useRecordsStore';
 import { createAdminApi } from '../../utils/adminApi';
 
 function makeId(prefix) {
@@ -38,6 +39,11 @@ export default function AdminCertificateTemplateBuilder() {
   }));
   const { token } = useAdminAuthStore((s) => ({ token: s.token }));
   const { uploadMedia } = useMediaStore((s) => ({ uploadMedia: s.uploadMedia }));
+  const { products, fetchProducts, updateProduct } = useRecordsStore((s) => ({
+    products: s.products,
+    fetchProducts: s.fetchProducts,
+    updateProduct: s.updateProduct
+  }));
 
   const [selectedId, setSelectedId] = useState(null);
   const [selectedFieldId, setSelectedFieldId] = useState(null);
@@ -53,6 +59,7 @@ export default function AdminCertificateTemplateBuilder() {
   const [bgError, setBgError] = useState(null);
   const [bgFileKey, setBgFileKey] = useState(0);
   const [devicePresetId, setDevicePresetId] = useState('fit');
+  const [assignedProductIds, setAssignedProductIds] = useState(() => new Set());
 
   const fieldsRef = useRef([]);
 
@@ -67,14 +74,39 @@ export default function AdminCertificateTemplateBuilder() {
 
   const fields = useMemo(() => {
     const layout = Array.isArray(selected?.layoutJson) ? selected.layoutJson : [];
+    const placeholders = Array.isArray(selected?.placeholders) ? selected.placeholders : [];
+    const placeholderByKey = new Map();
+    for (const p of placeholders) {
+      const key = String(p?.key || '').trim();
+      if (!key) continue;
+      placeholderByKey.set(key, p);
+    }
+    const safePreview = previewData
+      ? {
+          ...previewData,
+          templateData: {
+            ...(previewData.templateData || {}),
+            ...Object.fromEntries(placeholders.map((p) => [String(p?.key || '').trim(), previewData?.templateData?.[String(p?.key || '').trim()] || p?.sample || '']))
+          }
+        }
+      : null;
     return layout.map((f) => ({
       ...(f || {}),
       render: (it) => (
         <div className="h-full w-full p-2">
           <div className="text-[11px] font-semibold text-zinc-600">{it.label || it.path}</div>
-          <div className="mt-1 truncate text-sm font-semibold text-zinc-900">
-            {previewData ? String(getValue(it.path, previewData)) : ''}
-          </div>
+          {(() => {
+            const raw = safePreview ? getValue(it.path, safePreview) : '';
+            const path = String(it.path || '');
+            const key = path.startsWith('templateData.') ? path.slice('templateData.'.length) : '';
+            const ph = key ? placeholderByKey.get(key) : null;
+            const typ = String(ph?.type || '');
+            const val = raw == null ? '' : String(raw);
+            if (typ === 'rich_text') {
+              return <div className="mt-1 text-sm font-semibold text-zinc-900" dangerouslySetInnerHTML={{ __html: val }} />;
+            }
+            return <div className="mt-1 truncate text-sm font-semibold text-zinc-900">{val}</div>;
+          })()}
         </div>
       )
     }));
@@ -85,6 +117,8 @@ export default function AdminCertificateTemplateBuilder() {
   }, [selected]);
 
   const selectedField = useMemo(() => (fieldsRef.current || []).find((f) => f.id === selectedFieldId) || null, [selectedFieldId]);
+
+  const placeholders = useMemo(() => (Array.isArray(selected?.placeholders) ? selected.placeholders : []), [selected]);
 
   const updateSelected = async (patch) => {
     if (!selected) return;
@@ -118,9 +152,22 @@ export default function AdminCertificateTemplateBuilder() {
   }, [fetchTemplates]);
 
   useEffect(() => {
+    void fetchProducts();
+  }, [fetchProducts]);
+
+  useEffect(() => {
     if (selectedId != null) return;
     if (templates.length > 0) setSelectedId(templates[0].id);
   }, [templates, selectedId]);
+
+  useEffect(() => {
+    if (!selected?.id) return;
+    const next = new Set();
+    for (const p of Array.isArray(products) ? products : []) {
+      if (String(p?.certificateTemplateId || '') === String(selected.id)) next.add(String(p.id));
+    }
+    setAssignedProductIds(next);
+  }, [products, selected?.id]);
 
   const fetchPreview = async () => {
     setPreviewError(null);
@@ -246,6 +293,59 @@ export default function AdminCertificateTemplateBuilder() {
               </button>
             </div>
           </div>
+
+          {selected ? (
+            <div className="mt-4 rounded-lg bg-zinc-50 p-3">
+              <div className="text-xs font-semibold text-zinc-700">{t('assignProducts')}</div>
+              <div className="mt-2 max-h-56 space-y-1 overflow-auto">
+                {(Array.isArray(products) ? products : [])
+                  .slice()
+                  .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')))
+                  .map((p) => {
+                    const id = String(p.id);
+                    const checked = assignedProductIds.has(id);
+                    return (
+                      <label key={id} className="flex items-center gap-2 rounded px-2 py-1 text-xs text-zinc-800 hover:bg-white">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            const next = new Set(assignedProductIds);
+                            if (e.target.checked) next.add(id);
+                            else next.delete(id);
+                            setAssignedProductIds(next);
+                          }}
+                        />
+                        <span className="truncate">
+                          {p.name} <span className="font-mono text-[11px] text-zinc-500">({p.sku})</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+              </div>
+              <button
+                type="button"
+                className="ac-btn mt-3 w-full rounded-lg px-3 py-2 text-sm"
+                onClick={async () => {
+                  const list = Array.isArray(products) ? products : [];
+                  for (const p of list) {
+                    const pid = String(p.id);
+                    const shouldHave = assignedProductIds.has(pid);
+                    const has = String(p.certificateTemplateId || '') === String(selected.id);
+                    if (shouldHave && !has) {
+                      await updateProduct({ id: p.id, patch: { certificateTemplateId: Number(selected.id) } });
+                    }
+                    if (!shouldHave && has) {
+                      await updateProduct({ id: p.id, patch: { certificateTemplateId: null } });
+                    }
+                  }
+                  await fetchProducts();
+                }}
+              >
+                {t('apply')}
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <div className="ac-card p-3">
@@ -394,6 +494,65 @@ export default function AdminCertificateTemplateBuilder() {
                 </div>
               </div>
 
+              <div className="rounded-lg border border-zinc-200 bg-white p-3">
+                <div className="mb-2 text-xs font-semibold text-zinc-700">{t('placeholders')}</div>
+                <div className="space-y-2">
+                  {placeholders.map((p, idx) => (
+                    <div key={`${p?.key || ''}-${idx}`} className="grid grid-cols-[1fr_1fr_120px_auto] gap-2">
+                      <input
+                        value={String(p?.key || '')}
+                        onChange={(e) => {
+                          const next = placeholders.slice();
+                          next[idx] = { ...(next[idx] || {}), key: e.target.value };
+                          void updateSelected({ placeholders: next });
+                        }}
+                        placeholder={t('key')}
+                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                      />
+                      <input
+                        value={String(p?.label || '')}
+                        onChange={(e) => {
+                          const next = placeholders.slice();
+                          next[idx] = { ...(next[idx] || {}), label: e.target.value };
+                          void updateSelected({ placeholders: next });
+                        }}
+                        placeholder={t('fieldLabel')}
+                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                      />
+                      <select
+                        value={String(p?.type || 'text')}
+                        onChange={(e) => {
+                          const next = placeholders.slice();
+                          next[idx] = { ...(next[idx] || {}), type: e.target.value };
+                          void updateSelected({ placeholders: next });
+                        }}
+                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                      >
+                        <option value="text">{t('text')}</option>
+                        <option value="rich_text">{t('richText')}</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = placeholders.filter((_, i) => i !== idx);
+                          void updateSelected({ placeholders: next });
+                        }}
+                        className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                      >
+                        {t('delete')}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void updateSelected({ placeholders: [...placeholders, { key: '', label: '', type: 'text' }] })}
+                  className="mt-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                >
+                  {t('addPlaceholder')}
+                </button>
+              </div>
+
               {!selectedField ? (
                 <div className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{t('selectField')}</div>
               ) : (
@@ -430,6 +589,14 @@ export default function AdminCertificateTemplateBuilder() {
                       <option value="batch.batchNo">batch.batchNo</option>
                       <option value="issuedAt">issuedAt</option>
                       <option value="status">status</option>
+                      {placeholders
+                        .map((p) => String(p?.key || '').trim())
+                        .filter(Boolean)
+                        .map((k) => (
+                          <option key={k} value={`templateData.${k}`}>
+                            templateData.{k}
+                          </option>
+                        ))}
                     </select>
                   </div>
 

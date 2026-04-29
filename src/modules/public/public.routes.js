@@ -81,6 +81,8 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
 
     let layout = cert.batch?.product?.cmsPage?.publishedVersion?.layoutJson || null;
     const pageId = cert.batch?.product?.cmsPage?.id || null;
+    let certificateLayout = cert.batch?.product?.cmsCertificatePage?.publishedVersion?.layoutJson || null;
+    const certificatePageId = cert.batch?.product?.cmsCertificatePage?.id || null;
     if (pageId) {
       try {
         if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
@@ -99,7 +101,26 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         dbGate.markDbFailure({ cooldownMs: 10_000 });
       }
     }
+    if (certificatePageId) {
+      try {
+        if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
+        const translation = await Promise.race([
+          prisma.cmsTranslation.findFirst({
+            where: {
+              organizationId: Number(req.organization?.id || cert.organizationId || 0),
+              pageId: Number(certificatePageId),
+              language: lang
+            }
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
+        ]);
+        if (translation?.contentJson) certificateLayout = translation.contentJson;
+      } catch {
+        dbGate.markDbFailure({ cooldownMs: 10_000 });
+      }
+    }
     if (!layout) layout = cert.batch?.product?.cmsPage?.layout?.layoutJson || null;
+    if (!certificateLayout) certificateLayout = cert.batch?.product?.cmsCertificatePage?.layout?.layoutJson || null;
     const effectiveStatus = certificateService.computeEffectiveStatus(cert);
     const status = chooseStatus({ effectiveStatus, overrideStatus });
 
@@ -123,6 +144,8 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
           : null,
         batch: cert.batch ? { batchNo: cert.batch.batchNo } : null,
         layout,
+        certificateLayout,
+        certificateTemplate: cert.batch?.product?.certificateTemplate || null,
         risk: {
           score: scanEntry.riskScore,
           flags: scanEntry.riskFlags

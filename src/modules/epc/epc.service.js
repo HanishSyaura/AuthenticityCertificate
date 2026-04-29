@@ -51,7 +51,7 @@ function chunkArray(arr, size) {
   return out;
 }
 
-async function generateEpcBatch({ organizationId, corpPrefix, productId, batchName, batchQty, remark }) {
+async function generateEpcBatch({ organizationId, corpPrefix, productId, batchName, batchQty, remark, certificateTemplateId, templateData }) {
   const allowed = getAllowedCorpPrefixes();
   if (!allowed.includes(corpPrefix)) throw new Error('Corp code tidak dibenarkan');
 
@@ -103,7 +103,11 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, batchNa
           sku: product.sku,
           batchName,
           batchQty,
-          remark: remark || null
+          remark: remark || null,
+          certificateTemplateId: typeof certificateTemplateId === 'number' ? certificateTemplateId : null,
+          templateData: templateData || null,
+          productionUploadedAt: null,
+          productionDoneAt: null
         },
         include: {
           product: { select: { id: true, sku: true, name: true, code: true } }
@@ -118,7 +122,10 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, batchNa
           organizationId: orgId,
           batchId: batch.id,
           epcCode,
-          runningNo
+          runningNo,
+          netWeight: null,
+          productionDate: null,
+          caiqNumber: null
         });
       }
 
@@ -152,7 +159,7 @@ async function exportBatchXlsx({ organizationId, batchId }) {
     prisma.epcItem.findMany({
       where: { organizationId: orgId, batchId: id },
       orderBy: { runningNo: 'asc' },
-      select: { epcCode: true, runningNo: true, createdAt: true }
+      select: { epcCode: true, runningNo: true, createdAt: true, netWeight: true, productionDate: true, caiqNumber: true }
     }),
     12_000
   );
@@ -169,8 +176,9 @@ async function exportBatchXlsx({ organizationId, batchId }) {
   const wsItems = XLSX.utils.json_to_sheet(
     items.map((it) => ({
       epcCode: it.epcCode,
-      runningNo: it.runningNo?.toString ? it.runningNo.toString() : String(it.runningNo),
-      createdAt: it.createdAt ? new Date(it.createdAt).toISOString() : ''
+      netWeight: it.netWeight || '',
+      productionDate: it.productionDate ? new Date(it.productionDate).toISOString().slice(0, 10) : '',
+      caiqNumber: it.caiqNumber || ''
     }))
   );
 
@@ -259,10 +267,119 @@ async function listItems({ organizationId, q, batchId, limit, offset }) {
   return { items, total, limit, offset };
 }
 
+function parseXlsxBase64(base64) {
+  const raw = String(base64 || '');
+  const commaIdx = raw.indexOf(',');
+  const b64 = commaIdx >= 0 ? raw.slice(commaIdx + 1) : raw;
+  const buf = Buffer.from(b64, 'base64');
+  const wb = XLSX.read(buf, { type: 'buffer' });
+  const sheetName = wb.SheetNames?.find((n) => String(n || '').toLowerCase() === 'epc') || wb.SheetNames?.[0] || null;
+  if (!sheetName) return { sheetName: null, rows: [] };
+  const ws = wb.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  return { sheetName, rows };
+}
+
+function normalizeRowKeys(row) {
+  const out = {};
+  for (const [k, v] of Object.entries(row || {})) {
+    const key = String(k || '').trim().toLowerCase().replace(/\s+/g, '');
+    out[key] = v;
+  }
+  return out;
+}
+
+function toDateOrNull(input) {
+  if (!input) return null;
+  if (input instanceof Date && !Number.isNaN(input.getTime())) return input;
+  if (typeof input === 'number') {
+    const d = XLSX.SSF.parse_date_code(input);
+    if (d && d.y && d.m && d.d) return new Date(Date.UTC(d.y, d.m - 1, d.d));
+  }
+  const s = String(input || '').trim();
+  if (!s) return null;
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) return d;
+  return null;
+}
+
+async function importProductionXlsx({ organizationId, batchId, base64 }) {
+  const orgId = Number(organizationId);
+  const id = Number(batchId);
+  if (!Number.isFinite(id)) throw new Error('Invalid batch id');
+  const { rows } = parseXlsxBase64(base64);
+  if (!Array.isArray(rows) || rows.length === 0) throw new Error('Excel kosong');
+
+  const updates = [];
+  for (const r of rows) {
+    const n = normalizeRowKeys(r);
+    const epcCode = String(n.epccode || n.epc || n.code || '').trim();
+    if (!epcCode) continue;
+    updates.push({
+      epcCode,
+      netWeight: String(n.netweight || n.net_weight || '').trim() || null,
+      productionDate: toDateOrNull(n.productiondate || n.dateofproduction || n.production_date),
+      caiqNumber: String(n.caiqnumber || n.caiq || n.caiqlabel || n.caiq_label || '').trim() || null
+    });
+  }
+  if (updates.length === 0) throw new Error('Tiada EPC code dalam Excel');
+
+  const result = await prisma.$transaction(async (tx) => {
+    const batch = await tx.epcBatch.findFirst({ where: { id, organizationId: orgId } });
+    if (!batch) throw new Error('Batch tidak dijumpai');
+
+    let updated = 0;
+    for (const u of updates) {
+      const res = await tx.epcItem.updateMany({
+        where: { organizationId: orgId, batchId: id, epcCode: u.epcCode },
+        data: { netWeight: u.netWeight, productionDate: u.productionDate, caiqNumber: u.caiqNumber }
+      });
+      updated += res.count || 0;
+    }
+
+    await tx.epcBatch.update({ where: { id }, data: { productionUploadedAt: new Date() } });
+    return { batchId: id, rows: updates.length, updated };
+  });
+
+  return result;
+}
+
+async function markProductionDone({ organizationId, batchId }) {
+  const orgId = Number(organizationId);
+  const id = Number(batchId);
+  if (!Number.isFinite(id)) throw new Error('Invalid batch id');
+  const res = await withTimeout(
+    prisma.epcBatch.updateMany({
+      where: { id, organizationId: orgId },
+      data: { productionDoneAt: new Date() }
+    }),
+    1500
+  );
+  if (!res.count) throw new Error('Batch tidak dijumpai');
+  return { batchId: id };
+}
+
+async function deleteBatch({ organizationId, batchId }) {
+  const orgId = Number(organizationId);
+  const id = Number(batchId);
+  if (!Number.isFinite(id)) throw new Error('Invalid batch id');
+  const result = await prisma.$transaction(async (tx) => {
+    const batch = await tx.epcBatch.findFirst({ where: { id, organizationId: orgId } });
+    if (!batch) throw new Error('Batch tidak dijumpai');
+    await tx.epcItem.deleteMany({ where: { organizationId: orgId, batchId: id } });
+    await tx.epcBatch.delete({ where: { id } });
+    return { batchId: id };
+  });
+  return result;
+}
+
 module.exports = {
   getAllowedCorpPrefixes,
   generateEpcBatch,
   exportBatchXlsx,
   listBatches,
-  listItems
+  listItems,
+  importProductionXlsx,
+  markProductionDone,
+  deleteBatch
 };

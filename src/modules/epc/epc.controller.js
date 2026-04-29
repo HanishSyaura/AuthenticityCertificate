@@ -6,7 +6,13 @@ const generateSchema = z.object({
   productId: z.number().int().positive(),
   batchName: z.string().min(1),
   batchQty: z.number().int().positive().max(5000),
-  remark: z.string().optional()
+  remark: z.string().optional(),
+  certificateTemplateId: z.number().int().nullable().optional(),
+  templateData: z.record(z.any()).optional()
+});
+
+const importProductionSchema = z.object({
+  base64: z.string().min(1)
 });
 
 function parseLimitOffset(q) {
@@ -33,7 +39,9 @@ async function generateBatch(req, res) {
       productId: validated.productId,
       batchName: validated.batchName,
       batchQty: validated.batchQty,
-      remark: validated.remark
+      remark: validated.remark,
+      certificateTemplateId: validated.certificateTemplateId,
+      templateData: validated.templateData
     });
     res.success(result, 'EPC batch generated');
   } catch (e) {
@@ -87,11 +95,45 @@ async function exportBatch(req, res) {
   }
 }
 
+async function importProductionXlsx(req, res) {
+  try {
+    const batchId = Number(req.params.id);
+    const data = importProductionSchema.parse(req.body);
+    const result = await epcService.importProductionXlsx({ organizationId: req.organization.id, batchId, base64: data.base64 });
+    res.success(result, 'Production file imported');
+  } catch (e) {
+    res.error(e.message, 400);
+  }
+}
+
+async function markProductionDone(req, res) {
+  try {
+    const batchId = Number(req.params.id);
+    const result = await epcService.markProductionDone({ organizationId: req.organization.id, batchId });
+    res.success(result, 'Production marked done');
+  } catch (e) {
+    res.error(e.message, 400);
+  }
+}
+
+async function deleteBatch(req, res) {
+  try {
+    const batchId = Number(req.params.id);
+    const result = await epcService.deleteBatch({ organizationId: req.organization.id, batchId });
+    res.success(result, 'Batch deleted');
+  } catch (e) {
+    res.error(e.message, 400);
+  }
+}
+
 module.exports = {
   getCorpCodes,
   generateBatch,
   listBatches,
   listItems,
   listBatchItems,
-  exportBatch
+  exportBatch,
+  importProductionXlsx,
+  markProductionDone,
+  deleteBatch
 };

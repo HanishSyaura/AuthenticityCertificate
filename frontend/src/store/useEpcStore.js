@@ -83,7 +83,7 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
-  generateBatch: async ({ corpPrefix, productId, batchName, batchQty, remark }) => {
+  generateBatch: async ({ corpPrefix, productId, batchName, batchQty, remark, certificateTemplateId, templateData }) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
@@ -92,7 +92,9 @@ const useEpcStore = create((set, get) => ({
         productId: Number(productId),
         batchName,
         batchQty: Number(batchQty),
-        remark: remark || undefined
+        remark: remark || undefined,
+        certificateTemplateId: certificateTemplateId != null && String(certificateTemplateId).trim() !== '' ? Number(certificateTemplateId) : null,
+        templateData: templateData || undefined
       };
       const res = await api.post('/epc/batches/generate', body);
       const created = res?.data?.data;
@@ -127,6 +129,52 @@ const useEpcStore = create((set, get) => ({
   },
 
   clearLastGenerated: () => set({ lastGenerated: null }),
+
+  importProductionXlsx: async ({ batchId, base64 }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const id = Number(batchId);
+      const res = await api.post(`/epc/batches/${id}/production/import-xlsx`, { base64 });
+      set({ loading: false });
+      return res?.data?.data;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Import failed';
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
+  markProductionDone: async ({ batchId }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const id = Number(batchId);
+      const res = await api.post(`/epc/batches/${id}/production/done`, {});
+      set({ loading: false });
+      return res?.data?.data;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Update failed';
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
+  deleteBatch: async ({ batchId }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const id = Number(batchId);
+      await api.delete(`/epc/batches/${id}`);
+      const batches = (get().batches || []).filter((b) => String(b.id) !== String(id));
+      set({ loading: false, batches });
+      return true;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Delete failed';
+      set({ loading: false, error: msg });
+      return false;
+    }
+  },
 
   selectBatch: async (batchId) => {
     set({ loading: true, error: null });

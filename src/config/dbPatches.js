@@ -40,6 +40,13 @@ async function resolveProductTableName() {
   return tableName;
 }
 
+async function resolveTableName(candidates) {
+  for (const name of candidates) {
+    if (await tableExists(name)) return name;
+  }
+  return null;
+}
+
 async function ensureColumn(tableName, columnName, addSql, fillSql, modifySql) {
   const exists = await columnExists(tableName, columnName);
   if (exists) return;
@@ -164,8 +171,60 @@ async function ensureProductSchemaCompat() {
   }
 }
 
+async function ensureCmsPageSchemaCompat() {
+  const tableName = await resolveTableName(['CmsPage', 'cmsPage', 'cms_pages']);
+  if (!tableName) return;
+  await ensureColumn(
+    tableName,
+    'kind',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`kind\` VARCHAR(32) NULL`,
+    `UPDATE \`${tableName}\` SET \`kind\` = 'landing' WHERE \`kind\` IS NULL OR \`kind\` = ''`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`kind\` VARCHAR(32) NOT NULL DEFAULT 'landing'`
+  );
+}
+
+async function ensureCertificateTemplateSchemaCompat() {
+  const tableName = await resolveTableName(['CertificateTemplate', 'certificateTemplate', 'certificate_templates']);
+  if (!tableName) return;
+  await ensureColumn(tableName, 'placeholders', `ALTER TABLE \`${tableName}\` ADD COLUMN \`placeholders\` JSON NULL`, null, null);
+  await ensureColumn(
+    tableName,
+    'canvasWidth',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`canvasWidth\` INT NULL`,
+    `UPDATE \`${tableName}\` SET \`canvasWidth\` = 390 WHERE \`canvasWidth\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`canvasWidth\` INT NOT NULL DEFAULT 390`
+  );
+  await ensureColumn(
+    tableName,
+    'canvasHeight',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`canvasHeight\` INT NULL`,
+    `UPDATE \`${tableName}\` SET \`canvasHeight\` = 844 WHERE \`canvasHeight\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`canvasHeight\` INT NOT NULL DEFAULT 844`
+  );
+}
+
+async function ensureEpcSchemaCompat() {
+  const batchTable = await resolveTableName(['EpcBatch', 'epcBatch', 'epc_batches']);
+  if (batchTable) {
+    await ensureColumn(batchTable, 'certificateTemplateId', `ALTER TABLE \`${batchTable}\` ADD COLUMN \`certificateTemplateId\` INT NULL`, null, null);
+    await ensureColumn(batchTable, 'templateData', `ALTER TABLE \`${batchTable}\` ADD COLUMN \`templateData\` JSON NULL`, null, null);
+    await ensureColumn(batchTable, 'productionUploadedAt', `ALTER TABLE \`${batchTable}\` ADD COLUMN \`productionUploadedAt\` DATETIME NULL`, null, null);
+    await ensureColumn(batchTable, 'productionDoneAt', `ALTER TABLE \`${batchTable}\` ADD COLUMN \`productionDoneAt\` DATETIME NULL`, null, null);
+  }
+
+  const itemTable = await resolveTableName(['EpcItem', 'epcItem', 'epc_items']);
+  if (itemTable) {
+    await ensureColumn(itemTable, 'netWeight', `ALTER TABLE \`${itemTable}\` ADD COLUMN \`netWeight\` VARCHAR(191) NULL`, null, null);
+    await ensureColumn(itemTable, 'productionDate', `ALTER TABLE \`${itemTable}\` ADD COLUMN \`productionDate\` DATETIME NULL`, null, null);
+    await ensureColumn(itemTable, 'caiqNumber', `ALTER TABLE \`${itemTable}\` ADD COLUMN \`caiqNumber\` VARCHAR(191) NULL`, null, null);
+  }
+}
+
 async function applyDbPatches() {
   await ensureProductSchemaCompat();
+  await ensureCmsPageSchemaCompat();
+  await ensureCertificateTemplateSchemaCompat();
+  await ensureEpcSchemaCompat();
 }
 
 module.exports = { applyDbPatches };

@@ -14,8 +14,11 @@ router.use(requireOrganization);
 router.get('/corp-codes', epcController.getCorpCodes);
 router.post('/batches/generate', auditAction('GENERATE_EPC_BATCH', { targetType: 'epc_batch' }), epcController.generateBatch);
 router.get('/batches', epcController.listBatches);
+router.delete('/batches/:id', auditAction('DELETE_EPC_BATCH', { targetType: 'epc_batch', getTargetId: (req) => String(req.params?.id || '') }), epcController.deleteBatch);
 router.get('/items', epcController.listItems);
 router.get('/batches/:id/items', epcController.listBatchItems);
 router.get('/batches/:id/export-xlsx', epcController.exportBatch);
+router.post('/batches/:id/production/import-xlsx', auditAction('IMPORT_PRODUCTION_XLSX', { targetType: 'epc_batch', getTargetId: (req) => String(req.params?.id || '') }), epcController.importProductionXlsx);
+router.post('/batches/:id/production/done', auditAction('MARK_PRODUCTION_DONE', { targetType: 'epc_batch', getTargetId: (req) => String(req.params?.id || '') }), epcController.markProductionDone);
 
 module.exports = router;

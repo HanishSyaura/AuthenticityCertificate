@@ -255,7 +255,15 @@ async function getCertificateDetails(certificateId) {
                   publishedVersion: true,
                   draftVersion: true
                 }
-              }
+              },
+              cmsCertificatePage: {
+                include: {
+                  layout: true,
+                  publishedVersion: true,
+                  draftVersion: true
+                }
+              },
+              certificateTemplate: true
             }
           }
         }
