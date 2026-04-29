@@ -54,36 +54,25 @@ export default function AdminShell() {
           <div className="h-[calc(100vh-3.5rem)] overflow-auto px-2 py-3">
             <NavSection title={t('navOverview')}>
               <NavItem to="/admin/dashboard" label={t('dashboard')} tourId="nav-dashboard" />
-              <NavItem to="/admin/guide" label={t('gettingStarted')} tourId="nav-guide" />
             </NavSection>
 
             <NavSection title={t('navProductsBatches')}>
-              <NavItem to="/admin/records" label={t('records')} tourId="nav-records" />
+              <NavItem to="/admin/records" label={t('productModule')} tourId="nav-records" />
               <NavItem to="/admin/epc" label={t('epc')} tourId="nav-epc" />
             </NavSection>
 
             <NavSection title={t('navCertificates')}>
-              <NavItem to="/admin/certificates" label={t('certificates')} tourId="nav-certificates" />
-              <NavItem to="/admin/identities" label={t('identities')} tourId="nav-identities" />
               <NavItem to="/admin/cert-templates" label={t('certTemplates')} tourId="nav-cert-templates" />
             </NavSection>
 
             <NavSection title={t('navContent')}>
-              <NavItem to="/admin/cms" label={t('cmsBuilder')} tourId="nav-cms" />
+              <NavItem to="/admin/cms" label={t('cmsLanding')} tourId="nav-cms" />
+              <NavItem to="/admin/cms-certificate" label={t('cmsCertificate')} tourId="nav-cms-certificate" />
             </NavSection>
 
-            <NavSection title={t('navMonitoring')}>
-              <NavItem to="/admin/analytics" label={t('analytics')} tourId="nav-analytics" />
-              <NavItem to="/admin/fraud" label={t('fraudDetection')} />
-            </NavSection>
-
-            <NavSection title={t('navGovernance')}>
-              <NavItem to="/admin/audit" label={t('auditLog')} />
+            <NavSection title={t('navSettings')}>
+              <NavItem to="/admin/settings" label={t('settings')} tourId="nav-settings" />
               {canSeeUsers ? <NavItem to="/admin/users" label={t('usersRoles')} /> : null}
-            </NavSection>
-
-            <NavSection title={t('navIntegrations')}>
-              <NavItem to="/admin/integrations" label={t('integrations')} tourId="nav-integrations" />
             </NavSection>
           </div>
         </aside>
@@ -104,6 +93,17 @@ export default function AdminShell() {
             </div>
 
             <div className="flex items-center gap-3">
+              <NavLink
+                to="/admin/guide"
+                data-tour="nav-guide"
+                className={({ isActive }) =>
+                  `rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                    isActive ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200/80 bg-white text-zinc-900 hover:bg-zinc-50'
+                  }`
+                }
+              >
+                {t('gettingStarted')}
+              </NavLink>
               <LanguageSwitcher size="xs" />
               <div className="text-right">
                 <div className="text-xs font-medium text-zinc-900">{user?.name || 'Admin'}</div>

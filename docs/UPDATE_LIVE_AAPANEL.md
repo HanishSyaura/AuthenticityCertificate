@@ -215,30 +215,21 @@ cara update semua:
 ```Shell
 cd /www/wwwroot/wmscertauth.clbgroups.com
 
-# 1. clean local conflict dulu (PENTING)
 rm -rf frontend/dist
 git reset --hard
-
-# 2. pull latest code
 git pull origin main
 
-# 3. install backend deps (optional kalau backend berubah)
+npm install
 
-# 4. frontend clean install (lebih stable dari npm install)
 cd frontend
 rm -rf node_modules package-lock.json
-
-# 5. build frontend fresh
+npm install
 npm run build
 
-# 6. back to root + regenerate prisma
 cd ..
 npx prisma generate
-
-# 7. restart service
 pm2 restart wmscertauth-api
 
-# 8. health check
 curl -s http://127.0.0.1:5000/health
 echo
 ```

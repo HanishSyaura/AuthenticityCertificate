@@ -19,6 +19,8 @@ import AdminFraud from './pages/admin/AdminFraud';
 import AdminIntegrations from './pages/admin/AdminIntegrations';
 import AdminGuide from './pages/admin/AdminGuide';
 import AdminEpc from './pages/admin/AdminEpc';
+import AdminSettings from './pages/admin/AdminSettings';
+import AdminCmsCertificateBuilder from './pages/admin/AdminCmsCertificateBuilder';
 
 function App() {
   return (
@@ -43,6 +45,7 @@ function App() {
           <Route path="epc" element={<AdminEpc />} />
           <Route path="records/:id" element={<AdminRecordDetail />} />
           <Route path="cms" element={<AdminCmsBuilder />} />
+          <Route path="cms-certificate" element={<AdminCmsCertificateBuilder />} />
           <Route path="cert-templates" element={<AdminCertificateTemplateBuilder />} />
           <Route path="analytics" element={<AdminAnalytics />} />
           <Route path="fraud" element={<AdminFraud />} />
@@ -50,6 +53,7 @@ function App() {
           <Route path="certificates" element={<AdminCertificates />} />
           <Route path="identities" element={<AdminIdentities />} />
           <Route path="users" element={<AdminUsers />} />
+          <Route path="settings" element={<AdminSettings />} />
           <Route path="audit" element={<AdminAudit />} />
           <Route path="bulk" element={<AdminBulkImport />} />
         </Route>
