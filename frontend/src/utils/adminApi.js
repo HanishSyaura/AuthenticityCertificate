@@ -2,8 +2,13 @@ import axios from 'axios';
 
 function getApiBaseUrl() {
   const configured = import.meta.env.VITE_API_BASE_URL;
-  if (configured && String(configured).trim()) return String(configured).trim().replace(/\/+$/, '');
-  return 'http://localhost:5000';
+  if (configured !== undefined) {
+    const trimmed = String(configured).trim();
+    if (trimmed) return trimmed.replace(/\/+$/, '');
+    return '';
+  }
+  if (import.meta.env.DEV) return 'http://localhost:5000';
+  return '';
 }
 
 export function createAdminApi({ token }) {

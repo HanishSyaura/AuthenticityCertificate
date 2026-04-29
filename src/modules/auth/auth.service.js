@@ -6,12 +6,19 @@ async function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), ms))]);
 }
 
+function getDbTimeoutMs() {
+  const raw = process.env.AUTH_DB_TIMEOUT_MS || process.env.DB_QUERY_TIMEOUT_MS;
+  const ms = Number(raw);
+  return Number.isFinite(ms) && ms > 0 ? ms : 8000;
+}
+
 async function login(email, password) {
   let user = null;
   let role = null;
+  const dbTimeoutMs = getDbTimeoutMs();
 
   try {
-    user = await withTimeout(prisma.user.findUnique({ where: { email } }), 1500);
+    user = await withTimeout(prisma.user.findUnique({ where: { email } }), dbTimeoutMs);
     if (user && user.deletedAt) user = null;
     if (user) role = user.role;
   } catch {
@@ -23,7 +30,7 @@ async function login(email, password) {
         prisma.admin.findUnique({
           where: { email }
         }),
-        1500
+        dbTimeoutMs
       );
       if (admin) {
         user = admin;
