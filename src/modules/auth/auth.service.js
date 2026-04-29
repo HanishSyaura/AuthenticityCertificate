@@ -46,7 +46,9 @@ async function login(email, password) {
   const isPasswordValid = await bcrypt.compare(password, user.password);
   if (!isPasswordValid) throw new Error('Invalid email or password');
 
-  const token = jwt.sign({ id: user.id, email: user.email, role }, process.env.JWT_SECRET, { expiresIn: '1d' });
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret || !String(jwtSecret).trim()) throw new Error('jwt_secret_missing');
+  const token = jwt.sign({ id: user.id, email: user.email, role }, String(jwtSecret), { expiresIn: '1d' });
 
   return {
     token,

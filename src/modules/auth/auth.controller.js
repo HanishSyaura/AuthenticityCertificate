@@ -18,7 +18,16 @@ async function login(req, res, next) {
     if (error?.message === 'db_timeout') {
       return res.error('Database temporarily unavailable', 503);
     }
-    res.error(error.message, 401);
+    if (error?.message === 'jwt_secret_missing') {
+      return res.error('Service temporarily unavailable', 503);
+    }
+    if (typeof error?.name === 'string' && error.name.startsWith('Prisma')) {
+      return res.error('Database temporarily unavailable', 503);
+    }
+    if (error?.message === 'Invalid email or password') {
+      return res.error('Invalid email or password', 401);
+    }
+    res.error('Unauthorized', 401);
   }
 }
 
