@@ -398,6 +398,7 @@ model CertificateTemplate {
   organization   Organization @relation(fields: [organizationId], references: [id])
   name           String
   background     String // URL to background image
+  backgroundColor String      @default("#ffffff")
   layoutJson     Json // Overlay field positions
   placeholders   Json?
   canvasWidth    Int          @default(390)

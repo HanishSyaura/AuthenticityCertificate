@@ -133,10 +133,28 @@ export default function AdminEpc() {
     for (const p of placeholders) {
       const key = String(p?.key || '').trim();
       if (!key) continue;
-      next[key] = templateData?.[key] ?? '';
+      const existing = templateData?.[key];
+      if (existing != null && String(existing).length > 0) {
+        next[key] = existing;
+        continue;
+      }
+      const source = String(p?.source || 'manual');
+      if (source === 'static') {
+        next[key] = String(p?.staticValue || '');
+        continue;
+      }
+      if (source === 'product' && selectedProduct) {
+        const bindPath = String(p?.bindPath || '').trim();
+        if (bindPath.startsWith('product.')) {
+          const prop = bindPath.slice('product.'.length);
+          next[key] = selectedProduct?.[prop] == null ? '' : String(selectedProduct[prop]);
+          continue;
+        }
+      }
+      next[key] = '';
     }
     setTemplateData(next);
-  }, [certificateTemplateId]);
+  }, [certificateTemplateId, placeholders, selectedProduct]);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -188,16 +206,26 @@ export default function AdminEpc() {
                 const key = String(p?.key || '').trim();
                 const label = String(p?.label || key);
                 const type = String(p?.type || 'text');
+                const help = String(p?.help || '').trim();
+                const source = String(p?.source || 'manual');
+                const bindPath = String(p?.bindPath || '').trim();
                 if (!key) return null;
                 return (
                   <div key={key}>
                     <div className="mb-1 text-[11px] font-semibold text-zinc-600">{label}</div>
+                    {help ? <div className="-mt-1 mb-2 text-[11px] text-zinc-500">{help}</div> : null}
+                    {source === 'product' && bindPath ? (
+                      <div className="-mt-1 mb-2 text-[11px] text-zinc-500">
+                        {t('sourceProduct')}: {bindPath}
+                      </div>
+                    ) : null}
                     {type === 'rich_text' ? (
                       <RichInput value={String(templateData?.[key] || '')} onChange={(v) => setTemplateData((prev) => ({ ...(prev || {}), [key]: v }))} />
                     ) : (
                       <input
                         value={String(templateData?.[key] || '')}
                         onChange={(e) => setTemplateData((prev) => ({ ...(prev || {}), [key]: e.target.value }))}
+                        disabled={source === 'static'}
                         className="ac-input"
                       />
                     )}

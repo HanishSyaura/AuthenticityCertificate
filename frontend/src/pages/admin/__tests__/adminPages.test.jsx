@@ -30,10 +30,12 @@ describe('admin pages', () => {
     expect(screen.getByText(/Getting Started/i)).toBeInTheDocument();
     expect(screen.getByText(/Products\s*&\s*Batches/i)).toBeInTheDocument();
     expect(screen.getByText(/^EPC$/i)).toBeInTheDocument();
-    expect(screen.getByText(/Certificates/i)).toBeInTheDocument();
-    expect(screen.getByText(/Identities/i)).toBeInTheDocument();
-    expect(screen.getByText(/Audit/i)).toBeInTheDocument();
-    expect(screen.getByText(/Users/i)).toBeInTheDocument();
+    expect(screen.getByText(/Certificates\s*&\s*identity/i)).toBeInTheDocument();
+    expect(screen.getByText(/Certificate list/i)).toBeInTheDocument();
+    expect(screen.getByText(/Content/i)).toBeInTheDocument();
+    expect(screen.getByText(/Landing Page Design/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Settings/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Users\s*&\s*Roles/i)).toBeInTheDocument();
   });
 
   it('guards Users page for non-super-admin', () => {

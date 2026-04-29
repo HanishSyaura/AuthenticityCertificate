@@ -189,6 +189,13 @@ async function ensureCertificateTemplateSchemaCompat() {
   await ensureColumn(tableName, 'placeholders', `ALTER TABLE \`${tableName}\` ADD COLUMN \`placeholders\` JSON NULL`, null, null);
   await ensureColumn(
     tableName,
+    'backgroundColor',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`backgroundColor\` VARCHAR(32) NULL`,
+    `UPDATE \`${tableName}\` SET \`backgroundColor\` = '#ffffff' WHERE \`backgroundColor\` IS NULL OR \`backgroundColor\` = ''`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`backgroundColor\` VARCHAR(32) NOT NULL DEFAULT '#ffffff'`
+  );
+  await ensureColumn(
+    tableName,
     'canvasWidth',
     `ALTER TABLE \`${tableName}\` ADD COLUMN \`canvasWidth\` INT NULL`,
     `UPDATE \`${tableName}\` SET \`canvasWidth\` = 390 WHERE \`canvasWidth\` IS NULL`,

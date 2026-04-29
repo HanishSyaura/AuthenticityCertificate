@@ -11,6 +11,21 @@ function makeId(prefix) {
   return `${prefix}-${Math.random().toString(16).slice(2)}-${Date.now()}`;
 }
 
+function makeFieldKey(label, existingKeys) {
+  const base = String(label || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'field';
+  let k = base;
+  let i = 2;
+  while (existingKeys.has(k)) {
+    k = `${base}_${i}`;
+    i += 1;
+  }
+  return k;
+}
+
 function getValue(path, data) {
   const parts = String(path).split('.');
   let cur = data;
@@ -67,6 +82,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const selected = useMemo(() => templates.find((it) => String(it.id) === String(selectedId)) || null, [templates, selectedId]);
   const canvasW = Number(selected?.canvasWidth) > 0 ? Number(selected.canvasWidth) : 390;
   const canvasH = Number(selected?.canvasHeight) > 0 ? Number(selected.canvasHeight) : 844;
+  const canvasBgColor = String(selected?.backgroundColor || '#ffffff');
   const devicePreset = useMemo(() => DEVICE_PRESETS.find((d) => d.id === devicePresetId) || DEVICE_PRESETS[0], [devicePresetId]);
   const scale = useMemo(() => {
     if (!devicePreset || !devicePreset.w) return 1;
@@ -82,6 +98,12 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       if (!key) continue;
       placeholderByKey.set(key, p);
     }
+    const textAlignClass = (align) => {
+      const a = String(align || '').toLowerCase();
+      if (a === 'center') return 'text-center';
+      if (a === 'right') return 'text-right';
+      return 'text-left';
+    };
     const safePreview = previewData
       ? {
           ...previewData,
@@ -103,10 +125,22 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             const ph = key ? placeholderByKey.get(key) : null;
             const typ = String(ph?.type || '');
             const val = raw == null ? '' : String(raw);
+            const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
+            const align = textAlignClass(it.align);
             if (typ === 'rich_text') {
-              return <div className="mt-1 text-sm font-semibold text-zinc-900" dangerouslySetInnerHTML={{ __html: val }} />;
+              return (
+                <div
+                  className={`mt-1 font-semibold text-zinc-900 ${align}`}
+                  style={{ fontSize: fs }}
+                  dangerouslySetInnerHTML={{ __html: val }}
+                />
+              );
             }
-            return <div className="mt-1 truncate text-sm font-semibold text-zinc-900">{val}</div>;
+            return (
+              <div className={`mt-1 truncate font-semibold text-zinc-900 ${align}`} style={{ fontSize: fs }}>
+                {val}
+              </div>
+            );
           })()}
         </div>
       )
@@ -124,6 +158,37 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const updateSelected = async (patch) => {
     if (!selected) return;
     await updateTemplate({ id: selected.id, patch });
+  };
+
+  const addDataFieldAndCanvasItem = async ({ label = '', type = 'text' } = {}) => {
+    if (!selected) return;
+    const existingKeys = new Set((Array.isArray(selected.placeholders) ? selected.placeholders : []).map((p) => String(p?.key || '').trim()).filter(Boolean));
+    const key = makeFieldKey(label || t('fieldLabel'), existingKeys);
+    const ph = {
+      key,
+      label: String(label || t('fieldLabel')).trim() || key,
+      type: type === 'rich_text' ? 'rich_text' : 'text',
+      source: 'manual',
+      bindPath: '',
+      staticValue: '',
+      help: '',
+      sample: ''
+    };
+    const item = {
+      id: makeId('field'),
+      path: `templateData.${key}`,
+      label: ph.label,
+      x: 20,
+      y: 40,
+      w: 240,
+      h: 56,
+      fontSize: 14,
+      align: 'left'
+    };
+    const nextPlaceholders = [...(Array.isArray(selected.placeholders) ? selected.placeholders : []), ph];
+    const nextLayout = [...(Array.isArray(selected.layoutJson) ? selected.layoutJson : []), item];
+    await updateSelected({ placeholders: nextPlaceholders, layoutJson: nextLayout });
+    setSelectedFieldId(item.id);
   };
 
   const setFields = async (nextFields) => {
@@ -209,7 +274,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
 
       {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[280px_minmax(0,1fr)_320px]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[280px_minmax(0,540px)_420px]">
         <div className="ac-card p-3">
           <div className="mb-3 text-xs font-semibold text-zinc-500">{t('certTemplates')}</div>
           <div className="space-y-1">
@@ -280,13 +345,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   void createTemplate({
                     name: nm,
                     background: String(newBackground || '').trim() || '',
-                    layoutJson: [
-                      { id: makeId('field'), path: 'certificateId', label: t('certificateId'), x: 20, y: 40, w: 350, h: 56 },
-                      { id: makeId('field'), path: 'product.name', label: t('product'), x: 20, y: 110, w: 350, h: 56 },
-                      { id: makeId('field'), path: 'batch.batchNo', label: t('batch'), x: 20, y: 180, w: 350, h: 56 },
-                      { id: makeId('field'), path: 'issuedAt', label: t('issued'), x: 20, y: 250, w: 350, h: 56 },
-                      { id: makeId('field'), path: 'status', label: t('status'), x: 20, y: 320, w: 220, h: 56 }
-                    ]
+                    backgroundColor: '#ffffff',
+                    layoutJson: [],
+                    placeholders: [],
+                    canvasWidth: 390,
+                    canvasHeight: 844
                   }).then((created) => {
                     if (created?.id != null) setSelectedId(created.id);
                     setSelectedFieldId(null);
@@ -391,8 +454,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   <button
                     type="button"
                     onClick={() => {
-                      const current = Array.isArray(selected.layoutJson) ? selected.layoutJson : [];
-                      void setFields([...current, { id: makeId('field'), path: 'status', label: t('status'), x: 20, y: 400, w: 240, h: 56 }]);
+                      void addDataFieldAndCanvasItem({ label: t('fieldLabel'), type: 'text' });
                     }}
                     className="ac-btn ac-btn-soft rounded-lg px-3 py-2 text-xs"
                   >
@@ -420,6 +482,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                 height={canvasH}
                 scale={scale}
                 backgroundMode={backgroundMode}
+                backgroundColor={canvasBgColor}
                 backgroundUrl={selected.background || ''}
                 items={fields}
                 setItems={setCanvasItems}
@@ -451,6 +514,23 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   onChange={(e) => void updateSelected({ background: e.target.value })}
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
+                <div className="mt-2">
+                  <label className="block text-xs font-medium text-zinc-700">{t('backgroundColor')}</label>
+                  <div className="mt-1 flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={canvasBgColor}
+                      onChange={(e) => void updateSelected({ backgroundColor: e.target.value })}
+                      className="h-10 w-14 rounded border border-zinc-200 bg-white p-1"
+                    />
+                    <input
+                      value={canvasBgColor}
+                      onChange={(e) => void updateSelected({ backgroundColor: e.target.value })}
+                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                      placeholder="#ffffff"
+                    />
+                  </div>
+                </div>
                 <div className="mt-2">
                   <label className="block text-xs font-medium text-zinc-700">{t('backgroundMode')}</label>
                   <select
@@ -515,10 +595,12 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
               </div>
 
               <div className="rounded-lg border border-zinc-200 bg-white p-3">
-                <div className="mb-2 text-xs font-semibold text-zinc-700">{t('placeholders')}</div>
+                <div className="mb-2 text-xs font-semibold text-zinc-700">{t('dataFields')}</div>
                 <div className="space-y-2">
                   {placeholders.map((p, idx) => (
-                    <div key={`${p?.key || ''}-${idx}`} className="grid grid-cols-[1fr_1fr_120px_auto] gap-2">
+                    <div key={`${p?.key || ''}-${idx}`} className="rounded-lg border border-zinc-200 bg-white p-2">
+                      <div className="grid grid-cols-1 gap-2">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <input
                         value={String(p?.key || '')}
                         onChange={(e) => {
@@ -539,6 +621,8 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                         placeholder={t('fieldLabel')}
                         className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                       />
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <select
                         value={String(p?.type || 'text')}
                         onChange={(e) => {
@@ -551,6 +635,58 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                         <option value="text">{t('text')}</option>
                         <option value="rich_text">{t('richText')}</option>
                       </select>
+                      <select
+                        value={String(p?.source || 'manual')}
+                        onChange={(e) => {
+                          const next = placeholders.slice();
+                          next[idx] = { ...(next[idx] || {}), source: e.target.value };
+                          void updateSelected({ placeholders: next });
+                        }}
+                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                      >
+                        <option value="manual">{t('sourceManual')}</option>
+                        <option value="product">{t('sourceProduct')}</option>
+                        <option value="static">{t('sourceStatic')}</option>
+                      </select>
+                      <select
+                        value={String(p?.bindPath || '')}
+                        onChange={(e) => {
+                          const next = placeholders.slice();
+                          next[idx] = { ...(next[idx] || {}), bindPath: e.target.value };
+                          void updateSelected({ placeholders: next });
+                        }}
+                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                      >
+                        <option value="">{t('bindTo')}</option>
+                        <option value="product.name">product.name</option>
+                        <option value="product.sku">product.sku</option>
+                        <option value="product.code">product.code</option>
+                        <option value="product.category">product.category</option>
+                        <option value="product.origin">product.origin</option>
+                        <option value="product.description">product.description</option>
+                      </select>
+                        </div>
+                      <input
+                        value={String(p?.staticValue || '')}
+                        onChange={(e) => {
+                          const next = placeholders.slice();
+                          next[idx] = { ...(next[idx] || {}), staticValue: e.target.value };
+                          void updateSelected({ placeholders: next });
+                        }}
+                        placeholder={t('staticValue')}
+                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                      />
+                      <input
+                        value={String(p?.help || '')}
+                        onChange={(e) => {
+                          const next = placeholders.slice();
+                          next[idx] = { ...(next[idx] || {}), help: e.target.value };
+                          void updateSelected({ placeholders: next });
+                        }}
+                        placeholder={t('helpText')}
+                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                      />
+                      <div className="flex items-center justify-between gap-2">
                       <button
                         type="button"
                         onClick={() => {
@@ -561,12 +697,30 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                       >
                         {t('delete')}
                       </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const current = Array.isArray(selected?.layoutJson) ? selected.layoutJson : [];
+                            const key = String(p?.key || '').trim();
+                            if (!key) return;
+                            void setFields([...current, { id: makeId('field'), path: `templateData.${key}`, label: String(p?.label || key), x: 20, y: 40, w: 240, h: 56, fontSize: 14, align: 'left' }]);
+                          }}
+                          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                        >
+                          {t('addToCanvas')}
+                        </button>
+                      </div>
+                    </div>
                     </div>
                   ))}
                 </div>
                 <button
                   type="button"
-                  onClick={() => void updateSelected({ placeholders: [...placeholders, { key: '', label: '', type: 'text' }] })}
+                  onClick={() =>
+                    void updateSelected({
+                      placeholders: [...placeholders, { key: '', label: '', type: 'text', source: 'manual', bindPath: '', staticValue: '', help: '', sample: '' }]
+                    })
+                  }
                   className="mt-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
                 >
                   {t('addPlaceholder')}
@@ -618,6 +772,32 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           </option>
                         ))}
                     </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-700">{t('fontSize')}</label>
+                      <input
+                        type="number"
+                        min={8}
+                        max={96}
+                        value={Number(selectedField.fontSize) > 0 ? Number(selectedField.fontSize) : 14}
+                        onChange={(e) => updateField({ fontSize: Number(e.target.value) || 14 })}
+                        className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-700">{t('align')}</label>
+                      <select
+                        value={String(selectedField.align || 'left')}
+                        onChange={(e) => updateField({ align: e.target.value })}
+                        className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                      >
+                        <option value="left">{t('alignLeft')}</option>
+                        <option value="center">{t('alignCenter')}</option>
+                        <option value="right">{t('alignRight')}</option>
+                      </select>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-2">

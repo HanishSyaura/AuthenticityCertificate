@@ -14,6 +14,7 @@ export default function CanvasStage({
   height,
   scale = 1,
   backgroundMode = 'background',
+  backgroundColor = '#ffffff',
   items,
   setItems,
   selectedId,
@@ -115,19 +116,19 @@ export default function CanvasStage({
   };
 
   return (
-    <div className="w-full overflow-auto">
+    <div className="w-full overflow-auto p-3">
       <div className="mx-auto" style={{ width: width * scale, height: height * scale }}>
         <div
           ref={stageRef}
-          className="relative rounded-xl border border-zinc-200 bg-white shadow-sm"
-          style={{ width, height, transform: `scale(${scale})`, transformOrigin: 'top left' }}
+          className="relative rounded-xl border border-zinc-200 shadow-sm"
+          style={{ width, height, transform: `scale(${scale})`, transformOrigin: 'top left', backgroundColor: String(backgroundColor || '#ffffff') }}
           onPointerDown={() => setSelectedId(null)}
         >
           {backgroundUrl ? (
             /\.(mp4|webm|ogg)(\?.*)?$/i.test(String(backgroundUrl || '')) ? (
               <video
                 src={backgroundUrl}
-                className="absolute inset-0 h-full w-full rounded-xl object-cover"
+                className={backgroundMode === 'actual' ? 'absolute left-1/2 top-1/2 max-w-none -translate-x-1/2 -translate-y-1/2 rounded-xl object-center' : 'absolute inset-0 h-full w-full rounded-xl object-cover object-center'}
                 muted
                 playsInline
                 autoPlay
@@ -137,7 +138,11 @@ export default function CanvasStage({
               <img
                 src={backgroundUrl}
                 alt="Background"
-                className={backgroundMode === 'actual' ? 'absolute left-0 top-0 rounded-xl' : 'absolute inset-0 h-full w-full rounded-xl object-cover'}
+                className={
+                  backgroundMode === 'actual'
+                    ? 'absolute left-1/2 top-1/2 max-w-none -translate-x-1/2 -translate-y-1/2 rounded-xl object-center'
+                    : 'absolute inset-0 h-full w-full rounded-xl object-cover object-center'
+                }
                 draggable={false}
               />
             )

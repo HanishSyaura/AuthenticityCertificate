@@ -4,6 +4,7 @@ const templatesService = require('./templates.service');
 const createSchema = z.object({
   name: z.string().min(1),
   background: z.string().optional(),
+  backgroundColor: z.string().optional(),
   layoutJson: z.any().optional(),
   placeholders: z.any().optional(),
   canvasWidth: z.number().int().optional(),
@@ -13,6 +14,7 @@ const createSchema = z.object({
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
   background: z.string().optional(),
+  backgroundColor: z.string().optional(),
   layoutJson: z.any().optional(),
   placeholders: z.any().optional(),
   canvasWidth: z.number().int().optional(),
@@ -35,6 +37,7 @@ async function create(req, res) {
       organizationId: req.organization.id,
       name: data.name,
       background: data.background,
+      backgroundColor: data.backgroundColor,
       layoutJson: data.layoutJson,
       placeholders: data.placeholders,
       canvasWidth: data.canvasWidth,
