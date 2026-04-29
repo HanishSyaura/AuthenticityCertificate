@@ -12,7 +12,12 @@ function getApiBaseUrl() {
   return '';
 }
 
-const API_URL = `${getApiBaseUrl()}/public`;
+function getPublicApiBaseUrl() {
+  const rawBase = getApiBaseUrl();
+  const baseURL = rawBase ? rawBase.replace(/\/+$/, '') : '';
+  const baseHasApi = baseURL === '/api' || baseURL.endsWith('/api');
+  return baseHasApi ? `${baseURL}/public` : `${baseURL}/api/public`;
+}
 
 const useAuthStore = create((set) => ({
   certificate: null,
@@ -23,7 +28,7 @@ const useAuthStore = create((set) => ({
     set({ loading: true, error: null });
     try {
       const lang = opts?.lang ? String(opts.lang) : null;
-      const response = await axios.get(`${API_URL}/cert/${id}`, {
+      const response = await axios.get(`${getPublicApiBaseUrl()}/cert/${id}`, {
         params: lang ? { lang } : undefined
       });
       set({ certificate: response.data.data, loading: false });
