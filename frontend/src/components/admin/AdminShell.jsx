@@ -23,10 +23,8 @@ export default function AdminShell() {
   const navigate = useNavigate();
   const { t } = useT();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const { user, orgCode, setOrgCode, logout } = useAdminAuthStore((s) => ({
+  const { user, logout } = useAdminAuthStore((s) => ({
     user: s.user,
-    orgCode: s.orgCode,
-    setOrgCode: s.setOrgCode,
     logout: s.logout
   }));
 
@@ -81,17 +79,6 @@ export default function AdminShell() {
               {canSeeUsers ? <NavItem to="/admin/users" label={t('usersRoles')} /> : null}
             </nav>
 
-            <div className="mt-4 rounded-lg bg-zinc-50 p-3">
-              <div className="text-[11px] font-semibold text-zinc-500">{t('orgCode')}</div>
-              <div className="mt-2 flex items-center gap-2">
-                <input
-                  value={orgCode}
-                  onChange={(e) => setOrgCode(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400"
-                />
-              </div>
-              <div className="mt-2 text-[11px] text-zinc-500">{t('orgCodeHint')}</div>
-            </div>
           </aside>
 
           <main className="ac-card min-w-0">

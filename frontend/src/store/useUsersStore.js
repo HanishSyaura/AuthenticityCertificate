@@ -3,8 +3,8 @@ import useAdminAuthStore from './useAdminAuthStore';
 import { createAdminApi } from '../utils/adminApi';
 
 function getApi() {
-  const { token, orgCode } = useAdminAuthStore.getState();
-  return createAdminApi({ token, orgCode });
+  const { token } = useAdminAuthStore.getState();
+  return createAdminApi({ token });
 }
 
 const useUsersStore = create((set, get) => ({

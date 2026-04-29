@@ -21,7 +21,7 @@ const useCmsStore = create((set, get) => ({
   selectPage: (pageId) => set({ selectedPageId: pageId }),
 
   fetchPages: async () => {
-    const { token, orgCode } = useAdminAuthStore.getState();
+    const { token } = useAdminAuthStore.getState();
     set({ loading: true, error: null });
 
     if (!token) {
@@ -30,7 +30,7 @@ const useCmsStore = create((set, get) => ({
     }
 
     try {
-      const api = createAdminApi({ token, orgCode });
+      const api = createAdminApi({ token });
       const res = await api.get('/cms/pages');
       const pages = res?.data?.data || [];
       set({ pages, loading: false });
@@ -41,14 +41,14 @@ const useCmsStore = create((set, get) => ({
   },
 
   createPage: async ({ name, slug }) => {
-    const { token, orgCode } = useAdminAuthStore.getState();
+    const { token } = useAdminAuthStore.getState();
     const safeSlug = safeSlugify(slug || name);
     const pages = get().pages;
 
     if (!token) throw new Error('Not authenticated');
 
     try {
-      const api = createAdminApi({ token, orgCode });
+      const api = createAdminApi({ token });
       const res = await api.post('/cms/page', { name, slug: safeSlug });
       const created = res?.data?.data;
       const updated = [created, ...pages];
@@ -88,14 +88,14 @@ const useCmsStore = create((set, get) => ({
 
   saveLayout: async ({ pageId, layoutJson, language }) => {
     const lang = language || get().language || 'en';
-    const { token, orgCode } = useAdminAuthStore.getState();
+    const { token } = useAdminAuthStore.getState();
     const nextLayouts = { ...(get().layoutsByPageKey || {}), [`${pageId}:${lang}`]: layoutJson };
     set({ layoutsByPageKey: nextLayouts });
 
     if (!token) throw new Error('Not authenticated');
 
     try {
-      const api = createAdminApi({ token, orgCode });
+      const api = createAdminApi({ token });
       await api.post('/cms/layout', { pageId, layoutJson, language: lang });
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || 'Failed to save layout';
@@ -104,9 +104,9 @@ const useCmsStore = create((set, get) => ({
   },
 
   publishPage: async ({ pageId }) => {
-    const { token, orgCode } = useAdminAuthStore.getState();
+    const { token } = useAdminAuthStore.getState();
     if (!token) throw new Error('Not authenticated');
-    const api = createAdminApi({ token, orgCode });
+    const api = createAdminApi({ token });
     const res = await api.post('/cms/publish', { pageId });
     return res?.data?.data;
   }

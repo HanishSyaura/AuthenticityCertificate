@@ -38,8 +38,22 @@ async function getByCode(code) {
   return sanitize(org);
 }
 
+async function getOrCreateDefault() {
+  const existing = await withTimeout(
+    prisma.organization.findFirst({ where: { deletedAt: null }, orderBy: { createdAt: 'asc' } }),
+    1200
+  );
+  if (existing) return sanitize(existing);
+
+  const code = String(process.env.SINGLE_ORG_CODE || 'MAIN').trim().toUpperCase();
+  const name = String(process.env.SINGLE_ORG_NAME || 'Main Organization').trim();
+  const created = await withTimeout(prisma.organization.create({ data: { code, name } }), 1500);
+  return sanitize(created);
+}
+
 module.exports = {
   listOrganizations,
   createOrganization,
-  getByCode
+  getByCode,
+  getOrCreateDefault
 };

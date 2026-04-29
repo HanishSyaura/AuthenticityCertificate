@@ -3,6 +3,7 @@
 Dokumen ini untuk update **backend + frontend** setiap kali anda buat perubahan dalam repo.
 
 Asumsi:
+
 - Project folder: `/www/wwwroot/wmscertauth.clbgroups.com`
 - Backend jalan guna PM2 process name: `wmscertauth-api`
 - Backend port internal: `5000`
@@ -10,7 +11,7 @@ Asumsi:
 
 > Nota keselamatan: Jangan commit `.env`. `.env` hanya di server.
 
----
+***
 
 ## A) Update standard (paling biasa) — copy & paste
 
@@ -55,22 +56,23 @@ pm2 status wmscertauth-api
 ```
 
 Lepas run, test di browser:
+
 - `https://wmscertauth.clbgroups.com/health`
 - `https://wmscertauth.clbgroups.com/admin/dashboard`
 - `https://wmscertauth.clbgroups.com/verify/<CERTIFICATE_ID>`
 
----
+***
 
 ## B) Kalau `git pull` fail (local changes / conflict)
 
-1) Check apa yang berubah:
+1. Check apa yang berubah:
 
 ```bash
 cd /www/wwwroot/wmscertauth.clbgroups.com
 git status
 ```
 
-2) Kalau hanya file build/frontend yang tak patut ada, reset clean:
+1. Kalau hanya file build/frontend yang tak patut ada, reset clean:
 
 ```bash
 git reset --hard
@@ -78,7 +80,7 @@ git clean -fd
 git pull
 ```
 
----
+***
 
 ## C) Bila frontend berubah sahaja
 
@@ -91,7 +93,7 @@ npm ci || npm install
 npm run build
 ```
 
----
+***
 
 ## D) Bila backend berubah sahaja
 
@@ -109,7 +111,7 @@ curl -s http://127.0.0.1:5000/health
 echo
 ```
 
----
+***
 
 ## E) Troubleshooting cepat
 
@@ -128,11 +130,10 @@ tail -n 200 /www/wwwlogs/wmscertauth.clbgroups.com.error.log
 - Kalau `502 Bad Gateway`:
   - Pastikan backend hidup: `pm2 status wmscertauth-api`
   - Pastikan port: `curl -s http://127.0.0.1:5000/health`
-
 - Kalau route admin refresh jadi 404:
   - Pastikan Nginx ada `try_files $uri $uri/ /index.html;` untuk `location /`
 
----
+***
 
 ## F) Bila ada perubahan Prisma schema (tanpa migrations)
 
@@ -161,3 +162,14 @@ ALTER TABLE Product
   ON DELETE SET NULL
   ON UPDATE CASCADE;
 ```
+
+cara update semua:
+
+```
+cd /www/wwwroot/wmscertauth.clbgroups.com
+git pull
+cd frontend
+npm install
+npm run build
+```
+

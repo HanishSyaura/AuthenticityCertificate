@@ -6,21 +6,16 @@ function getApiBaseUrl() {
   return 'http://localhost:5000';
 }
 
-export function createAdminApi({ token, orgCode }) {
+export function createAdminApi({ token }) {
   const api = axios.create({
     baseURL: getApiBaseUrl(),
     timeout: 8000
   });
 
   api.interceptors.request.use((config) => {
-    const effectiveOrgCode = orgCode || config?.headers?.['X-Org-Code'] || config?.headers?.['x-org-code'];
     if (token) {
       config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
-    }
-    if (effectiveOrgCode) {
-      config.headers = config.headers || {};
-      config.headers['X-Org-Code'] = effectiveOrgCode;
     }
     return config;
   });

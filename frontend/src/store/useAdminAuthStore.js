@@ -6,15 +6,8 @@ import { createAdminApi } from '../utils/adminApi';
 const useAdminAuthStore = create((set, get) => ({
   token: readJson(ADMIN_KEYS.token, null),
   user: readJson(ADMIN_KEYS.user, null),
-  orgCode: String(readJson(ADMIN_KEYS.orgCode, '') || '').trim(),
   loading: false,
   error: null,
-
-  setOrgCode: (orgCode) => {
-    const next = String(orgCode || '').trim().toUpperCase();
-    writeJson(ADMIN_KEYS.orgCode, next);
-    set({ orgCode: next });
-  },
 
   logout: () => {
     removeKey(ADMIN_KEYS.token);
