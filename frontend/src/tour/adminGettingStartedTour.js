@@ -24,11 +24,6 @@ export function getAdminGettingStartedTourSteps(t) {
       selector: '[data-tour="nav-cms"]',
       title: t('cmsLanding'),
       body: t('cmsSubheading')
-    },
-    {
-      selector: '[data-tour="nav-settings"]',
-      title: t('settings'),
-      body: t('systemSettingsHint')
     }
   ];
 }

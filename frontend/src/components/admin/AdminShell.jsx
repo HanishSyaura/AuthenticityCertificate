@@ -4,6 +4,8 @@ import useAdminAuthStore from '../../store/useAdminAuthStore';
 import { useT } from '../../i18n/useT';
 import LanguageSwitcher from '../LanguageSwitcher';
 import TourOverlay from '../tour/TourOverlay';
+import useTourStore from '../../store/useTourStore';
+import { getAdminGettingStartedTourSteps } from '../../tour/adminGettingStartedTour';
 
 function NavItem({ to, label, tourId }) {
   return (
@@ -34,6 +36,7 @@ export default function AdminShell() {
   const navigate = useNavigate();
   const { t } = useT();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const { openTour } = useTourStore((s) => ({ openTour: s.openTour }));
   const { user, logout } = useAdminAuthStore((s) => ({
     user: s.user,
     logout: s.logout
@@ -92,17 +95,14 @@ export default function AdminShell() {
             </div>
 
             <div className="flex items-center gap-3">
-              <NavLink
-                to="/admin/guide"
+              <button
+                type="button"
                 data-tour="nav-guide"
-                className={({ isActive }) =>
-                  `rounded-lg px-3 py-2 text-xs font-semibold transition ${
-                    isActive ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200/80 bg-white text-zinc-900 hover:bg-zinc-50'
-                  }`
-                }
+                className="rounded-lg border border-zinc-200/80 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                onClick={() => openTour({ steps: getAdminGettingStartedTourSteps(t), storageKey: 'ac_seen_admin_tour_v1' })}
               >
                 {t('gettingStarted')}
-              </NavLink>
+              </button>
               <LanguageSwitcher size="xs" />
               <div className="text-right">
                 <div className="text-xs font-medium text-zinc-900">{user?.name || 'Admin'}</div>

@@ -19,7 +19,6 @@ function Card({ title, value, hint }) {
 
 export default function AdminDashboard() {
   const { t } = useT();
-  const [showGuideBanner, setShowGuideBanner] = useState(false);
   const [tourAutoStarted, setTourAutoStarted] = useState(false);
   const { openTour, hasSeen } = useTourStore((s) => ({ openTour: s.openTour, hasSeen: s.hasSeen }));
   const { pages, fetchPages } = useCmsStore((s) => ({ pages: s.pages, fetchPages: s.fetchPages }));
@@ -31,15 +30,6 @@ export default function AdminDashboard() {
     fetchTemplates();
     fetchProducts();
   }, [fetchPages, fetchTemplates, fetchProducts]);
-
-  useEffect(() => {
-    try {
-      const seen = localStorage.getItem('ac_seen_guide');
-      setShowGuideBanner(!seen);
-    } catch {
-      setShowGuideBanner(true);
-    }
-  }, []);
 
   useEffect(() => {
     const storageKey = 'ac_seen_admin_tour_v1';
@@ -62,42 +52,23 @@ export default function AdminDashboard() {
         <p className="mt-1 text-sm text-zinc-600">{t('dashboardSubtitle')}</p>
       </div>
 
-      {showGuideBanner ? (
-        <div className="ac-card mb-4 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-zinc-900">{t('firstTimeTitle')}</div>
-              <div className="mt-1 text-sm text-zinc-600">{t('firstTimeSubtitle')}</div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className="ac-btn ac-btn-primary px-3 py-2 text-xs"
-                onClick={() => openTour({ steps: getAdminGettingStartedTourSteps(t), storageKey: 'ac_seen_admin_tour_v1' })}
-              >
-                {t('tourStart')}
-              </button>
-              <Link to="/admin/guide" className="ac-btn ac-btn-primary px-3 py-2 text-xs">
-                {t('openGuide')}
-              </Link>
-              <button
-                type="button"
-                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                onClick={() => {
-                  try {
-                    localStorage.setItem('ac_seen_guide', '1');
-                  } catch {
-                    setShowGuideBanner(false);
-                  }
-                  setShowGuideBanner(false);
-                }}
-              >
-                {t('dismiss')}
-              </button>
-            </div>
+      <div className="ac-card mb-4 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-zinc-900">{t('firstTimeTitle')}</div>
+            <div className="mt-1 text-sm text-zinc-600">{t('firstTimeSubtitle')}</div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="ac-btn ac-btn-primary px-3 py-2 text-xs"
+              onClick={() => openTour({ steps: getAdminGettingStartedTourSteps(t), storageKey: 'ac_seen_admin_tour_v1' })}
+            >
+              {t('tourStart')}
+            </button>
           </div>
         </div>
-      ) : null}
+      </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card title={t('productModule')} value={productCount} hint={t('products')} />
