@@ -3,6 +3,7 @@ import CanvasStage from '../../components/admin/CanvasStage';
 import { useT } from '../../i18n/useT';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
+import useMediaStore from '../../store/useMediaStore';
 import { createAdminApi } from '../../utils/adminApi';
 
 function makeId(prefix) {
@@ -29,14 +30,21 @@ export default function AdminCertificateTemplateBuilder() {
     deleteTemplate: s.deleteTemplate
   }));
   const { token } = useAdminAuthStore((s) => ({ token: s.token }));
+  const { uploadMedia } = useMediaStore((s) => ({ uploadMedia: s.uploadMedia }));
 
   const [selectedId, setSelectedId] = useState(null);
   const [selectedFieldId, setSelectedFieldId] = useState(null);
   const [newName, setNewName] = useState('');
   const [newBackground, setNewBackground] = useState('');
+  const [newBgUploading, setNewBgUploading] = useState(false);
+  const [newBgError, setNewBgError] = useState(null);
+  const [newBgFileKey, setNewBgFileKey] = useState(0);
   const [previewId, setPreviewId] = useState('');
   const [previewData, setPreviewData] = useState(null);
   const [previewError, setPreviewError] = useState(null);
+  const [bgUploading, setBgUploading] = useState(false);
+  const [bgError, setBgError] = useState(null);
+  const [bgFileKey, setBgFileKey] = useState(0);
 
   const fieldsRef = useRef([]);
 
@@ -171,6 +179,30 @@ export default function AdminCertificateTemplateBuilder() {
                 className="ac-input rounded-lg px-3 py-2"
                 placeholder={t('backgroundUrl')}
               />
+              <input
+                key={newBgFileKey}
+                type="file"
+                accept="image/*"
+                disabled={newBgUploading}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setNewBgError(null);
+                  setNewBgUploading(true);
+                  try {
+                    const created = await uploadMedia({ file });
+                    if (created?.url) setNewBackground(created.url);
+                    setNewBgFileKey((k) => k + 1);
+                  } catch (err) {
+                    const msg = err?.response?.data?.message || err?.message || 'Upload failed';
+                    setNewBgError(msg);
+                  } finally {
+                    setNewBgUploading(false);
+                  }
+                }}
+                className="ac-input rounded-lg px-3 py-2"
+              />
+              {newBgError ? <div className="text-xs text-rose-700">{newBgError}</div> : null}
               <button
                 type="button"
                 onClick={() => {
@@ -284,6 +316,30 @@ export default function AdminCertificateTemplateBuilder() {
                   onChange={(e) => void updateSelected({ background: e.target.value })}
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
+                <input
+                  key={bgFileKey}
+                  type="file"
+                  accept="image/*"
+                  disabled={bgUploading}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setBgError(null);
+                    setBgUploading(true);
+                    try {
+                      const created = await uploadMedia({ file });
+                      if (created?.url) await updateSelected({ background: created.url });
+                      setBgFileKey((k) => k + 1);
+                    } catch (err) {
+                      const msg = err?.response?.data?.message || err?.message || 'Upload failed';
+                      setBgError(msg);
+                    } finally {
+                      setBgUploading(false);
+                    }
+                  }}
+                  className="mt-2 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                />
+                {bgError ? <div className="mt-2 text-xs text-rose-700">{bgError}</div> : null}
               </div>
 
               {!selectedField ? (

@@ -4,6 +4,8 @@ import useCmsStore from '../../store/useCmsStore';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import useRecordsStore from '../../store/useRecordsStore';
 import { useT } from '../../i18n/useT';
+import useTourStore from '../../store/useTourStore';
+import { getAdminGettingStartedTourSteps } from '../../tour/adminGettingStartedTour';
 
 function Card({ title, value, hint }) {
   return (
@@ -18,6 +20,8 @@ function Card({ title, value, hint }) {
 export default function AdminDashboard() {
   const { t } = useT();
   const [showGuideBanner, setShowGuideBanner] = useState(false);
+  const [tourAutoStarted, setTourAutoStarted] = useState(false);
+  const { openTour, hasSeen } = useTourStore((s) => ({ openTour: s.openTour, hasSeen: s.hasSeen }));
   const { pages, fetchPages } = useCmsStore((s) => ({ pages: s.pages, fetchPages: s.fetchPages }));
   const { templates, fetchTemplates } = useCertTemplatesStore((s) => ({ templates: s.templates, fetchTemplates: s.fetchTemplates }));
   const { products, fetchProducts } = useRecordsStore((s) => ({ products: s.products, fetchProducts: s.fetchProducts }));
@@ -37,6 +41,17 @@ export default function AdminDashboard() {
     }
   }, []);
 
+  useEffect(() => {
+    const storageKey = 'ac_seen_admin_tour_v1';
+    if (tourAutoStarted) return;
+    if (hasSeen(storageKey)) return;
+    setTourAutoStarted(true);
+    const timer = setTimeout(() => {
+      openTour({ steps: getAdminGettingStartedTourSteps(t), storageKey });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [tourAutoStarted, hasSeen, openTour, t]);
+
   const productCount = useMemo(() => (Array.isArray(products) ? products.length : 0), [products]);
   const templateCount = useMemo(() => (Array.isArray(templates) ? templates.length : 0), [templates]);
 
@@ -55,6 +70,13 @@ export default function AdminDashboard() {
               <div className="mt-1 text-sm text-zinc-600">{t('firstTimeSubtitle')}</div>
             </div>
             <div className="flex gap-2">
+              <button
+                type="button"
+                className="ac-btn ac-btn-primary px-3 py-2 text-xs"
+                onClick={() => openTour({ steps: getAdminGettingStartedTourSteps(t), storageKey: 'ac_seen_admin_tour_v1' })}
+              >
+                {t('tourStart')}
+              </button>
               <Link to="/admin/guide" className="ac-btn ac-btn-primary px-3 py-2 text-xs">
                 {t('openGuide')}
               </Link>

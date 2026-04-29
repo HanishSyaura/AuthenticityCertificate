@@ -1,8 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useT } from '../../../i18n/useT';
+import useMediaStore from '../../../store/useMediaStore';
 
 export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, clearSelection }) {
   const { t } = useT();
+  const { uploadMedia } = useMediaStore((s) => ({ uploadMedia: s.uploadMedia }));
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
+  const [fileKey, setFileKey] = useState(0);
   const updateSelected = (patch) => {
     if (!selectedBlock) return;
     const next = layout.map((b) => (b.id === selectedBlock.id ? { ...b, ...patch } : b));
@@ -13,6 +18,8 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
     if (!selectedBlock) return;
     updateSelected({ content: { ...(selectedBlock.content || {}), ...contentPatch } });
   };
+
+  const accept = selectedBlock?.type === 'video' ? 'video/*' : selectedBlock?.type === 'image' ? 'image/*' : undefined;
 
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-3">
@@ -52,6 +59,33 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
                 className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 placeholder="https://..."
               />
+              <div className="mt-2">
+                <label className="block text-xs font-medium text-zinc-700">{t('file')}</label>
+                <input
+                  key={fileKey}
+                  type="file"
+                  accept={accept}
+                  disabled={uploading}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setUploadError(null);
+                    setUploading(true);
+                    try {
+                      const created = await uploadMedia({ file });
+                      if (created?.url) updateSelectedContent({ url: created.url });
+                      setFileKey((k) => k + 1);
+                    } catch (err) {
+                      const msg = err?.response?.data?.message || err?.message || 'Upload failed';
+                      setUploadError(msg);
+                    } finally {
+                      setUploading(false);
+                    }
+                  }}
+                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                />
+                {uploadError ? <div className="mt-2 text-xs text-rose-700">{uploadError}</div> : null}
+              </div>
             </div>
           ) : null}
 

@@ -3,14 +3,16 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
 import { useT } from '../../i18n/useT';
 import LanguageSwitcher from '../LanguageSwitcher';
+import TourOverlay from '../tour/TourOverlay';
 
-function NavItem({ to, label }) {
+function NavItem({ to, label, tourId }) {
   return (
     <NavLink
       to={to}
+      data-tour={tourId}
       className={({ isActive }) =>
-        `block rounded-lg px-3 py-2 text-sm transition ${
-          isActive ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'text-zinc-700 hover:bg-zinc-50'
+        `block rounded px-3 py-2 text-sm transition ${
+          isActive ? 'bg-blue-600 text-white' : 'text-slate-200 hover:bg-slate-800/60 hover:text-white'
         }`
       }
     >
@@ -22,7 +24,7 @@ function NavItem({ to, label }) {
 function NavSection({ title, children }) {
   return (
     <div className="mt-3">
-      <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">{title}</div>
+      <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{title}</div>
       <div className="space-y-1">{children}</div>
     </div>
   );
@@ -41,64 +43,37 @@ export default function AdminShell() {
   const canSeeUsers = role === 'super_admin';
 
   return (
-    <div className="min-h-screen">
-      <div className="mx-auto w-[90vw] max-w-none px-4 py-6 sm:px-6 lg:px-8">
-        <div className="ac-topbar mb-6 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setMobileNavOpen((v) => !v)}
-              className="ac-btn ac-btn-soft px-3 py-2 text-xs md:hidden"
-            >
-              {mobileNavOpen ? t('close') : t('menu')}
-            </button>
-            <Link to="/admin/dashboard" className="text-sm font-semibold tracking-tight text-zinc-900 hover:text-brand-800 no-underline hover:no-underline">
-              {t('adminPanel')}
-            </Link>
+    <div className="min-h-screen bg-zinc-100">
+      <div className="flex min-h-screen">
+        <aside className={`w-[260px] flex-shrink-0 bg-slate-900 text-slate-200 ${mobileNavOpen ? 'block' : 'hidden'} md:block`}>
+          <div className="flex h-14 items-center gap-2 border-b border-slate-800 px-4">
+            <div className="h-7 w-7 rounded bg-orange-500" />
+            <div className="text-sm font-semibold tracking-tight text-white">WMS Console</div>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            <LanguageSwitcher size="xs" />
-            <div className="text-right">
-              <div className="text-xs font-medium text-zinc-900">{user?.name || 'Admin'}</div>
-              <div className="text-[11px] text-zinc-500">{user?.email}</div>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                logout();
-                navigate('/admin/login');
-              }}
-              className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-            >
-              {t('signOut')}
-            </button>
-          </div>
-        </div>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
-          <aside className={`ac-sidenav lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:overflow-auto ${mobileNavOpen ? 'block' : 'hidden'} lg:block`}>
+          <div className="h-[calc(100vh-3.5rem)] overflow-auto px-2 py-3">
             <NavSection title={t('navOverview')}>
-              <NavItem to="/admin/dashboard" label={t('dashboard')} />
-              <NavItem to="/admin/guide" label={t('gettingStarted')} />
+              <NavItem to="/admin/dashboard" label={t('dashboard')} tourId="nav-dashboard" />
+              <NavItem to="/admin/guide" label={t('gettingStarted')} tourId="nav-guide" />
             </NavSection>
 
             <NavSection title={t('navProductsBatches')}>
-              <NavItem to="/admin/records" label={t('records')} />
-              <NavItem to="/admin/epc" label={t('epc')} />
+              <NavItem to="/admin/records" label={t('records')} tourId="nav-records" />
+              <NavItem to="/admin/epc" label={t('epc')} tourId="nav-epc" />
             </NavSection>
 
             <NavSection title={t('navCertificates')}>
-              <NavItem to="/admin/certificates" label={t('certificates')} />
-              <NavItem to="/admin/identities" label={t('identities')} />
-              <NavItem to="/admin/cert-templates" label={t('certTemplates')} />
+              <NavItem to="/admin/certificates" label={t('certificates')} tourId="nav-certificates" />
+              <NavItem to="/admin/identities" label={t('identities')} tourId="nav-identities" />
+              <NavItem to="/admin/cert-templates" label={t('certTemplates')} tourId="nav-cert-templates" />
             </NavSection>
 
             <NavSection title={t('navContent')}>
-              <NavItem to="/admin/cms" label={t('cmsBuilder')} />
+              <NavItem to="/admin/cms" label={t('cmsBuilder')} tourId="nav-cms" />
             </NavSection>
 
             <NavSection title={t('navMonitoring')}>
-              <NavItem to="/admin/analytics" label={t('analytics')} />
+              <NavItem to="/admin/analytics" label={t('analytics')} tourId="nav-analytics" />
               <NavItem to="/admin/fraud" label={t('fraudDetection')} />
             </NavSection>
 
@@ -108,15 +83,53 @@ export default function AdminShell() {
             </NavSection>
 
             <NavSection title={t('navIntegrations')}>
-              <NavItem to="/admin/integrations" label={t('integrations')} />
+              <NavItem to="/admin/integrations" label={t('integrations')} tourId="nav-integrations" />
             </NavSection>
-          </aside>
+          </div>
+        </aside>
 
-          <main className="ac-card min-w-0 bg-white/80 backdrop-blur">
-            <Outlet />
+        <div className="min-w-0 flex-1">
+          <div className="flex h-14 items-center justify-between gap-3 border-b border-zinc-200 bg-white px-4">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen((v) => !v)}
+                className="rounded border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 hover:bg-zinc-50 md:hidden"
+              >
+                {mobileNavOpen ? t('close') : t('menu')}
+              </button>
+              <Link to="/admin/dashboard" className="text-sm font-semibold text-zinc-900 no-underline hover:no-underline">
+                {t('adminPanel')}
+              </Link>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <LanguageSwitcher size="xs" />
+              <div className="text-right">
+                <div className="text-xs font-medium text-zinc-900">{user?.name || 'Admin'}</div>
+                <div className="text-[11px] text-zinc-500">{user?.email}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  logout();
+                  navigate('/admin/login');
+                }}
+                className="rounded border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 hover:bg-zinc-50"
+              >
+                {t('signOut')}
+              </button>
+            </div>
+          </div>
+
+          <main className="p-4">
+            <div className="min-w-0 rounded border border-zinc-200 bg-white">
+              <Outlet />
+            </div>
           </main>
         </div>
       </div>
+      <TourOverlay />
     </div>
   );
 }
