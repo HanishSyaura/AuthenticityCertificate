@@ -27,7 +27,7 @@ const DEVICE_PRESETS = [
   { id: 'pixel-7', label: 'Pixel 7', w: 412, h: 915 }
 ];
 
-export default function AdminCertificateTemplateBuilder() {
+export default function AdminCertificateTemplateBuilder({ initialSelectedId = null }) {
   const { t } = useT();
   const { templates, error, fetchTemplates, createTemplate, updateTemplate, deleteTemplate } = useCertTemplatesStore((s) => ({
     templates: s.templates,
@@ -45,7 +45,7 @@ export default function AdminCertificateTemplateBuilder() {
     updateProduct: s.updateProduct
   }));
 
-  const [selectedId, setSelectedId] = useState(null);
+  const [selectedId, setSelectedId] = useState(initialSelectedId);
   const [selectedFieldId, setSelectedFieldId] = useState(null);
   const [newName, setNewName] = useState('');
   const [newBackground, setNewBackground] = useState('');
@@ -59,6 +59,7 @@ export default function AdminCertificateTemplateBuilder() {
   const [bgError, setBgError] = useState(null);
   const [bgFileKey, setBgFileKey] = useState(0);
   const [devicePresetId, setDevicePresetId] = useState('fit');
+  const [backgroundMode, setBackgroundMode] = useState('background');
   const [assignedProductIds, setAssignedProductIds] = useState(() => new Set());
 
   const fieldsRef = useRef([]);
@@ -150,6 +151,12 @@ export default function AdminCertificateTemplateBuilder() {
   useEffect(() => {
     void fetchTemplates();
   }, [fetchTemplates]);
+
+  useEffect(() => {
+    if (initialSelectedId == null) return;
+    setSelectedId(initialSelectedId);
+    setSelectedFieldId(null);
+  }, [initialSelectedId]);
 
   useEffect(() => {
     void fetchProducts();
@@ -412,6 +419,7 @@ export default function AdminCertificateTemplateBuilder() {
                 width={canvasW}
                 height={canvasH}
                 scale={scale}
+                backgroundMode={backgroundMode}
                 backgroundUrl={selected.background || ''}
                 items={fields}
                 setItems={setCanvasItems}
@@ -443,6 +451,18 @@ export default function AdminCertificateTemplateBuilder() {
                   onChange={(e) => void updateSelected({ background: e.target.value })}
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
+                <div className="mt-2">
+                  <label className="block text-xs font-medium text-zinc-700">{t('backgroundMode')}</label>
+                  <select
+                    value={backgroundMode}
+                    onChange={(e) => setBackgroundMode(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                  >
+                    <option value="background">{t('stretchBackground')}</option>
+                    <option value="actual">{t('actualSize')}</option>
+                  </select>
+                  <div className="mt-1 text-[11px] text-zinc-500">{t('backgroundSizeAdvice')}</div>
+                </div>
                 <input
                   key={bgFileKey}
                   type="file"

@@ -6,12 +6,7 @@ async function withTimeout(promise, ms) {
 }
 
 function getAllowedCorpPrefixes() {
-  const raw = process.env.CORP_PREFIXES || process.env.CORP_PREFIX || '';
-  const list = String(raw)
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return list.length > 0 ? list : ['DA01C'];
+  return ['DA01'];
 }
 
 function getRunningPadLen() {
@@ -43,6 +38,24 @@ function buildEpcCode({ corpPrefix, runningNo, skuCode, mmyy }) {
   const padLen = getRunningPadLen();
   const run = padRunningNo(runningNo, padLen);
   return `${corpPrefix}${run}${skuCode}${mmyy}${run}`;
+}
+
+function parseRunningNoFromEpcCode({ epcCode, corpPrefix }) {
+  const code = String(epcCode || '').trim();
+  const prefix = String(corpPrefix || '').trim();
+  if (!code || !prefix) throw new Error('Invalid EPC code');
+  if (!code.startsWith(prefix)) throw new Error(`EPC code does not start with ${prefix}`);
+
+  const padLen = getRunningPadLen();
+  const expectedMinLen = prefix.length + padLen;
+  if (code.length < expectedMinLen) throw new Error('EPC code too short');
+
+  const run1 = code.slice(prefix.length, prefix.length + padLen);
+  if (!/^\d+$/.test(run1)) throw new Error('Invalid running number in EPC code');
+  const run2 = code.slice(code.length - padLen);
+  if (!/^\d+$/.test(run2)) throw new Error('Invalid running number in EPC code');
+  if (run1 !== run2) throw new Error('EPC code running numbers mismatch');
+  return BigInt(run1);
 }
 
 function chunkArray(arr, size) {
@@ -87,13 +100,20 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, batchNa
       `;
 
       const current = rows && rows[0] && rows[0].lastNo !== undefined ? BigInt(rows[0].lastNo) : 0n;
-      const startNo = current + 1n;
-      const endNo = current + BigInt(batchQty);
-
+      const maxExisting = await tx.epcItem.findFirst({
+        where: { organizationId: orgId, batch: { corpPrefix } },
+        orderBy: { runningNo: 'desc' },
+        select: { runningNo: true }
+      });
+      const maxExistingNo = maxExisting?.runningNo != null ? BigInt(maxExisting.runningNo) : 0n;
+      const baseNo = current > maxExistingNo ? current : maxExistingNo;
+      const startNo = baseNo + 1n;
+      const endNo = baseNo + BigInt(batchQty);
       await tx.corpSequence.update({
         where: { organizationId_corpPrefix: { organizationId: orgId, corpPrefix } },
         data: { lastNo: endNo }
       });
+
 
       const batch = await tx.epcBatch.create({
         data: {
@@ -137,6 +157,97 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, batchNa
     },
     { timeout: 12_000, maxWait: 5_000 }
   );
+
+  return result;
+}
+
+async function importExistingEpc({ organizationId, productId, batchName, base64 }) {
+  const orgId = Number(organizationId);
+  const prodId = Number(productId);
+  if (!Number.isFinite(prodId)) throw new Error('Invalid product');
+
+  const corpPrefix = 'DA01';
+
+  const product = await withTimeout(
+    prisma.product.findFirst({ where: { id: prodId, organizationId: orgId, deletedAt: null } }),
+    1200
+  );
+  if (!product) throw new Error('Product tidak dijumpai');
+
+  const { rows } = parseXlsxBase64(base64);
+  if (!Array.isArray(rows) || rows.length === 0) throw new Error('Excel kosong');
+
+  const items = [];
+  let maxRun = 0n;
+  for (const r of rows) {
+    const n = normalizeRowKeys(r);
+    const epcCode = String(n.epccode || n.epc || n.code || '').trim();
+    if (!epcCode) continue;
+    const runningNo = parseRunningNoFromEpcCode({ epcCode, corpPrefix });
+    if (runningNo > maxRun) maxRun = runningNo;
+    items.push({
+      epcCode,
+      runningNo
+    });
+  }
+  if (items.length === 0) throw new Error('Tiada EPC code dalam Excel');
+
+  const name = String(batchName || '').trim() || `import_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '')}`;
+
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.corpSequence.upsert({
+      where: { organizationId_corpPrefix: { organizationId: orgId, corpPrefix } },
+      update: {},
+      create: { organizationId: orgId, corpPrefix, lastNo: 0n }
+    });
+
+    const batch = await tx.epcBatch.create({
+      data: {
+        organizationId: orgId,
+        corpPrefix,
+        productId: prodId,
+        sku: product.sku,
+        batchName: name,
+        batchQty: items.length,
+        remark: 'import_existing',
+        certificateTemplateId: null,
+        templateData: null,
+        productionUploadedAt: null,
+        productionDoneAt: null
+      },
+      include: { product: { select: { id: true, sku: true, name: true, code: true } } }
+    });
+
+    await tx.epcItem.createMany({
+      data: items.map((it) => ({
+        organizationId: orgId,
+        batchId: batch.id,
+        epcCode: it.epcCode,
+        runningNo: it.runningNo,
+        netWeight: null,
+        productionDate: null,
+        caiqNumber: null
+      })),
+      skipDuplicates: true
+    });
+
+    const rows2 = await tx.$queryRaw`
+      SELECT lastNo FROM \`CorpSequence\`
+      WHERE organizationId = ${orgId} AND corpPrefix = ${corpPrefix}
+      FOR UPDATE
+    `;
+    const current = rows2 && rows2[0] && rows2[0].lastNo !== undefined ? BigInt(rows2[0].lastNo) : 0n;
+    const nextLast = current > maxRun ? current : maxRun;
+    if (nextLast !== current) {
+      await tx.corpSequence.update({
+        where: { organizationId_corpPrefix: { organizationId: orgId, corpPrefix } },
+        data: { lastNo: nextLast }
+      });
+    }
+
+    const inserted = await tx.epcItem.count({ where: { organizationId: orgId, batchId: batch.id } });
+    return { batch, rows: items.length, inserted, lastNo: nextLast.toString() };
+  });
 
   return result;
 }
@@ -381,5 +492,6 @@ module.exports = {
   listItems,
   importProductionXlsx,
   markProductionDone,
-  deleteBatch
+  deleteBatch,
+  importExistingEpc
 };

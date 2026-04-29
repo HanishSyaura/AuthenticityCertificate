@@ -15,6 +15,12 @@ const importProductionSchema = z.object({
   base64: z.string().min(1)
 });
 
+const importExistingSchema = z.object({
+  productId: z.number().int().positive(),
+  batchName: z.string().optional(),
+  base64: z.string().min(1)
+});
+
 function parseLimitOffset(q) {
   const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 200);
   const offset = Math.max(Number(q.offset) || 0, 0);
@@ -126,6 +132,21 @@ async function deleteBatch(req, res) {
   }
 }
 
+async function importExisting(req, res) {
+  try {
+    const data = importExistingSchema.parse(req.body);
+    const result = await epcService.importExistingEpc({
+      organizationId: req.organization.id,
+      productId: data.productId,
+      batchName: data.batchName,
+      base64: data.base64
+    });
+    res.success(result, 'Existing EPC imported');
+  } catch (e) {
+    res.error(e.message, 400);
+  }
+}
+
 module.exports = {
   getCorpCodes,
   generateBatch,
@@ -135,5 +156,6 @@ module.exports = {
   exportBatch,
   importProductionXlsx,
   markProductionDone,
-  deleteBatch
+  deleteBatch,
+  importExisting
 };

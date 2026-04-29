@@ -67,6 +67,7 @@ export default function AdminEpc() {
     importProductionXlsx,
     markProductionDone,
     deleteBatch,
+    importExistingXlsx,
     clearLastGenerated
   } = useEpcStore((s) => ({
     corpCodes: s.corpCodes,
@@ -81,18 +82,21 @@ export default function AdminEpc() {
     importProductionXlsx: s.importProductionXlsx,
     markProductionDone: s.markProductionDone,
     deleteBatch: s.deleteBatch,
+    importExistingXlsx: s.importExistingXlsx,
     clearLastGenerated: s.clearLastGenerated
   }));
 
   const [tab, setTab] = useState('create');
 
-  const [corpPrefix, setCorpPrefix] = useState('');
+  const [corpPrefix, setCorpPrefix] = useState('DA01');
   const [productId, setProductId] = useState('');
   const [batchName, setBatchName] = useState('');
   const [batchQty, setBatchQty] = useState(1);
   const [remark, setRemark] = useState('');
   const [certificateTemplateId, setCertificateTemplateId] = useState('');
   const [templateData, setTemplateData] = useState({});
+  const [importProductId, setImportProductId] = useState('');
+  const [importBatchName, setImportBatchName] = useState('');
 
   useEffect(() => {
     void fetchProducts();
@@ -102,7 +106,7 @@ export default function AdminEpc() {
   }, [fetchBatches, fetchCorpCodes, fetchProducts, fetchTemplates]);
 
   useEffect(() => {
-    if (!corpPrefix && Array.isArray(corpCodes) && corpCodes[0]) setCorpPrefix(corpCodes[0]);
+    void corpCodes;
   }, [corpCodes, corpPrefix]);
 
   const selectedProduct = useMemo(() => (Array.isArray(products) ? products : []).find((p) => String(p.id) === String(productId)) || null, [products, productId]);
@@ -208,13 +212,7 @@ export default function AdminEpc() {
             <div className="space-y-3">
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('corpCode')}</div>
-                <select value={corpPrefix} onChange={(e) => setCorpPrefix(e.target.value)} className="ac-input">
-                  {corpCodes.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
+                <input value={corpPrefix} disabled className="ac-input" />
               </div>
 
               <div>
@@ -398,6 +396,53 @@ export default function AdminEpc() {
             })}
             {(!batches || batches.length === 0) && !loading ? <div className="px-4 py-6 text-xs text-zinc-500">{t('noBatches')}</div> : null}
           </div>
+        </div>
+      ) : null}
+
+      {tab === 'production' ? (
+        <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-4">
+          <div className="mb-3 text-xs font-semibold text-zinc-600">{t('importExistingEpc')}</div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+            <div>
+              <div className="mb-1 text-xs font-semibold text-zinc-600">{t('product')}</div>
+              <select value={importProductId} onChange={(e) => setImportProductId(e.target.value)} className="ac-input">
+                <option value="">{t('selectProduct')}</option>
+                {(Array.isArray(products) ? products : [])
+                  .slice()
+                  .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')))
+                  .map((p) => (
+                    <option key={p.id} value={String(p.id)}>
+                      {p.name} ({p.sku})
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div>
+              <div className="mb-1 text-xs font-semibold text-zinc-600">{t('batchName')}</div>
+              <input value={importBatchName} onChange={(e) => setImportBatchName(e.target.value)} className="ac-input" placeholder="import-epc" />
+            </div>
+            <label className={`ac-btn ac-btn-soft px-3 py-2 text-xs ${!importProductId ? 'opacity-50 pointer-events-none' : ''}`}>
+              {t('importXlsx')}
+              <input
+                type="file"
+                accept=".xlsx"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const base64 = await toBase64(file);
+                  await importExistingXlsx({
+                    productId: Number(importProductId),
+                    batchName: String(importBatchName || '').trim() || undefined,
+                    base64
+                  });
+                  await fetchBatches({ limit: 50, offset: 0 });
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          </div>
+          <div className="mt-2 text-[11px] text-zinc-500">{t('importExistingEpcHint')}</div>
         </div>
       ) : null}
     </div>

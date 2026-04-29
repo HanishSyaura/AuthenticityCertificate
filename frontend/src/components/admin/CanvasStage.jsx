@@ -13,6 +13,7 @@ export default function CanvasStage({
   width,
   height,
   scale = 1,
+  backgroundMode = 'background',
   items,
   setItems,
   selectedId,
@@ -136,7 +137,7 @@ export default function CanvasStage({
               <img
                 src={backgroundUrl}
                 alt="Background"
-                className="absolute inset-0 h-full w-full rounded-xl object-cover"
+                className={backgroundMode === 'actual' ? 'absolute left-0 top-0 rounded-xl' : 'absolute inset-0 h-full w-full rounded-xl object-cover'}
                 draggable={false}
               />
             )

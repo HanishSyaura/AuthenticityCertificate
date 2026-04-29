@@ -191,7 +191,7 @@ model EpcBatch {
   batchQty  Int
   remark    String?
   certificateTemplateId Int?
-  certificateTemplate   CertificateTemplate? @relation(fields: [certificateTemplateId], references: [id])
+  certificateTemplate   CertificateTemplate? @relation("EpcBatchTemplate", fields: [certificateTemplateId], references: [id])
   templateData Json?
   productionUploadedAt DateTime?
   productionDoneAt     DateTime?
@@ -404,6 +404,7 @@ model CertificateTemplate {
   canvasHeight   Int          @default(844)
 
   products Product[]
+  epcBatches EpcBatch[] @relation("EpcBatchTemplate")
 
   versionNo Int       @default(1)
   createdAt DateTime  @default(now())

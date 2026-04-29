@@ -63,25 +63,16 @@ export default function AdminGuide() {
           <Step n="01" title={t('guideStepProductsTitle')} to="/admin/records" cta={t('openModule')}>
             {t('guideStepProductsBody')}
           </Step>
-          <Step n="02" title={t('guideStepBatchesTitle')} to="/admin/epc" cta={t('openModule')}>
-            {t('guideStepBatchesBody')}
-          </Step>
-          <Step n="03" title={t('guideStepGenerateTitle')} to="/admin/records" cta={t('openModule')}>
-            {t('guideStepGenerateBody')}
-          </Step>
-          <Step n="04" title={t('guideStepAssignTitle')} to="/admin/certificates" cta={t('openModule')}>
-            {t('guideStepAssignBody')}
-          </Step>
-          <Step n="05" title={t('guideStepCmsTitle')} to="/admin/cms" cta={t('openModule')}>
-            {t('guideStepCmsBody')}
-          </Step>
-          <Step n="06" title={t('guideStepTemplateTitle')} to="/admin/cert-templates" cta={t('openModule')}>
+          <Step n="02" title={t('certificateList')} to="/admin/certificates" cta={t('openModule')}>
             {t('guideStepTemplateBody')}
           </Step>
-          <Step n="07" title={t('guideStepPublishTitle')} to="/admin/cms" cta={t('openModule')}>
-            {t('guideStepPublishBody')}
+          <Step n="03" title={t('guideStepBatchesTitle')} to="/admin/epc" cta={t('openModule')}>
+            {t('guideStepBatchesBody')}
           </Step>
-          <Step n="08" title={t('guideStepVerifyTitle')}>
+          <Step n="04" title={t('guideStepCmsTitle')} to="/admin/cms" cta={t('openModule')}>
+            {t('guideStepCmsBody')}
+          </Step>
+          <Step n="05" title={t('guideStepVerifyTitle')}>
             {t('guideStepVerifyBody')}
           </Step>
         </div>
@@ -89,20 +80,11 @@ export default function AdminGuide() {
 
       {expanded === 'ops' ? (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <Step n="A" title={t('guideOpsMonitoringTitle')} to="/admin/analytics" cta={t('openModule')}>
-            {t('guideOpsMonitoringBody')}
+          <Step n="A" title={t('settings')} to="/admin/settings" cta={t('openModule')}>
+            {t('systemSettingsHint')}
           </Step>
-          <Step n="B" title={t('guideOpsFraudTitle')} to="/admin/fraud" cta={t('openModule')}>
-            {t('guideOpsFraudBody')}
-          </Step>
-          <Step n="C" title={t('guideOpsBulkTitle')} to="/admin/bulk" cta={t('openModule')}>
-            {t('guideOpsBulkBody')}
-          </Step>
-          <Step n="D" title={t('guideOpsGovernanceTitle')} to="/admin/audit" cta={t('openModule')}>
-            {t('guideOpsGovernanceBody')}
-          </Step>
-          <Step n="E" title={t('guideOpsIntegrationsTitle')} to="/admin/integrations" cta={t('openModule')}>
-            {t('guideOpsIntegrationsBody')}
+          <Step n="B" title={t('usersRoles')} to="/admin/users" cta={t('openModule')}>
+            {t('usersSubtitle')}
           </Step>
         </div>
       ) : null}

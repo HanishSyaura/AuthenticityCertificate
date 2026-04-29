@@ -100,9 +100,9 @@ export default function AdminDashboard() {
       ) : null}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Card title={t('records')} value={productCount} hint={t('products')} />
-        <Card title={t('cmsBuilder')} value={pages.length} hint={t('pages')} />
-        <Card title={t('certTemplates')} value={templateCount} hint={t('templates')} />
+        <Card title={t('productModule')} value={productCount} hint={t('products')} />
+        <Card title={t('cmsLanding')} value={pages.length} hint={t('pages')} />
+        <Card title={t('certificateList')} value={templateCount} hint={t('templates')} />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -110,8 +110,8 @@ export default function AdminDashboard() {
           <div className="text-sm font-semibold text-zinc-900">{t('cmsBuilder')}</div>
           <div className="mt-1 text-xs text-zinc-600">{t('cmsSubheading')}</div>
         </Link>
-        <Link to="/admin/cert-templates" className="ac-card p-4 hover:bg-zinc-50">
-          <div className="text-sm font-semibold text-zinc-900">{t('certTemplates')}</div>
+        <Link to="/admin/certificates" className="ac-card p-4 hover:bg-zinc-50">
+          <div className="text-sm font-semibold text-zinc-900">{t('certificateList')}</div>
           <div className="mt-1 text-xs text-zinc-600">{t('certTplSubheading')}</div>
         </Link>
       </div>

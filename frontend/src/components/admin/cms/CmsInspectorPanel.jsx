@@ -59,6 +59,19 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
                 className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 placeholder="https://..."
               />
+              {selectedBlock.type === 'image' ? (
+                <div className="mt-2">
+                  <label className="block text-xs font-medium text-zinc-700">{t('imageMode')}</label>
+                  <select
+                    value={selectedBlock.content?.mode || 'fit'}
+                    onChange={(e) => updateSelectedContent({ mode: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                  >
+                    <option value="fit">{t('actualOrFit')}</option>
+                    <option value="stretch">{t('stretch')}</option>
+                  </select>
+                </div>
+              ) : null}
               <div className="mt-2">
                 <label className="block text-xs font-medium text-zinc-700">{t('file')}</label>
                 <input

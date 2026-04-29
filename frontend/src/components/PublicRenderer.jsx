@@ -47,17 +47,21 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
           </div>
         );
       case 'image':
-        return (
-          <div key={block.id} style={style}>
-            {block.content?.url ? (
-              <img src={block.content.url} alt="" className="h-full w-full object-contain" />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 text-xs text-zinc-500">
-                {t('image')}
-              </div>
-            )}
-          </div>
-        );
+        {
+          const mode = String(block.content?.mode || 'fit');
+          const isStretch = mode === 'stretch';
+          return (
+            <div key={block.id} style={style} className="overflow-hidden">
+              {block.content?.url ? (
+                <img src={block.content.url} alt="" className={isStretch ? 'h-full w-full object-fill' : 'h-full w-full object-contain'} />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 text-xs text-zinc-500">
+                  {t('image')}
+                </div>
+              )}
+            </div>
+          );
+        }
       case 'certificate':
         {
           const status = String(data?.status || '').toUpperCase();

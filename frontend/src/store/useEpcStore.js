@@ -176,6 +176,25 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
+  importExistingXlsx: async ({ productId, batchName, base64 }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const body = {
+        productId: Number(productId),
+        batchName: batchName || undefined,
+        base64
+      };
+      const res = await api.post('/epc/import-existing-xlsx', body);
+      set({ loading: false });
+      return res?.data?.data;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Import failed';
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
   selectBatch: async (batchId) => {
     set({ loading: true, error: null });
     try {

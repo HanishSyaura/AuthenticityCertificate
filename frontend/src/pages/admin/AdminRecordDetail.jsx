@@ -44,11 +44,9 @@ export default function AdminRecordDetail() {
   const [remark, setRemark] = useState('');
 
   const [cmsPageId, setCmsPageId] = useState('');
-  const [cmsCertificatePageId, setCmsCertificatePageId] = useState('');
   const [certificateTemplateId, setCertificateTemplateId] = useState('');
 
   const [landingPages, setLandingPages] = useState([]);
-  const [certificatePages, setCertificatePages] = useState([]);
 
   useEffect(() => {
     void fetchProducts();
@@ -58,13 +56,9 @@ export default function AdminRecordDetail() {
   useEffect(() => {
     if (!token) return;
     const api = createAdminApi({ token });
-    Promise.all([
-      api.get('/cms/pages', { params: { kind: 'landing' } }).catch(() => ({ data: { data: [] } })),
-      api.get('/cms/pages', { params: { kind: 'certificate' } }).catch(() => ({ data: { data: [] } }))
-    ]).then(([a, b]) => {
-      setLandingPages(Array.isArray(a?.data?.data) ? a.data.data : []);
-      setCertificatePages(Array.isArray(b?.data?.data) ? b.data.data : []);
-    });
+    api.get('/cms/pages', { params: { kind: 'landing' } })
+      .then((res) => setLandingPages(Array.isArray(res?.data?.data) ? res.data.data : []))
+      .catch(() => setLandingPages([]));
   }, [token]);
 
   useEffect(() => {
@@ -76,7 +70,6 @@ export default function AdminRecordDetail() {
     setStatus(product.status || '');
     setRemark(product.remark || '');
     setCmsPageId(product.cmsPageId != null ? String(product.cmsPageId) : '');
-    setCmsCertificatePageId(product.cmsCertificatePageId != null ? String(product.cmsCertificatePageId) : '');
     setCertificateTemplateId(product.certificateTemplateId != null ? String(product.certificateTemplateId) : '');
   }, [product]);
 
@@ -155,7 +148,7 @@ export default function AdminRecordDetail() {
                   </option>
                 ))}
               </select>
-              <button type="button" className="mt-2 text-[11px] font-semibold underline" onClick={() => navigate('/admin/cert-templates')}>
+              <button type="button" className="mt-2 text-[11px] font-semibold underline" onClick={() => navigate('/admin/certificates')}>
                 {t('openModule')}
               </button>
             </div>
@@ -171,21 +164,6 @@ export default function AdminRecordDetail() {
                 ))}
               </select>
               <button type="button" className="mt-2 text-[11px] font-semibold underline" onClick={() => navigate('/admin/cms')}>
-                {t('openModule')}
-              </button>
-            </div>
-
-            <div>
-              <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('cmsCertificate')}</div>
-              <select value={cmsCertificatePageId} onChange={(e) => setCmsCertificatePageId(e.target.value)} className="ac-input">
-                <option value="">{t('none')}</option>
-                {certificatePages.map((p) => (
-                  <option key={p.id} value={String(p.id)}>
-                    {p.name} ({p.slug})
-                  </option>
-                ))}
-              </select>
-              <button type="button" className="mt-2 text-[11px] font-semibold underline" onClick={() => navigate('/admin/cms-certificate')}>
                 {t('openModule')}
               </button>
             </div>
@@ -207,7 +185,6 @@ export default function AdminRecordDetail() {
                       status: String(status || '').trim(),
                       remark: String(remark || '').trim() || null,
                       cmsPageId: cmsPageId ? Number(cmsPageId) : null,
-                      cmsCertificatePageId: cmsCertificatePageId ? Number(cmsCertificatePageId) : null,
                       certificateTemplateId: certificateTemplateId ? Number(certificateTemplateId) : null
                     }
                   });

@@ -6,14 +6,14 @@ import AdminShell from './components/admin/AdminShell';
 import AdminProtected from './components/admin/AdminProtected';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminCmsBuilder from './pages/admin/AdminCmsBuilder';
-import AdminCertificateTemplateBuilder from './pages/admin/AdminCertificateTemplateBuilder';
 import AdminRecords from './pages/admin/AdminRecords';
 import AdminRecordDetail from './pages/admin/AdminRecordDetail';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminGuide from './pages/admin/AdminGuide';
 import AdminEpc from './pages/admin/AdminEpc';
 import AdminSettings from './pages/admin/AdminSettings';
-import AdminCmsCertificateBuilder from './pages/admin/AdminCmsCertificateBuilder';
+import AdminCertificateList from './pages/admin/AdminCertificateList';
+import AdminCertificateBuilder from './pages/admin/AdminCertificateBuilder';
 
 function App() {
   return (
@@ -38,8 +38,9 @@ function App() {
           <Route path="epc" element={<AdminEpc />} />
           <Route path="records/:id" element={<AdminRecordDetail />} />
           <Route path="cms" element={<AdminCmsBuilder />} />
-          <Route path="cms-certificate" element={<AdminCmsCertificateBuilder />} />
-          <Route path="cert-templates" element={<AdminCertificateTemplateBuilder />} />
+          <Route path="certificates" element={<AdminCertificateList />} />
+          <Route path="certificates/new" element={<AdminCertificateBuilder />} />
+          <Route path="certificates/:id" element={<AdminCertificateBuilder />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="settings" element={<AdminSettings />} />
         </Route>

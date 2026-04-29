@@ -62,12 +62,11 @@ export default function AdminShell() {
             </NavSection>
 
             <NavSection title={t('navCertificates')}>
-              <NavItem to="/admin/cert-templates" label={t('certTemplates')} tourId="nav-cert-templates" />
+              <NavItem to="/admin/certificates" label={t('certificateList')} tourId="nav-certificates" />
             </NavSection>
 
             <NavSection title={t('navContent')}>
               <NavItem to="/admin/cms" label={t('cmsLanding')} tourId="nav-cms" />
-              <NavItem to="/admin/cms-certificate" label={t('cmsCertificate')} tourId="nav-cms-certificate" />
             </NavSection>
 
             <NavSection title={t('navSettings')}>

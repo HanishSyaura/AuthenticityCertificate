@@ -16,19 +16,14 @@ export function getAdminGettingStartedTourSteps(t) {
       body: t('guideStepBatchesBody')
     },
     {
-      selector: '[data-tour="nav-cert-templates"]',
-      title: t('certTemplates'),
+      selector: '[data-tour="nav-certificates"]',
+      title: t('certificateList'),
       body: t('certTplSubheading')
     },
     {
       selector: '[data-tour="nav-cms"]',
       title: t('cmsLanding'),
       body: t('cmsSubheading')
-    },
-    {
-      selector: '[data-tour="nav-cms-certificate"]',
-      title: t('cmsCertificate'),
-      body: t('cmsCertificateSubheading')
     },
     {
       selector: '[data-tour="nav-settings"]',

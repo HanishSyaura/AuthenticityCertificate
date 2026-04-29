@@ -11,9 +11,16 @@ function getApiBaseUrl() {
   return '';
 }
 
+function getAdminApiBaseUrl() {
+  const base = getApiBaseUrl();
+  if (!base) return '/api';
+  if (base.endsWith('/api')) return base;
+  return `${base}/api`;
+}
+
 export function createAdminApi({ token }) {
   const api = axios.create({
-    baseURL: getApiBaseUrl(),
+    baseURL: getAdminApiBaseUrl(),
     timeout: 8000
   });
 
