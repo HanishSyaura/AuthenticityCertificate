@@ -12,20 +12,26 @@ function formatDate(input) {
 
 export default function AdminRecords() {
   const { t } = useT();
-  const { products, loading, error, lastSyncAt, fetchProducts, createProduct } = useRecordsStore((s) => ({
+  const { products, loading, error, lastSyncAt, fetchProducts, createProduct, updateProduct, deactivateProduct } = useRecordsStore((s) => ({
     products: s.products,
     loading: s.loading,
     error: s.error,
     lastSyncAt: s.lastSyncAt,
     fetchProducts: s.fetchProducts,
-    createProduct: s.createProduct
+    createProduct: s.createProduct,
+    updateProduct: s.updateProduct,
+    deactivateProduct: s.deactivateProduct
   }));
 
   const [query, setQuery] = useState('');
   const [live, setLive] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
+  const [origin, setOrigin] = useState('');
+  const [description, setDescription] = useState('');
 
   useEffect(() => {
     void fetchProducts();
@@ -88,10 +94,11 @@ export default function AdminRecords() {
 
       <div className="rounded-xl border border-zinc-200 bg-white">
         <div className="overflow-x-auto">
-          <div className="min-w-[780px]">
-            <div className="grid grid-cols-[2fr_1fr_1fr_100px] gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-600">
+          <div className="min-w-[980px]">
+            <div className="grid grid-cols-[2fr_1fr_1fr_1fr_220px] gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-600">
               <div>{t('product')}</div>
               <div>{t('code')}</div>
+              <div>{t('origin')}</div>
               <div>{t('updated')}</div>
               <div className="text-right">{t('actions')}</div>
             </div>
@@ -106,18 +113,45 @@ export default function AdminRecords() {
               filtered.map((p) => (
                 <div
                   key={p.id}
-                  className="grid grid-cols-[2fr_1fr_1fr_100px] gap-4 border-b border-zinc-100 px-4 py-3 text-sm text-zinc-800 last:border-b-0"
+                  className="grid grid-cols-[2fr_1fr_1fr_1fr_220px] gap-4 border-b border-zinc-100 px-4 py-3 text-sm text-zinc-800 last:border-b-0"
                 >
                   <div>
                     <div className="font-medium text-zinc-900">{p.name}</div>
                     <div className="mt-0.5 text-[11px] text-zinc-500">{t('batchesCount', { value: Array.isArray(p.batches) ? p.batches.length : 0 })}</div>
                   </div>
                   <div className="font-mono text-xs text-zinc-700">{p.code}</div>
+                  <div className="text-xs text-zinc-700">{p.origin || '-'}</div>
                   <div className="text-xs text-zinc-600">{formatDate(p.updatedAt || p.createdAt)}</div>
                   <div className="flex justify-end">
-                    <Link className="ac-btn ac-btn-soft px-3 py-2 text-xs" to={`/admin/records/${p.id}`}>
-                      {t('view')}
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link className="ac-btn ac-btn-soft px-3 py-2 text-xs" to={`/admin/records/${p.id}`}>
+                        {t('view')}
+                      </Link>
+                      <button
+                        type="button"
+                        className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                        onClick={() => {
+                          setEditing(p);
+                          setName(p.name || '');
+                          setCode(p.code || '');
+                          setOrigin(p.origin || '');
+                          setDescription(p.description || '');
+                          setShowEdit(true);
+                        }}
+                      >
+                        {t('edit')}
+                      </button>
+                      <button
+                        type="button"
+                        className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                        onClick={async () => {
+                          if (!window.confirm(t('confirmDeactivateProduct'))) return;
+                          await deactivateProduct({ id: p.id });
+                        }}
+                      >
+                        {t('deactivate')}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))
@@ -147,6 +181,22 @@ export default function AdminRecords() {
                   className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-mono text-sm text-zinc-900 outline-none focus:border-zinc-400"
                 />
               </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('origin')}</div>
+                <input
+                  value={origin}
+                  onChange={(e) => setOrigin(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('description')}</div>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="h-24 w-full resize-none rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+                />
+              </div>
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -156,6 +206,8 @@ export default function AdminRecords() {
                   setShowCreate(false);
                   setName('');
                   setCode('');
+                  setOrigin('');
+                  setDescription('');
                 }}
               >
                 {t('cancel')}
@@ -167,13 +219,95 @@ export default function AdminRecords() {
                   const trimmedName = String(name || '').trim();
                   const trimmedCode = String(code || '').trim();
                   if (!trimmedName || !trimmedCode) return;
-                  await createProduct({ name: trimmedName, code: trimmedCode });
+                  await createProduct({
+                    name: trimmedName,
+                    code: trimmedCode,
+                    origin: String(origin || '').trim() || undefined,
+                    description: String(description || '').trim() || undefined
+                  });
                   setShowCreate(false);
                   setName('');
                   setCode('');
+                  setOrigin('');
+                  setDescription('');
                 }}
               >
                 {t('create')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showEdit ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5">
+            <div className="mb-4 text-sm font-semibold text-zinc-900">{t('editProduct')}</div>
+            <div className="space-y-3">
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('name')}</div>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('code')}</div>
+                <input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-mono text-sm text-zinc-900 outline-none focus:border-zinc-400"
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('origin')}</div>
+                <input
+                  value={origin}
+                  onChange={(e) => setOrigin(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('description')}</div>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="h-24 w-full resize-none rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+                />
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                onClick={() => {
+                  setShowEdit(false);
+                  setEditing(null);
+                }}
+              >
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                className="ac-btn px-3 py-2 text-xs"
+                disabled={!editing?.id}
+                onClick={async () => {
+                  if (!editing?.id) return;
+                  await updateProduct({
+                    id: editing.id,
+                    patch: {
+                      name: String(name || '').trim(),
+                      code: String(code || '').trim(),
+                      origin: String(origin || '').trim() || null,
+                      description: String(description || '').trim() || null
+                    }
+                  });
+                  setShowEdit(false);
+                  setEditing(null);
+                }}
+              >
+                {t('save')}
               </button>
             </div>
           </div>

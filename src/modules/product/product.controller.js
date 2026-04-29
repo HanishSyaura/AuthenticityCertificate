@@ -3,7 +3,20 @@ const { z } = require('zod');
 
 const productSchema = z.object({
   name: z.string().min(1),
-  code: z.string().min(1)
+  code: z.string().min(1),
+  origin: z.string().min(1).optional(),
+  description: z.string().min(1).optional(),
+  cmsPageId: z.number().int().positive().optional(),
+  certificateTemplateId: z.number().int().positive().optional()
+});
+
+const updateProductSchema = z.object({
+  name: z.string().min(1).optional(),
+  code: z.string().min(1).optional(),
+  origin: z.string().min(1).nullable().optional(),
+  description: z.string().min(1).nullable().optional(),
+  cmsPageId: z.number().int().positive().nullable().optional(),
+  certificateTemplateId: z.number().int().positive().nullable().optional()
 });
 
 const batchSchema = z.object({
@@ -19,6 +32,34 @@ async function createProduct(req, res) {
       ...validatedData
     });
     res.success(product, 'Product created successfully');
+  } catch (error) {
+    res.error(error.message, 400);
+  }
+}
+
+async function updateProduct(req, res) {
+  try {
+    const { id } = req.params;
+    const validatedData = updateProductSchema.parse(req.body);
+    const product = await productService.updateProduct({
+      organizationId: req.organization.id,
+      productId: id,
+      patch: validatedData
+    });
+    res.success(product, 'Product updated successfully');
+  } catch (error) {
+    res.error(error.message, 400);
+  }
+}
+
+async function deactivateProduct(req, res) {
+  try {
+    const { id } = req.params;
+    const product = await productService.deactivateProduct({
+      organizationId: req.organization.id,
+      productId: id
+    });
+    res.success(product, 'Product deactivated successfully');
   } catch (error) {
     res.error(error.message, 400);
   }
@@ -58,6 +99,8 @@ async function getProductBatches(req, res) {
 
 module.exports = {
   createProduct,
+  updateProduct,
+  deactivateProduct,
   getAllProducts,
   createBatch,
   getProductBatches

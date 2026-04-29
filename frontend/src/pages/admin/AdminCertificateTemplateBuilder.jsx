@@ -1,100 +1,127 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import CanvasStage from '../../components/admin/CanvasStage';
-import { ADMIN_KEYS } from '../../utils/adminKeys';
-import { readJson, writeJson } from '../../utils/storage';
 import { useT } from '../../i18n/useT';
+import useCertTemplatesStore from '../../store/useCertTemplatesStore';
+import useAdminAuthStore from '../../store/useAdminAuthStore';
+import { createAdminApi } from '../../utils/adminApi';
 
 function makeId(prefix) {
   return `${prefix}-${Math.random().toString(16).slice(2)}-${Date.now()}`;
 }
 
-const SAMPLE_DATA = {
-  certificateId: 'BN-TEST-123',
-  status: 'VALID',
-  issuedAt: new Date().toISOString(),
-  product: { name: 'Premium Bird Nest (Gold Edition)' },
-  batch: { batchNo: 'BATCH-2024-04' }
-};
-
-function getValue(path) {
+function getValue(path, data) {
   const parts = String(path).split('.');
-  let cur = SAMPLE_DATA;
+  let cur = data;
   for (const p of parts) {
     cur = cur?.[p];
   }
-  if (path === 'issuedAt') return new Date(SAMPLE_DATA.issuedAt).toLocaleDateString();
   return cur ?? '';
-}
-
-function getTemplates() {
-  const all = readJson(ADMIN_KEYS.certTemplates, []);
-  return Array.isArray(all) ? all : [];
-}
-
-function saveTemplates(next) {
-  writeJson(ADMIN_KEYS.certTemplates, next);
 }
 
 export default function AdminCertificateTemplateBuilder() {
   const { t } = useT();
-  const [templates, setTemplates] = useState(getTemplates());
-  const [selectedId, setSelectedId] = useState(templates[0]?.id || null);
+  const { templates, loading, error, fetchTemplates, createTemplate, updateTemplate, deleteTemplate } = useCertTemplatesStore((s) => ({
+    templates: s.templates,
+    loading: s.loading,
+    error: s.error,
+    fetchTemplates: s.fetchTemplates,
+    createTemplate: s.createTemplate,
+    updateTemplate: s.updateTemplate,
+    deleteTemplate: s.deleteTemplate
+  }));
+  const { token, orgCode } = useAdminAuthStore((s) => ({ token: s.token, orgCode: s.orgCode }));
+
+  const [selectedId, setSelectedId] = useState(null);
   const [selectedFieldId, setSelectedFieldId] = useState(null);
-  const [newName, setNewName] = useState('Default Certificate');
+  const [newName, setNewName] = useState('');
+  const [newBackground, setNewBackground] = useState('');
+  const [previewId, setPreviewId] = useState('');
+  const [previewData, setPreviewData] = useState(null);
+  const [previewError, setPreviewError] = useState(null);
 
   const fieldsRef = useRef([]);
 
-  const selected = useMemo(
-    () => templates.find((t) => t.id === selectedId) || null,
-    [templates, selectedId]
-  );
+  const selected = useMemo(() => templates.find((it) => String(it.id) === String(selectedId)) || null, [templates, selectedId]);
 
   const fields = useMemo(() => {
-    return (selected?.fields || []).map((f) => ({
-      ...f,
+    const layout = Array.isArray(selected?.layoutJson) ? selected.layoutJson : [];
+    return layout.map((f) => ({
+      ...(f || {}),
       render: (it) => (
         <div className="h-full w-full p-2">
           <div className="text-[11px] font-semibold text-zinc-600">{it.label || it.path}</div>
-          <div className="mt-1 truncate text-sm font-semibold text-zinc-900">{getValue(it.path)}</div>
+          <div className="mt-1 truncate text-sm font-semibold text-zinc-900">
+            {previewData ? String(getValue(it.path, previewData)) : ''}
+          </div>
         </div>
       )
     }));
-  }, [selected]);
+  }, [selected, previewData]);
 
   useEffect(() => {
-    fieldsRef.current = selected?.fields || [];
+    fieldsRef.current = Array.isArray(selected?.layoutJson) ? selected.layoutJson : [];
   }, [selected]);
 
-  const selectedField = useMemo(
-    () => (selected?.fields || []).find((f) => f.id === selectedFieldId) || null,
-    [selected, selectedFieldId]
-  );
+  const selectedField = useMemo(() => (fieldsRef.current || []).find((f) => f.id === selectedFieldId) || null, [selectedFieldId]);
 
-  const updateSelected = (patch) => {
+  const updateSelected = async (patch) => {
     if (!selected) return;
-    const nextTemplates = templates.map((t) => (t.id === selected.id ? { ...t, ...patch } : t));
-    setTemplates(nextTemplates);
-    saveTemplates(nextTemplates);
+    await updateTemplate({ id: selected.id, patch });
   };
 
-  const setFields = (nextFields) => {
+  const setFields = async (nextFields) => {
+    if (!selected) return;
     const sanitized = (nextFields || []).map((field) => {
       const next = { ...(field || {}) };
       delete next.render;
       return next;
     });
-    updateSelected({ fields: sanitized });
+    await updateSelected({ layoutJson: sanitized });
   };
 
   const setCanvasItems = (updaterOrNext) => {
     const current = fieldsRef.current || [];
     const next = typeof updaterOrNext === 'function' ? updaterOrNext(current) : updaterOrNext;
-    setFields(next);
+    void setFields(next);
   };
 
   const updateField = (patch) => {
     if (!selectedField || !selected) return;
-    setFields(selected.fields.map((f) => (f.id === selectedField.id ? { ...f, ...patch } : f)));
+    const current = fieldsRef.current || [];
+    void setFields(current.map((f) => (f.id === selectedField.id ? { ...f, ...patch } : f)));
+  };
+
+  useEffect(() => {
+    void fetchTemplates();
+  }, [fetchTemplates]);
+
+  useEffect(() => {
+    if (selectedId != null) return;
+    if (templates.length > 0) setSelectedId(templates[0].id);
+  }, [templates, selectedId]);
+
+  const fetchPreview = async () => {
+    setPreviewError(null);
+    setPreviewData(null);
+    const certId = String(previewId || '').trim();
+    if (!certId) return;
+    if (!token) {
+      setPreviewError('Not authenticated');
+      return;
+    }
+    try {
+      const api = createAdminApi({ token, orgCode });
+      const res = await api.get(`/analytics/cert/${encodeURIComponent(certId)}`);
+      const cert = res?.data?.data?.certificate || null;
+      if (!cert) {
+        setPreviewError(t('notFound'));
+        return;
+      }
+      setPreviewData(cert);
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || t('verificationFailed');
+      setPreviewError(msg);
+    }
   };
 
   return (
@@ -103,6 +130,8 @@ export default function AdminCertificateTemplateBuilder() {
         <h2 className="text-base font-semibold text-zinc-900">{t('certTplHeading')}</h2>
         <p className="mt-1 text-sm text-zinc-600">{t('certTplSubheading')}</p>
       </div>
+
+      {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[280px_minmax(0,1fr)_320px]">
         <div className="rounded-xl border border-zinc-200 bg-white p-3">
@@ -122,7 +151,7 @@ export default function AdminCertificateTemplateBuilder() {
               >
                 <div className="font-semibold">{t.name}</div>
                 <div className={`text-[11px] ${t.id === selectedId ? 'text-white/70' : 'text-zinc-500'}`}>
-                  {t.fields?.length || 0} fields
+                  {(Array.isArray(t.layoutJson) ? t.layoutJson.length : 0)} fields
                 </div>
               </button>
             ))}
@@ -135,29 +164,35 @@ export default function AdminCertificateTemplateBuilder() {
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                placeholder={t('templateName')}
+              />
+              <input
+                value={newBackground}
+                onChange={(e) => setNewBackground(e.target.value)}
+                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                placeholder={t('backgroundUrl')}
               />
               <button
                 type="button"
                 onClick={() => {
-                  const next = {
-                    id: makeId('tpl'),
-                    name: newName,
-                    width: 920,
-                    height: 640,
-                    backgroundUrl:
-                      'https://coresg-normal.trae.ai/api/ide/v1/text_to_image?prompt=elegant%20certificate%20background%2C%20minimal%2C%20gold%20accent%2C%20paper%20texture&image_size=landscape_4_3',
-                    fields: [
-                      { id: makeId('field'), path: 'certificateId', label: 'Certificate ID', x: 80, y: 110, w: 300, h: 60 },
-                      { id: makeId('field'), path: 'product.name', label: 'Product', x: 80, y: 190, w: 520, h: 60 },
-                      { id: makeId('field'), path: 'batch.batchNo', label: 'Batch', x: 80, y: 270, w: 300, h: 60 },
-                      { id: makeId('field'), path: 'issuedAt', label: 'Issued', x: 80, y: 350, w: 300, h: 60 }
+                  const nm = String(newName || '').trim();
+                  if (!nm) return;
+                  void createTemplate({
+                    name: nm,
+                    background: String(newBackground || '').trim() || '',
+                    layoutJson: [
+                      { id: makeId('field'), path: 'certificateId', label: t('certificateId'), x: 80, y: 110, w: 300, h: 60 },
+                      { id: makeId('field'), path: 'product.name', label: t('product'), x: 80, y: 190, w: 520, h: 60 },
+                      { id: makeId('field'), path: 'batch.batchNo', label: t('batch'), x: 80, y: 270, w: 300, h: 60 },
+                      { id: makeId('field'), path: 'issuedAt', label: t('issued'), x: 80, y: 350, w: 300, h: 60 },
+                      { id: makeId('field'), path: 'status', label: t('status'), x: 80, y: 430, w: 240, h: 60 }
                     ]
-                  };
-                  const updated = [next, ...templates];
-                  setTemplates(updated);
-                  saveTemplates(updated);
-                  setSelectedId(next.id);
-                  setSelectedFieldId(null);
+                  }).then((created) => {
+                    if (created?.id != null) setSelectedId(created.id);
+                    setSelectedFieldId(null);
+                    setNewName('');
+                    setNewBackground('');
+                  });
                 }}
                 className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
               >
@@ -178,26 +213,48 @@ export default function AdminCertificateTemplateBuilder() {
                   <div className="text-sm font-semibold text-zinc-900">{selected.name}</div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={previewId}
+                      onChange={(e) => setPreviewId(e.target.value)}
+                      placeholder={t('certificateId')}
+                      className="w-44 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900"
+                    />
+                    <button type="button" onClick={fetchPreview} className="ac-btn ac-btn-soft px-3 py-2 text-xs">
+                      {t('preview')}
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => {
-                      const next = [
-                        ...selected.fields,
-                        { id: makeId('field'), path: 'status', label: 'Status', x: 80, y: 430, w: 240, h: 60 }
-                      ];
-                      setFields(next);
+                      const current = Array.isArray(selected.layoutJson) ? selected.layoutJson : [];
+                      void setFields([...current, { id: makeId('field'), path: 'status', label: t('status'), x: 80, y: 430, w: 240, h: 60 }]);
                     }}
                     className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
                   >
                     {t('addField')}
                   </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!window.confirm(t('confirmDelete'))) return;
+                      await deleteTemplate({ id: selected.id });
+                      setSelectedId(null);
+                      setSelectedFieldId(null);
+                    }}
+                    className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                  >
+                    {t('delete')}
+                  </button>
                 </div>
               </div>
 
+              {previewError ? <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">{previewError}</div> : null}
+
               <CanvasStage
-                width={selected.width}
-                height={selected.height}
-                backgroundUrl={selected.backgroundUrl}
+                width={920}
+                height={640}
+                backgroundUrl={selected.background || ''}
                 items={fields}
                 setItems={setCanvasItems}
                 selectedId={selectedFieldId}
@@ -216,7 +273,7 @@ export default function AdminCertificateTemplateBuilder() {
                 <label className="block text-xs font-medium text-zinc-700">{t('templateName')}</label>
                 <input
                   value={selected.name}
-                  onChange={(e) => updateSelected({ name: e.target.value })}
+                  onChange={(e) => void updateSelected({ name: e.target.value })}
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
               </div>
@@ -224,8 +281,8 @@ export default function AdminCertificateTemplateBuilder() {
               <div>
                 <label className="block text-xs font-medium text-zinc-700">{t('backgroundUrl')}</label>
                 <input
-                  value={selected.backgroundUrl || ''}
-                  onChange={(e) => updateSelected({ backgroundUrl: e.target.value })}
+                  value={selected.background || ''}
+                  onChange={(e) => void updateSelected({ background: e.target.value })}
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
               </div>

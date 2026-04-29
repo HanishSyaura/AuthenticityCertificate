@@ -117,8 +117,12 @@ model Product {
   organization   Organization @relation(fields: [organizationId], references: [id])
   name           String
   code           String
+  origin         String?
+  description    String?
   cmsPageId      Int? // Linked CMS Page
   cmsPage        CmsPage?     @relation(fields: [cmsPageId], references: [id])
+  certificateTemplateId Int?
+  certificateTemplate   CertificateTemplate? @relation(fields: [certificateTemplateId], references: [id])
   batches        Batch[]
 
   versionNo Int       @default(1)

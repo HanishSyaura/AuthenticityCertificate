@@ -131,3 +131,33 @@ tail -n 200 /www/wwwlogs/wmscertauth.clbgroups.com.error.log
 
 - Kalau route admin refresh jadi 404:
   - Pastikan Nginx ada `try_files $uri $uri/ /index.html;` untuk `location /`
+
+---
+
+## F) Bila ada perubahan Prisma schema (tanpa migrations)
+
+Kadang-kadang update code menambah field baru dalam Prisma schema, tetapi repo anda belum ada folder `prisma/migrations`.
+
+Untuk kes ini, anda perlu apply perubahan DB secara manual (MySQL), kemudian barulah jalankan:
+
+- `npx prisma generate`
+- restart PM2
+
+Contoh (Part Product Management — tambah `origin`, `description`, `certificateTemplateId` pada table `Product`):
+
+```sql
+ALTER TABLE Product
+  ADD COLUMN origin VARCHAR(191) NULL,
+  ADD COLUMN description TEXT NULL,
+  ADD COLUMN certificateTemplateId INT NULL;
+
+ALTER TABLE Product
+  ADD INDEX idx_Product_certificateTemplateId (certificateTemplateId);
+
+ALTER TABLE Product
+  ADD CONSTRAINT Product_certificateTemplateId_fkey
+  FOREIGN KEY (certificateTemplateId)
+  REFERENCES CertificateTemplate(id)
+  ON DELETE SET NULL
+  ON UPDATE CASCADE;
+```

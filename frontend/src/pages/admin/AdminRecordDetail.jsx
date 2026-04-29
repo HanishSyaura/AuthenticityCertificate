@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import useRecordsStore from '../../store/useRecordsStore';
+import useCmsStore from '../../store/useCmsStore';
+import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import { useT } from '../../i18n/useT';
 
 function formatDate(input) {
@@ -29,7 +31,8 @@ export default function AdminRecordDetail() {
     fetchProducts,
     fetchBatches,
     createBatch,
-    generateCertificates
+    generateCertificates,
+    updateProduct
   } = useRecordsStore((s) => ({
     products: s.products,
     batches: s.batchesByProductId[String(id)] || [],
@@ -39,8 +42,12 @@ export default function AdminRecordDetail() {
     fetchProducts: s.fetchProducts,
     fetchBatches: s.fetchBatches,
     createBatch: s.createBatch,
-    generateCertificates: s.generateCertificates
+    generateCertificates: s.generateCertificates,
+    updateProduct: s.updateProduct
   }));
+
+  const { pages, fetchPages } = useCmsStore((s) => ({ pages: s.pages, fetchPages: s.fetchPages }));
+  const { templates, fetchTemplates } = useCertTemplatesStore((s) => ({ templates: s.templates, fetchTemplates: s.fetchTemplates }));
 
   const product = useMemo(() => products.find((p) => String(p.id) === String(id)) || null, [products, id]);
 
@@ -50,14 +57,32 @@ export default function AdminRecordDetail() {
   const [certQty, setCertQty] = useState('');
   const [lastGenerated, setLastGenerated] = useState(null);
 
+  const [origin, setOrigin] = useState('');
+  const [description, setDescription] = useState('');
+  const [cmsPageId, setCmsPageId] = useState('');
+  const [templateId, setTemplateId] = useState('');
+
   useEffect(() => {
     void fetchProducts();
   }, [fetchProducts]);
 
   useEffect(() => {
+    void fetchPages();
+    void fetchTemplates();
+  }, [fetchPages, fetchTemplates]);
+
+  useEffect(() => {
     if (!id) return;
     void fetchBatches(id);
   }, [id, fetchBatches]);
+
+  useEffect(() => {
+    if (!product) return;
+    setOrigin(product.origin || '');
+    setDescription(product.description || '');
+    setCmsPageId(product.cmsPageId ? String(product.cmsPageId) : '');
+    setTemplateId(product.certificateTemplateId ? String(product.certificateTemplateId) : '');
+  }, [product]);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -204,6 +229,79 @@ export default function AdminRecordDetail() {
               })}
             </div>
           )}
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-white p-4">
+          <div className="mb-3 text-xs font-semibold text-zinc-600">{t('productSettings')}</div>
+          <div className="space-y-3">
+            <div>
+              <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('origin')}</div>
+              <input
+                value={origin}
+                onChange={(e) => setOrigin(e.target.value)}
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400"
+              />
+            </div>
+            <div>
+              <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('description')}</div>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="h-20 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400"
+              />
+            </div>
+            <div>
+              <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('cmsPage')}</div>
+              <select
+                value={cmsPageId}
+                onChange={(e) => setCmsPageId(e.target.value)}
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400"
+              >
+                <option value="">{t('none')}</option>
+                {(pages || []).map((p) => (
+                  <option key={p.id} value={String(p.id)}>
+                    {p.name} ({p.slug})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('certTemplate')}</div>
+              <select
+                value={templateId}
+                onChange={(e) => setTemplateId(e.target.value)}
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400"
+              >
+                <option value="">{t('none')}</option>
+                {(templates || []).map((tpl) => (
+                  <option key={tpl.id} value={String(tpl.id)}>
+                    {tpl.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="ac-btn px-3 py-2 text-xs"
+                disabled={!product?.id}
+                onClick={async () => {
+                  if (!product?.id) return;
+                  await updateProduct({
+                    id: product.id,
+                    patch: {
+                      origin: String(origin || '').trim() || null,
+                      description: String(description || '').trim() || null,
+                      cmsPageId: cmsPageId ? toInt(cmsPageId) : null,
+                      certificateTemplateId: templateId ? toInt(templateId) : null
+                    }
+                  });
+                }}
+              >
+                {t('save')}
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="rounded-xl border border-zinc-200 bg-white p-4">

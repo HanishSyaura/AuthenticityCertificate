@@ -13,6 +13,16 @@ router.use(requireRole(['super_admin', 'admin']));
 router.use(requireOrganization);
 
 router.post('/', auditAction('CREATE_PRODUCT', { targetType: 'product' }), productController.createProduct);
+router.patch(
+  '/:id',
+  auditAction('UPDATE_PRODUCT', { targetType: 'product', getTargetId: (req) => req.params.id }),
+  productController.updateProduct
+);
+router.post(
+  '/:id/deactivate',
+  auditAction('DEACTIVATE_PRODUCT', { targetType: 'product', getTargetId: (req) => req.params.id }),
+  productController.deactivateProduct
+);
 router.get('/', productController.getAllProducts);
 
 router.post('/batches', auditAction('CREATE_BATCH', { targetType: 'batch' }), productController.createBatch);

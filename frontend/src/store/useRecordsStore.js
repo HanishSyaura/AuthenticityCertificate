@@ -29,11 +29,11 @@ const useRecordsStore = create((set, get) => ({
     }
   },
 
-  createProduct: async ({ name, code }) => {
+  createProduct: async ({ name, code, origin, description }) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const res = await api.post('/products', { name, code });
+      const res = await api.post('/products', { name, code, origin, description });
       const created = res?.data?.data;
       const products = [created, ...get().products].filter(Boolean);
       set({ products, loading: false, lastSyncAt: Date.now() });
@@ -103,8 +103,39 @@ const useRecordsStore = create((set, get) => ({
       set({ loading: false, error: msg });
       throw e;
     }
+  },
+
+  updateProduct: async ({ id, patch }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.patch(`/products/${encodeURIComponent(id)}`, patch);
+      const updated = res?.data?.data;
+      const products = get().products.map((p) => (String(p.id) === String(id) ? updated : p));
+      set({ products, loading: false, lastSyncAt: Date.now() });
+      return updated;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Failed to update product';
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
+  deactivateProduct: async ({ id }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.post(`/products/${encodeURIComponent(id)}/deactivate`);
+      const updated = res?.data?.data;
+      const products = get().products.map((p) => (String(p.id) === String(id) ? updated : p));
+      set({ products, loading: false, lastSyncAt: Date.now() });
+      return updated;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Failed to deactivate product';
+      set({ loading: false, error: msg });
+      throw e;
+    }
   }
 }));
 
 export default useRecordsStore;
-
