@@ -43,7 +43,7 @@ export default function AdminShell() {
   return (
     <div className="min-h-screen">
       <div className="mx-auto w-[90vw] max-w-none px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="ac-topbar mb-6 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -76,7 +76,7 @@ export default function AdminShell() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
-          <aside className={`ac-card p-3 lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:overflow-auto ${mobileNavOpen ? 'block' : 'hidden'} lg:block`}>
+          <aside className={`ac-sidenav lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:overflow-auto ${mobileNavOpen ? 'block' : 'hidden'} lg:block`}>
             <NavSection title={t('navOverview')}>
               <NavItem to="/admin/dashboard" label={t('dashboard')} />
               <NavItem to="/admin/guide" label={t('gettingStarted')} />
@@ -112,7 +112,7 @@ export default function AdminShell() {
             </NavSection>
           </aside>
 
-          <main className="ac-card min-w-0">
+          <main className="ac-card min-w-0 bg-white/80 backdrop-blur">
             <Outlet />
           </main>
         </div>

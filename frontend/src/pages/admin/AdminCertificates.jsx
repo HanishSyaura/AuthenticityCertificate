@@ -10,7 +10,7 @@ function formatDate(input) {
 }
 
 function Tag({ children }) {
-  return <span className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] text-zinc-700">{children}</span>;
+  return <span className="ac-badge ac-badge-neutral">{children}</span>;
 }
 
 export default function AdminCertificates() {
@@ -62,7 +62,7 @@ export default function AdminCertificates() {
   }, [fetchCertificates]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="ac-page">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-zinc-900">{t('certificates')}</h2>
@@ -80,12 +80,12 @@ export default function AdminCertificates() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t('searchCertificates')}
-            className="w-64 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+            className="ac-input w-64 px-3 py-2"
           />
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+            className="ac-input w-[180px] px-3 py-2"
           >
             <option value="">{t('allStatuses')}</option>
             <option value="PENDING">PENDING</option>
@@ -97,7 +97,7 @@ export default function AdminCertificates() {
           <select
             value={type}
             onChange={(e) => setType(e.target.value)}
-            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+            className="ac-input w-[140px] px-3 py-2"
           >
             <option value="">{t('allTypes')}</option>
             <option value="batch">batch</option>
@@ -111,10 +111,10 @@ export default function AdminCertificates() {
 
       {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
 
-      <div className="rounded-xl border border-zinc-200 bg-white">
+      <div className="ac-table">
         <div className="overflow-x-auto">
           <div className="min-w-[980px]">
-            <div className="grid grid-cols-[1.3fr_110px_120px_1fr_1fr_240px] gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-600">
+            <div className="ac-table-head grid grid-cols-[1.3fr_110px_120px_1fr_1fr_240px] gap-4">
               <div>{t('certificateId')}</div>
               <div>{t('type')}</div>
               <div>{t('status')}</div>
@@ -134,7 +134,7 @@ export default function AdminCertificates() {
               items.map((c) => (
                 <div
                   key={c.certificateId}
-                  className="grid grid-cols-[1.3fr_110px_120px_1fr_1fr_240px] gap-4 border-b border-zinc-100 px-4 py-3 text-sm text-zinc-800 last:border-b-0"
+                  className="ac-table-row grid grid-cols-[1.3fr_110px_120px_1fr_1fr_240px] gap-4"
                 >
                   <div className="min-w-0">
                     <div className="truncate font-mono text-[11px] text-zinc-900">{c.certificateId}</div>
@@ -222,25 +222,25 @@ export default function AdminCertificates() {
       </div>
 
       {assignOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-4">
+        <div className="ac-modal-backdrop">
+          <div className="ac-modal">
             <div className="mb-3 text-sm font-semibold text-zinc-900">{t('assignIdentity')}</div>
             <div className="space-y-3">
               <div>
                 <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('certificateId')}</div>
-                <input value={assignCertId} readOnly className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-900" />
+                <input value={assignCertId} readOnly className="ac-input bg-zinc-50 px-3 py-2 text-xs" />
               </div>
               <div>
                 <div className="mb-1 text-[11px] font-semibold text-zinc-600">NFC UID</div>
-                <input value={assignNfc} onChange={(e) => setAssignNfc(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs" />
+                <input value={assignNfc} onChange={(e) => setAssignNfc(e.target.value)} className="ac-input px-3 py-2 text-xs" />
               </div>
               <div>
                 <div className="mb-1 text-[11px] font-semibold text-zinc-600">EPC</div>
-                <input value={assignEpc} onChange={(e) => setAssignEpc(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs" />
+                <input value={assignEpc} onChange={(e) => setAssignEpc(e.target.value)} className="ac-input px-3 py-2 text-xs" />
               </div>
               <div>
                 <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('expiresAtOptional')}</div>
-                <input value={assignExp} onChange={(e) => setAssignExp(e.target.value)} placeholder="2026-12-31" className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs" />
+                <input value={assignExp} onChange={(e) => setAssignExp(e.target.value)} placeholder="2026-12-31" className="ac-input px-3 py-2 text-xs" />
               </div>
             </div>
             <div className="mt-4 flex justify-end gap-2">
@@ -265,4 +265,3 @@ export default function AdminCertificates() {
     </div>
   );
 }
-

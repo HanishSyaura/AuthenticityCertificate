@@ -37,7 +37,7 @@ export default function AdminIdentities() {
   }, [fetchIdentities]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="ac-page">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-zinc-900">{t('identities')}</h2>
@@ -55,7 +55,7 @@ export default function AdminIdentities() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t('searchIdentities')}
-            className="w-72 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+            className="ac-input w-72 px-3 py-2"
           />
           <label className="flex items-center gap-2 text-xs text-zinc-700">
             <input type="checkbox" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} />
@@ -69,10 +69,10 @@ export default function AdminIdentities() {
 
       {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
 
-      <div className="rounded-xl border border-zinc-200 bg-white">
+      <div className="ac-table">
         <div className="overflow-x-auto">
           <div className="min-w-[980px]">
-            <div className="grid grid-cols-[1fr_1fr_1.2fr_160px_160px_200px] gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-600">
+            <div className="ac-table-head grid grid-cols-[1fr_1fr_1.2fr_160px_160px_200px] gap-4">
               <div>NFC UID</div>
               <div>EPC</div>
               <div>{t('certificateId')}</div>
@@ -92,7 +92,7 @@ export default function AdminIdentities() {
               items.map((it) => (
                 <div
                   key={it.id}
-                  className="grid grid-cols-[1fr_1fr_1.2fr_160px_160px_200px] gap-4 border-b border-zinc-100 px-4 py-3 text-sm text-zinc-800 last:border-b-0"
+                  className="ac-table-row grid grid-cols-[1fr_1fr_1.2fr_160px_160px_200px] gap-4"
                 >
                   <div className="truncate font-mono text-[11px] text-zinc-900">{it.nfcUid || '-'}</div>
                   <div className="truncate font-mono text-[11px] text-zinc-900">{it.epc || '-'}</div>
@@ -144,4 +144,3 @@ export default function AdminIdentities() {
     </div>
   );
 }
-

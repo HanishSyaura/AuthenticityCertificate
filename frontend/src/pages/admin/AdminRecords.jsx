@@ -60,14 +60,14 @@ export default function AdminRecords() {
   }, [products, query]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="ac-page">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-base font-semibold text-zinc-900">{t('records')}</h2>
           <p className="mt-1 text-sm text-zinc-600">{t('recordsSubtitle')}</p>
           <div className="mt-2 flex items-center gap-2 text-[11px] text-zinc-500">
             <span
-              className={`inline-flex items-center rounded-full px-2 py-0.5 ring-1 ring-inset ${
+              className={`ac-pill ${
                 live ? 'bg-emerald-50 text-emerald-700 ring-emerald-200/60' : 'bg-zinc-50 text-zinc-700 ring-zinc-200/70'
               }`}
             >
@@ -100,10 +100,10 @@ export default function AdminRecords() {
 
       {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
 
-      <div className="rounded-xl border border-zinc-200 bg-white">
+      <div className="ac-table">
         <div className="overflow-x-auto">
           <div className="min-w-[1100px]">
-            <div className="grid grid-cols-[1fr_2fr_1fr_1fr_1fr_1fr_220px] gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-600">
+            <div className="ac-table-head grid grid-cols-[1fr_2fr_1fr_1fr_1fr_1fr_220px] gap-4">
               <div>{t('sku')}</div>
               <div>{t('product')}</div>
               <div>{t('productCode')}</div>
@@ -123,7 +123,7 @@ export default function AdminRecords() {
               filtered.map((p) => (
                 <div
                   key={p.id}
-                  className="grid grid-cols-[1fr_2fr_1fr_1fr_1fr_1fr_220px] gap-4 border-b border-zinc-100 px-4 py-3 text-sm text-zinc-800 last:border-b-0"
+                  className="ac-table-row grid grid-cols-[1fr_2fr_1fr_1fr_1fr_1fr_220px] gap-4"
                 >
                   <div className="font-mono text-xs text-zinc-700">{p.sku}</div>
                   <div>
@@ -175,8 +175,8 @@ export default function AdminRecords() {
       </div>
 
       {showCreate ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5">
+        <div className="ac-modal-backdrop">
+          <div className="ac-modal">
             <div className="mb-4 text-sm font-semibold text-zinc-900">{t('createProduct')}</div>
             <div className="space-y-3">
               <div>
@@ -279,8 +279,8 @@ export default function AdminRecords() {
       ) : null}
 
       {showEdit ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5">
+        <div className="ac-modal-backdrop">
+          <div className="ac-modal">
             <div className="mb-4 text-sm font-semibold text-zinc-900">{t('editProduct')}</div>
             <div className="space-y-3">
               <div>

@@ -84,4 +84,40 @@
   .ac-help {
     @apply text-xs text-zinc-600;
   }
+
+  .ac-page {
+    @apply p-4 sm:p-6 lg:p-8;
+  }
+
+  .ac-topbar {
+    @apply rounded-2xl border border-zinc-200/80 bg-white/80 px-4 py-3 shadow-sm shadow-zinc-900/5 backdrop-blur;
+  }
+
+  .ac-sidenav {
+    @apply rounded-2xl border border-zinc-200/80 bg-white/70 p-3 shadow-sm shadow-zinc-900/5 backdrop-blur;
+  }
+
+  .ac-table {
+    @apply overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm shadow-zinc-900/5;
+  }
+
+  .ac-table-head {
+    @apply border-b border-zinc-200/70 bg-zinc-50/60 px-4 py-3 text-xs font-semibold text-zinc-600 backdrop-blur;
+  }
+
+  .ac-table-row {
+    @apply border-b border-zinc-100/80 px-4 py-3 text-sm text-zinc-800 transition-colors hover:bg-zinc-50/60 last:border-b-0;
+  }
+
+  .ac-modal-backdrop {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/30 p-4 backdrop-blur-sm;
+  }
+
+  .ac-modal {
+    @apply w-full max-w-md rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-lg shadow-zinc-900/20;
+  }
+
+  .ac-pill {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset;
+  }
 }

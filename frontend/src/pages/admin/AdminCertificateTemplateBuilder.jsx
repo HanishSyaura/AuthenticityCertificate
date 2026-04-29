@@ -124,7 +124,7 @@ export default function AdminCertificateTemplateBuilder() {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="ac-page">
       <div className="mb-4">
         <h2 className="text-base font-semibold text-zinc-900">{t('certTplHeading')}</h2>
         <p className="mt-1 text-sm text-zinc-600">{t('certTplSubheading')}</p>

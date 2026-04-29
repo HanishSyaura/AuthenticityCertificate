@@ -76,7 +76,7 @@ export default function AdminCmsBuilder() {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="ac-page">
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-base font-semibold text-zinc-900">{t('cmsHeading')}</h2>
