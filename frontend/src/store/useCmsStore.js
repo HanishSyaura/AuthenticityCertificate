@@ -79,7 +79,8 @@ const useCmsStore = create((set, get) => ({
         set({ layoutsByPageKey: next });
         return;
       }
-    } catch {
+    } catch (e) {
+      void e;
     }
   },
 

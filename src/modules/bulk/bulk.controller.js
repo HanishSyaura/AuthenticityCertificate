@@ -26,6 +26,12 @@ const assignXlsxSchema = z.object({
   runSync: z.boolean().optional()
 });
 
+const importXlsxSchema = z.object({
+  base64: z.string().min(1),
+  dryRun: z.boolean().optional(),
+  runSync: z.boolean().optional()
+});
+
 async function generate(req, res) {
   try {
     const data = generateSchema.parse(req.body);
@@ -120,11 +126,33 @@ async function jobStatus(req, res) {
   }
 }
 
+async function importXlsx(req, res) {
+  try {
+    const data = importXlsxSchema.parse(req.body);
+    const sheets = bulkService.parseWorkbookBase64(data.base64);
+    const payload = {
+      organizationId: req.organization.id,
+      sheets,
+      dryRun: Boolean(data.dryRun)
+    };
+
+    if (data.runSync || !jobQueue.hasRedis()) {
+      const result = await jobQueue.runNow('bulk_import_xlsx', payload);
+      return res.success({ mode: 'sync', result }, 'Bulk import completed');
+    }
+
+    const job = await jobQueue.addJob('bulk_import_xlsx', payload);
+    return res.success({ mode: job.mode, jobId: job.id }, 'Bulk import queued');
+  } catch (e) {
+    res.error(e.message, 400);
+  }
+}
+
 module.exports = {
   generate,
   revoke,
   assign,
   assignXlsx,
+  importXlsx,
   jobStatus
 };
-

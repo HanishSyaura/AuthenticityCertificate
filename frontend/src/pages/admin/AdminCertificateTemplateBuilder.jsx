@@ -20,9 +20,8 @@ function getValue(path, data) {
 
 export default function AdminCertificateTemplateBuilder() {
   const { t } = useT();
-  const { templates, loading, error, fetchTemplates, createTemplate, updateTemplate, deleteTemplate } = useCertTemplatesStore((s) => ({
+  const { templates, error, fetchTemplates, createTemplate, updateTemplate, deleteTemplate } = useCertTemplatesStore((s) => ({
     templates: s.templates,
-    loading: s.loading,
     error: s.error,
     fetchTemplates: s.fetchTemplates,
     createTemplate: s.createTemplate,

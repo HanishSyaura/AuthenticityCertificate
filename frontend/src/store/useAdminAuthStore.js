@@ -3,7 +3,7 @@ import { ADMIN_KEYS } from '../utils/adminKeys';
 import { readJson, removeKey, writeJson } from '../utils/storage';
 import { createAdminApi } from '../utils/adminApi';
 
-const useAdminAuthStore = create((set, get) => ({
+const useAdminAuthStore = create((set) => ({
   token: readJson(ADMIN_KEYS.token, null),
   user: readJson(ADMIN_KEYS.user, null),
   loading: false,

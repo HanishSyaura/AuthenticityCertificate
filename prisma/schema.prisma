@@ -37,6 +37,7 @@ model Organization {
   cmsVersions     CmsVersion[]
   cmsTranslations CmsTranslation[]
   templates       CertificateTemplate[]
+  mediaAssets     MediaAsset[]
   auditLogs       AuditLog[]
 }
 
@@ -322,8 +323,30 @@ model CertificateTemplate {
   background     String // URL to background image
   layoutJson     Json // Overlay field positions
 
+  products Product[]
+
   versionNo Int       @default(1)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
+}
+
+model MediaAsset {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  originalName String
+  fileName     String
+  mimeType     String
+  sizeBytes    Int
+  url          String
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([organizationId])
+  @@index([createdAt])
+  @@unique([organizationId, fileName])
 }

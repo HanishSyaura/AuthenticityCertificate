@@ -12,6 +12,8 @@ import AdminRecords from './pages/admin/AdminRecords';
 import AdminRecordDetail from './pages/admin/AdminRecordDetail';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminAudit from './pages/admin/AdminAudit';
+import AdminMedia from './pages/admin/AdminMedia';
+import AdminBulkImport from './pages/admin/AdminBulkImport';
 
 function App() {
   return (
@@ -38,6 +40,8 @@ function App() {
           <Route path="analytics" element={<AdminAnalytics />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="audit" element={<AdminAudit />} />
+          <Route path="media" element={<AdminMedia />} />
+          <Route path="bulk" element={<AdminBulkImport />} />
         </Route>
       </Routes>
     </Router>

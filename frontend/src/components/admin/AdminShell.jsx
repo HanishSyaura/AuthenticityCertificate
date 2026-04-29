@@ -74,6 +74,8 @@ export default function AdminShell() {
               <NavItem to="/admin/records" label={t('records')} />
               <NavItem to="/admin/cms" label={t('cmsBuilder')} />
               <NavItem to="/admin/cert-templates" label={t('certTemplates')} />
+              <NavItem to="/admin/bulk" label={t('bulk')} />
+              <NavItem to="/admin/media" label={t('media')} />
               <NavItem to="/admin/analytics" label={t('analytics')} />
               <NavItem to="/admin/audit" label={t('auditLog')} />
               {canSeeUsers ? <NavItem to="/admin/users" label={t('usersRoles')} /> : null}

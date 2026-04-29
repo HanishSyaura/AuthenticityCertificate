@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const path = require('path');
 const authRoutes = require('./modules/auth/auth.routes');
 const productRoutes = require('./modules/product/product.routes');
 const certificateRoutes = require('./modules/certificate/certificate.routes');
@@ -14,6 +15,7 @@ const bulkRoutes = require('./modules/bulk/bulk.routes');
 const fraudRoutes = require('./modules/fraud/fraud.routes');
 const integrationsRoutes = require('./modules/integrations/integrations.routes');
 const templatesRoutes = require('./modules/templates/templates.routes');
+const mediaRoutes = require('./modules/media/media.routes');
 const { rateLimit } = require('./middleware/rateLimit.middleware');
 
 dotenv.config();
@@ -22,6 +24,8 @@ require('./modules/bulk/bulk.service').registerHandlers();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
 
 function parseAllowedOrigins() {
   const raw = process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || '';
@@ -87,6 +91,7 @@ app.use('/bulk', bulkRoutes);
 app.use('/fraud', fraudRoutes);
 app.use('/integrations', integrationsRoutes);
 app.use('/templates', templatesRoutes);
+app.use('/media', mediaRoutes);
 
 app.get('/health', async (req, res) => {
   let db = 'unknown';

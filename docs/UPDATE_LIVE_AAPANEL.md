@@ -98,14 +98,10 @@ npm run build
 ## D) Bila backend berubah sahaja
 
 ```bash
-set -e
 cd /www/wwwroot/wmscertauth.clbgroups.com
 git pull
 npm ci || npm install
 npx prisma generate
-if [ -d "prisma/migrations" ] && [ "$(ls -A prisma/migrations 2>/dev/null)" ]; then
-  npx prisma migrate deploy
-fi
 pm2 restart wmscertauth-api
 curl -s http://127.0.0.1:5000/health
 echo
@@ -144,6 +140,35 @@ Untuk kes ini, anda perlu apply perubahan DB secara manual (MySQL), kemudian bar
 - `npx prisma generate`
 - restart PM2
 
+Jika `npx prisma generate` gagal dengan error `P1012 missing an opposite relation field`, itu bermaksud Prisma schema di server belum lengkap / belum ikut versi repo.
+
+Contoh error yang pernah berlaku:
+
+- `Product.certificateTemplate` missing opposite field pada `CertificateTemplate`
+- `MediaAsset.organization` missing opposite field pada `Organization`
+
+Hotfix cepat (edit `prisma/schema.prisma` di server):
+
+```prisma
+model CertificateTemplate {
+  // ...
+  products Product[]
+}
+
+model Organization {
+  // ...
+  mediaAssets MediaAsset[]
+}
+```
+
+Lepas save:
+
+```bash
+npx prisma validate
+npx prisma generate
+pm2 restart wmscertauth-api
+```
+
 Contoh (Part Product Management — tambah `origin`, `description`, `certificateTemplateId` pada table `Product`):
 
 ```sql
@@ -163,6 +188,28 @@ ALTER TABLE Product
   ON UPDATE CASCADE;
 ```
 
+Contoh (Media Library — tambah table `MediaAsset`):
+
+```sql
+CREATE TABLE MediaAsset (
+  id INT NOT NULL AUTO_INCREMENT,
+  organizationId INT NOT NULL,
+  originalName VARCHAR(255) NOT NULL,
+  fileName VARCHAR(255) NOT NULL,
+  mimeType VARCHAR(191) NOT NULL,
+  sizeBytes INT NOT NULL,
+  url TEXT NOT NULL,
+  createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  deletedAt DATETIME(3) NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY MediaAsset_org_fileName_unique (organizationId, fileName),
+  KEY MediaAsset_organizationId_idx (organizationId),
+  KEY MediaAsset_createdAt_idx (createdAt),
+  CONSTRAINT MediaAsset_organizationId_fkey FOREIGN KEY (organizationId) REFERENCES Organization(id) ON DELETE RESTRICT ON UPDATE CASCADE
+);
+```
+
 cara update semua:
 
 ```
@@ -172,4 +219,3 @@ cd frontend
 npm install
 npm run build
 ```
-
