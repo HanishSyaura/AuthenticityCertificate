@@ -18,6 +18,7 @@ const integrationsRoutes = require('./modules/integrations/integrations.routes')
 const templatesRoutes = require('./modules/templates/templates.routes');
 const mediaRoutes = require('./modules/media/media.routes');
 const identityRoutes = require('./modules/identity/identity.routes');
+const organizationsRoutes = require('./modules/organizations/organizations.routes');
 const { rateLimit } = require('./middleware/rateLimit.middleware');
 const { applyDbPatches } = require('./config/dbPatches');
 
@@ -111,6 +112,7 @@ app.use('/integrations', integrationsRoutes);
 app.use('/templates', templatesRoutes);
 app.use('/media', mediaRoutes);
 app.use('/identities', identityRoutes);
+app.use('/organizations', organizationsRoutes);
 app.use('/api/cms', cmsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/users', usersRoutes);
@@ -121,6 +123,7 @@ app.use('/api/integrations', integrationsRoutes);
 app.use('/api/templates', templatesRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/identities', identityRoutes);
+app.use('/api/organizations', organizationsRoutes);
 
 app.get('/health', async (req, res) => {
   let db = 'unknown';
@@ -152,9 +155,17 @@ app.use((err, req, res, next) => {
 });
 
 async function start() {
-  await applyDbPatches();
-  app.listen(PORT, () => {
+  const server = app.listen(PORT);
+  server.on('listening', () => {
     console.log(`Server is running on port ${PORT}`);
+  });
+  server.on('error', (err) => {
+    console.error(err);
+    process.exit(1);
+  });
+
+  applyDbPatches().catch((err) => {
+    console.error(err);
   });
 }
 

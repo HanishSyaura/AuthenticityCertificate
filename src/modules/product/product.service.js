@@ -16,6 +16,93 @@ function withSkuFallback(row) {
   return { ...row, sku };
 }
 
+async function resolveProductTableName() {
+  const rows = await prisma.$queryRaw`
+    SELECT TABLE_NAME AS name
+    FROM INFORMATION_SCHEMA.TABLES
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME IN ('Product', 'Products')
+    ORDER BY TABLE_NAME = 'Product' DESC
+    LIMIT 1
+  `;
+  return rows?.[0]?.name || null;
+}
+
+async function getTableColumns(tableName) {
+  const rows = await prisma.$queryRaw`
+    SELECT COLUMN_NAME AS name
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = ${tableName}
+  `;
+  return new Set(rows.map((r) => r.name).filter(Boolean));
+}
+
+function normalizeRawProduct(row) {
+  const p = withSkuFallback(row);
+  return {
+    id: p.id ?? null,
+    organizationId: p.organizationId ?? null,
+    sku: p.sku ?? null,
+    name: p.name ?? '',
+    code: p.code ?? '',
+    category: p.category ?? 'general',
+    status: p.status ?? 'active',
+    remark: p.remark ?? null,
+    origin: p.origin ?? null,
+    description: p.description ?? null,
+    cmsPageId: p.cmsPageId ?? null,
+    certificateTemplateId: p.certificateTemplateId ?? null,
+    versionNo: p.versionNo ?? 1,
+    createdAt: p.createdAt ?? null,
+    updatedAt: p.updatedAt ?? null,
+    deletedAt: p.deletedAt ?? null
+  };
+}
+
+async function rawListProducts({ organizationId }) {
+  const tableName = await resolveProductTableName();
+  if (!tableName) return [];
+  const cols = await getTableColumns(tableName);
+
+  const desired = [
+    'id',
+    'organizationId',
+    'sku',
+    'name',
+    'code',
+    'category',
+    'status',
+    'remark',
+    'origin',
+    'description',
+    'cmsPageId',
+    'certificateTemplateId',
+    'versionNo',
+    'createdAt',
+    'updatedAt',
+    'deletedAt'
+  ];
+  const selected = desired.filter((c) => cols.has(c));
+  if (selected.length === 0) return [];
+
+  const where = [];
+  const args = [];
+
+  if (cols.has('organizationId') && organizationId != null) {
+    where.push('`organizationId` = ?');
+    args.push(Number(organizationId));
+  }
+  if (cols.has('deletedAt')) where.push('`deletedAt` IS NULL');
+
+  const orderBy = cols.has('createdAt') ? ' ORDER BY `createdAt` DESC' : cols.has('id') ? ' ORDER BY `id` DESC' : '';
+  const whereSql = where.length ? ` WHERE ${where.join(' AND ')}` : '';
+  const sql = `SELECT ${selected.map((c) => `\`${c}\``).join(', ')} FROM \`${tableName}\`${whereSql}${orderBy}`;
+
+  const rows = await withTimeout(prisma.$queryRawUnsafe(sql, ...args), 1200);
+  return Array.isArray(rows) ? rows.map(normalizeRawProduct) : [];
+}
+
 const productSelectWithoutSku = {
   id: true,
   organizationId: true,
@@ -67,17 +154,7 @@ async function getAllProducts({ organizationId }) {
     );
     return rows.map(withSkuFallback);
   } catch (e) {
-    if (e?.code === 'P2022' && String(e?.message || '').toLowerCase().includes('sku')) {
-      const rows = await withTimeout(
-        prisma.product.findMany({
-          where: notDeleted({ organizationId: Number(organizationId) }),
-          orderBy: { createdAt: 'desc' },
-          select: productSelectWithoutSku
-        }),
-        1200
-      );
-      return rows.map(withSkuFallback);
-    }
+    if (e?.code === 'P2022') return await rawListProducts({ organizationId });
     throw e;
   }
 }
