@@ -43,43 +43,75 @@ const PublicRenderer = ({ layout, data }) => {
       case 'text':
         return (
           <div key={block.id} style={style} className="overflow-hidden">
-            <p className="whitespace-pre-wrap">{block.content.text}</p>
+            <p className="whitespace-pre-wrap text-sm text-zinc-900">{block.content?.text || ''}</p>
           </div>
         );
       case 'image':
         return (
           <div key={block.id} style={style}>
-            <img 
-              src={block.content.url} 
-              alt="Block content" 
-              className="w-full h-full object-contain"
-            />
+            {block.content?.url ? (
+              <img src={block.content.url} alt="" className="h-full w-full object-contain" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 text-xs text-zinc-500">
+                {t('image')}
+              </div>
+            )}
           </div>
         );
       case 'certificate':
+        {
+          const status = String(data?.status || '').toUpperCase();
+          const ok = status === 'VALID';
+          const productName = data?.product?.name || '-';
+          const batchNo = data?.batch?.batchNo || '-';
+          const issued = data?.issuedAt ? new Date(data.issuedAt) : null;
         return (
-          <div key={block.id} style={style} className="border-2 border-accent p-4 bg-white rounded shadow-lg flex flex-col items-center justify-center text-center">
-             <h3 className="text-xl font-bold text-primary mb-2">{t('certificateTitle')}</h3>
-             <p className="text-sm text-gray-600">{t('certificateStatusSubtitle')}</p>
-             <p className={`text-2xl font-bold my-2 ${data.status === 'VALID' ? 'text-green-600' : 'text-red-600'}`}>
-               {data.status}
-             </p>
-             <p className="text-xs font-mono bg-gray-100 p-1 px-2 rounded">{data.certificateId}</p>
-             <div className="mt-4 text-left w-full border-t pt-2 text-xs">
-                <p><strong>{t('product')}:</strong> {data.product.name}</p>
-                <p><strong>{t('batch')}:</strong> {data.batch.batchNo}</p>
-                <p><strong>{t('issued')}:</strong> {new Date(data.issuedAt).toLocaleDateString(locale)}</p>
-             </div>
+          <div
+            key={block.id}
+            style={style}
+            className={`flex h-full w-full flex-col justify-between overflow-hidden rounded-2xl border p-4 ${
+              ok ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50'
+            }`}
+          >
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600">{t('certificateTitle')}</div>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <div className="text-sm font-semibold text-zinc-900">{t('certificateStatusSubtitle')}</div>
+                <div className={`rounded-full bg-white/70 px-2 py-1 text-xs font-semibold ${ok ? 'text-emerald-900' : 'text-rose-900'}`}>{status || '-'}</div>
+              </div>
+              <div className="mt-3 rounded-xl border border-white/40 bg-white/60 px-3 py-2">
+                <div className="text-[11px] font-semibold text-zinc-600">{t('certificateId')}</div>
+                <div className="mt-1 font-mono text-xs text-zinc-900">{data?.certificateId || '-'}</div>
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-xl border border-white/40 bg-white/60 px-3 py-2 text-xs text-zinc-800">
+              <div className="flex justify-between gap-3">
+                <span className="font-semibold">{t('product')}:</span>
+                <span className="truncate">{productName}</span>
+              </div>
+              <div className="mt-1 flex justify-between gap-3">
+                <span className="font-semibold">{t('batch')}:</span>
+                <span className="truncate">{batchNo}</span>
+              </div>
+              <div className="mt-1 flex justify-between gap-3">
+                <span className="font-semibold">{t('issued')}:</span>
+                <span className="truncate">{issued ? issued.toLocaleDateString(locale) : '-'}</span>
+              </div>
+            </div>
           </div>
         );
+        }
       case 'video':
         return (
           <div key={block.id} style={style}>
-            <video 
-              src={block.content.url} 
-              controls 
-              className="w-full h-full object-cover"
-            />
+            {block.content?.url ? (
+              <video src={block.content.url} controls className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 text-xs text-zinc-500">
+                {t('video')}
+              </div>
+            )}
           </div>
         );
       default:

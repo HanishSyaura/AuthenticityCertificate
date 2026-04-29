@@ -18,6 +18,7 @@ import AdminCertificates from './pages/admin/AdminCertificates';
 import AdminIdentities from './pages/admin/AdminIdentities';
 import AdminFraud from './pages/admin/AdminFraud';
 import AdminIntegrations from './pages/admin/AdminIntegrations';
+import AdminGuide from './pages/admin/AdminGuide';
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
         >
           <Route index element={<AdminDashboard />} />
           <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="guide" element={<AdminGuide />} />
           <Route path="records" element={<AdminRecords />} />
           <Route path="records/:id" element={<AdminRecordDetail />} />
           <Route path="cms" element={<AdminCmsBuilder />} />

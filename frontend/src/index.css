@@ -10,15 +10,12 @@
 
   body {
     @apply text-zinc-900 antialiased;
-    background:
-      radial-gradient(900px 500px at 15% 10%, rgba(37, 99, 235, 0.14), rgba(255, 255, 255, 0)),
-      radial-gradient(900px 500px at 85% 20%, rgba(245, 158, 11, 0.12), rgba(255, 255, 255, 0)),
-      linear-gradient(180deg, #f8fafc 0%, #ffffff 60%, #ffffff 100%);
+    background: #f6f7f9;
     min-height: 100vh;
   }
 
   a {
-    @apply text-brand-700;
+    @apply text-zinc-900;
   }
 
   ::selection {
@@ -28,7 +25,7 @@
 
 @layer components {
   .ac-card {
-    @apply rounded-2xl border border-zinc-200 bg-white/80 shadow-sm backdrop-blur;
+    @apply rounded-2xl border border-zinc-200 bg-white shadow-sm;
   }
 
   .ac-card-header {
@@ -59,15 +56,27 @@
     @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold;
   }
 
-  .ac-badge-mock {
-    @apply bg-amber-100 text-amber-800;
-  }
-
   .ac-badge-backend {
     @apply bg-emerald-100 text-emerald-800;
   }
 
+  .ac-badge-danger {
+    @apply bg-rose-100 text-rose-800;
+  }
+
+  .ac-badge-warning {
+    @apply bg-amber-100 text-amber-900;
+  }
+
+  .ac-badge-neutral {
+    @apply bg-zinc-100 text-zinc-800;
+  }
+
   .ac-input {
     @apply w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none focus:border-zinc-400;
+  }
+
+  .ac-help {
+    @apply text-xs text-zinc-600;
   }
 }

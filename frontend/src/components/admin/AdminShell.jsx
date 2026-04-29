@@ -79,6 +79,7 @@ export default function AdminShell() {
           <aside className={`ac-card p-3 lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:overflow-auto ${mobileNavOpen ? 'block' : 'hidden'} lg:block`}>
             <NavSection title={t('navOverview')}>
               <NavItem to="/admin/dashboard" label={t('dashboard')} />
+              <NavItem to="/admin/guide" label={t('gettingStarted')} />
             </NavSection>
 
             <NavSection title={t('navProductsBatches')}>
