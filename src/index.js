@@ -75,8 +75,22 @@ app.use('/auth', authRoutes);
 app.use('/products', productRoutes);
 app.use('/epc', epcRoutes);
 app.use('/certificates', certificateRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/epc', epcRoutes);
+app.use('/api/certificates', certificateRoutes);
 app.use(
   '/public',
+  rateLimit({
+    windowMs: 60_000,
+    max: 120,
+    keyFn: (req) => `${req.headers['x-forwarded-for'] || req.ip}|${req.path}|${req.params?.id || ''}`,
+    message: 'Too many verification requests'
+  }),
+  publicRoutes
+);
+app.use(
+  '/api/public',
   rateLimit({
     windowMs: 60_000,
     max: 120,
@@ -97,6 +111,16 @@ app.use('/integrations', integrationsRoutes);
 app.use('/templates', templatesRoutes);
 app.use('/media', mediaRoutes);
 app.use('/identities', identityRoutes);
+app.use('/api/cms', cmsRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/users', usersRoutes);
+app.use('/api/audit', auditRoutes);
+app.use('/api/bulk', bulkRoutes);
+app.use('/api/fraud', fraudRoutes);
+app.use('/api/integrations', integrationsRoutes);
+app.use('/api/templates', templatesRoutes);
+app.use('/api/media', mediaRoutes);
+app.use('/api/identities', identityRoutes);
 
 app.get('/health', async (req, res) => {
   let db = 'unknown';
