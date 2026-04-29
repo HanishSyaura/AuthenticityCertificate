@@ -72,6 +72,61 @@ async function listIdentitiesByCertificate({ organizationId, certificateId }) {
   }
 }
 
+async function listIdentities({ organizationId, q, certificateId, nfcUid, epc, active = true, limit = 50, offset = 0 }) {
+  const orgId = Number(organizationId);
+  const l = Math.max(1, Math.min(200, Number(limit) || 50));
+  const o = Math.max(0, Number(offset) || 0);
+
+  const uid = norm(nfcUid);
+  const e = norm(epc);
+  const query = q ? String(q).trim().toUpperCase() : null;
+  const certId = certificateId ? String(certificateId).trim() : null;
+
+  const where = {
+    organizationId: orgId,
+    ...(active ? { unassignedAt: null } : {}),
+    ...(certId ? { certificateId: certId } : {}),
+    ...(uid ? { nfcUid: uid } : {}),
+    ...(e ? { epc: e } : {})
+  };
+
+  if (query && !uid && !e && !certId) {
+    where.OR = [
+      { certificateId: { contains: query } },
+      { nfcUid: { contains: query } },
+      { epc: { contains: query } }
+    ];
+  }
+
+  try {
+    const [total, items] = await withTimeout(
+      Promise.all([
+        prisma.tagIdentity.count({ where }),
+        prisma.tagIdentity.findMany({ where, orderBy: { assignedAt: 'desc' }, skip: o, take: l })
+      ]),
+      1200
+    );
+    return { total, items, limit: l, offset: o };
+  } catch {
+    const filtered = identities
+      .filter((x) => {
+        if (x.organizationId !== orgId) return false;
+        if (active && x.unassignedAt) return false;
+        if (certId && x.certificateId !== certId) return false;
+        if (uid && x.nfcUid !== uid) return false;
+        if (e && x.epc !== e) return false;
+        if (query && !uid && !e && !certId) {
+          const hay = `${x.certificateId || ''}|${x.nfcUid || ''}|${x.epc || ''}`.toUpperCase();
+          if (!hay.includes(query)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => b.assignedAt.getTime() - a.assignedAt.getTime());
+
+    return { total: filtered.length, items: filtered.slice(o, o + l), limit: l, offset: o };
+  }
+}
+
 async function assignIdentity({ organizationId, certificateId, nfcUid, epc }) {
   const orgId = Number(organizationId);
   const certId = String(certificateId);
@@ -84,19 +139,50 @@ async function assignIdentity({ organizationId, certificateId, nfcUid, epc }) {
 
   const now = new Date();
   try {
-    const created = await withTimeout(
-      prisma.tagIdentity.create({
-        data: {
+    const existingRow = await withTimeout(
+      prisma.tagIdentity.findFirst({
+        where: {
           organizationId: orgId,
-          certificateId: certId,
-          nfcUid: uid,
-          epc: e,
-          assignedAt: now
+          OR: [uid ? { nfcUid: uid } : undefined, e ? { epc: e } : undefined].filter(Boolean)
         }
       }),
-      120
+      1200
     );
-    return created;
+
+    if (!existingRow) {
+      const created = await withTimeout(
+        prisma.tagIdentity.create({
+          data: {
+            organizationId: orgId,
+            certificateId: certId,
+            nfcUid: uid,
+            epc: e,
+            assignedAt: now
+          }
+        }),
+        1200
+      );
+      return created;
+    }
+
+    if (existingRow.unassignedAt == null && existingRow.certificateId !== certId) {
+      throw new Error('Identity is already assigned to another certificate');
+    }
+
+    const updated = await withTimeout(
+      prisma.tagIdentity.update({
+        where: { id: existingRow.id },
+        data: {
+          certificateId: certId,
+          nfcUid: uid || existingRow.nfcUid,
+          epc: e || existingRow.epc,
+          assignedAt: now,
+          unassignedAt: null
+        }
+      }),
+      1200
+    );
+    return updated;
   } catch {
     const next = {
       id: Date.now(),
@@ -111,6 +197,32 @@ async function assignIdentity({ organizationId, certificateId, nfcUid, epc }) {
     identities.unshift(next);
     if (identities.length > MAX_IDENTITIES) identities.splice(MAX_IDENTITIES);
     return next;
+  }
+}
+
+async function unassignIdentity({ organizationId, id }) {
+  const orgId = Number(organizationId);
+  const identityId = Number(id);
+  if (!Number.isFinite(identityId)) throw new Error('Invalid identity id');
+
+  const now = new Date();
+  try {
+    const row = await withTimeout(
+      prisma.tagIdentity.findFirst({ where: { id: identityId, organizationId: orgId, unassignedAt: null } }),
+      1200
+    );
+    if (!row) throw new Error('Identity not found');
+
+    const updated = await withTimeout(
+      prisma.tagIdentity.update({ where: { id: identityId }, data: { unassignedAt: now } }),
+      1200
+    );
+    return { id: updated.id, unassignedAt: updated.unassignedAt };
+  } catch {
+    const idx = identities.findIndex((x) => x.organizationId === orgId && x.id === identityId && !x.unassignedAt);
+    if (idx === -1) throw new Error('Identity not found');
+    identities[idx] = { ...identities[idx], unassignedAt: now };
+    return { id: identityId, unassignedAt: now };
   }
 }
 
@@ -145,7 +257,9 @@ async function moveActiveIdentities({ organizationId, fromCertificateId, toCerti
 
 module.exports = {
   resolveCertificateId,
+  listIdentities,
   listIdentitiesByCertificate,
   assignIdentity,
+  unassignIdentity,
   moveActiveIdentities
 };

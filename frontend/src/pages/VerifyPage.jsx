@@ -53,80 +53,92 @@ const VerifyPage = () => {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <IconLoader className="w-12 h-12 text-primary animate-spin mb-4" />
-        <p className="text-lg font-medium">{t('verifying')}</p>
+      <div className="flex min-h-screen flex-col items-center justify-center px-4">
+        <IconLoader className="mb-4 h-10 w-10 animate-spin text-zinc-700" />
+        <p className="text-base font-semibold text-zinc-900">{t('verifying')}</p>
       </div>
     );
   }
 
   if (certificate) {
     return (
-      <div>
-        {/* Verification Status Header */}
-        <div className={`p-4 flex items-center justify-center space-x-2 ${
-          certificate.status === 'VALID' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-        }`}>
-          {certificate.status === 'VALID' ? <IconShieldCheck className="w-5 h-5" /> : <IconShieldAlert className="w-5 h-5" />}
-          <span className="font-bold">{t('verification')}: {certificate.status}</span>
-        </div>
+      <div className="min-h-screen">
+        <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 lg:px-8">
+          <div
+            className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${
+              certificate.status === 'VALID'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                : 'border-rose-200 bg-rose-50 text-rose-900'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {certificate.status === 'VALID' ? <IconShieldCheck className="h-5 w-5" /> : <IconShieldAlert className="h-5 w-5" />}
+              <div className="text-sm font-semibold">{t('verification')}</div>
+              <div className="rounded-full bg-white/70 px-2 py-1 text-xs font-semibold">{certificate.status}</div>
+            </div>
+            <LanguageSwitcher size="xs" />
+          </div>
 
-        {/* Dynamic CMS Content */}
-        {certificate.layout ? (
-          <PublicRenderer layout={certificate.layout} data={certificate} />
-        ) : (
-          <div className="max-w-2xl mx-auto p-8 text-center">
-            <h1 className="text-3xl font-bold mb-4">{certificate.product.name}</h1>
-            <div className="border-2 border-dashed border-gray-300 p-12 rounded-lg">
-              <p className="text-gray-500 mb-2">{t('basicDetails')}</p>
-              <p className="text-xl font-mono mb-4">{certificate.certificateId}</p>
-              <div className="text-left bg-white p-4 rounded shadow-sm inline-block">
-                 <p><strong>{t('batch')}:</strong> {certificate.batch.batchNo}</p>
-                 <p><strong>{t('date')}:</strong> {new Date(certificate.issuedAt).toLocaleString(locale)}</p>
+          {certificate.layout ? (
+            <PublicRenderer layout={certificate.layout} data={certificate} />
+          ) : (
+            <div className="ac-card mx-auto max-w-2xl p-6 text-center">
+              <h1 className="text-xl font-semibold text-zinc-900">{certificate.product?.name || t('product')}</h1>
+              <div className="mt-4 rounded-2xl border border-dashed border-zinc-300 bg-white p-6">
+                <div className="text-xs font-semibold text-zinc-500">{t('basicDetails')}</div>
+                <div className="mt-2 font-mono text-base text-zinc-900">{certificate.certificateId}</div>
+                <div className="mx-auto mt-4 inline-block rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-left text-xs text-zinc-800">
+                  <div>
+                    <span className="font-semibold">{t('batch')}:</span> {certificate.batch?.batchNo || '-'}
+                  </div>
+                  <div className="mt-1">
+                    <span className="font-semibold">{t('date')}:</span> {certificate.issuedAt ? new Date(certificate.issuedAt).toLocaleString(locale) : '-'}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
-      <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg text-center">
-        <div className="mb-4 flex justify-end">
+    <div className="flex min-h-screen flex-col items-center justify-center px-4 py-8">
+      <div className="mx-auto w-full max-w-md">
+        <div className="mb-3 flex justify-end">
           <LanguageSwitcher size="xs" />
         </div>
-        <IconShieldCheck className="w-16 h-16 text-primary mx-auto mb-6" />
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">{t('productVerification')}</h1>
-        <p className="text-gray-600 mb-8">{t('verifySubtitle')}</p>
+        <div className="ac-card p-6 text-center">
+          <IconShieldCheck className="mx-auto mb-4 h-12 w-12 text-zinc-900" />
+          <h1 className="text-lg font-semibold text-zinc-900">{t('productVerification')}</h1>
+          <p className="mt-1 text-sm text-zinc-600">{t('verifySubtitle')}</p>
 
-        <form onSubmit={handleManualVerify} className="space-y-4">
-          <input
-            type="text"
-            placeholder="BN-XXXXXXXXXX"
-            value={certId}
-            onChange={(e) => setCertId(e.target.value)}
-            className="w-full p-4 border rounded-lg focus:ring-2 focus:ring-primary focus:outline-none font-mono text-center text-lg uppercase"
-          />
-          <button
-            type="submit"
-            disabled={!certId}
-            className="w-full bg-primary text-white p-4 rounded-lg font-bold hover:bg-slate-800 transition-colors disabled:bg-gray-300"
-          >
-            {t('verifyNow')}
-          </button>
-        </form>
+          <form onSubmit={handleManualVerify} className="mt-5 space-y-3">
+            <input
+              type="text"
+              placeholder="BN-XXXXXXXXXX"
+              value={certId}
+              onChange={(e) => setCertId(e.target.value)}
+              className="ac-input text-center font-mono uppercase"
+            />
+            <button type="submit" disabled={!certId} className="ac-btn ac-btn-primary w-full disabled:cursor-not-allowed disabled:opacity-60">
+              {t('verifyNow')}
+            </button>
+          </form>
 
-        {error && (
-          <div className="mt-6 p-4 bg-red-50 text-red-600 rounded-lg flex items-center justify-center space-x-2">
-            <IconShieldAlert className="w-5 h-5" />
-            <span>{error || t('verificationFailed')}</span>
-          </div>
-        )}
+          {error ? (
+            <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+              <div className="flex items-center justify-center gap-2">
+                <IconShieldAlert className="h-4 w-4" />
+                <span>{error || t('verificationFailed')}</span>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <p className="mt-6 text-center text-[11px] text-zinc-500">© 2026 Product Authenticity Verification System</p>
       </div>
-      
-      <p className="mt-8 text-sm text-gray-400">© 2026 Product Authenticity Verification System</p>
     </div>
   );
 };

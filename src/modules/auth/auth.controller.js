@@ -15,6 +15,9 @@ async function login(req, res, next) {
     if (error instanceof z.ZodError) {
       return res.error(error.errors[0].message, 400);
     }
+    if (error?.message === 'db_timeout') {
+      return res.error('Database temporarily unavailable', 503);
+    }
     res.error(error.message, 401);
   }
 }

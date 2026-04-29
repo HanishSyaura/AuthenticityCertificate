@@ -16,6 +16,7 @@ const fraudRoutes = require('./modules/fraud/fraud.routes');
 const integrationsRoutes = require('./modules/integrations/integrations.routes');
 const templatesRoutes = require('./modules/templates/templates.routes');
 const mediaRoutes = require('./modules/media/media.routes');
+const identityRoutes = require('./modules/identity/identity.routes');
 const { rateLimit } = require('./middleware/rateLimit.middleware');
 
 dotenv.config();
@@ -92,6 +93,7 @@ app.use('/fraud', fraudRoutes);
 app.use('/integrations', integrationsRoutes);
 app.use('/templates', templatesRoutes);
 app.use('/media', mediaRoutes);
+app.use('/identities', identityRoutes);
 
 app.get('/health', async (req, res) => {
   let db = 'unknown';

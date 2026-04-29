@@ -19,6 +19,15 @@ function NavItem({ to, label }) {
   );
 }
 
+function NavSection({ title, children }) {
+  return (
+    <div className="mt-3">
+      <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">{title}</div>
+      <div className="space-y-1">{children}</div>
+    </div>
+  );
+}
+
 export default function AdminShell() {
   const navigate = useNavigate();
   const { t } = useT();
@@ -41,7 +50,7 @@ export default function AdminShell() {
               onClick={() => setMobileNavOpen((v) => !v)}
               className="ac-btn ac-btn-soft px-3 py-2 text-xs md:hidden"
             >
-              {mobileNavOpen ? 'Close' : 'Menu'}
+              {mobileNavOpen ? t('close') : t('menu')}
             </button>
             <Link to="/admin/dashboard" className="text-sm font-semibold tracking-tight text-zinc-900">
               {t('adminPanel')}
@@ -68,19 +77,39 @@ export default function AdminShell() {
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
           <aside className={`ac-card p-3 lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:overflow-auto ${mobileNavOpen ? 'block' : 'hidden'} lg:block`}>
-            <div className="mb-3 px-3 text-xs font-semibold text-zinc-500">Admin</div>
-            <nav className="space-y-1">
+            <NavSection title={t('navOverview')}>
               <NavItem to="/admin/dashboard" label={t('dashboard')} />
+            </NavSection>
+
+            <NavSection title={t('navProductsBatches')}>
               <NavItem to="/admin/records" label={t('records')} />
-              <NavItem to="/admin/cms" label={t('cmsBuilder')} />
+            </NavSection>
+
+            <NavSection title={t('navCertificates')}>
+              <NavItem to="/admin/certificates" label={t('certificates')} />
+              <NavItem to="/admin/identities" label={t('identities')} />
               <NavItem to="/admin/cert-templates" label={t('certTemplates')} />
-              <NavItem to="/admin/bulk" label={t('bulk')} />
+            </NavSection>
+
+            <NavSection title={t('navContent')}>
+              <NavItem to="/admin/cms" label={t('cmsBuilder')} />
               <NavItem to="/admin/media" label={t('media')} />
+              <NavItem to="/admin/bulk" label={t('bulk')} />
+            </NavSection>
+
+            <NavSection title={t('navMonitoring')}>
               <NavItem to="/admin/analytics" label={t('analytics')} />
+              <NavItem to="/admin/fraud" label={t('fraudDetection')} />
+            </NavSection>
+
+            <NavSection title={t('navGovernance')}>
               <NavItem to="/admin/audit" label={t('auditLog')} />
               {canSeeUsers ? <NavItem to="/admin/users" label={t('usersRoles')} /> : null}
-            </nav>
+            </NavSection>
 
+            <NavSection title={t('navIntegrations')}>
+              <NavItem to="/admin/integrations" label={t('integrations')} />
+            </NavSection>
           </aside>
 
           <main className="ac-card min-w-0">

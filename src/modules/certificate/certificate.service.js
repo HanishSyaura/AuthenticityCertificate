@@ -35,8 +35,20 @@ async function generateCertificates(batchId, type, quantity = 1, organizationId)
   const certificates = [];
 
   let orgId = Number(organizationId);
-  void batchId;
-  
+
+  const batchPk = Number(batchId);
+  if (!Number.isFinite(batchPk)) throw new Error('Invalid batchId');
+
+  try {
+    const exists = await withTimeout(
+      prisma.batch.findFirst({ where: { id: batchPk, organizationId: orgId }, select: { id: true } }),
+      1200
+    );
+    if (!exists) throw new Error('Batch not found');
+  } catch (e) {
+    if (e?.message === 'db_timeout') throw e;
+  }
+
   if (type === 'batch') {
     // One certificate for the entire batch
     const certificateId = generateCertificateId();
@@ -47,15 +59,15 @@ async function generateCertificates(batchId, type, quantity = 1, organizationId)
             certificateId,
             organizationId: orgId,
             type: 'batch',
-            batchId: parseInt(batchId),
+            batchId: batchPk,
             status: 'PENDING'
           }
         }),
-        120
+        1200
       );
       certificates.push(cert);
     } catch {
-      const cert = { certificateId, organizationId: orgId, type: 'batch', batchId: parseInt(batchId), status: 'PENDING', createdAt: new Date() };
+      const cert = { certificateId, organizationId: orgId, type: 'batch', batchId: batchPk, status: 'PENDING', createdAt: new Date() };
       memCerts.unshift(cert);
       certificates.push(cert);
     }
@@ -70,15 +82,15 @@ async function generateCertificates(batchId, type, quantity = 1, organizationId)
               certificateId,
               organizationId: orgId,
               type: 'unit',
-              batchId: parseInt(batchId),
+              batchId: batchPk,
               status: 'PENDING'
             }
           }),
-          120
+          1200
         );
         certificates.push(cert);
       } catch {
-        const cert = { certificateId, organizationId: orgId, type: 'unit', batchId: parseInt(batchId), status: 'PENDING', createdAt: new Date() };
+        const cert = { certificateId, organizationId: orgId, type: 'unit', batchId: batchPk, status: 'PENDING', createdAt: new Date() };
         memCerts.unshift(cert);
         certificates.push(cert);
       }
@@ -92,7 +104,7 @@ async function revokeCertificate(certificateId, organizationId) {
   const orgId = Number(organizationId);
   let cert = null;
   try {
-    cert = await withTimeout(prisma.certificate.findUnique({ where: { certificateId } }), 80);
+    cert = await withTimeout(prisma.certificate.findUnique({ where: { certificateId } }), 1200);
   } catch {
   }
   if (cert && cert.organizationId !== orgId) throw new Error('Certificate belongs to a different organization');
@@ -103,7 +115,7 @@ async function revokeCertificate(certificateId, organizationId) {
         where: { certificateId },
         data: { status: 'REVOKED', revokedAt: new Date() }
       }),
-      120
+      1200
     );
   } catch {
     const idx = memCerts.findIndex((c) => c.certificateId === certificateId && c.organizationId === orgId);
@@ -131,7 +143,7 @@ async function activateCertificate({ organizationId, certificateId, expiresAt, n
 
   let cert = null;
   try {
-    cert = await withTimeout(prisma.certificate.findUnique({ where: { certificateId: certId } }), 80);
+    cert = await withTimeout(prisma.certificate.findUnique({ where: { certificateId: certId } }), 1200);
   } catch {
   }
   if (!cert) {
@@ -152,7 +164,7 @@ async function activateCertificate({ organizationId, certificateId, expiresAt, n
           expiresAt: exp
         }
       }),
-      120
+      1200
     );
     return { certificate: updated, effectiveStatus: computeEffectiveStatus(updated) };
   } catch {
@@ -168,7 +180,7 @@ async function reissueCertificate({ organizationId, certificateId, reason }) {
   const fromId = String(certificateId);
   let from = null;
   try {
-    from = await withTimeout(prisma.certificate.findUnique({ where: { certificateId: fromId } }), 80);
+    from = await withTimeout(prisma.certificate.findUnique({ where: { certificateId: fromId } }), 1200);
   } catch {
     from = memCerts.find((c) => c.certificateId === fromId && c.organizationId === orgId) || null;
   }
@@ -193,7 +205,7 @@ async function reissueCertificate({ organizationId, certificateId, reason }) {
           reissuedFromId: fromId
         }
       }),
-      120
+      1200
     );
     await withTimeout(
       prisma.certificate.update({
@@ -204,7 +216,7 @@ async function reissueCertificate({ organizationId, certificateId, reason }) {
           reissuedToId: toId
         }
       }),
-      120
+      1200
     );
   } catch {
     memCerts.unshift({
@@ -260,6 +272,86 @@ async function getCertificateDetailsCached(certificateId, { ttlMs = 5000 } = {})
   return cert;
 }
 
+async function getCertificateDetailsForAdmin({ organizationId, certificateId }) {
+  const orgId = Number(organizationId);
+  const certId = String(certificateId);
+  const cert = await withTimeout(
+    prisma.certificate.findFirst({
+      where: { certificateId: certId, organizationId: orgId },
+      include: {
+        batch: { include: { product: true } },
+        identities: { where: { unassignedAt: null }, orderBy: { assignedAt: 'desc' } }
+      }
+    }),
+    1500
+  );
+  if (!cert) throw new Error('Certificate not found');
+  return cert;
+}
+
+async function listCertificates({ organizationId, q, status, type, batchNo, productCode, from, to, limit = 50, offset = 0 }) {
+  const orgId = Number(organizationId);
+  const l = Math.max(1, Math.min(200, Number(limit) || 50));
+  const o = Math.max(0, Number(offset) || 0);
+
+  const query = q ? String(q).trim() : null;
+  const where = {
+    organizationId: orgId,
+    ...(status ? { status: String(status).toUpperCase() } : {}),
+    ...(type ? { type: String(type).toLowerCase() } : {})
+  };
+
+  if (from || to) {
+    const createdAt = {};
+    if (from) {
+      const d = new Date(from);
+      if (!Number.isNaN(d.getTime())) createdAt.gte = d;
+    }
+    if (to) {
+      const d = new Date(to);
+      if (!Number.isNaN(d.getTime())) createdAt.lte = d;
+    }
+    if (Object.keys(createdAt).length > 0) where.createdAt = createdAt;
+  }
+
+  if (query) {
+    where.OR = [
+      { certificateId: { contains: query } },
+      { batch: { batchNo: { contains: query } } },
+      { batch: { product: { code: { contains: query } } } }
+    ];
+  }
+
+  if (batchNo) {
+    where.batch = { ...(where.batch || {}), batchNo: { contains: String(batchNo) } };
+  }
+  if (productCode) {
+    where.batch = {
+      ...(where.batch || {}),
+      product: { ...(where.batch?.product || {}), code: { contains: String(productCode) } }
+    };
+  }
+
+  const [total, items] = await withTimeout(
+    Promise.all([
+      prisma.certificate.count({ where }),
+      prisma.certificate.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: o,
+        take: l,
+        include: {
+          batch: { include: { product: true } },
+          identities: { where: { unassignedAt: null }, orderBy: { assignedAt: 'desc' }, take: 5 }
+        }
+      })
+    ]),
+    2000
+  );
+
+  return { total, items, limit: l, offset: o };
+}
+
 module.exports = {
   generateCertificates,
   revokeCertificate,
@@ -268,5 +360,7 @@ module.exports = {
   computeEffectiveStatus,
   getCertificateLite,
   getCertificateDetails,
-  getCertificateDetailsCached
+  getCertificateDetailsCached,
+  getCertificateDetailsForAdmin,
+  listCertificates
 };

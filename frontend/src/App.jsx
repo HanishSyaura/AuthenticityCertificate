@@ -14,6 +14,10 @@ import AdminUsers from './pages/admin/AdminUsers';
 import AdminAudit from './pages/admin/AdminAudit';
 import AdminMedia from './pages/admin/AdminMedia';
 import AdminBulkImport from './pages/admin/AdminBulkImport';
+import AdminCertificates from './pages/admin/AdminCertificates';
+import AdminIdentities from './pages/admin/AdminIdentities';
+import AdminFraud from './pages/admin/AdminFraud';
+import AdminIntegrations from './pages/admin/AdminIntegrations';
 
 function App() {
   return (
@@ -38,6 +42,10 @@ function App() {
           <Route path="cms" element={<AdminCmsBuilder />} />
           <Route path="cert-templates" element={<AdminCertificateTemplateBuilder />} />
           <Route path="analytics" element={<AdminAnalytics />} />
+          <Route path="fraud" element={<AdminFraud />} />
+          <Route path="integrations" element={<AdminIntegrations />} />
+          <Route path="certificates" element={<AdminCertificates />} />
+          <Route path="identities" element={<AdminIdentities />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="audit" element={<AdminAudit />} />
           <Route path="media" element={<AdminMedia />} />

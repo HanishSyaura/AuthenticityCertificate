@@ -27,7 +27,9 @@ describe('admin pages', () => {
 
   it('shows new nav items', () => {
     renderWithRoute('/admin', <AdminShell />);
-    expect(screen.getByText(/Records/i)).toBeInTheDocument();
+    expect(screen.getByText(/Products\s*&\s*Batches/i)).toBeInTheDocument();
+    expect(screen.getByText(/Certificates/i)).toBeInTheDocument();
+    expect(screen.getByText(/Identities/i)).toBeInTheDocument();
     expect(screen.getByText(/Audit/i)).toBeInTheDocument();
     expect(screen.getByText(/Users/i)).toBeInTheDocument();
   });

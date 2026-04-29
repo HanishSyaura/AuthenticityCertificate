@@ -18,7 +18,7 @@ const useRecordsStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const res = await api.get('/products');
+      const res = await api.get('/products/');
       const products = Array.isArray(res?.data?.data) ? res.data.data : [];
       set({ products, loading: false, lastSyncAt: Date.now() });
       return products;
@@ -33,7 +33,7 @@ const useRecordsStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const res = await api.post('/products', { name, code, origin, description });
+      const res = await api.post('/products/', { name, code, origin, description });
       const created = res?.data?.data;
       const products = [created, ...get().products].filter(Boolean);
       set({ products, loading: false, lastSyncAt: Date.now() });

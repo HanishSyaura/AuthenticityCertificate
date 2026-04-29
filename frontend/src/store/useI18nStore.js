@@ -10,7 +10,21 @@ function normalize(lang) {
 
 function readLang() {
   try {
-    return normalize(localStorage.getItem(KEY) || 'en');
+    const stored = localStorage.getItem(KEY);
+    if (stored) return normalize(stored);
+
+    const candidates = [];
+    if (typeof navigator !== 'undefined') {
+      if (Array.isArray(navigator.languages)) candidates.push(...navigator.languages);
+      if (navigator.language) candidates.push(navigator.language);
+    }
+
+    for (const c of candidates) {
+      const v = String(c || '').toLowerCase();
+      if (v.startsWith('ms')) return 'ms';
+    }
+
+    return 'en';
   } catch (e) {
     void e;
     return 'en';

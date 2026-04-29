@@ -11,22 +11,26 @@ async function login(email, password) {
   let role = null;
 
   try {
-    user = await withTimeout(prisma.user.findUnique({ where: { email } }), 600);
+    user = await withTimeout(prisma.user.findUnique({ where: { email } }), 1500);
     if (user && user.deletedAt) user = null;
     if (user) role = user.role;
   } catch {
   }
 
   if (!user) {
-    const admin = await withTimeout(
-      prisma.admin.findUnique({
-        where: { email }
-      }),
-      600
-    );
-    if (admin) {
-      user = admin;
-      role = 'admin';
+    try {
+      const admin = await withTimeout(
+        prisma.admin.findUnique({
+          where: { email }
+        }),
+        1500
+      );
+      if (admin) {
+        user = admin;
+        role = 'admin';
+      }
+    } catch (e) {
+      throw e;
     }
   }
 

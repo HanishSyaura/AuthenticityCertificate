@@ -74,7 +74,60 @@ async function reissue(req, res) {
   }
 }
 
+function parseLimit(req) {
+  const limit = Number(req.query.limit || 50);
+  return Math.max(1, Math.min(200, limit));
+}
+
+function parseOffset(req) {
+  const offset = Number(req.query.offset || 0);
+  return Math.max(0, offset);
+}
+
+async function list(req, res) {
+  try {
+    const limit = parseLimit(req);
+    const offset = parseOffset(req);
+    const q = req.query.q ? String(req.query.q) : null;
+    const status = req.query.status ? String(req.query.status) : null;
+    const type = req.query.type ? String(req.query.type) : null;
+    const batchNo = req.query.batchNo ? String(req.query.batchNo) : null;
+    const productCode = req.query.productCode ? String(req.query.productCode) : null;
+    const from = req.query.from ? String(req.query.from) : null;
+    const to = req.query.to ? String(req.query.to) : null;
+
+    const result = await certificateService.listCertificates({
+      organizationId: req.organization.id,
+      q,
+      status,
+      type,
+      batchNo,
+      productCode,
+      from,
+      to,
+      limit,
+      offset
+    });
+
+    res.success(result);
+  } catch (error) {
+    res.error(error.message, 400);
+  }
+}
+
+async function get(req, res) {
+  try {
+    const { id } = req.params;
+    const cert = await certificateService.getCertificateDetailsForAdmin({ organizationId: req.organization.id, certificateId: id });
+    res.success(cert);
+  } catch (error) {
+    res.error(error.message, 400);
+  }
+}
+
 module.exports = {
+  list,
+  get,
   generate,
   revoke,
   assign,

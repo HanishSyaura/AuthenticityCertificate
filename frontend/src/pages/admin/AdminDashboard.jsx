@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import useCmsStore from '../../store/useCmsStore';
-import { ADMIN_KEYS } from '../../utils/adminKeys';
-import { readJson } from '../../utils/storage';
+import useCertTemplatesStore from '../../store/useCertTemplatesStore';
+import useRecordsStore from '../../store/useRecordsStore';
 import { useT } from '../../i18n/useT';
 
 function Card({ title, value, hint }) {
@@ -18,15 +18,17 @@ function Card({ title, value, hint }) {
 export default function AdminDashboard() {
   const { t } = useT();
   const { pages, fetchPages } = useCmsStore((s) => ({ pages: s.pages, fetchPages: s.fetchPages }));
+  const { templates, fetchTemplates } = useCertTemplatesStore((s) => ({ templates: s.templates, fetchTemplates: s.fetchTemplates }));
+  const { products, fetchProducts } = useRecordsStore((s) => ({ products: s.products, fetchProducts: s.fetchProducts }));
 
   useEffect(() => {
     fetchPages();
-  }, [fetchPages]);
+    fetchTemplates();
+    fetchProducts();
+  }, [fetchPages, fetchTemplates, fetchProducts]);
 
-  const templateCount = useMemo(() => {
-    const items = readJson(ADMIN_KEYS.certTemplates, []);
-    return Array.isArray(items) ? items.length : 0;
-  }, []);
+  const productCount = useMemo(() => (Array.isArray(products) ? products.length : 0), [products]);
+  const templateCount = useMemo(() => (Array.isArray(templates) ? templates.length : 0), [templates]);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -36,9 +38,9 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Card title={t('records')} value={productCount} hint={t('products')} />
         <Card title={t('cmsBuilder')} value={pages.length} hint={t('pages')} />
-        <Card title={t('certTemplates')} value={templateCount} hint={t('demo')} />
-        <Card title={t('publicVerifyPage')} value="BN-TEST-123" hint="/verify/BN-TEST-123" />
+        <Card title={t('certTemplates')} value={templateCount} hint={t('templates')} />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -50,6 +52,12 @@ export default function AdminDashboard() {
           <div className="text-sm font-semibold text-zinc-900">{t('certTemplates')}</div>
           <div className="mt-1 text-xs text-zinc-600">{t('certTplSubheading')}</div>
         </Link>
+      </div>
+
+      <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-4">
+        <div className="text-xs font-semibold text-zinc-600">{t('publicVerifyPage')}</div>
+        <div className="mt-1 text-xs text-zinc-600">{t('publicVerifyHint')}</div>
+        <div className="mt-2 font-mono text-[11px] text-zinc-800">/verify/&lt;CERTIFICATE_ID&gt;</div>
       </div>
     </div>
   );

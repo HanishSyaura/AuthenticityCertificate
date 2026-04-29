@@ -11,6 +11,9 @@ router.use(attachOrganization);
 router.use(requireRole(['super_admin', 'admin']));
 router.use(requireOrganization);
 
+router.get('/', certificateController.list);
+router.get('/:id', certificateController.get);
+
 router.post('/generate', auditAction('CREATE_CERT', { targetType: 'certificate' }), certificateController.generate);
 
 router.post(
