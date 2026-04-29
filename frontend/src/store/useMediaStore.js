@@ -17,7 +17,7 @@ const useMediaStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const res = await api.get('/uploads/media');
+      const res = await api.get('/media');
       const items = Array.isArray(res?.data?.data) ? res.data.data : [];
       set({ items, loading: false, lastSyncAt: Date.now() });
       return items;
@@ -34,7 +34,7 @@ const useMediaStore = create((set, get) => ({
       const api = getApi();
       const form = new FormData();
       form.append('file', file);
-      const res = await api.post('/uploads/media', form, {
+      const res = await api.post('/media/upload', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 60_000
       });
@@ -53,7 +53,7 @@ const useMediaStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      await api.delete(`/uploads/media/${encodeURIComponent(id)}`);
+      await api.delete(`/media/${encodeURIComponent(id)}`);
       const items = get().items.filter((it) => String(it.id) !== String(id));
       set({ items, loading: false, lastSyncAt: Date.now() });
     } catch (e) {

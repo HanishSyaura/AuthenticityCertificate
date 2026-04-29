@@ -14,7 +14,6 @@ function getApiBaseUrl() {
 export function createAdminApi({ token }) {
   const rawBase = getApiBaseUrl();
   const baseURL = rawBase ? rawBase.replace(/\/+$/, '') : '';
-  const baseHasApi = baseURL === '/api' || baseURL.endsWith('/api');
 
   const api = axios.create({
     baseURL,
@@ -22,9 +21,6 @@ export function createAdminApi({ token }) {
   });
 
   api.interceptors.request.use((config) => {
-    if (!baseHasApi && typeof config.url === 'string' && config.url.startsWith('/') && !config.url.startsWith('/api/')) {
-      config.url = `/api${config.url}`;
-    }
     if (token) {
       config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;

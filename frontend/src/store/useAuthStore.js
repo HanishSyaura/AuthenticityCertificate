@@ -15,8 +15,9 @@ function getApiBaseUrl() {
 function getPublicApiBaseUrl() {
   const rawBase = getApiBaseUrl();
   const baseURL = rawBase ? rawBase.replace(/\/+$/, '') : '';
+  if (!baseURL) return '/public';
   const baseHasApi = baseURL === '/api' || baseURL.endsWith('/api');
-  return baseHasApi ? `${baseURL}/public` : `${baseURL}/api/public`;
+  return baseHasApi ? `${baseURL}/public` : `${baseURL}/public`;
 }
 
 const useAuthStore = create((set) => ({
