@@ -1,7 +1,18 @@
 import { create } from 'zustand';
 import axios from 'axios';
 
-const API_URL = `${(import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/+$/, '')}/public`;
+function getApiBaseUrl() {
+  const configured = import.meta.env.VITE_API_BASE_URL;
+  if (configured !== undefined) {
+    const trimmed = String(configured).trim();
+    if (trimmed) return trimmed.replace(/\/+$/, '');
+    return '';
+  }
+  if (import.meta.env.DEV) return 'http://localhost:5000';
+  return '';
+}
+
+const API_URL = `${getApiBaseUrl()}/public`;
 
 const useAuthStore = create((set) => ({
   certificate: null,
