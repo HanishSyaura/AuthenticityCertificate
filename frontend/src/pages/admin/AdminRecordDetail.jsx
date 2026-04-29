@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import useRecordsStore from '../../store/useRecordsStore';
-import useCmsStore from '../../store/useCmsStore';
-import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import { useT } from '../../i18n/useT';
 
 function formatDate(input) {
@@ -46,9 +44,6 @@ export default function AdminRecordDetail() {
     updateProduct: s.updateProduct
   }));
 
-  const { pages, fetchPages } = useCmsStore((s) => ({ pages: s.pages, fetchPages: s.fetchPages }));
-  const { templates, fetchTemplates } = useCertTemplatesStore((s) => ({ templates: s.templates, fetchTemplates: s.fetchTemplates }));
-
   const product = useMemo(() => products.find((p) => String(p.id) === String(id)) || null, [products, id]);
 
   const [batchNo, setBatchNo] = useState('');
@@ -57,19 +52,16 @@ export default function AdminRecordDetail() {
   const [certQty, setCertQty] = useState('');
   const [lastGenerated, setLastGenerated] = useState(null);
 
-  const [origin, setOrigin] = useState('');
-  const [description, setDescription] = useState('');
-  const [cmsPageId, setCmsPageId] = useState('');
-  const [templateId, setTemplateId] = useState('');
+  const [sku, setSku] = useState('');
+  const [name, setName] = useState('');
+  const [productCode, setProductCode] = useState('');
+  const [category, setCategory] = useState('');
+  const [status, setStatus] = useState('');
+  const [remark, setRemark] = useState('');
 
   useEffect(() => {
     void fetchProducts();
   }, [fetchProducts]);
-
-  useEffect(() => {
-    void fetchPages();
-    void fetchTemplates();
-  }, [fetchPages, fetchTemplates]);
 
   useEffect(() => {
     if (!id) return;
@@ -78,10 +70,12 @@ export default function AdminRecordDetail() {
 
   useEffect(() => {
     if (!product) return;
-    setOrigin(product.origin || '');
-    setDescription(product.description || '');
-    setCmsPageId(product.cmsPageId ? String(product.cmsPageId) : '');
-    setTemplateId(product.certificateTemplateId ? String(product.certificateTemplateId) : '');
+    setSku(product.sku || '');
+    setName(product.name || '');
+    setProductCode(product.code || '');
+    setCategory(product.category || '');
+    setStatus(product.status || '');
+    setRemark(product.remark || '');
   }, [product]);
 
   return (
@@ -97,7 +91,8 @@ export default function AdminRecordDetail() {
           <div className="mt-1 text-sm text-zinc-600">
             {product ? (
               <span>
-                {product.name} <span className="font-mono text-xs text-zinc-500">({product.code})</span>
+                {product.name}{' '}
+                <span className="font-mono text-xs text-zinc-500">({product.sku} • {product.code})</span>
               </span>
             ) : (
               <span className="font-mono text-xs">{id}</span>
@@ -235,50 +230,28 @@ export default function AdminRecordDetail() {
           <div className="mb-3 text-xs font-semibold text-zinc-600">{t('productSettings')}</div>
           <div className="space-y-3">
             <div>
-              <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('origin')}</div>
-              <input
-                value={origin}
-                onChange={(e) => setOrigin(e.target.value)}
-                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400"
-              />
+              <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('sku')}</div>
+              <input value={sku} onChange={(e) => setSku(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 font-mono text-xs text-zinc-900 outline-none focus:border-zinc-400" />
             </div>
             <div>
-              <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('description')}</div>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="h-20 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400"
-              />
+              <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('name')}</div>
+              <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400" />
             </div>
             <div>
-              <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('cmsPage')}</div>
-              <select
-                value={cmsPageId}
-                onChange={(e) => setCmsPageId(e.target.value)}
-                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400"
-              >
-                <option value="">{t('none')}</option>
-                {(pages || []).map((p) => (
-                  <option key={p.id} value={String(p.id)}>
-                    {p.name} ({p.slug})
-                  </option>
-                ))}
-              </select>
+              <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('productCode')}</div>
+              <input value={productCode} onChange={(e) => setProductCode(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 font-mono text-xs text-zinc-900 outline-none focus:border-zinc-400" />
             </div>
             <div>
-              <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('certTemplate')}</div>
-              <select
-                value={templateId}
-                onChange={(e) => setTemplateId(e.target.value)}
-                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400"
-              >
-                <option value="">{t('none')}</option>
-                {(templates || []).map((tpl) => (
-                  <option key={tpl.id} value={String(tpl.id)}>
-                    {tpl.name}
-                  </option>
-                ))}
-              </select>
+              <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('category')}</div>
+              <input value={category} onChange={(e) => setCategory(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400" />
+            </div>
+            <div>
+              <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('status')}</div>
+              <input value={status} onChange={(e) => setStatus(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400" />
+            </div>
+            <div>
+              <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('remark')}</div>
+              <textarea value={remark} onChange={(e) => setRemark(e.target.value)} className="h-20 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400" />
             </div>
             <div className="flex justify-end">
               <button
@@ -290,10 +263,12 @@ export default function AdminRecordDetail() {
                   await updateProduct({
                     id: product.id,
                     patch: {
-                      origin: String(origin || '').trim() || null,
-                      description: String(description || '').trim() || null,
-                      cmsPageId: cmsPageId ? toInt(cmsPageId) : null,
-                      certificateTemplateId: templateId ? toInt(templateId) : null
+                      sku: String(sku || '').trim(),
+                      name: String(name || '').trim(),
+                      product_code: String(productCode || '').trim(),
+                      category: String(category || '').trim(),
+                      status: String(status || '').trim(),
+                      remark: String(remark || '').trim() || null
                     }
                   });
                 }}

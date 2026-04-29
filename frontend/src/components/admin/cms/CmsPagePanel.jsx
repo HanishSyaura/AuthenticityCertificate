@@ -7,7 +7,7 @@ export default function CmsPagePanel({ pages, selectedPageId, onSelectPage, onCr
   const [newSlug, setNewSlug] = useState('product-page');
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-3">
+    <div className="ac-card p-3">
       <div className="mb-3 text-xs font-semibold text-zinc-500">{t('pages')}</div>
       <div className="space-y-1">
         {pages.map((p) => (
@@ -16,11 +16,11 @@ export default function CmsPagePanel({ pages, selectedPageId, onSelectPage, onCr
             type="button"
             onClick={() => onSelectPage(p.id)}
             className={`w-full rounded-lg px-3 py-2 text-left text-sm ${
-              String(p.id) === String(selectedPageId) ? 'bg-zinc-900 text-white' : 'text-zinc-900 hover:bg-zinc-50'
+              String(p.id) === String(selectedPageId) ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'text-zinc-900 hover:bg-zinc-50'
             }`}
           >
             <div className="font-semibold">{p.name}</div>
-            <div className={`text-[11px] ${String(p.id) === String(selectedPageId) ? 'text-white/70' : 'text-zinc-500'}`}>
+            <div className={`text-[11px] ${String(p.id) === String(selectedPageId) ? 'text-brand-700/80' : 'text-zinc-500'}`}>
               {p.slug}
             </div>
           </button>
@@ -33,19 +33,19 @@ export default function CmsPagePanel({ pages, selectedPageId, onSelectPage, onCr
           <input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+            className="ac-input rounded-lg px-3 py-2"
             placeholder={t('pageName')}
           />
           <input
             value={newSlug}
             onChange={(e) => setNewSlug(e.target.value)}
-            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+            className="ac-input rounded-lg px-3 py-2"
             placeholder={t('pageSlug')}
           />
           <button
             type="button"
             onClick={() => onCreatePage({ name: newName, slug: newSlug })}
-            className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
+            className="ac-btn w-full rounded-lg px-3 py-2 text-sm"
           >
             {t('create')}
           </button>

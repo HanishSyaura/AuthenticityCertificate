@@ -86,7 +86,7 @@ export default function AdminCmsBuilder() {
 
         <div className="flex items-center gap-2">
           <select
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900"
+            className="ac-input rounded-lg px-3 py-2 text-xs font-semibold"
             value={language || 'en'}
             onChange={(e) => setLanguage(e.target.value)}
           >
@@ -100,7 +100,7 @@ export default function AdminCmsBuilder() {
               if (!selectedPageId) return;
               await publishPage({ pageId: selectedPageId });
             }}
-            className="rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white hover:bg-zinc-800"
+            className="ac-btn rounded-lg px-3 py-2 text-xs"
             disabled={!selectedPageId}
           >
             Publish
@@ -108,14 +108,18 @@ export default function AdminCmsBuilder() {
           <button
             type="button"
             onClick={() => setViewMode('edit')}
-            className={`rounded-lg px-3 py-2 text-xs font-semibold ${viewMode === 'edit' ? 'bg-zinc-900 text-white' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'}`}
+            className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+              viewMode === 'edit' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200/80 bg-white text-zinc-900 hover:bg-zinc-50'
+            }`}
           >
             {t('edit')}
           </button>
           <button
             type="button"
             onClick={() => setViewMode('preview')}
-            className={`rounded-lg px-3 py-2 text-xs font-semibold ${viewMode === 'preview' ? 'bg-zinc-900 text-white' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'}`}
+            className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+              viewMode === 'preview' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200/80 bg-white text-zinc-900 hover:bg-zinc-50'
+            }`}
           >
             {t('preview')}
           </button>

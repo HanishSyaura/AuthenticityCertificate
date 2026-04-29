@@ -133,7 +133,7 @@ export default function AdminCertificateTemplateBuilder() {
       {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[280px_minmax(0,1fr)_320px]">
-        <div className="rounded-xl border border-zinc-200 bg-white p-3">
+        <div className="ac-card p-3">
           <div className="mb-3 text-xs font-semibold text-zinc-500">{t('certTemplates')}</div>
           <div className="space-y-1">
             {templates.map((t) => (
@@ -145,11 +145,11 @@ export default function AdminCertificateTemplateBuilder() {
                   setSelectedFieldId(null);
                 }}
                 className={`w-full rounded-lg px-3 py-2 text-left text-sm ${
-                  t.id === selectedId ? 'bg-zinc-900 text-white' : 'text-zinc-900 hover:bg-zinc-50'
+                  t.id === selectedId ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'text-zinc-900 hover:bg-zinc-50'
                 }`}
               >
                 <div className="font-semibold">{t.name}</div>
-                <div className={`text-[11px] ${t.id === selectedId ? 'text-white/70' : 'text-zinc-500'}`}>
+                <div className={`text-[11px] ${t.id === selectedId ? 'text-brand-700/80' : 'text-zinc-500'}`}>
                   {(Array.isArray(t.layoutJson) ? t.layoutJson.length : 0)} fields
                 </div>
               </button>
@@ -162,13 +162,13 @@ export default function AdminCertificateTemplateBuilder() {
               <input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                className="ac-input rounded-lg px-3 py-2"
                 placeholder={t('templateName')}
               />
               <input
                 value={newBackground}
                 onChange={(e) => setNewBackground(e.target.value)}
-                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                className="ac-input rounded-lg px-3 py-2"
                 placeholder={t('backgroundUrl')}
               />
               <button
@@ -193,7 +193,7 @@ export default function AdminCertificateTemplateBuilder() {
                     setNewBackground('');
                   });
                 }}
-                className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
+                className="ac-btn w-full rounded-lg px-3 py-2 text-sm"
               >
                 {t('create')}
               </button>
@@ -201,7 +201,7 @@ export default function AdminCertificateTemplateBuilder() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-zinc-200 bg-white p-3">
+        <div className="ac-card p-3">
           {!selected ? (
             <div className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{t('createTemplate')}</div>
           ) : (
@@ -217,7 +217,7 @@ export default function AdminCertificateTemplateBuilder() {
                       value={previewId}
                       onChange={(e) => setPreviewId(e.target.value)}
                       placeholder={t('certificateId')}
-                      className="w-44 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900"
+                      className="ac-input w-44 rounded-lg px-3 py-2 text-xs"
                     />
                     <button type="button" onClick={fetchPreview} className="ac-btn ac-btn-soft px-3 py-2 text-xs">
                       {t('preview')}
@@ -229,7 +229,7 @@ export default function AdminCertificateTemplateBuilder() {
                       const current = Array.isArray(selected.layoutJson) ? selected.layoutJson : [];
                       void setFields([...current, { id: makeId('field'), path: 'status', label: t('status'), x: 80, y: 430, w: 240, h: 60 }]);
                     }}
-                    className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                    className="ac-btn ac-btn-soft rounded-lg px-3 py-2 text-xs"
                   >
                     {t('addField')}
                   </button>
@@ -241,7 +241,7 @@ export default function AdminCertificateTemplateBuilder() {
                       setSelectedId(null);
                       setSelectedFieldId(null);
                     }}
-                    className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                    className="ac-btn ac-btn-soft rounded-lg px-3 py-2 text-xs"
                   >
                     {t('delete')}
                   </button>

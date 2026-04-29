@@ -28,10 +28,12 @@ export default function AdminRecords() {
   const [showCreate, setShowCreate] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [sku, setSku] = useState('');
   const [name, setName] = useState('');
-  const [code, setCode] = useState('');
-  const [origin, setOrigin] = useState('');
-  const [description, setDescription] = useState('');
+  const [productCode, setProductCode] = useState('');
+  const [category, setCategory] = useState('');
+  const [status, setStatus] = useState('');
+  const [remark, setRemark] = useState('');
 
   useEffect(() => {
     void fetchProducts();
@@ -49,9 +51,11 @@ export default function AdminRecords() {
     const q = String(query || '').trim().toLowerCase();
     if (!q) return products;
     return products.filter((p) => {
+      const skuStr = String(p?.sku || '').toLowerCase();
       const nameStr = String(p?.name || '').toLowerCase();
       const codeStr = String(p?.code || '').toLowerCase();
-      return nameStr.includes(q) || codeStr.includes(q);
+      const categoryStr = String(p?.category || '').toLowerCase();
+      return skuStr.includes(q) || nameStr.includes(q) || codeStr.includes(q) || categoryStr.includes(q);
     });
   }, [products, query]);
 
@@ -62,7 +66,11 @@ export default function AdminRecords() {
           <h2 className="text-base font-semibold text-zinc-900">{t('records')}</h2>
           <p className="mt-1 text-sm text-zinc-600">{t('recordsSubtitle')}</p>
           <div className="mt-2 flex items-center gap-2 text-[11px] text-zinc-500">
-            <span className={`inline-flex items-center rounded-full px-2 py-0.5 ${live ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-700'}`}>
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 ring-1 ring-inset ${
+                live ? 'bg-emerald-50 text-emerald-700 ring-emerald-200/60' : 'bg-zinc-50 text-zinc-700 ring-zinc-200/70'
+              }`}
+            >
               {live ? t('live') : t('paused')}
             </span>
             <button type="button" className="underline" onClick={() => void fetchProducts()}>
@@ -86,7 +94,7 @@ export default function AdminRecords() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t('searchProducts')}
-          className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+          className="ac-input"
         />
       </div>
 
@@ -94,11 +102,13 @@ export default function AdminRecords() {
 
       <div className="rounded-xl border border-zinc-200 bg-white">
         <div className="overflow-x-auto">
-          <div className="min-w-[980px]">
-            <div className="grid grid-cols-[2fr_1fr_1fr_1fr_220px] gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-600">
+          <div className="min-w-[1100px]">
+            <div className="grid grid-cols-[1fr_2fr_1fr_1fr_1fr_1fr_220px] gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-600">
+              <div>{t('sku')}</div>
               <div>{t('product')}</div>
-              <div>{t('code')}</div>
-              <div>{t('origin')}</div>
+              <div>{t('productCode')}</div>
+              <div>{t('category')}</div>
+              <div>{t('status')}</div>
               <div>{t('updated')}</div>
               <div className="text-right">{t('actions')}</div>
             </div>
@@ -113,14 +123,16 @@ export default function AdminRecords() {
               filtered.map((p) => (
                 <div
                   key={p.id}
-                  className="grid grid-cols-[2fr_1fr_1fr_1fr_220px] gap-4 border-b border-zinc-100 px-4 py-3 text-sm text-zinc-800 last:border-b-0"
+                  className="grid grid-cols-[1fr_2fr_1fr_1fr_1fr_1fr_220px] gap-4 border-b border-zinc-100 px-4 py-3 text-sm text-zinc-800 last:border-b-0"
                 >
+                  <div className="font-mono text-xs text-zinc-700">{p.sku}</div>
                   <div>
                     <div className="font-medium text-zinc-900">{p.name}</div>
-                    <div className="mt-0.5 text-[11px] text-zinc-500">{t('batchesCount', { value: Array.isArray(p.batches) ? p.batches.length : 0 })}</div>
+                    <div className="mt-0.5 text-[11px] text-zinc-500">{p.remark || '-'}</div>
                   </div>
                   <div className="font-mono text-xs text-zinc-700">{p.code}</div>
-                  <div className="text-xs text-zinc-700">{p.origin || '-'}</div>
+                  <div className="text-xs text-zinc-700">{p.category || '-'}</div>
+                  <div className="text-xs text-zinc-700">{p.status || '-'}</div>
                   <div className="text-xs text-zinc-600">{formatDate(p.updatedAt || p.createdAt)}</div>
                   <div className="flex justify-end">
                     <div className="flex items-center gap-2">
@@ -132,10 +144,12 @@ export default function AdminRecords() {
                         className="ac-btn ac-btn-soft px-3 py-2 text-xs"
                         onClick={() => {
                           setEditing(p);
+                          setSku(p.sku || '');
                           setName(p.name || '');
-                          setCode(p.code || '');
-                          setOrigin(p.origin || '');
-                          setDescription(p.description || '');
+                          setProductCode(p.code || '');
+                          setCategory(p.category || '');
+                          setStatus(p.status || '');
+                          setRemark(p.remark || '');
                           setShowEdit(true);
                         }}
                       >
@@ -166,35 +180,51 @@ export default function AdminRecords() {
             <div className="mb-4 text-sm font-semibold text-zinc-900">{t('createProduct')}</div>
             <div className="space-y-3">
               <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('sku')}</div>
+                <input
+                  value={sku}
+                  onChange={(e) => setSku(e.target.value)}
+                  className="ac-input font-mono"
+                />
+              </div>
+              <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('name')}</div>
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+                  className="ac-input"
                 />
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('code')}</div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('productCode')}</div>
                 <input
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-mono text-sm text-zinc-900 outline-none focus:border-zinc-400"
+                  value={productCode}
+                  onChange={(e) => setProductCode(e.target.value)}
+                  className="ac-input font-mono"
                 />
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('origin')}</div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('category')}</div>
                 <input
-                  value={origin}
-                  onChange={(e) => setOrigin(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="ac-input"
                 />
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('description')}</div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('status')}</div>
+                <input
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+                  className="ac-input"
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
                 <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="h-24 w-full resize-none rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+                  value={remark}
+                  onChange={(e) => setRemark(e.target.value)}
+                  className="ac-input h-24 resize-none"
                 />
               </div>
             </div>
@@ -204,10 +234,12 @@ export default function AdminRecords() {
                 className="ac-btn ac-btn-soft px-3 py-2 text-xs"
                 onClick={() => {
                   setShowCreate(false);
+                  setSku('');
                   setName('');
-                  setCode('');
-                  setOrigin('');
-                  setDescription('');
+                  setProductCode('');
+                  setCategory('');
+                  setStatus('');
+                  setRemark('');
                 }}
               >
                 {t('cancel')}
@@ -216,20 +248,27 @@ export default function AdminRecords() {
                 type="button"
                 className="ac-btn px-3 py-2 text-xs"
                 onClick={async () => {
+                  const trimmedSku = String(sku || '').trim();
                   const trimmedName = String(name || '').trim();
-                  const trimmedCode = String(code || '').trim();
-                  if (!trimmedName || !trimmedCode) return;
+                  const trimmedProductCode = String(productCode || '').trim();
+                  const trimmedCategory = String(category || '').trim();
+                  const trimmedStatus = String(status || '').trim();
+                  if (!trimmedSku || !trimmedName || !trimmedProductCode || !trimmedCategory || !trimmedStatus) return;
                   await createProduct({
+                    sku: trimmedSku,
                     name: trimmedName,
-                    code: trimmedCode,
-                    origin: String(origin || '').trim() || undefined,
-                    description: String(description || '').trim() || undefined
+                    product_code: trimmedProductCode,
+                    category: trimmedCategory,
+                    status: trimmedStatus,
+                    remark: String(remark || '').trim() || undefined
                   });
                   setShowCreate(false);
+                  setSku('');
                   setName('');
-                  setCode('');
-                  setOrigin('');
-                  setDescription('');
+                  setProductCode('');
+                  setCategory('');
+                  setStatus('');
+                  setRemark('');
                 }}
               >
                 {t('create')}
@@ -245,35 +284,51 @@ export default function AdminRecords() {
             <div className="mb-4 text-sm font-semibold text-zinc-900">{t('editProduct')}</div>
             <div className="space-y-3">
               <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('sku')}</div>
+                <input
+                  value={sku}
+                  onChange={(e) => setSku(e.target.value)}
+                  className="ac-input font-mono"
+                />
+              </div>
+              <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('name')}</div>
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+                  className="ac-input"
                 />
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('code')}</div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('productCode')}</div>
                 <input
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-mono text-sm text-zinc-900 outline-none focus:border-zinc-400"
+                  value={productCode}
+                  onChange={(e) => setProductCode(e.target.value)}
+                  className="ac-input font-mono"
                 />
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('origin')}</div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('category')}</div>
                 <input
-                  value={origin}
-                  onChange={(e) => setOrigin(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="ac-input"
                 />
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('description')}</div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('status')}</div>
+                <input
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+                  className="ac-input"
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
                 <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="h-24 w-full resize-none rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+                  value={remark}
+                  onChange={(e) => setRemark(e.target.value)}
+                  className="ac-input h-24 resize-none"
                 />
               </div>
             </div>
@@ -297,10 +352,12 @@ export default function AdminRecords() {
                   await updateProduct({
                     id: editing.id,
                     patch: {
+                      sku: String(sku || '').trim(),
                       name: String(name || '').trim(),
-                      code: String(code || '').trim(),
-                      origin: String(origin || '').trim() || null,
-                      description: String(description || '').trim() || null
+                      product_code: String(productCode || '').trim(),
+                      category: String(category || '').trim(),
+                      status: String(status || '').trim(),
+                      remark: String(remark || '').trim() || null
                     }
                   });
                   setShowEdit(false);

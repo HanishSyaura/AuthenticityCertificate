@@ -134,7 +134,7 @@ export default function CanvasStage({
           return (
             <div
               key={it.id}
-              className={`absolute rounded-lg ${selected ? 'ring-2 ring-zinc-900' : 'ring-1 ring-zinc-200'} bg-white/70 backdrop-blur-sm`}
+              className={`absolute rounded-lg ${selected ? 'ring-2 ring-brand-500' : 'ring-1 ring-zinc-200/80'} bg-white/70 backdrop-blur-sm`}
               style={{ left: it.x, top: it.y, width: it.w, height: it.h }}
               onPointerDown={(e) => onItemPointerDown(e, it, 'drag')}
             >
@@ -145,7 +145,7 @@ export default function CanvasStage({
               <div
                 role="button"
                 tabIndex={0}
-                className={`absolute -bottom-2 -right-2 h-4 w-4 rounded bg-zinc-900 ${selected ? '' : 'hidden'}`}
+                className={`absolute -bottom-2 -right-2 h-4 w-4 rounded bg-brand-600 ${selected ? '' : 'hidden'}`}
                 onPointerDown={(e) => onItemPointerDown(e, it, 'resize')}
               />
             </div>

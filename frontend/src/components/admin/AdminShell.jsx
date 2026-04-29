@@ -10,7 +10,7 @@ function NavItem({ to, label }) {
       to={to}
       className={({ isActive }) =>
         `block rounded-lg px-3 py-2 text-sm transition ${
-          isActive ? 'bg-zinc-900 text-white' : 'text-zinc-700 hover:bg-zinc-100'
+          isActive ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'text-zinc-700 hover:bg-zinc-50'
         }`
       }
     >
@@ -52,7 +52,7 @@ export default function AdminShell() {
             >
               {mobileNavOpen ? t('close') : t('menu')}
             </button>
-            <Link to="/admin/dashboard" className="text-sm font-semibold tracking-tight text-zinc-900">
+            <Link to="/admin/dashboard" className="text-sm font-semibold tracking-tight text-zinc-900 hover:text-brand-800 no-underline hover:no-underline">
               {t('adminPanel')}
             </Link>
           </div>
@@ -84,6 +84,7 @@ export default function AdminShell() {
 
             <NavSection title={t('navProductsBatches')}>
               <NavItem to="/admin/records" label={t('records')} />
+              <NavItem to="/admin/epc" label={t('epc')} />
             </NavSection>
 
             <NavSection title={t('navCertificates')}>
@@ -94,8 +95,6 @@ export default function AdminShell() {
 
             <NavSection title={t('navContent')}>
               <NavItem to="/admin/cms" label={t('cmsBuilder')} />
-              <NavItem to="/admin/media" label={t('media')} />
-              <NavItem to="/admin/bulk" label={t('bulk')} />
             </NavSection>
 
             <NavSection title={t('navMonitoring')}>

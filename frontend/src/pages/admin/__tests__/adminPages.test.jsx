@@ -29,6 +29,7 @@ describe('admin pages', () => {
     renderWithRoute('/admin', <AdminShell />);
     expect(screen.getByText(/Getting Started/i)).toBeInTheDocument();
     expect(screen.getByText(/Products\s*&\s*Batches/i)).toBeInTheDocument();
+    expect(screen.getByText(/^EPC$/i)).toBeInTheDocument();
     expect(screen.getByText(/Certificates/i)).toBeInTheDocument();
     expect(screen.getByText(/Identities/i)).toBeInTheDocument();
     expect(screen.getByText(/Audit/i)).toBeInTheDocument();

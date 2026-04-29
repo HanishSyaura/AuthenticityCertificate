@@ -14,12 +14,16 @@ async function createProduct(data) {
     prisma.product.create({
       data: {
         organizationId: Number(data.organizationId),
+        sku: data.sku,
         name: data.name,
-        code: data.code,
-        origin: data.origin || null,
-        description: data.description || null,
-        cmsPageId: data.cmsPageId ?? null,
-        certificateTemplateId: data.certificateTemplateId ?? null
+        code: data.product_code,
+        category: data.category,
+        status: data.status,
+        remark: data.remark || null,
+        origin: null,
+        description: null,
+        cmsPageId: null,
+        certificateTemplateId: null
       }
     }),
     1200
@@ -30,7 +34,7 @@ async function getAllProducts({ organizationId }) {
   return await withTimeout(
     prisma.product.findMany({
       where: notDeleted({ organizationId: Number(organizationId) }),
-      include: { batches: true }
+      orderBy: { createdAt: 'desc' }
     }),
     1200
   );
@@ -45,12 +49,12 @@ async function getProductById(id) {
 
 async function updateProduct({ organizationId, productId, patch }) {
   const data = {};
+  if (patch.sku !== undefined) data.sku = patch.sku;
   if (patch.name !== undefined) data.name = patch.name;
-  if (patch.code !== undefined) data.code = patch.code;
-  if (patch.origin !== undefined) data.origin = patch.origin;
-  if (patch.description !== undefined) data.description = patch.description;
-  if (patch.cmsPageId !== undefined) data.cmsPageId = patch.cmsPageId;
-  if (patch.certificateTemplateId !== undefined) data.certificateTemplateId = patch.certificateTemplateId;
+  if (patch.product_code !== undefined) data.code = patch.product_code;
+  if (patch.category !== undefined) data.category = patch.category;
+  if (patch.status !== undefined) data.status = patch.status;
+  if (patch.remark !== undefined) data.remark = patch.remark;
 
   const res = await withTimeout(
     prisma.product.updateMany({

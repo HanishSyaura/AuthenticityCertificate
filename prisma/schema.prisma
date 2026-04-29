@@ -26,6 +26,9 @@ model Organization {
   users           User[]
   products        Product[]
   batches         Batch[]
+  corpSequences   CorpSequence[]
+  epcBatches      EpcBatch[]
+  epcItems        EpcItem[]
   certificates    Certificate[]
   scanLogs        ScanLog[]
   fraudFlags      FraudFlag[]
@@ -116,8 +119,12 @@ model Product {
   id             Int          @id @default(autoincrement())
   organizationId Int
   organization   Organization @relation(fields: [organizationId], references: [id])
+  sku            String
   name           String
   code           String
+  category       String
+  status         String
+  remark         String?
   origin         String?
   description    String?
   cmsPageId      Int? // Linked CMS Page
@@ -126,12 +133,17 @@ model Product {
   certificateTemplate   CertificateTemplate? @relation(fields: [certificateTemplateId], references: [id])
   batches        Batch[]
 
+  epcBatches EpcBatch[]
+
   versionNo Int       @default(1)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
   @@unique([organizationId, code])
+  @@unique([organizationId, sku])
+  @@index([organizationId, category])
+  @@index([organizationId, status])
 }
 
 model Batch {
@@ -149,6 +161,58 @@ model Batch {
   deletedAt DateTime?
 
   @@unique([organizationId, batchNo])
+}
+
+model CorpSequence {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  corpPrefix     String
+  lastNo         BigInt       @default(0)
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, corpPrefix])
+  @@index([organizationId])
+}
+
+model EpcBatch {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  corpPrefix     String
+
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
+  sku       String
+
+  batchName String
+  batchQty  Int
+  remark    String?
+
+  createdAt DateTime @default(now())
+
+  items EpcItem[]
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, corpPrefix])
+  @@index([organizationId, productId])
+}
+
+model EpcItem {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  batchId Int
+  batch   EpcBatch @relation(fields: [batchId], references: [id])
+
+  epcCode   String
+  runningNo BigInt
+  createdAt DateTime @default(now())
+
+  @@unique([organizationId, epcCode])
+  @@index([organizationId, createdAt])
+  @@index([batchId])
 }
 
 model Certificate {

@@ -4,7 +4,7 @@ import { useT } from '../../i18n/useT';
 
 function Step({ n, title, children, to, cta }) {
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+    <div className="ac-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">{n}</div>
@@ -48,7 +48,9 @@ export default function AdminGuide() {
             type="button"
             onClick={() => setExpanded(s.key)}
             className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
-              expanded === s.key ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
+              expanded === s.key
+                ? 'border-brand-200 bg-brand-50 text-brand-800 shadow-sm shadow-zinc-900/5'
+                : 'border-zinc-200/80 bg-white text-zinc-900 hover:bg-zinc-50'
             }`}
           >
             {s.label}
@@ -61,7 +63,7 @@ export default function AdminGuide() {
           <Step n="01" title={t('guideStepProductsTitle')} to="/admin/records" cta={t('openModule')}>
             {t('guideStepProductsBody')}
           </Step>
-          <Step n="02" title={t('guideStepBatchesTitle')} to="/admin/records" cta={t('openModule')}>
+          <Step n="02" title={t('guideStepBatchesTitle')} to="/admin/epc" cta={t('openModule')}>
             {t('guideStepBatchesBody')}
           </Step>
           <Step n="03" title={t('guideStepGenerateTitle')} to="/admin/records" cta={t('openModule')}>
@@ -96,20 +98,17 @@ export default function AdminGuide() {
           <Step n="C" title={t('guideOpsBulkTitle')} to="/admin/bulk" cta={t('openModule')}>
             {t('guideOpsBulkBody')}
           </Step>
-          <Step n="D" title={t('guideOpsMediaTitle')} to="/admin/media" cta={t('openModule')}>
-            {t('guideOpsMediaBody')}
-          </Step>
-          <Step n="E" title={t('guideOpsGovernanceTitle')} to="/admin/audit" cta={t('openModule')}>
+          <Step n="D" title={t('guideOpsGovernanceTitle')} to="/admin/audit" cta={t('openModule')}>
             {t('guideOpsGovernanceBody')}
           </Step>
-          <Step n="F" title={t('guideOpsIntegrationsTitle')} to="/admin/integrations" cta={t('openModule')}>
+          <Step n="E" title={t('guideOpsIntegrationsTitle')} to="/admin/integrations" cta={t('openModule')}>
             {t('guideOpsIntegrationsBody')}
           </Step>
         </div>
       ) : null}
 
       {expanded === 'troubleshooting' ? (
-        <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+        <div className="ac-card p-4">
           <div className="text-sm font-semibold text-zinc-900">{t('guideTroubleshootingTitle')}</div>
           <ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-zinc-700">
             <li>{t('guideTs401')}</li>
@@ -122,4 +121,3 @@ export default function AdminGuide() {
     </div>
   );
 }
-

@@ -12,13 +12,13 @@ import AdminRecords from './pages/admin/AdminRecords';
 import AdminRecordDetail from './pages/admin/AdminRecordDetail';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminAudit from './pages/admin/AdminAudit';
-import AdminMedia from './pages/admin/AdminMedia';
 import AdminBulkImport from './pages/admin/AdminBulkImport';
 import AdminCertificates from './pages/admin/AdminCertificates';
 import AdminIdentities from './pages/admin/AdminIdentities';
 import AdminFraud from './pages/admin/AdminFraud';
 import AdminIntegrations from './pages/admin/AdminIntegrations';
 import AdminGuide from './pages/admin/AdminGuide';
+import AdminEpc from './pages/admin/AdminEpc';
 
 function App() {
   return (
@@ -40,6 +40,7 @@ function App() {
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="guide" element={<AdminGuide />} />
           <Route path="records" element={<AdminRecords />} />
+          <Route path="epc" element={<AdminEpc />} />
           <Route path="records/:id" element={<AdminRecordDetail />} />
           <Route path="cms" element={<AdminCmsBuilder />} />
           <Route path="cert-templates" element={<AdminCertificateTemplateBuilder />} />
@@ -50,7 +51,6 @@ function App() {
           <Route path="identities" element={<AdminIdentities />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="audit" element={<AdminAudit />} />
-          <Route path="media" element={<AdminMedia />} />
           <Route path="bulk" element={<AdminBulkImport />} />
         </Route>
       </Routes>

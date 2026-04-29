@@ -10,22 +10,25 @@
 
   body {
     @apply text-zinc-900 antialiased;
-    background: #f6f7f9;
+    background:
+      radial-gradient(1200px circle at 15% -10%, rgba(99, 102, 241, 0.14), transparent 55%),
+      radial-gradient(900px circle at 100% 0%, rgba(20, 184, 166, 0.12), transparent 48%),
+      #f7f8fc;
     min-height: 100vh;
   }
 
   a {
-    @apply text-zinc-900;
+    @apply text-brand-700 hover:text-brand-800;
   }
 
   ::selection {
-    background: rgba(59, 130, 246, 0.2);
+    background: rgba(99, 102, 241, 0.22);
   }
 }
 
 @layer components {
   .ac-card {
-    @apply rounded-2xl border border-zinc-200 bg-white shadow-sm;
+    @apply rounded-2xl border border-zinc-200/80 bg-white shadow-sm shadow-zinc-900/5;
   }
 
   .ac-card-header {
@@ -41,39 +44,41 @@
   }
 
   .ac-btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-zinc-900/10 transition hover:bg-brand-700 active:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-60;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2;
   }
 
   .ac-btn-primary {
-    @apply bg-zinc-900 text-white hover:bg-zinc-800;
+    @apply bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800;
   }
 
   .ac-btn-soft {
-    @apply border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50;
+    @apply border border-zinc-200/80 bg-white text-zinc-800 shadow-sm shadow-zinc-900/5 hover:bg-zinc-50 active:bg-zinc-100;
   }
 
   .ac-badge {
-    @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold;
+    @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ring-zinc-900/5;
   }
 
   .ac-badge-backend {
-    @apply bg-emerald-100 text-emerald-800;
+    @apply bg-emerald-50 text-emerald-700 ring-emerald-200/60;
   }
 
   .ac-badge-danger {
-    @apply bg-rose-100 text-rose-800;
+    @apply bg-rose-50 text-rose-700 ring-rose-200/60;
   }
 
   .ac-badge-warning {
-    @apply bg-amber-100 text-amber-900;
+    @apply bg-amber-50 text-amber-800 ring-amber-200/60;
   }
 
   .ac-badge-neutral {
-    @apply bg-zinc-100 text-zinc-800;
+    @apply bg-zinc-50 text-zinc-700 ring-zinc-200/70;
   }
 
   .ac-input {
-    @apply w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none focus:border-zinc-400;
+    @apply w-full rounded-xl border border-zinc-200/80 bg-white px-4 py-3 text-sm text-zinc-900 outline-none placeholder:text-zinc-400;
+    @apply focus:border-brand-300 focus:ring-2 focus:ring-brand-200/70;
   }
 
   .ac-help {

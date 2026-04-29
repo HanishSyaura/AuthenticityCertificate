@@ -29,11 +29,11 @@ const useRecordsStore = create((set, get) => ({
     }
   },
 
-  createProduct: async ({ name, code, origin, description }) => {
+  createProduct: async ({ sku, name, product_code, category, status, remark }) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const res = await api.post('/products/', { name, code, origin, description });
+      const res = await api.post('/products/', { sku, name, product_code, category, status, remark });
       const created = res?.data?.data;
       const products = [created, ...get().products].filter(Boolean);
       set({ products, loading: false, lastSyncAt: Date.now() });

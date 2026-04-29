@@ -7,7 +7,7 @@ import { useT } from '../../i18n/useT';
 
 function Card({ title, value, hint }) {
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-4">
+    <div className="ac-card p-4">
       <div className="text-xs font-semibold text-zinc-500">{title}</div>
       <div className="mt-2 text-2xl font-semibold tracking-tight text-zinc-900">{value}</div>
       {hint ? <div className="mt-2 text-xs text-zinc-600">{hint}</div> : null}
@@ -48,7 +48,7 @@ export default function AdminDashboard() {
       </div>
 
       {showGuideBanner ? (
-        <div className="mb-4 rounded-2xl border border-zinc-200 bg-white p-4">
+        <div className="ac-card mb-4 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-sm font-semibold text-zinc-900">{t('firstTimeTitle')}</div>
@@ -65,6 +65,7 @@ export default function AdminDashboard() {
                   try {
                     localStorage.setItem('ac_seen_guide', '1');
                   } catch {
+                    setShowGuideBanner(false);
                   }
                   setShowGuideBanner(false);
                 }}
@@ -83,17 +84,17 @@ export default function AdminDashboard() {
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Link to="/admin/cms" className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 hover:bg-zinc-100">
+        <Link to="/admin/cms" className="ac-card p-4 hover:bg-zinc-50">
           <div className="text-sm font-semibold text-zinc-900">{t('cmsBuilder')}</div>
           <div className="mt-1 text-xs text-zinc-600">{t('cmsSubheading')}</div>
         </Link>
-        <Link to="/admin/cert-templates" className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 hover:bg-zinc-100">
+        <Link to="/admin/cert-templates" className="ac-card p-4 hover:bg-zinc-50">
           <div className="text-sm font-semibold text-zinc-900">{t('certTemplates')}</div>
           <div className="mt-1 text-xs text-zinc-600">{t('certTplSubheading')}</div>
         </Link>
       </div>
 
-      <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-4">
+      <div className="ac-card mt-4 p-4">
         <div className="text-xs font-semibold text-zinc-600">{t('publicVerifyPage')}</div>
         <div className="mt-1 text-xs text-zinc-600">{t('publicVerifyHint')}</div>
         <div className="mt-2 font-mono text-[11px] text-zinc-800">/verify/&lt;CERTIFICATE_ID&gt;</div>

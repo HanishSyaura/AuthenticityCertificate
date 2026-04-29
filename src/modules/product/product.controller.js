@@ -2,21 +2,21 @@ const productService = require('./product.service');
 const { z } = require('zod');
 
 const productSchema = z.object({
+  sku: z.string().min(1),
   name: z.string().min(1),
-  code: z.string().min(1),
-  origin: z.string().min(1).optional(),
-  description: z.string().min(1).optional(),
-  cmsPageId: z.number().int().positive().optional(),
-  certificateTemplateId: z.number().int().positive().optional()
+  product_code: z.string().min(1),
+  category: z.string().min(1),
+  status: z.string().min(1),
+  remark: z.string().optional()
 });
 
 const updateProductSchema = z.object({
+  sku: z.string().min(1).optional(),
   name: z.string().min(1).optional(),
-  code: z.string().min(1).optional(),
-  origin: z.string().min(1).nullable().optional(),
-  description: z.string().min(1).nullable().optional(),
-  cmsPageId: z.number().int().positive().nullable().optional(),
-  certificateTemplateId: z.number().int().positive().nullable().optional()
+  product_code: z.string().min(1).optional(),
+  category: z.string().min(1).optional(),
+  status: z.string().min(1).optional(),
+  remark: z.string().nullable().optional()
 });
 
 const batchSchema = z.object({
