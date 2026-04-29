@@ -22,7 +22,6 @@ describe('admin pages', () => {
     useAdminAuthStore.setState({
       token: 'test-token',
       user: { id: 1, email: 'admin@local.test', name: 'Admin', role: 'super_admin' },
-      orgCode: 'TEST'
     });
   });
 
@@ -37,7 +36,6 @@ describe('admin pages', () => {
     useAdminAuthStore.setState({
       token: 'test-token',
       user: { id: 2, email: 'op@local.test', name: 'Operator', role: 'admin' },
-      orgCode: 'TEST'
     });
     render(
       <MemoryRouter initialEntries={['/admin/users']}>

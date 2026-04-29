@@ -29,7 +29,7 @@ export default function AdminCertificateTemplateBuilder() {
     updateTemplate: s.updateTemplate,
     deleteTemplate: s.deleteTemplate
   }));
-  const { token, orgCode } = useAdminAuthStore((s) => ({ token: s.token, orgCode: s.orgCode }));
+  const { token } = useAdminAuthStore((s) => ({ token: s.token }));
 
   const [selectedId, setSelectedId] = useState(null);
   const [selectedFieldId, setSelectedFieldId] = useState(null);
@@ -110,7 +110,7 @@ export default function AdminCertificateTemplateBuilder() {
       return;
     }
     try {
-      const api = createAdminApi({ token, orgCode });
+      const api = createAdminApi({ token });
       const res = await api.get(`/analytics/cert/${encodeURIComponent(certId)}`);
       const cert = res?.data?.data?.certificate || null;
       if (!cert) {
