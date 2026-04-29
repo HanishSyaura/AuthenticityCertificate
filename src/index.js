@@ -19,6 +19,7 @@ const templatesRoutes = require('./modules/templates/templates.routes');
 const mediaRoutes = require('./modules/media/media.routes');
 const identityRoutes = require('./modules/identity/identity.routes');
 const { rateLimit } = require('./middleware/rateLimit.middleware');
+const { applyDbPatches } = require('./config/dbPatches');
 
 dotenv.config();
 
@@ -126,6 +127,14 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+async function start() {
+  await applyDbPatches();
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}
+
+start().catch((err) => {
+  console.error(err);
+  process.exit(1);
 });

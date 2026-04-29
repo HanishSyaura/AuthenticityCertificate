@@ -42,7 +42,7 @@ export default function AdminShell() {
 
   return (
     <div className="min-h-screen">
-      <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto w-[90vw] max-w-none px-4 py-6 sm:px-6 lg:px-8">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <button
