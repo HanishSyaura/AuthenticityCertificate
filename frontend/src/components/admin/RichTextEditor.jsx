@@ -3,7 +3,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 function exec(cmd, value = null) {
   try {
     document.execCommand('styleWithCSS', false, true);
-  } catch {
+  } catch (e) {
+    void e;
   }
   document.execCommand(cmd, false, value);
 }
@@ -171,4 +172,3 @@ export default function RichTextEditor({ value, onChange }) {
     </div>
   );
 }
-

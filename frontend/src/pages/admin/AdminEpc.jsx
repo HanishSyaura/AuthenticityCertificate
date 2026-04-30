@@ -68,7 +68,7 @@ export default function AdminEpc() {
 
   const [tab, setTab] = useState('create');
 
-  const [corpPrefix, setCorpPrefix] = useState('DA01');
+  const [corpPrefix] = useState('DA01');
   const [productId, setProductId] = useState('');
   const [batchName, setBatchName] = useState('');
   const [batchQty, setBatchQty] = useState(1);
@@ -84,10 +84,6 @@ export default function AdminEpc() {
     void fetchCorpCodes();
     void fetchBatches({ limit: 50, offset: 0 });
   }, [fetchBatches, fetchCorpCodes, fetchProducts, fetchTemplates]);
-
-  useEffect(() => {
-    void corpCodes;
-  }, [corpCodes, corpPrefix]);
 
   const selectedProduct = useMemo(() => (Array.isArray(products) ? products : []).find((p) => String(p.id) === String(productId)) || null, [products, productId]);
 
@@ -109,31 +105,33 @@ export default function AdminEpc() {
   }, [selectedTemplate]);
 
   useEffect(() => {
-    const next = {};
-    for (const p of placeholders) {
-      const key = String(p?.key || '').trim();
-      if (!key) continue;
-      const existing = templateData?.[key];
-      if (existing != null && String(existing).length > 0) {
-        next[key] = existing;
-        continue;
-      }
-      const source = String(p?.source || 'manual');
-      if (source === 'static') {
-        next[key] = String(p?.staticValue || '');
-        continue;
-      }
-      if (source === 'product' && selectedProduct) {
-        const bindPath = String(p?.bindPath || '').trim();
-        if (bindPath.startsWith('product.')) {
-          const prop = bindPath.slice('product.'.length);
-          next[key] = selectedProduct?.[prop] == null ? '' : String(selectedProduct[prop]);
+    setTemplateData((prev) => {
+      const next = {};
+      for (const p of placeholders) {
+        const key = String(p?.key || '').trim();
+        if (!key) continue;
+        const existing = prev?.[key];
+        if (existing != null && String(existing).length > 0) {
+          next[key] = existing;
           continue;
         }
+        const source = String(p?.source || 'manual');
+        if (source === 'static') {
+          next[key] = String(p?.staticValue || '');
+          continue;
+        }
+        if (source === 'product' && selectedProduct) {
+          const bindPath = String(p?.bindPath || '').trim();
+          if (bindPath.startsWith('product.')) {
+            const prop = bindPath.slice('product.'.length);
+            next[key] = selectedProduct?.[prop] == null ? '' : String(selectedProduct[prop]);
+            continue;
+          }
+        }
+        next[key] = '';
       }
-      next[key] = '';
-    }
-    setTemplateData(next);
+      return next;
+    });
   }, [certificateTemplateId, placeholders, selectedProduct]);
 
   return (

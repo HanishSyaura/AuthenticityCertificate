@@ -50,4 +50,8 @@ Our Admin Settings requirements consist of the following main pages:
 graph TD
   A["Admin Login"] --> B["Admin Dashboard"]
   B --> C["Admin Settings"]
-  C --> D["Profile Settings
+  C --> D["Profile Settings"]
+  C --> E["System Settings"]
+  D --> C
+  E --> C
+```

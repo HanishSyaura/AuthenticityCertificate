@@ -9,6 +9,11 @@ const useAdminAuthStore = create((set) => ({
   loading: false,
   error: null,
 
+  setUser: (user) => {
+    writeJson(ADMIN_KEYS.user, user);
+    set({ user });
+  },
+
   logout: () => {
     removeKey(ADMIN_KEYS.token);
     removeKey(ADMIN_KEYS.user);

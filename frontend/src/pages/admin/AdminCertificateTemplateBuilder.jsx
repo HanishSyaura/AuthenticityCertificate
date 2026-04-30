@@ -147,7 +147,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       window.clearTimeout(persistTimerRef.current);
       persistTimerRef.current = null;
     }
-  }, [selected?.id]);
+  }, [selected?.id, selected?.layoutJson, selected?.placeholders]);
 
   const queueTemplatePatch = (patch) => {
     if (!selected?.id) return;
@@ -271,7 +271,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     setSelectedFieldId(null);
     const firstKey = String((Array.isArray(selected.placeholders) ? selected.placeholders : [])?.[0]?.key || '').trim();
     setAddOverlayKey(firstKey);
-  }, [selected?.id]);
+  }, [selected?.id, selected?.placeholders]);
 
   useEffect(() => {
     if (!selected?.id) return;

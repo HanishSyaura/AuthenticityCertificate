@@ -61,6 +61,105 @@ async function login(email, password) {
   };
 }
 
+async function resolveCurrentUser(tokenUser) {
+  const id = Number(tokenUser?.id);
+  const email = String(tokenUser?.email || '').trim().toLowerCase();
+  if (!Number.isFinite(id) || id <= 0 || !email) return null;
+
+  const dbTimeoutMs = getDbTimeoutMs();
+  try {
+    const u = await withTimeout(prisma.user.findUnique({ where: { id } }), dbTimeoutMs);
+    if (u && !u.deletedAt && String(u.email || '').trim().toLowerCase() === email) {
+      return { kind: 'user', row: u };
+    }
+  } catch {
+  }
+
+  try {
+    const a = await withTimeout(prisma.admin.findUnique({ where: { id } }), dbTimeoutMs);
+    if (a && String(a.email || '').trim().toLowerCase() === email) {
+      return { kind: 'admin', row: a };
+    }
+  } catch {
+  }
+
+  return null;
+}
+
+async function getMe(tokenUser) {
+  const resolved = await resolveCurrentUser(tokenUser);
+  if (!resolved) return null;
+
+  const role = resolved.kind === 'user' ? resolved.row.role : 'admin';
+  return {
+    id: resolved.row.id,
+    email: resolved.row.email,
+    name: resolved.row.name,
+    role
+  };
+}
+
+async function updateMe(tokenUser, input) {
+  const resolved = await resolveCurrentUser(tokenUser);
+  if (!resolved) throw new Error('Unauthorized');
+
+  const role = resolved.kind === 'user' ? resolved.row.role : 'admin';
+  const canEditEmail = role === 'super_admin' || role === 'admin';
+
+  const update = {};
+  if (typeof input.name === 'string') update.name = input.name.trim();
+  if (typeof input.email === 'string') {
+    if (!canEditEmail) throw new Error('Forbidden');
+    update.email = input.email.trim().toLowerCase();
+  }
+
+  if (typeof input.newPassword === 'string' && input.newPassword.trim()) {
+    const ok = await bcrypt.compare(String(input.currentPassword || ''), resolved.row.password);
+    if (!ok) throw new Error('Invalid current password');
+    update.password = await bcrypt.hash(String(input.newPassword), 10);
+  }
+
+  if (Object.keys(update).length === 0) {
+    const user = await getMe(tokenUser);
+    return { user };
+  }
+
+  try {
+    if (resolved.kind === 'user') {
+      const saved = await withTimeout(
+        prisma.user.update({ where: { id: resolved.row.id }, data: update }),
+        getDbTimeoutMs()
+      );
+      return {
+        user: {
+          id: saved.id,
+          email: saved.email,
+          name: saved.name,
+          role: saved.role
+        }
+      };
+    }
+
+    const saved = await withTimeout(
+      prisma.admin.update({ where: { id: resolved.row.id }, data: update }),
+      getDbTimeoutMs()
+    );
+    return {
+      user: {
+        id: saved.id,
+        email: saved.email,
+        name: saved.name,
+        role: 'admin'
+      }
+    };
+  } catch (e) {
+    if (e?.code === 'P2002') throw new Error('Email already in use');
+    throw e;
+  }
+}
+
 module.exports = {
-  login
+  login,
+  getMe,
+  updateMe
 };

@@ -11,7 +11,9 @@ function getApiBaseUrl() {
         const u = new URL(normalized);
         const path = u.pathname.replace(/\/+$/, '');
         if (!path) return `${u.origin}/api`;
-      } catch {}
+      } catch (e) {
+        return normalized;
+      }
     }
     return normalized;
   }

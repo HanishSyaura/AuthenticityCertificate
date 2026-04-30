@@ -127,7 +127,7 @@ export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayo
         );
       }
     }));
-  }, [layout, t]);
+  }, [layout, t, templatesById]);
 
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-3">

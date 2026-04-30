@@ -82,7 +82,7 @@ export default function CanvasStage({
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
     };
-  }, [activePointer, applyUpdate, grid, height, width]);
+  }, [activePointer, applyUpdate, grid, height, scale, width]);
 
   const onItemPointerDown = (e, item, kind) => {
     e.preventDefault();

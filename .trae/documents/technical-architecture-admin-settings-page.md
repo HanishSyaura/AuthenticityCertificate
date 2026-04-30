@@ -147,9 +147,9 @@ erDiagram
 ```
 
 ### 6.2 Data Definition Language
-Organization Settings Table (organization_settings)
+Organization Settings Table (OrganizationSettings)
 ```
-CREATE TABLE organization_settings (
+CREATE TABLE OrganizationSettings (
   id INT PRIMARY KEY AUTO_INCREMENT,
   organizationId INT NOT NULL,
   defaultLocale VARCHAR(20) NULL,

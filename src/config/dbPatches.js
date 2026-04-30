@@ -414,12 +414,51 @@ async function ensureEpcSchemaCompat() {
   await ensureColumn('EpcItem', 'caiqNumber', `ALTER TABLE \`EpcItem\` ADD COLUMN \`caiqNumber\` VARCHAR(191) NULL`, null, null);
 }
 
+async function ensureOrganizationSettingsSchemaCompat() {
+  const hasTable = await tableExists('OrganizationSettings');
+  if (!hasTable) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`OrganizationSettings\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`organizationId\` INT NOT NULL,
+        \`defaultLocale\` VARCHAR(20) NULL,
+        \`defaultTimezone\` VARCHAR(64) NULL,
+        \`maintenanceMode\` TINYINT(1) NOT NULL DEFAULT 0,
+        \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+
+  await ensureColumn(
+    'OrganizationSettings',
+    'createdAt',
+    'ALTER TABLE `OrganizationSettings` ADD COLUMN `createdAt` DATETIME NULL',
+    'UPDATE `OrganizationSettings` SET `createdAt` = NOW() WHERE `createdAt` IS NULL',
+    'ALTER TABLE `OrganizationSettings` MODIFY `createdAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP'
+  );
+  await ensureColumn(
+    'OrganizationSettings',
+    'updatedAt',
+    'ALTER TABLE `OrganizationSettings` ADD COLUMN `updatedAt` DATETIME NULL',
+    'UPDATE `OrganizationSettings` SET `updatedAt` = NOW() WHERE `updatedAt` IS NULL',
+    'ALTER TABLE `OrganizationSettings` MODIFY `updatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP'
+  );
+
+  const idx = 'OrganizationSettings_organizationId_key';
+  if (!(await indexExists('OrganizationSettings', idx))) {
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX \`${idx}\` ON \`OrganizationSettings\` (\`organizationId\`)`);
+  }
+}
+
 async function applyDbPatches() {
   await ensureProductSchemaCompat();
   await ensureCategorySchemaCompat();
   await ensureCmsPageSchemaCompat();
   await ensureCertificateTemplateSchemaCompat();
   await ensureEpcSchemaCompat();
+  await ensureOrganizationSettingsSchemaCompat();
 }
 
 module.exports = { applyDbPatches };
