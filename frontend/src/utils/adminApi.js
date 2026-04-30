@@ -8,7 +8,7 @@ function getApiBaseUrl() {
     return '';
   }
   if (import.meta.env.DEV) return 'http://localhost:5000';
-  return '';
+  return '/api';
 }
 
 export function createAdminApi({ token }) {

@@ -40,6 +40,11 @@ async function resolveProductTableName() {
   return tableName;
 }
 
+async function resolveCategoryTableName() {
+  const tableName = (await tableExists('Category')) ? 'Category' : (await tableExists('Categories')) ? 'Categories' : null;
+  return tableName;
+}
+
 async function resolveTableName(candidates) {
   for (const name of candidates) {
     if (await tableExists(name)) return name;
@@ -171,6 +176,90 @@ async function ensureProductSchemaCompat() {
   }
 }
 
+async function ensureCategorySchemaCompat() {
+  let tableName = await resolveCategoryTableName();
+
+  if (!tableName) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`Category\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`organizationId\` INT NOT NULL,
+        \`name\` VARCHAR(191) NOT NULL,
+        \`code\` VARCHAR(191) NOT NULL,
+        \`isActive\` TINYINT(1) NOT NULL DEFAULT 1,
+        \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        \`deletedAt\` DATETIME NULL,
+        PRIMARY KEY (\`id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    tableName = 'Category';
+  }
+
+  await ensureColumn(
+    tableName,
+    'organizationId',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`organizationId\` INT NULL`,
+    null,
+    `ALTER TABLE \`${tableName}\` MODIFY \`organizationId\` INT NOT NULL`
+  );
+
+  await ensureColumn(
+    tableName,
+    'name',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`name\` VARCHAR(191) NULL`,
+    null,
+    `ALTER TABLE \`${tableName}\` MODIFY \`name\` VARCHAR(191) NOT NULL`
+  );
+
+  await ensureColumn(
+    tableName,
+    'code',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`code\` VARCHAR(191) NULL`,
+    null,
+    `ALTER TABLE \`${tableName}\` MODIFY \`code\` VARCHAR(191) NOT NULL`
+  );
+
+  const hasOrg = await columnExists(tableName, 'organizationId');
+
+  await ensureColumn(
+    tableName,
+    'isActive',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`isActive\` TINYINT(1) NULL`,
+    `UPDATE \`${tableName}\` SET \`isActive\` = 1 WHERE \`isActive\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`isActive\` TINYINT(1) NOT NULL DEFAULT 1`
+  );
+
+  await ensureColumn(
+    tableName,
+    'createdAt',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`createdAt\` DATETIME NULL`,
+    `UPDATE \`${tableName}\` SET \`createdAt\` = NOW() WHERE \`createdAt\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`
+  );
+
+  await ensureColumn(
+    tableName,
+    'updatedAt',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`updatedAt\` DATETIME NULL`,
+    `UPDATE \`${tableName}\` SET \`updatedAt\` = NOW() WHERE \`updatedAt\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`
+  );
+
+  await ensureColumn(tableName, 'deletedAt', `ALTER TABLE \`${tableName}\` ADD COLUMN \`deletedAt\` DATETIME NULL`, null, null);
+
+  if (hasOrg) {
+    const idxCode = `${tableName}_organizationId_code_key`;
+    const hasIdxCode = await indexExists(tableName, idxCode);
+    if (!hasIdxCode) await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX \`${idxCode}\` ON \`${tableName}\` (\`organizationId\`, \`code\`)`);
+
+    const idxActive = `${tableName}_organizationId_isActive_idx`;
+    const hasIdxActive = await indexExists(tableName, idxActive);
+    if (!hasIdxActive)
+      await prisma.$executeRawUnsafe(`CREATE INDEX \`${idxActive}\` ON \`${tableName}\` (\`organizationId\`, \`isActive\`)`);
+  }
+}
+
 async function ensureCmsPageSchemaCompat() {
   const tableName = await resolveTableName(['CmsPage', 'cmsPage', 'cms_pages']);
   if (!tableName) return;
@@ -229,6 +318,7 @@ async function ensureEpcSchemaCompat() {
 
 async function applyDbPatches() {
   await ensureProductSchemaCompat();
+  await ensureCategorySchemaCompat();
   await ensureCmsPageSchemaCompat();
   await ensureCertificateTemplateSchemaCompat();
   await ensureEpcSchemaCompat();

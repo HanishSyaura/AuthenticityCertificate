@@ -25,6 +25,7 @@ model Organization {
 
   users           User[]
   products        Product[]
+  categories      Category[]
   batches         Batch[]
   corpSequences   CorpSequence[]
   epcBatches      EpcBatch[]
@@ -146,6 +147,21 @@ model Product {
   @@unique([organizationId, sku])
   @@index([organizationId, category])
   @@index([organizationId, status])
+}
+
+model Category {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  code           String
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  @@unique([organizationId, code])
+  @@index([organizationId, isActive])
 }
 
 model Batch {

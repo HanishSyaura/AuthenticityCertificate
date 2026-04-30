@@ -73,6 +73,8 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const [bgUploading, setBgUploading] = useState(false);
   const [bgError, setBgError] = useState(null);
   const [bgFileKey, setBgFileKey] = useState(0);
+  const [wizardStep, setWizardStep] = useState('fields');
+  const [addOverlayKey, setAddOverlayKey] = useState('');
   const [devicePresetId, setDevicePresetId] = useState('fit');
   const [backgroundMode, setBackgroundMode] = useState('background');
   const [assignedProductIds, setAssignedProductIds] = useState(() => new Set());
@@ -191,6 +193,19 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     setSelectedFieldId(item.id);
   };
 
+  const addCanvasItemForKey = async (key) => {
+    if (!selected) return;
+    const k = String(key || '').trim();
+    if (!k) return;
+    const placeholders = Array.isArray(selected.placeholders) ? selected.placeholders : [];
+    const ph = placeholders.find((p) => String(p?.key || '').trim() === k) || null;
+    const label = String(ph?.label || k).trim() || k;
+    const item = { id: makeId('field'), path: `templateData.${k}`, label, x: 20, y: 40, w: 240, h: 56, fontSize: 14, align: 'left' };
+    const nextLayout = [...(Array.isArray(selected.layoutJson) ? selected.layoutJson : []), item];
+    await updateSelected({ layoutJson: nextLayout });
+    setSelectedFieldId(item.id);
+  };
+
   const setFields = async (nextFields) => {
     if (!selected) return;
     const sanitized = (nextFields || []).map((field) => {
@@ -231,6 +246,14 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     if (selectedId != null) return;
     if (templates.length > 0) setSelectedId(templates[0].id);
   }, [templates, selectedId]);
+
+  useEffect(() => {
+    if (!selected?.id) return;
+    setWizardStep('fields');
+    setSelectedFieldId(null);
+    const firstKey = String((Array.isArray(selected.placeholders) ? selected.placeholders : [])?.[0]?.key || '').trim();
+    setAddOverlayKey(firstKey);
+  }, [selected?.id]);
 
   useEffect(() => {
     if (!selected?.id) return;
@@ -429,37 +452,80 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   <div className="text-sm font-semibold text-zinc-900">{selected.name}</div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    value={devicePresetId}
-                    onChange={(e) => setDevicePresetId(e.target.value)}
-                    className="ac-input w-36 rounded-lg px-3 py-2 text-xs font-semibold"
-                  >
-                    {DEVICE_PRESETS.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.label}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="flex items-center gap-2">
-                    <input
-                      value={previewId}
-                      onChange={(e) => setPreviewId(e.target.value)}
-                      placeholder={t('certificateId')}
-                      className="ac-input w-44 rounded-lg px-3 py-2 text-xs"
-                    />
-                    <button type="button" onClick={fetchPreview} className="ac-btn ac-btn-soft px-3 py-2 text-xs">
-                      {t('preview')}
+                  <div className="inline-flex overflow-hidden rounded-lg border border-zinc-200 bg-white">
+                    <button
+                      type="button"
+                      onClick={() => setWizardStep('fields')}
+                      className={`px-3 py-2 text-xs font-semibold ${wizardStep === 'fields' ? 'bg-brand-50 text-brand-800' : 'text-zinc-700 hover:bg-zinc-50'}`}
+                    >
+                      {t('step1DefineFields')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWizardStep('canvas')}
+                      className={`px-3 py-2 text-xs font-semibold ${wizardStep === 'canvas' ? 'bg-brand-50 text-brand-800' : 'text-zinc-700 hover:bg-zinc-50'}`}
+                    >
+                      {t('step2PlaceCanvas')}
                     </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void addDataFieldAndCanvasItem({ label: t('fieldLabel'), type: 'text' });
-                    }}
-                    className="ac-btn ac-btn-soft rounded-lg px-3 py-2 text-xs"
-                  >
-                    {t('addField')}
-                  </button>
+                  {wizardStep === 'canvas' ? (
+                    <>
+                      <select
+                        value={devicePresetId}
+                        onChange={(e) => setDevicePresetId(e.target.value)}
+                        className="ac-input w-36 rounded-lg px-3 py-2 text-xs font-semibold"
+                      >
+                        {DEVICE_PRESETS.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.label}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={previewId}
+                          onChange={(e) => setPreviewId(e.target.value)}
+                          placeholder={t('certificateId')}
+                          className="ac-input w-44 rounded-lg px-3 py-2 text-xs"
+                        />
+                        <button type="button" onClick={fetchPreview} className="ac-btn ac-btn-soft px-3 py-2 text-xs">
+                          {t('preview')}
+                        </button>
+                      </div>
+                      <select value={addOverlayKey} onChange={(e) => setAddOverlayKey(e.target.value)} className="ac-input w-52 rounded-lg px-3 py-2 text-xs">
+                        <option value="">{t('selectDataField')}</option>
+                        {placeholders
+                          .map((p) => ({ key: String(p?.key || '').trim(), label: String(p?.label || '').trim() }))
+                          .filter((p) => p.key)
+                          .map((p) => (
+                            <option key={p.key} value={p.key}>
+                              {p.label || p.key}
+                            </option>
+                          ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => void addCanvasItemForKey(addOverlayKey)}
+                        className="ac-btn ac-btn-soft rounded-lg px-3 py-2 text-xs"
+                        disabled={!String(addOverlayKey || '').trim()}
+                      >
+                        {t('addToCanvas')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void addDataFieldAndCanvasItem({ label: t('fieldLabel'), type: 'text' });
+                        }}
+                        className="ac-btn ac-btn-soft rounded-lg px-3 py-2 text-xs"
+                      >
+                        {t('addField')}
+                      </button>
+                    </>
+                  ) : (
+                    <button type="button" onClick={() => setWizardStep('canvas')} className="ac-btn ac-btn-soft rounded-lg px-3 py-2 text-xs">
+                      {t('nextStep')}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={async () => {
@@ -477,19 +543,32 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
 
               {previewError ? <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">{previewError}</div> : null}
 
-              <CanvasStage
-                width={canvasW}
-                height={canvasH}
-                scale={scale}
-                backgroundMode={backgroundMode}
-                backgroundColor={canvasBgColor}
-                backgroundUrl={selected.background || ''}
-                items={fields}
-                setItems={setCanvasItems}
-                selectedId={selectedFieldId}
-                setSelectedId={setSelectedFieldId}
-                grid={4}
-              />
+              {wizardStep === 'canvas' ? (
+                <CanvasStage
+                  width={canvasW}
+                  height={canvasH}
+                  scale={scale}
+                  backgroundMode={backgroundMode}
+                  backgroundColor={canvasBgColor}
+                  backgroundUrl={selected.background || ''}
+                  items={fields}
+                  setItems={setCanvasItems}
+                  selectedId={selectedFieldId}
+                  setSelectedId={setSelectedFieldId}
+                  grid={4}
+                />
+              ) : (
+                <div className="rounded-lg border border-zinc-200 bg-white p-4">
+                  <div className="text-xs font-semibold text-zinc-700">{t('step1DefineFields')}</div>
+                  <div className="mt-2 text-sm text-zinc-600">{t('wizardFieldsHint')}</div>
+                  <div className="mt-1 text-xs text-zinc-500">
+                    {t('dataFields')}: {placeholders.length}
+                  </div>
+                  <button type="button" onClick={() => setWizardStep('canvas')} className="ac-btn mt-3 rounded-lg px-3 py-2 text-xs">
+                    {t('nextStep')}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -594,138 +673,141 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                 </div>
               </div>
 
-              <div className="rounded-lg border border-zinc-200 bg-white p-3">
-                <div className="mb-2 text-xs font-semibold text-zinc-700">{t('dataFields')}</div>
-                <div className="space-y-2">
-                  {placeholders.map((p, idx) => (
-                    <div key={`${p?.key || ''}-${idx}`} className="rounded-lg border border-zinc-200 bg-white p-2">
-                      <div className="grid grid-cols-1 gap-2">
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <input
-                        value={String(p?.key || '')}
-                        onChange={(e) => {
-                          const next = placeholders.slice();
-                          next[idx] = { ...(next[idx] || {}), key: e.target.value };
-                          void updateSelected({ placeholders: next });
-                        }}
-                        placeholder={t('key')}
-                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                      />
-                      <input
-                        value={String(p?.label || '')}
-                        onChange={(e) => {
-                          const next = placeholders.slice();
-                          next[idx] = { ...(next[idx] || {}), label: e.target.value };
-                          void updateSelected({ placeholders: next });
-                        }}
-                        placeholder={t('fieldLabel')}
-                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                      />
+              {wizardStep === 'fields' ? (
+                <div className="rounded-lg border border-zinc-200 bg-white p-3">
+                  <div className="mb-2 text-xs font-semibold text-zinc-700">{t('dataFields')}</div>
+                  <div className="space-y-2">
+                    {placeholders.map((p, idx) => (
+                      <div key={`${p?.key || ''}-${idx}`} className="rounded-lg border border-zinc-200 bg-white p-2">
+                        <div className="grid grid-cols-1 gap-2">
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <input
+                              value={String(p?.key || '')}
+                              onChange={(e) => {
+                                const next = placeholders.slice();
+                                next[idx] = { ...(next[idx] || {}), key: e.target.value };
+                                void updateSelected({ placeholders: next });
+                              }}
+                              placeholder={t('key')}
+                              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                            />
+                            <input
+                              value={String(p?.label || '')}
+                              onChange={(e) => {
+                                const next = placeholders.slice();
+                                next[idx] = { ...(next[idx] || {}), label: e.target.value };
+                                void updateSelected({ placeholders: next });
+                              }}
+                              placeholder={t('fieldLabel')}
+                              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                            />
+                          </div>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                            <select
+                              value={String(p?.type || 'text')}
+                              onChange={(e) => {
+                                const next = placeholders.slice();
+                                next[idx] = { ...(next[idx] || {}), type: e.target.value };
+                                void updateSelected({ placeholders: next });
+                              }}
+                              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                            >
+                              <option value="text">{t('text')}</option>
+                              <option value="rich_text">{t('richText')}</option>
+                            </select>
+                            <select
+                              value={String(p?.source || 'manual')}
+                              onChange={(e) => {
+                                const next = placeholders.slice();
+                                next[idx] = { ...(next[idx] || {}), source: e.target.value };
+                                void updateSelected({ placeholders: next });
+                              }}
+                              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                            >
+                              <option value="manual">{t('sourceManual')}</option>
+                              <option value="product">{t('sourceProduct')}</option>
+                              <option value="static">{t('sourceStatic')}</option>
+                            </select>
+                            <select
+                              value={String(p?.bindPath || '')}
+                              onChange={(e) => {
+                                const next = placeholders.slice();
+                                next[idx] = { ...(next[idx] || {}), bindPath: e.target.value };
+                                void updateSelected({ placeholders: next });
+                              }}
+                              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                            >
+                              <option value="">{t('bindTo')}</option>
+                              <option value="product.name">product.name</option>
+                              <option value="product.sku">product.sku</option>
+                              <option value="product.code">product.code</option>
+                              <option value="product.category">product.category</option>
+                              <option value="product.origin">product.origin</option>
+                              <option value="product.description">product.description</option>
+                            </select>
+                          </div>
+                          <input
+                            value={String(p?.staticValue || '')}
+                            onChange={(e) => {
+                              const next = placeholders.slice();
+                              next[idx] = { ...(next[idx] || {}), staticValue: e.target.value };
+                              void updateSelected({ placeholders: next });
+                            }}
+                            placeholder={t('staticValue')}
+                            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                          />
+                          <input
+                            value={String(p?.help || '')}
+                            onChange={(e) => {
+                              const next = placeholders.slice();
+                              next[idx] = { ...(next[idx] || {}), help: e.target.value };
+                              void updateSelected({ placeholders: next });
+                            }}
+                            placeholder={t('helpText')}
+                            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                          />
+                          <div className="flex items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = placeholders.filter((_, i) => i !== idx);
+                                void updateSelected({ placeholders: next });
+                              }}
+                              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                            >
+                              {t('delete')}
+                            </button>
+                          </div>
                         </div>
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      <select
-                        value={String(p?.type || 'text')}
-                        onChange={(e) => {
-                          const next = placeholders.slice();
-                          next[idx] = { ...(next[idx] || {}), type: e.target.value };
-                          void updateSelected({ placeholders: next });
-                        }}
-                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                      >
-                        <option value="text">{t('text')}</option>
-                        <option value="rich_text">{t('richText')}</option>
-                      </select>
-                      <select
-                        value={String(p?.source || 'manual')}
-                        onChange={(e) => {
-                          const next = placeholders.slice();
-                          next[idx] = { ...(next[idx] || {}), source: e.target.value };
-                          void updateSelected({ placeholders: next });
-                        }}
-                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                      >
-                        <option value="manual">{t('sourceManual')}</option>
-                        <option value="product">{t('sourceProduct')}</option>
-                        <option value="static">{t('sourceStatic')}</option>
-                      </select>
-                      <select
-                        value={String(p?.bindPath || '')}
-                        onChange={(e) => {
-                          const next = placeholders.slice();
-                          next[idx] = { ...(next[idx] || {}), bindPath: e.target.value };
-                          void updateSelected({ placeholders: next });
-                        }}
-                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                      >
-                        <option value="">{t('bindTo')}</option>
-                        <option value="product.name">product.name</option>
-                        <option value="product.sku">product.sku</option>
-                        <option value="product.code">product.code</option>
-                        <option value="product.category">product.category</option>
-                        <option value="product.origin">product.origin</option>
-                        <option value="product.description">product.description</option>
-                      </select>
-                        </div>
-                      <input
-                        value={String(p?.staticValue || '')}
-                        onChange={(e) => {
-                          const next = placeholders.slice();
-                          next[idx] = { ...(next[idx] || {}), staticValue: e.target.value };
-                          void updateSelected({ placeholders: next });
-                        }}
-                        placeholder={t('staticValue')}
-                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                      />
-                      <input
-                        value={String(p?.help || '')}
-                        onChange={(e) => {
-                          const next = placeholders.slice();
-                          next[idx] = { ...(next[idx] || {}), help: e.target.value };
-                          void updateSelected({ placeholders: next });
-                        }}
-                        placeholder={t('helpText')}
-                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                      />
-                      <div className="flex items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = placeholders.filter((_, i) => i !== idx);
-                          void updateSelected({ placeholders: next });
-                        }}
-                        className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-                      >
-                        {t('delete')}
-                      </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const current = Array.isArray(selected?.layoutJson) ? selected.layoutJson : [];
-                            const key = String(p?.key || '').trim();
-                            if (!key) return;
-                            void setFields([...current, { id: makeId('field'), path: `templateData.${key}`, label: String(p?.label || key), x: 20, y: 40, w: 240, h: 56, fontSize: 14, align: 'left' }]);
-                          }}
-                          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-                        >
-                          {t('addToCanvas')}
-                        </button>
                       </div>
-                    </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void updateSelected({
+                        placeholders: [...placeholders, { key: '', label: '', type: 'text', source: 'manual', bindPath: '', staticValue: '', help: '', sample: '' }]
+                      })
+                    }
+                    className="mt-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                  >
+                    {t('addPlaceholder')}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void updateSelected({
-                      placeholders: [...placeholders, { key: '', label: '', type: 'text', source: 'manual', bindPath: '', staticValue: '', help: '', sample: '' }]
-                    })
-                  }
-                  className="mt-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-                >
-                  {t('addPlaceholder')}
-                </button>
-              </div>
+              ) : (
+                <div className="rounded-lg border border-zinc-200 bg-white p-3">
+                  <div className="text-xs font-semibold text-zinc-700">{t('dataFields')}</div>
+                  <div className="mt-1 text-xs text-zinc-600">{t('wizardCanvasHint')}</div>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <div className="text-xs text-zinc-500">
+                      {t('dataFields')}: {placeholders.length}
+                    </div>
+                    <button type="button" onClick={() => setWizardStep('fields')} className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50">
+                      {t('editFields')}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {!selectedField ? (
                 <div className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{t('selectField')}</div>

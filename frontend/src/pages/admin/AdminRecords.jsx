@@ -12,40 +12,68 @@ function formatDate(input) {
 
 export default function AdminRecords() {
   const { t } = useT();
-  const { products, loading, error, lastSyncAt, fetchProducts, createProduct, updateProduct, deactivateProduct } = useRecordsStore((s) => ({
+  const {
+    products,
+    categories,
+    loading,
+    error,
+    lastSyncAt,
+    fetchProducts,
+    fetchCategories,
+    createCategory,
+    createProduct,
+    updateProduct,
+    deactivateProduct
+  } = useRecordsStore((s) => ({
     products: s.products,
+    categories: s.categories,
     loading: s.loading,
     error: s.error,
     lastSyncAt: s.lastSyncAt,
     fetchProducts: s.fetchProducts,
+    fetchCategories: s.fetchCategories,
+    createCategory: s.createCategory,
     createProduct: s.createProduct,
     updateProduct: s.updateProduct,
     deactivateProduct: s.deactivateProduct
   }));
 
   const [query, setQuery] = useState('');
-  const [live, setLive] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [showCreateCategory, setShowCreateCategory] = useState(false);
   const [editing, setEditing] = useState(null);
   const [sku, setSku] = useState('');
   const [name, setName] = useState('');
   const [productCode, setProductCode] = useState('');
   const [category, setCategory] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState('active');
   const [remark, setRemark] = useState('');
+
+  const [categoryName, setCategoryName] = useState('');
+  const [categoryCode, setCategoryCode] = useState('');
+  const [categoryStatus, setCategoryStatus] = useState('active');
 
   useEffect(() => {
     void fetchProducts();
-  }, [fetchProducts]);
+    void fetchCategories();
+  }, [fetchProducts, fetchCategories]);
 
   useEffect(() => {
-    if (!live) return;
     const id = setInterval(() => {
       void fetchProducts();
     }, 10_000);
     return () => clearInterval(id);
-  }, [live, fetchProducts]);
+  }, [fetchProducts]);
+
+  const categoryByCode = useMemo(() => {
+    const map = new Map();
+    (Array.isArray(categories) ? categories : []).forEach((c) => {
+      if (!c?.code) return;
+      map.set(String(c.code), c);
+    });
+    return map;
+  }, [categories]);
 
   const filtered = useMemo(() => {
     const q = String(query || '').trim().toLowerCase();
@@ -54,10 +82,17 @@ export default function AdminRecords() {
       const skuStr = String(p?.sku || '').toLowerCase();
       const nameStr = String(p?.name || '').toLowerCase();
       const codeStr = String(p?.code || '').toLowerCase();
-      const categoryStr = String(p?.category || '').toLowerCase();
-      return skuStr.includes(q) || nameStr.includes(q) || codeStr.includes(q) || categoryStr.includes(q);
+      const categoryCodeStr = String(p?.category || '').toLowerCase();
+      const categoryNameStr = String(categoryByCode.get(String(p?.category || ''))?.name || '').toLowerCase();
+      return (
+        skuStr.includes(q) ||
+        nameStr.includes(q) ||
+        codeStr.includes(q) ||
+        categoryCodeStr.includes(q) ||
+        categoryNameStr.includes(q)
+      );
     });
-  }, [products, query]);
+  }, [products, query, categoryByCode]);
 
   return (
     <div className="ac-page">
@@ -66,13 +101,6 @@ export default function AdminRecords() {
           <h2 className="text-base font-semibold text-zinc-900">{t('records')}</h2>
           <p className="mt-1 text-sm text-zinc-600">{t('recordsSubtitle')}</p>
           <div className="mt-2 flex items-center gap-2 text-[11px] text-zinc-500">
-            <span
-              className={`ac-pill ${
-                live ? 'bg-emerald-50 text-emerald-700 ring-emerald-200/60' : 'bg-zinc-50 text-zinc-700 ring-zinc-200/70'
-              }`}
-            >
-              {live ? t('live') : t('paused')}
-            </span>
             <button type="button" className="underline" onClick={() => void fetchProducts()}>
               {t('refresh')}
             </button>
@@ -80,8 +108,8 @@ export default function AdminRecords() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => setLive((v) => !v)}>
-            {live ? t('pauseLive') : t('resumeLive')}
+          <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => setShowCreateCategory(true)}>
+            {t('addCategory')}
           </button>
           <button type="button" className="ac-btn px-3 py-2 text-xs" onClick={() => setShowCreate(true)}>
             {t('createProduct')}
@@ -131,8 +159,10 @@ export default function AdminRecords() {
                     <div className="mt-0.5 text-[11px] text-zinc-500">{p.remark || '-'}</div>
                   </div>
                   <div className="font-mono text-xs text-zinc-700">{p.code}</div>
-                  <div className="text-xs text-zinc-700">{p.category || '-'}</div>
-                  <div className="text-xs text-zinc-700">{p.status || '-'}</div>
+                <div className="text-xs text-zinc-700">{categoryByCode.get(String(p.category || ''))?.name || p.category || '-'}</div>
+                <div className="text-xs text-zinc-700">
+                  {String(p.status || '').toLowerCase() === 'inactive' ? t('inactive') : t('active')}
+                </div>
                   <div className="text-xs text-zinc-600">{formatDate(p.updatedAt || p.createdAt)}</div>
                   <div className="flex justify-end">
                     <div className="flex items-center gap-2">
@@ -148,7 +178,7 @@ export default function AdminRecords() {
                           setName(p.name || '');
                           setProductCode(p.code || '');
                           setCategory(p.category || '');
-                          setStatus(p.status || '');
+                          setStatus(String(p.status || '').toLowerCase() === 'inactive' ? 'inactive' : 'active');
                           setRemark(p.remark || '');
                           setShowEdit(true);
                         }}
@@ -205,19 +235,35 @@ export default function AdminRecords() {
               </div>
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('category')}</div>
-                <input
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="ac-input"
-                />
+                <select value={category} onChange={(e) => setCategory(e.target.value)} className="ac-input">
+                  <option value="">{t('selectCategory')}</option>
+                  {(Array.isArray(categories) ? categories : [])
+                    .filter((c) => Boolean(c?.code) && (c?.isActive !== false || String(c.code) === String(category)))
+                    .map((c) => (
+                      <option key={c.id} value={String(c.code)}>
+                        {c.name} ({c.code})
+                      </option>
+                    ))}
+                </select>
               </div>
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('status')}</div>
-                <input
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value)}
-                  className="ac-input"
-                />
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 text-xs text-zinc-700">
+                    <input type="radio" name="productStatusCreate" value="active" checked={status === 'active'} onChange={() => setStatus('active')} />
+                    {t('active')}
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-zinc-700">
+                    <input
+                      type="radio"
+                      name="productStatusCreate"
+                      value="inactive"
+                      checked={status === 'inactive'}
+                      onChange={() => setStatus('inactive')}
+                    />
+                    {t('inactive')}
+                  </label>
+                </div>
               </div>
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
@@ -238,7 +284,7 @@ export default function AdminRecords() {
                   setName('');
                   setProductCode('');
                   setCategory('');
-                  setStatus('');
+                  setStatus('active');
                   setRemark('');
                 }}
               >
@@ -252,8 +298,8 @@ export default function AdminRecords() {
                   const trimmedName = String(name || '').trim();
                   const trimmedProductCode = String(productCode || '').trim();
                   const trimmedCategory = String(category || '').trim();
-                  const trimmedStatus = String(status || '').trim();
-                  if (!trimmedSku || !trimmedName || !trimmedProductCode || !trimmedCategory || !trimmedStatus) return;
+                  const trimmedStatus = String(status || '').trim() || 'active';
+                  if (!trimmedSku || !trimmedName || !trimmedProductCode || !trimmedCategory) return;
                   await createProduct({
                     sku: trimmedSku,
                     name: trimmedName,
@@ -267,7 +313,7 @@ export default function AdminRecords() {
                   setName('');
                   setProductCode('');
                   setCategory('');
-                  setStatus('');
+                  setStatus('active');
                   setRemark('');
                 }}
               >
@@ -309,19 +355,35 @@ export default function AdminRecords() {
               </div>
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('category')}</div>
-                <input
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="ac-input"
-                />
+                <select value={category} onChange={(e) => setCategory(e.target.value)} className="ac-input">
+                  <option value="">{t('selectCategory')}</option>
+                  {(Array.isArray(categories) ? categories : [])
+                    .filter((c) => Boolean(c?.code) && (c?.isActive !== false || String(c.code) === String(category)))
+                    .map((c) => (
+                      <option key={c.id} value={String(c.code)}>
+                        {c.name} ({c.code})
+                      </option>
+                    ))}
+                </select>
               </div>
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('status')}</div>
-                <input
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value)}
-                  className="ac-input"
-                />
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 text-xs text-zinc-700">
+                    <input type="radio" name="productStatusEdit" value="active" checked={status === 'active'} onChange={() => setStatus('active')} />
+                    {t('active')}
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-zinc-700">
+                    <input
+                      type="radio"
+                      name="productStatusEdit"
+                      value="inactive"
+                      checked={status === 'inactive'}
+                      onChange={() => setStatus('inactive')}
+                    />
+                    {t('inactive')}
+                  </label>
+                </div>
               </div>
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
@@ -356,7 +418,7 @@ export default function AdminRecords() {
                       name: String(name || '').trim(),
                       product_code: String(productCode || '').trim(),
                       category: String(category || '').trim(),
-                      status: String(status || '').trim(),
+                      status: String(status || '').trim() || 'active',
                       remark: String(remark || '').trim() || null
                     }
                   });
@@ -365,6 +427,80 @@ export default function AdminRecords() {
                 }}
               >
                 {t('save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showCreateCategory ? (
+        <div className="ac-modal-backdrop">
+          <div className="ac-modal">
+            <div className="mb-4 text-sm font-semibold text-zinc-900">{t('createCategory')}</div>
+            <div className="space-y-3">
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('categoryName')}</div>
+                <input value={categoryName} onChange={(e) => setCategoryName(e.target.value)} className="ac-input" />
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('categoryCode')}</div>
+                <input value={categoryCode} onChange={(e) => setCategoryCode(e.target.value)} className="ac-input font-mono" />
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('status')}</div>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 text-xs text-zinc-700">
+                    <input
+                      type="radio"
+                      name="categoryStatusCreate"
+                      value="active"
+                      checked={categoryStatus === 'active'}
+                      onChange={() => setCategoryStatus('active')}
+                    />
+                    {t('active')}
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-zinc-700">
+                    <input
+                      type="radio"
+                      name="categoryStatusCreate"
+                      value="inactive"
+                      checked={categoryStatus === 'inactive'}
+                      onChange={() => setCategoryStatus('inactive')}
+                    />
+                    {t('inactive')}
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                onClick={() => {
+                  setShowCreateCategory(false);
+                  setCategoryName('');
+                  setCategoryCode('');
+                  setCategoryStatus('active');
+                }}
+              >
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                className="ac-btn px-3 py-2 text-xs"
+                onClick={async () => {
+                  const trimmedName = String(categoryName || '').trim();
+                  const trimmedCode = String(categoryCode || '').trim();
+                  if (!trimmedName || !trimmedCode) return;
+                  await createCategory({ name: trimmedName, code: trimmedCode, status: categoryStatus });
+                  void fetchCategories();
+                  setShowCreateCategory(false);
+                  setCategoryName('');
+                  setCategoryCode('');
+                  setCategoryStatus('active');
+                }}
+              >
+                {t('create')}
               </button>
             </div>
           </div>

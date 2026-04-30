@@ -9,6 +9,7 @@ function getApi() {
 
 const useRecordsStore = create((set, get) => ({
   products: [],
+  categories: [],
   batchesByProductId: {},
   loading: false,
   error: null,
@@ -26,6 +27,37 @@ const useRecordsStore = create((set, get) => ({
       const msg = e?.response?.data?.message || e?.message || 'Failed to load products';
       set({ loading: false, error: msg });
       return [];
+    }
+  },
+
+  fetchCategories: async () => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.get('/categories/');
+      const categories = Array.isArray(res?.data?.data) ? res.data.data : [];
+      set({ categories, loading: false, lastSyncAt: Date.now() });
+      return categories;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Failed to load categories';
+      set({ loading: false, error: msg });
+      return [];
+    }
+  },
+
+  createCategory: async ({ name, code, status }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.post('/categories/', { name, code, status });
+      const created = res?.data?.data;
+      const categories = [created, ...get().categories].filter(Boolean);
+      set({ categories, loading: false, lastSyncAt: Date.now() });
+      return created;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Failed to create category';
+      set({ loading: false, error: msg });
+      throw e;
     }
   },
 

@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const path = require('path');
 const authRoutes = require('./modules/auth/auth.routes');
 const productRoutes = require('./modules/product/product.routes');
+const categoriesRoutes = require('./modules/categories/categories.routes');
 const epcRoutes = require('./modules/epc/epc.routes');
 const certificateRoutes = require('./modules/certificate/certificate.routes');
 const publicRoutes = require('./modules/public/public.routes');
@@ -75,10 +76,12 @@ app.use((req, res, next) => {
 // Routes
 app.use('/auth', authRoutes);
 app.use('/products', productRoutes);
+app.use('/categories', categoriesRoutes);
 app.use('/epc', epcRoutes);
 app.use('/certificates', certificateRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/categories', categoriesRoutes);
 app.use('/api/epc', epcRoutes);
 app.use('/api/certificates', certificateRoutes);
 app.use(

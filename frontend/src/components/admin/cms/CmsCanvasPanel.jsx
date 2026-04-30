@@ -3,6 +3,7 @@ import CanvasStage from '../CanvasStage';
 import PublicRenderer from '../../PublicRenderer';
 import { useT } from '../../../i18n/useT';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
+import useCertTemplatesStore from '../../../store/useCertTemplatesStore';
 import { createAdminApi } from '../../../utils/adminApi';
 
 function makeId(prefix) {
@@ -30,12 +31,16 @@ const DEVICE_PRESETS = [
 export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayout, selectedBlockId, setSelectedBlockId }) {
   const { t } = useT();
   const token = useAdminAuthStore((s) => s.token);
+  const templates = useCertTemplatesStore((s) => s.templates);
+  const templatesLoading = useCertTemplatesStore((s) => s.loading);
+  const fetchTemplates = useCertTemplatesStore((s) => s.fetchTemplates);
   const layoutRef = useRef(layout);
 
   const [previewCertId, setPreviewCertId] = useState('');
   const [previewData, setPreviewData] = useState(null);
   const [previewError, setPreviewError] = useState(null);
   const [devicePresetId, setDevicePresetId] = useState('fit');
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
 
   const baseW = 390;
   const baseH = 844;
@@ -47,7 +52,26 @@ export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayo
 
   useEffect(() => {
     layoutRef.current = layout;
-  }, [layout, t]);
+  }, [layout, t, templatesById]);
+
+  useEffect(() => {
+    if (!token) return;
+    fetchTemplates();
+  }, [token, fetchTemplates]);
+
+  useEffect(() => {
+    if (selectedTemplateId) return;
+    if (!Array.isArray(templates) || templates.length === 0) return;
+    setSelectedTemplateId(String(templates[0]?.id || ''));
+  }, [selectedTemplateId, templates]);
+
+  const templatesById = useMemo(() => {
+    const map = new Map();
+    (templates || []).forEach((tpl) => {
+      map.set(String(tpl.id), tpl);
+    });
+    return map;
+  }, [templates]);
 
   const setCanvasItems = (updaterOrNext) => {
     const current = layoutRef.current || [];
@@ -83,10 +107,17 @@ export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayo
           );
         }
         if (it.type === 'certificate') {
+          const tplId = it.content?.templateId != null ? String(it.content.templateId) : '';
+          const tpl = tplId ? templatesById.get(tplId) : null;
+          const name = tpl?.name || it.content?.templateName || '';
+          const w = Number(tpl?.canvasWidth || it.content?.canvasWidth || 0) || 0;
+          const h = Number(tpl?.canvasHeight || it.content?.canvasHeight || 0) || 0;
           return (
             <div className="flex h-full w-full items-center justify-center p-2">
-              <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800">
-                {t('certificateTitle')}
+              <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-center">
+                <div className="text-xs font-semibold text-zinc-800">{t('certificateTitle')}</div>
+                {name ? <div className="mt-0.5 text-[11px] font-semibold text-zinc-600">{name}</div> : null}
+                {w > 0 && h > 0 ? <div className="mt-0.5 text-[11px] text-zinc-500">{w}×{h}</div> : null}
               </div>
             </div>
           );
@@ -164,16 +195,67 @@ export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayo
           >
             {t('addVideo')}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              const next = [...layout, { id: makeId('cert'), type: 'certificate', x: 20, y: 400, w: 320, h: 220 }];
-              setLayout(next);
-            }}
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-          >
-            {t('addCertificate')}
-          </button>
+          {Array.isArray(templates) && templates.length > 0 ? (
+            <>
+              <select
+                value={selectedTemplateId}
+                onChange={(e) => setSelectedTemplateId(e.target.value)}
+                className="ac-input w-44 rounded-lg px-3 py-2 text-xs font-semibold"
+                disabled={templatesLoading}
+              >
+                {templates.map((tpl) => (
+                  <option key={tpl.id} value={String(tpl.id)}>
+                    {tpl.name} ({Number(tpl.canvasWidth || 390)}×{Number(tpl.canvasHeight || 844)})
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  const tpl = templatesById.get(String(selectedTemplateId || '')) || null;
+                  const tplW = Number(tpl?.canvasWidth || 390);
+                  const tplH = Number(tpl?.canvasHeight || 844);
+                  const maxW = baseW - 40;
+                  const maxH = baseH - 40;
+                  const fit = Math.max(0.1, Math.min(1, Math.min(maxW / tplW, maxH / tplH)));
+                  const w = Math.max(40, Math.round(tplW * fit));
+                  const h = Math.max(30, Math.round(tplH * fit));
+                  const next = [
+                    ...layout,
+                    {
+                      id: makeId('cert'),
+                      type: 'certificate',
+                      x: 20,
+                      y: 400,
+                      w,
+                      h,
+                      content: {
+                        templateId: tpl?.id != null ? String(tpl.id) : null,
+                        templateName: tpl?.name || null,
+                        canvasWidth: tplW,
+                        canvasHeight: tplH
+                      }
+                    }
+                  ];
+                  setLayout(next);
+                }}
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+              >
+                {t('addCertificate')}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                const next = [...layout, { id: makeId('cert'), type: 'certificate', x: 20, y: 400, w: 320, h: 220 }];
+                setLayout(next);
+              }}
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+            >
+              {t('addCertificate')}
+            </button>
+          )}
         </div>
       </div>
 

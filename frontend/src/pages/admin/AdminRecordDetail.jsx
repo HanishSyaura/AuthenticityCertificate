@@ -18,12 +18,14 @@ export default function AdminRecordDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
 
-  const { products, loading, error, lastSyncAt, fetchProducts, updateProduct } = useRecordsStore((s) => ({
+  const { products, categories, loading, error, lastSyncAt, fetchProducts, fetchCategories, updateProduct } = useRecordsStore((s) => ({
     products: s.products,
+    categories: s.categories,
     loading: s.loading,
     error: s.error,
     lastSyncAt: s.lastSyncAt,
     fetchProducts: s.fetchProducts,
+    fetchCategories: s.fetchCategories,
     updateProduct: s.updateProduct
   }));
 
@@ -40,7 +42,7 @@ export default function AdminRecordDetail() {
   const [name, setName] = useState('');
   const [productCode, setProductCode] = useState('');
   const [category, setCategory] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState('active');
   const [remark, setRemark] = useState('');
 
   const [cmsPageId, setCmsPageId] = useState('');
@@ -48,10 +50,20 @@ export default function AdminRecordDetail() {
 
   const [landingPages, setLandingPages] = useState([]);
 
+  const categoryByCode = useMemo(() => {
+    const map = new Map();
+    (Array.isArray(categories) ? categories : []).forEach((c) => {
+      if (!c?.code) return;
+      map.set(String(c.code), c);
+    });
+    return map;
+  }, [categories]);
+
   useEffect(() => {
     void fetchProducts();
+    void fetchCategories();
     void fetchTemplates();
-  }, [fetchProducts, fetchTemplates]);
+  }, [fetchProducts, fetchCategories, fetchTemplates]);
 
   useEffect(() => {
     if (!token) return;
@@ -67,7 +79,7 @@ export default function AdminRecordDetail() {
     setName(product.name || '');
     setProductCode(product.code || '');
     setCategory(product.category || '');
-    setStatus(product.status || '');
+    setStatus(String(product.status || '').toLowerCase() === 'inactive' ? 'inactive' : 'active');
     setRemark(product.remark || '');
     setCmsPageId(product.cmsPageId != null ? String(product.cmsPageId) : '');
     setCertificateTemplateId(product.certificateTemplateId != null ? String(product.certificateTemplateId) : '');
@@ -122,11 +134,40 @@ export default function AdminRecordDetail() {
             </div>
             <div>
               <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('category')}</div>
-              <input value={category} onChange={(e) => setCategory(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400" />
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className="ac-input">
+                <option value="">{t('selectCategory')}</option>
+                {(Array.isArray(categories) ? categories : [])
+                  .filter((c) => Boolean(c?.code) && (c?.isActive !== false || String(c.code) === String(category)))
+                  .map((c) => (
+                    <option key={c.id} value={String(c.code)}>
+                      {c.name} ({c.code})
+                    </option>
+                  ))}
+              </select>
+              {category ? (
+                <div className="mt-1 text-[11px] text-zinc-500">
+                  {categoryByCode.get(String(category))?.name ? categoryByCode.get(String(category))?.name : null}
+                </div>
+              ) : null}
             </div>
             <div>
               <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('status')}</div>
-              <input value={status} onChange={(e) => setStatus(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400" />
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-xs text-zinc-700">
+                  <input type="radio" name="productStatusDetail" value="active" checked={status === 'active'} onChange={() => setStatus('active')} />
+                  {t('active')}
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-700">
+                  <input
+                    type="radio"
+                    name="productStatusDetail"
+                    value="inactive"
+                    checked={status === 'inactive'}
+                    onChange={() => setStatus('inactive')}
+                  />
+                  {t('inactive')}
+                </label>
+              </div>
             </div>
             <div>
               <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('remark')}</div>
@@ -182,7 +223,7 @@ export default function AdminRecordDetail() {
                       name: String(name || '').trim(),
                       product_code: String(productCode || '').trim(),
                       category: String(category || '').trim(),
-                      status: String(status || '').trim(),
+                      status: String(status || '').trim() || 'active',
                       remark: String(remark || '').trim() || null,
                       cmsPageId: cmsPageId ? Number(cmsPageId) : null,
                       certificateTemplateId: certificateTemplateId ? Number(certificateTemplateId) : null
