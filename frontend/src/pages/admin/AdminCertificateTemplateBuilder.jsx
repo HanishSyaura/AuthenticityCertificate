@@ -32,6 +32,26 @@ function escapeTextToHtml(input) {
   return escapeHtml(input).replaceAll('\n', '<br/>');
 }
 
+function normalizeKeyCandidate(input) {
+  return String(input || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+/, '')
+    .replace(/_+$/, '');
+}
+
+function makeUniqueKey(input, usedLower) {
+  const base = normalizeKeyCandidate(input) || 'field';
+  let candidate = base;
+  let i = 1;
+  while (usedLower.has(candidate.toLowerCase())) {
+    i += 1;
+    candidate = `${base}_${i}`;
+  }
+  return candidate;
+}
+
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
@@ -137,7 +157,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const safePreview = useMemo(() => {
     const list = Array.isArray(placeholders) ? placeholders : [];
     const fallback = {
-      certificateId: selected?.id != null ? `CERT-${selected.id}` : 'CERT-0001',
+      certificateId: String(selected?.certificateId || '').trim() || (selected?.id != null ? `CERT-${selected.id}` : 'CERT-0001'),
       status: 'valid',
       issuedAt: previewNowRef.current,
       product: {
@@ -182,7 +202,6 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       ...(f || {}),
       render: (it) => (
         <div className="h-full w-full p-2">
-          <div className="text-[11px] font-semibold text-zinc-600">{it.label || it.path}</div>
           {(() => {
             const raw = safePreview ? getValue(it.path, safePreview) : '';
             const path = String(it.path || '');
@@ -198,7 +217,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
             const align = textAlignClass(it.align);
             return (
-              <div className={`mt-1 font-semibold text-zinc-900 ${align}`} style={{ fontSize: fs }} dangerouslySetInnerHTML={{ __html: html }} />
+              <div className={`font-semibold text-zinc-900 ${align}`} style={{ fontSize: fs }} dangerouslySetInnerHTML={{ __html: html }} />
             );
           })()}
         </div>
@@ -334,6 +353,26 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     queueTemplatePatch({ placeholders: arr });
   };
 
+  useEffect(() => {
+    const list = Array.isArray(placeholders) ? placeholders : [];
+    if (list.length === 0) return;
+    if (!list.some((p) => !String(p?.key || '').trim())) return;
+    const used = new Set();
+    const next = list.map((p, i) => {
+      const curKey = String(p?.key || '').trim();
+      if (curKey) {
+        used.add(curKey.toLowerCase());
+        return p;
+      }
+      const label = String(p?.label || '').trim();
+      const base = label || `field_${i + 1}`;
+      const key = makeUniqueKey(base, used);
+      used.add(key.toLowerCase());
+      return { ...(p || {}), key };
+    });
+    replacePlaceholders(next);
+  }, [placeholders, replacePlaceholders]);
+
   const replacePlaceholdersAndLayout = ({ nextPlaceholders, nextLayout }) => {
     const ph = Array.isArray(nextPlaceholders) ? nextPlaceholders : [];
     const ly = Array.isArray(nextLayout) ? nextLayout : [];
@@ -431,8 +470,9 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             <>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <div className="text-xs font-semibold text-zinc-500">{t('canvas')}</div>
-                  <div className="text-sm font-semibold text-zinc-900">#{selected.id}</div>
+                  <div className="text-xs font-semibold text-zinc-500">{t('certificateId')}</div>
+                  <div className="text-sm font-semibold text-zinc-900">{String(selected?.certificateId || '').trim() || `#${selected.id}`}</div>
+                  {String(selected?.name || '').trim() ? <div className="mt-0.5 text-[11px] text-zinc-500">{selected.name}</div> : null}
                   {saveStatus === 'saving' ? <div className="mt-0.5 text-[11px] font-semibold text-zinc-500">Saving…</div> : null}
                   {saveStatus === 'saved' ? <div className="mt-0.5 text-[11px] font-semibold text-emerald-700">Saved</div> : null}
                   {saveStatus === 'error' ? <div className="mt-0.5 text-[11px] font-semibold text-rose-700">Save failed</div> : null}
@@ -557,41 +597,30 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   </div>
                   <div className="mt-3 space-y-2">
                     {placeholders.map((p, idx) => {
-                      const key = String(p?.key || '');
                       const source = String(p?.source || 'static');
                       const uiSource = source === 'manual' ? 'static' : source;
                       return (
                         <div key={`${p?.key || ''}-${idx}`} className="rounded-lg border border-zinc-200 bg-white p-2">
                           <div className="grid grid-cols-1 gap-2">
-                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                              <input
-                                value={key}
-                                onChange={(e) => {
-                                  const nextKey = e.target.value;
-                                  const oldKey = String(placeholders[idx]?.key || '');
-                                  const nextPlaceholders = placeholders.slice();
-                                  nextPlaceholders[idx] = { ...(nextPlaceholders[idx] || {}), key: nextKey };
-                                  const oldTrim = String(oldKey || '').trim();
-                                  const newTrim = String(nextKey || '').trim();
-                                  if (oldTrim && newTrim && oldTrim !== newTrim) {
-                                    const nextLayout = (Array.isArray(draftLayout) ? draftLayout : []).map((it) => {
-                                      const path = String(it?.path || '');
-                                      return path === `templateData.${oldTrim}` ? { ...it, path: `templateData.${newTrim}` } : it;
-                                    });
-                                    if (String(addOverlayKey || '').trim() === oldTrim) setAddOverlayKey(newTrim);
-                                    replacePlaceholdersAndLayout({ nextPlaceholders, nextLayout });
-                                    return;
-                                  }
-                                  replacePlaceholders(nextPlaceholders);
-                                }}
-                                placeholder={t('key')}
-                                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                              />
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                               <input
                                 value={String(p?.label || '')}
                                 onChange={(e) => {
+                                  const nextLabel = e.target.value;
                                   const next = placeholders.slice();
-                                  next[idx] = { ...(next[idx] || {}), label: e.target.value };
+                                  const cur = next[idx] || {};
+                                  const curKey = String(cur.key || '').trim();
+                                  if (!curKey) {
+                                    const used = new Set(
+                                      next
+                                        .map((it, i) => (i === idx ? '' : String(it?.key || '').trim().toLowerCase()))
+                                        .filter(Boolean)
+                                    );
+                                    const gen = makeUniqueKey(nextLabel, used);
+                                    next[idx] = { ...cur, label: nextLabel, key: gen };
+                                  } else {
+                                    next[idx] = { ...cur, label: nextLabel };
+                                  }
                                   replacePlaceholders(next);
                                 }}
                                 placeholder={t('fieldLabel')}
@@ -699,10 +728,16 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                     <button
                       type="button"
                       onClick={() =>
-                        replacePlaceholders([
-                          ...placeholders,
-                          { key: '', label: '', separator: ': ', source: 'static', bindPath: '', staticValue: '', sample: '' }
-                        ])
+                        (() => {
+                          const used = new Set(
+                            placeholders.map((it) => String(it?.key || '').trim().toLowerCase()).filter(Boolean)
+                          );
+                          const key = makeUniqueKey(`field_${placeholders.length + 1}`, used);
+                          replacePlaceholders([
+                            ...placeholders,
+                            { key, label: '', separator: ': ', source: 'static', bindPath: '', staticValue: '', sample: '' }
+                          ]);
+                        })()
                       }
                       className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
                     >
@@ -725,10 +760,24 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
               <div>
                 <label className="block text-xs font-medium text-zinc-700">{t('certificateId')}</label>
                 <input
-                  value={selected.id != null ? `#${selected.id}` : ''}
-                  disabled
+                  value={selected.certificateId || ''}
+                  onChange={(e) => queueTemplatePatch({ certificateId: e.target.value })}
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-700">{t('certificateName')}</label>
+                <input
+                  value={selected.name || ''}
+                  onChange={(e) => queueTemplatePatch({ name: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-700">{t('templateRecordId')}</label>
+                <input value={selected.id != null ? `#${selected.id}` : ''} disabled className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm" />
               </div>
 
               <div>

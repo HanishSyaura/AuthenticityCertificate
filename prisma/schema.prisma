@@ -419,6 +419,7 @@ model CertificateTemplate {
   id              Int          @id @default(autoincrement())
   organizationId  Int
   organization    Organization @relation(fields: [organizationId], references: [id])
+  certificateId   String
   name            String
   background      String // URL to background image
   backgroundColor String       @default("#ffffff")
@@ -434,6 +435,8 @@ model CertificateTemplate {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
+
+  @@unique([organizationId, certificateId])
 }
 
 model MediaAsset {

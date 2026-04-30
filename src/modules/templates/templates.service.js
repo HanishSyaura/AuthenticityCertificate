@@ -14,26 +14,33 @@ async function listTemplates({ organizationId }) {
   );
 }
 
-async function createTemplate({ organizationId, name, background, backgroundColor, layoutJson, placeholders, canvasWidth, canvasHeight }) {
-  return await withTimeout(
-    prisma.certificateTemplate.create({
-      data: {
-        organizationId: Number(organizationId),
-        name,
-        background: background || '',
-        backgroundColor: String(backgroundColor || '').trim() || '#ffffff',
-        layoutJson: layoutJson || [],
-        placeholders: placeholders || null,
-        canvasWidth: Number.isFinite(Number(canvasWidth)) && Number(canvasWidth) > 0 ? Number(canvasWidth) : 390,
-        canvasHeight: Number.isFinite(Number(canvasHeight)) && Number(canvasHeight) > 0 ? Number(canvasHeight) : 844
-      }
-    }),
-    1500
-  );
+async function createTemplate({ organizationId, certificateId, name, background, backgroundColor, layoutJson, placeholders, canvasWidth, canvasHeight }) {
+  try {
+    return await withTimeout(
+      prisma.certificateTemplate.create({
+        data: {
+          organizationId: Number(organizationId),
+          certificateId: String(certificateId || '').trim(),
+          name,
+          background: background || '',
+          backgroundColor: String(backgroundColor || '').trim() || '#ffffff',
+          layoutJson: layoutJson || [],
+          placeholders: placeholders || null,
+          canvasWidth: Number.isFinite(Number(canvasWidth)) && Number(canvasWidth) > 0 ? Number(canvasWidth) : 390,
+          canvasHeight: Number.isFinite(Number(canvasHeight)) && Number(canvasHeight) > 0 ? Number(canvasHeight) : 844
+        }
+      }),
+      1500
+    );
+  } catch (e) {
+    if (e?.code === 'P2002') throw new Error('Certificate ID already exists');
+    throw e;
+  }
 }
 
 async function updateTemplate({ organizationId, id, patch }) {
   const data = {};
+  if (patch.certificateId !== undefined) data.certificateId = String(patch.certificateId || '').trim();
   if (patch.name !== undefined) data.name = patch.name;
   if (patch.background !== undefined) data.background = patch.background || '';
   if (patch.backgroundColor !== undefined) data.backgroundColor = String(patch.backgroundColor || '').trim() || '#ffffff';
@@ -42,13 +49,19 @@ async function updateTemplate({ organizationId, id, patch }) {
   if (patch.canvasWidth !== undefined) data.canvasWidth = patch.canvasWidth;
   if (patch.canvasHeight !== undefined) data.canvasHeight = patch.canvasHeight;
 
-  const res = await withTimeout(
-    prisma.certificateTemplate.updateMany({
-      where: { id: Number(id), organizationId: Number(organizationId) },
-      data
-    }),
-    1500
-  );
+  let res;
+  try {
+    res = await withTimeout(
+      prisma.certificateTemplate.updateMany({
+        where: { id: Number(id), organizationId: Number(organizationId) },
+        data
+      }),
+      1500
+    );
+  } catch (e) {
+    if (e?.code === 'P2002') throw new Error('Certificate ID already exists');
+    throw e;
+  }
   if (!res.count) throw new Error('Template not found');
   return await withTimeout(prisma.certificateTemplate.findUnique({ where: { id: Number(id) } }), 1200);
 }

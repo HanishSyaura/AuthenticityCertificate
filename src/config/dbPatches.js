@@ -275,7 +275,15 @@ async function ensureCmsPageSchemaCompat() {
 async function ensureCertificateTemplateSchemaCompat() {
   const tableName = await resolveTableName(['CertificateTemplate', 'certificateTemplate', 'certificate_templates']);
   if (!tableName) return;
+  const hasOrg = await columnExists(tableName, 'organizationId');
   await ensureColumn(tableName, 'placeholders', `ALTER TABLE \`${tableName}\` ADD COLUMN \`placeholders\` JSON NULL`, null, null);
+  await ensureColumn(
+    tableName,
+    'certificateId',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`certificateId\` VARCHAR(191) NULL`,
+    `UPDATE \`${tableName}\` SET \`certificateId\` = CONCAT('TPL-', \`id\`) WHERE \`certificateId\` IS NULL OR \`certificateId\` = ''`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`certificateId\` VARCHAR(191) NOT NULL`
+  );
   await ensureColumn(
     tableName,
     'backgroundColor',
@@ -297,6 +305,13 @@ async function ensureCertificateTemplateSchemaCompat() {
     `UPDATE \`${tableName}\` SET \`canvasHeight\` = 844 WHERE \`canvasHeight\` IS NULL`,
     `ALTER TABLE \`${tableName}\` MODIFY \`canvasHeight\` INT NOT NULL DEFAULT 844`
   );
+
+  if (hasOrg) {
+    const idxCertId = `${tableName}_organizationId_certificateId_key`;
+    const hasIdxCertId = await indexExists(tableName, idxCertId);
+    if (!hasIdxCertId)
+      await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX \`${idxCertId}\` ON \`${tableName}\` (\`organizationId\`, \`certificateId\`)`);
+  }
 }
 
 async function ensureEpcSchemaCompat() {

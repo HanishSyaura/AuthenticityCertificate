@@ -1,5 +1,6 @@
 const prisma = require('../../config/prisma');
 const XLSX = require('xlsx');
+const { generateCertificateId } = require('../../utils/id-generator');
 
 async function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), ms))]);
@@ -168,10 +169,11 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, product
 
   const result = await prisma.$transaction(
     async (tx) => {
-      await tx.batch.upsert({
+      const appBatch = await tx.batch.upsert({
         where: { organizationId_batchNo: { organizationId: orgId, batchNo: batchName } },
         update: { productId: prodId },
-        create: { organizationId: orgId, batchNo: batchName, productId: prodId }
+        create: { organizationId: orgId, batchNo: batchName, productId: prodId },
+        select: { id: true }
       });
 
       await tx.corpSequence.upsert({
@@ -179,6 +181,27 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, product
         update: {},
         create: { organizationId: orgId, corpPrefix, lastNo: 0n }
       });
+
+      let batchCertId = null;
+      const existingBatchCert = await tx.certificate.findFirst({
+        where: { organizationId: orgId, batchId: appBatch.id, type: 'batch', deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        select: { certificateId: true }
+      });
+      if (existingBatchCert?.certificateId) {
+        batchCertId = String(existingBatchCert.certificateId);
+      } else {
+        batchCertId = generateCertificateId();
+        await tx.certificate.create({
+          data: {
+            certificateId: batchCertId,
+            organizationId: orgId,
+            type: 'batch',
+            batchId: appBatch.id,
+            status: 'PENDING'
+          }
+        });
+      }
 
       const rows = await tx.$queryRaw`
         SELECT lastNo FROM \`CorpSequence\`
@@ -211,6 +234,7 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, product
           batchName,
           batchQty,
           remark: remark || null,
+          certificateId: batchCertId,
           certificateTemplateId: typeof certificateTemplateId === 'number' ? certificateTemplateId : null,
           templateData: templateData || null,
           productionUploadedAt: null,
@@ -288,6 +312,34 @@ async function importExistingEpc({ organizationId, productId, batchName, base64 
       create: { organizationId: orgId, corpPrefix, lastNo: 0n }
     });
 
+    const appBatch = await tx.batch.upsert({
+      where: { organizationId_batchNo: { organizationId: orgId, batchNo: name } },
+      update: { productId: prodId },
+      create: { organizationId: orgId, batchNo: name, productId: prodId },
+      select: { id: true }
+    });
+
+    let batchCertId = null;
+    const existingBatchCert = await tx.certificate.findFirst({
+      where: { organizationId: orgId, batchId: appBatch.id, type: 'batch', deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      select: { certificateId: true }
+    });
+    if (existingBatchCert?.certificateId) {
+      batchCertId = String(existingBatchCert.certificateId);
+    } else {
+      batchCertId = generateCertificateId();
+      await tx.certificate.create({
+        data: {
+          certificateId: batchCertId,
+          organizationId: orgId,
+          type: 'batch',
+          batchId: appBatch.id,
+          status: 'PENDING'
+        }
+      });
+    }
+
     const batch = await tx.epcBatch.create({
       data: {
         organizationId: orgId,
@@ -297,6 +349,7 @@ async function importExistingEpc({ organizationId, productId, batchName, base64 
         batchName: name,
         batchQty: items.length,
         remark: 'import_existing',
+        certificateId: batchCertId,
         certificateTemplateId: null,
         templateData: null,
         productionUploadedAt: null,

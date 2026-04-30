@@ -103,16 +103,26 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     }
 
     let epcItem = null;
+    let epcBatchTemplate = null;
+    let templateData = null;
     if (resolvedOrgId && resolvedEpc) {
       try {
         if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
-        epcItem = await Promise.race([
+        const row = await Promise.race([
           prisma.epcItem.findUnique({
             where: { organizationId_epcCode: { organizationId: resolvedOrgId, epcCode: String(resolvedEpc) } },
-            select: { netWeight: true, productionDate: true, caiqNumber: true }
+            select: {
+              netWeight: true,
+              productionDate: true,
+              caiqNumber: true,
+              batch: { select: { templateData: true, certificateTemplate: true } }
+            }
           }),
           new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
         ]);
+        epcItem = row ? { netWeight: row.netWeight, productionDate: row.productionDate, caiqNumber: row.caiqNumber } : null;
+        epcBatchTemplate = row?.batch?.certificateTemplate || null;
+        templateData = row?.batch?.templateData || null;
       } catch {
         dbGate.markDbFailure({ cooldownMs: 10_000 });
       }
@@ -189,9 +199,10 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
               caiqNumber: epcItem.caiqNumber || null
             }
           : null,
+        templateData: templateData || null,
         layout,
         certificateLayout,
-        certificateTemplate: cert.batch?.product?.certificateTemplate || null,
+        certificateTemplate: epcBatchTemplate || cert.batch?.product?.certificateTemplate || null,
         risk: {
           score: scanEntry.riskScore,
           flags: scanEntry.riskFlags

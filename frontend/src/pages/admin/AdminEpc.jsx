@@ -279,7 +279,7 @@ export default function AdminEpc() {
                   <option value="">{t('none')}</option>
                   {(Array.isArray(templates) ? templates : []).map((tpl) => (
                     <option key={tpl.id} value={String(tpl.id)}>
-                      {tpl.name}
+                      {String(tpl?.certificateId || '').trim() ? `${tpl.certificateId} — ${tpl.name}` : tpl.name}
                     </option>
                   ))}
                 </select>

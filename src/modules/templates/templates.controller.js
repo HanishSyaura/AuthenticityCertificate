@@ -2,7 +2,8 @@ const { z } = require('zod');
 const templatesService = require('./templates.service');
 
 const createSchema = z.object({
-  name: z.string().min(1),
+  certificateId: z.string().trim().min(1),
+  name: z.string().trim().min(1),
   background: z.string().optional(),
   backgroundColor: z.string().optional(),
   layoutJson: z.any().optional(),
@@ -12,7 +13,8 @@ const createSchema = z.object({
 });
 
 const updateSchema = z.object({
-  name: z.string().min(1).optional(),
+  certificateId: z.string().trim().min(1).optional(),
+  name: z.string().trim().min(1).optional(),
   background: z.string().optional(),
   backgroundColor: z.string().optional(),
   layoutJson: z.any().optional(),
@@ -35,6 +37,7 @@ async function create(req, res) {
     const data = createSchema.parse(req.body);
     const created = await templatesService.createTemplate({
       organizationId: req.organization.id,
+      certificateId: data.certificateId,
       name: data.name,
       background: data.background,
       backgroundColor: data.backgroundColor,

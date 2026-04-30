@@ -46,7 +46,43 @@ async function resolveCertificateId({ organizationId, nfcUid, epc }) {
       }),
       80
     );
-    return found?.certificateId || null;
+    if (found?.certificateId) return found.certificateId;
+
+    if (e) {
+      const epcItem = await withTimeout(
+        prisma.epcItem.findUnique({
+          where: { organizationId_epcCode: { organizationId: orgId, epcCode: e } },
+          select: { batch: { select: { certificateId: true, batchName: true, productId: true } } }
+        }),
+        80
+      );
+      if (epcItem?.batch?.certificateId) return epcItem.batch.certificateId;
+
+      const batchName = epcItem?.batch?.batchName ? String(epcItem.batch.batchName) : null;
+      const productId = epcItem?.batch?.productId != null ? Number(epcItem.batch.productId) : null;
+      if (batchName && Number.isFinite(productId)) {
+        const appBatch = await withTimeout(
+          prisma.batch.findFirst({
+            where: { organizationId: orgId, batchNo: batchName, productId: productId },
+            select: { id: true }
+          }),
+          80
+        );
+        if (appBatch?.id) {
+          const cert = await withTimeout(
+            prisma.certificate.findFirst({
+              where: { organizationId: orgId, batchId: appBatch.id, type: 'batch', deletedAt: null },
+              orderBy: { createdAt: 'desc' },
+              select: { certificateId: true }
+            }),
+            80
+          );
+          if (cert?.certificateId) return cert.certificateId;
+        }
+      }
+    }
+
+    return null;
   } catch {
     const mem = findActiveIdentityMem({ organizationId: orgId, nfcUid: uid, epc: e });
     return mem?.certificateId || null;

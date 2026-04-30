@@ -18,7 +18,8 @@ export default function AdminCertificateList() {
   const location = useLocation();
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [newName, setNewName] = useState('');
+  const [newCertificateId, setNewCertificateId] = useState('');
+  const [newCertificateName, setNewCertificateName] = useState('');
   const [newBackground, setNewBackground] = useState('');
   const [newBgUploading, setNewBgUploading] = useState(false);
   const [newBgError, setNewBgError] = useState(null);
@@ -86,7 +87,7 @@ export default function AdminCertificateList() {
 
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
         <div className="grid grid-cols-[1fr_120px_140px_110px] gap-3 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-600">
-          <div>{t('name')}</div>
+          <div>{t('certificateName')}</div>
           <div>{t('fields')}</div>
           <div>{t('epcBatches')}</div>
           <div>{t('created')}</div>
@@ -108,7 +109,9 @@ export default function AdminCertificateList() {
             >
               <div className="min-w-0">
                 <div className="truncate font-semibold text-zinc-900">{tpl.name}</div>
-                <div className="mt-0.5 truncate text-[11px] text-zinc-500">#{tpl.id}</div>
+                <div className="mt-0.5 truncate text-[11px] text-zinc-500">
+                  {String(tpl.certificateId || '').trim() || `#${tpl.id}`}
+                </div>
               </div>
               <div className="text-[11px] text-zinc-700">{Array.isArray(tpl.layoutJson) ? tpl.layoutJson.length : 0}</div>
               <div className="text-[11px] text-zinc-700">{assignedCountByTemplateId.get(String(tpl.id)) || 0}</div>
@@ -134,8 +137,20 @@ export default function AdminCertificateList() {
             <div className="space-y-3 px-4 py-4">
               {newError ? <div className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">{newError}</div> : null}
               <div>
-                <label className="block text-xs font-medium text-zinc-700">{t('templateName')}</label>
-                <input value={newName} onChange={(e) => setNewName(e.target.value)} className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
+                <label className="block text-xs font-medium text-zinc-700">{t('certificateId')}</label>
+                <input
+                  value={newCertificateId}
+                  onChange={(e) => setNewCertificateId(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-700">{t('certificateName')}</label>
+                <input
+                  value={newCertificateName}
+                  onChange={(e) => setNewCertificateName(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-700">{t('backgroundUrl')}</label>
@@ -182,11 +197,13 @@ export default function AdminCertificateList() {
                 type="button"
                 className="ac-btn rounded-lg px-3 py-2 text-xs"
                 onClick={async () => {
-                  const nm = String(newName || '').trim();
-                  if (!nm) return;
+                  const cid = String(newCertificateId || '').trim();
+                  const nm = String(newCertificateName || '').trim();
+                  if (!cid || !nm) return;
                   setNewError(null);
                   try {
                     const created = await createTemplate({
+                      certificateId: cid,
                       name: nm,
                       background: String(newBackground || '').trim() || '',
                       backgroundColor: '#ffffff',
@@ -196,7 +213,8 @@ export default function AdminCertificateList() {
                       canvasHeight: 844
                     });
                     setCreateOpen(false);
-                    setNewName('');
+                    setNewCertificateId('');
+                    setNewCertificateName('');
                     setNewBackground('');
                     if (created?.id != null) navigate(`/admin/certificates/${created.id}`);
                   } catch (e) {
