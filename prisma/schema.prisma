@@ -119,24 +119,24 @@ model AuditLog {
 }
 
 model Product {
-  id             Int          @id @default(autoincrement())
-  organizationId Int
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  sku            String
-  name           String
-  code           String
-  category       String
-  status         String
-  remark         String?
-  origin         String?
-  description    String?
-  cmsPageId      Int? // Linked CMS landing page
-  cmsPage        CmsPage?     @relation("LandingPage", fields: [cmsPageId], references: [id])
-  cmsCertificatePageId Int? // Linked CMS certificate page
-  cmsCertificatePage   CmsPage? @relation("CertificatePage", fields: [cmsCertificatePageId], references: [id])
+  id                    Int                  @id @default(autoincrement())
+  organizationId        Int
+  organization          Organization         @relation(fields: [organizationId], references: [id])
+  sku                   String
+  name                  String
+  code                  String
+  category              String
+  status                String
+  remark                String?
+  origin                String?
+  description           String?
+  cmsPageId             Int? // Linked CMS landing page
+  cmsPage               CmsPage?             @relation("LandingPage", fields: [cmsPageId], references: [id])
+  cmsCertificatePageId  Int? // Linked CMS certificate page
+  cmsCertificatePage    CmsPage?             @relation("CertificatePage", fields: [cmsCertificatePageId], references: [id])
   certificateTemplateId Int?
   certificateTemplate   CertificateTemplate? @relation(fields: [certificateTemplateId], references: [id])
-  batches        Batch[]
+  batches               Batch[]
 
   epcBatches EpcBatch[]
 
@@ -205,16 +205,16 @@ model EpcBatch {
   product   Product @relation(fields: [productId], references: [id])
   sku       String
 
-  batchName String
-  batchQty  Int
-  remark    String?
-  certificateId String?
-  certificate   Certificate? @relation(fields: [certificateId], references: [certificateId])
+  batchName             String
+  batchQty              Int
+  remark                String?
+  certificateId         String?
+  certificate           Certificate?         @relation("EpcBatchCertificate", fields: [certificateId], references: [certificateId])
   certificateTemplateId Int?
   certificateTemplate   CertificateTemplate? @relation("EpcBatchTemplate", fields: [certificateTemplateId], references: [id])
-  templateData Json?
-  productionUploadedAt DateTime?
-  productionDoneAt     DateTime?
+  templateData          Json?
+  productionUploadedAt  DateTime?
+  productionDoneAt      DateTime?
 
   createdAt DateTime @default(now())
 
@@ -234,12 +234,12 @@ model EpcItem {
   batchId Int
   batch   EpcBatch @relation(fields: [batchId], references: [id])
 
-  epcCode   String
-  runningNo BigInt
-  netWeight String?
+  epcCode        String
+  runningNo      BigInt
+  netWeight      String?
   productionDate DateTime?
-  caiqNumber String?
-  createdAt DateTime @default(now())
+  caiqNumber     String?
+  createdAt      DateTime  @default(now())
 
   @@unique([organizationId, epcCode])
   @@index([organizationId, createdAt])
@@ -254,6 +254,7 @@ model Certificate {
   status         String       @default("PENDING") // PENDING, VALID, SUSPICIOUS, REVOKED, EXPIRED
   batchId        Int
   batch          Batch        @relation(fields: [batchId], references: [id])
+  epcBatches     EpcBatch[]   @relation("EpcBatchCertificate")
   scanLogs       ScanLog[]
   fraudFlags     FraudFlag[]
   createdAt      DateTime     @default(now())
@@ -340,16 +341,16 @@ model TagIdentity {
 }
 
 model CmsPage {
-  id             Int          @id @default(autoincrement())
-  organizationId Int
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  name           String
-  slug           String
-  kind           String       @default("landing")
-  sortOrder      Int          @default(0)
-  layout         CmsLayout?
-  landingProducts     Product[] @relation("LandingPage")
-  certificateProducts Product[] @relation("CertificatePage")
+  id                  Int          @id @default(autoincrement())
+  organizationId      Int
+  organization        Organization @relation(fields: [organizationId], references: [id])
+  name                String
+  slug                String
+  kind                String       @default("landing")
+  sortOrder           Int          @default(0)
+  layout              CmsLayout?
+  landingProducts     Product[]    @relation("LandingPage")
+  certificateProducts Product[]    @relation("CertificatePage")
 
   metaTitle       String?
   metaDescription String?
@@ -415,18 +416,18 @@ model CmsLayout {
 }
 
 model CertificateTemplate {
-  id             Int          @id @default(autoincrement())
-  organizationId Int
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  name           String
-  background     String // URL to background image
-  backgroundColor String      @default("#ffffff")
-  layoutJson     Json // Overlay field positions
-  placeholders   Json?
-  canvasWidth    Int          @default(390)
-  canvasHeight   Int          @default(844)
+  id              Int          @id @default(autoincrement())
+  organizationId  Int
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  name            String
+  background      String // URL to background image
+  backgroundColor String       @default("#ffffff")
+  layoutJson      Json // Overlay field positions
+  placeholders    Json?
+  canvasWidth     Int          @default(390)
+  canvasHeight    Int          @default(844)
 
-  products Product[]
+  products   Product[]
   epcBatches EpcBatch[] @relation("EpcBatchTemplate")
 
   versionNo Int       @default(1)
@@ -450,9 +451,9 @@ model MediaAsset {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
+  @@unique([organizationId, fileName])
   @@index([organizationId])
   @@index([createdAt])
-  @@unique([organizationId, fileName])
 }
 
 model Role {
