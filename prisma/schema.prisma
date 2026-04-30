@@ -208,6 +208,8 @@ model EpcBatch {
   batchName String
   batchQty  Int
   remark    String?
+  certificateId String?
+  certificate   Certificate? @relation(fields: [certificateId], references: [certificateId])
   certificateTemplateId Int?
   certificateTemplate   CertificateTemplate? @relation("EpcBatchTemplate", fields: [certificateTemplateId], references: [id])
   templateData Json?
@@ -221,6 +223,7 @@ model EpcBatch {
   @@index([organizationId, createdAt])
   @@index([organizationId, corpPrefix])
   @@index([organizationId, productId])
+  @@index([organizationId, certificateId])
 }
 
 model EpcItem {
@@ -343,6 +346,7 @@ model CmsPage {
   name           String
   slug           String
   kind           String       @default("landing")
+  sortOrder      Int          @default(0)
   layout         CmsLayout?
   landingProducts     Product[] @relation("LandingPage")
   certificateProducts Product[] @relation("CertificatePage")

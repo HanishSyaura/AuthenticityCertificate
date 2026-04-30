@@ -43,6 +43,29 @@ export default function CanvasStage({
 
   useEffect(() => {
     if (!interactive) return undefined;
+    if (!setItems) return undefined;
+    const onKeyDown = (e) => {
+      if (!selectedId) return;
+      const t = e.target;
+      const tag = String(t?.tagName || '').toLowerCase();
+      const editable = tag === 'input' || tag === 'textarea' || Boolean(t?.isContentEditable);
+      if (editable) return;
+      if (e.key === 'Escape') {
+        if (setSelectedId) setSelectedId(null);
+        return;
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        applyUpdate((prev) => (Array.isArray(prev) ? prev.filter((it) => it.id !== selectedId) : prev));
+        if (setSelectedId) setSelectedId(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [applyUpdate, interactive, selectedId, setItems, setSelectedId]);
+
+  useEffect(() => {
+    if (!interactive) return undefined;
     if (!activePointer) return;
 
     const onMove = (e) => {

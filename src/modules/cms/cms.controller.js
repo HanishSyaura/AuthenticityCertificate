@@ -26,6 +26,11 @@ const metaSchema = z.object({
   ogImage: z.string().optional().nullable()
 });
 
+const reorderSchema = z.object({
+  orderedIds: z.array(z.number().int()).min(1),
+  kind: z.string().optional()
+});
+
 async function createPage(req, res) {
   try {
     const validatedData = pageSchema.parse(req.body);
@@ -114,6 +119,20 @@ async function removePage(req, res) {
   }
 }
 
+async function reorderPages(req, res) {
+  try {
+    const validatedData = reorderSchema.parse(req.body);
+    const result = await cmsService.reorderPages({
+      organizationId: req.organization.id,
+      kind: validatedData.kind,
+      orderedIds: validatedData.orderedIds
+    });
+    res.success(result, 'CMS Pages reordered successfully');
+  } catch (error) {
+    res.error(error.message, 400);
+  }
+}
+
 module.exports = {
   createPage,
   saveLayout,
@@ -121,5 +140,6 @@ module.exports = {
   updateMeta,
   getPage,
   listPages,
-  removePage
+  removePage,
+  reorderPages
 };

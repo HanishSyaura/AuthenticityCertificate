@@ -83,13 +83,14 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
-  generateBatch: async ({ corpPrefix, productId, batchName, batchQty, remark, certificateTemplateId, templateData }) => {
+  generateBatch: async ({ corpPrefix, productId, productionDate, batchName, batchQty, remark, certificateTemplateId, templateData }) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
       const body = {
         corpPrefix,
         productId: Number(productId),
+        productionDate: productionDate || undefined,
         batchName,
         batchQty: Number(batchQty),
         remark: remark || undefined,

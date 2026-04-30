@@ -18,13 +18,25 @@ function normalizeLang(lang) {
 
 async function createPage(data) {
   try {
+    const orgId = Number(data.organizationId);
+    const kind = data.kind || 'landing';
+    const latest = await withTimeout(
+      prisma.cmsPage.findFirst({
+        where: { organizationId: orgId, kind },
+        select: { sortOrder: true, id: true },
+        orderBy: [{ sortOrder: 'desc' }, { id: 'desc' }]
+      }),
+      300
+    );
+    const nextSortOrder = (Number(latest?.sortOrder) || 0) + 1;
     return await withTimeout(
       prisma.cmsPage.create({
         data: {
-          organizationId: Number(data.organizationId),
+          organizationId: orgId,
           name: data.name,
           slug: data.slug,
-          kind: data.kind || 'landing',
+          kind,
+          sortOrder: nextSortOrder,
           metaTitle: data.metaTitle || null,
           metaDescription: data.metaDescription || null,
           ogImage: data.ogImage || null
@@ -33,12 +45,19 @@ async function createPage(data) {
       300
     );
   } catch {
+    const orgId = Number(data.organizationId);
+    const kind = data.kind || 'landing';
+    const nextSortOrder =
+      memPages
+        .filter((p) => p.organizationId === orgId && p.kind === kind)
+        .reduce((max, p) => Math.max(max, Number(p?.sortOrder) || 0), 0) + 1;
     const next = {
       id: Date.now(),
-      organizationId: Number(data.organizationId),
+      organizationId: orgId,
       name: data.name,
       slug: data.slug,
-      kind: data.kind || 'landing',
+      kind,
+      sortOrder: nextSortOrder,
       metaTitle: data.metaTitle || null,
       metaDescription: data.metaDescription || null,
       ogImage: data.ogImage || null,
@@ -232,11 +251,60 @@ async function getAllPages({ organizationId, kind }) {
   const k = typeof kind === 'string' && kind ? kind : null;
   try {
     return await withTimeout(
-      prisma.cmsPage.findMany({ where: { organizationId: Number(organizationId), ...(k ? { kind: k } : {}) } }),
+      prisma.cmsPage.findMany({
+        where: { organizationId: Number(organizationId), ...(k ? { kind: k } : {}) },
+        orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }]
+      }),
       250
     );
   } catch {
-    return memPages.filter((p) => p.organizationId === Number(organizationId) && (k ? p.kind === k : true));
+    return memPages
+      .filter((p) => p.organizationId === Number(organizationId) && (k ? p.kind === k : true))
+      .sort((a, b) => {
+        const ao = Number(a?.sortOrder) || 0;
+        const bo = Number(b?.sortOrder) || 0;
+        if (ao !== bo) return ao - bo;
+        return Number(a?.id) - Number(b?.id);
+      });
+  }
+}
+
+async function reorderPages({ organizationId, kind, orderedIds }) {
+  const orgId = Number(organizationId);
+  const k = typeof kind === 'string' && kind ? kind : null;
+  const uniqIds = Array.from(new Set((orderedIds || []).map((v) => Number(v)).filter((n) => Number.isFinite(n))));
+  if (!uniqIds.length) throw new Error('orderedIds is required');
+
+  try {
+    const existing = await withTimeout(
+      prisma.cmsPage.findMany({
+        where: { organizationId: orgId, ...(k ? { kind: k } : {}), id: { in: uniqIds } },
+        select: { id: true }
+      }),
+      300
+    );
+    if (existing.length !== uniqIds.length) throw new Error('Invalid pages');
+
+    await withTimeout(
+      prisma.$transaction(uniqIds.map((id, idx) => prisma.cmsPage.update({ where: { id }, data: { sortOrder: idx + 1 } }))),
+      300
+    );
+
+    return { orderedIds: uniqIds };
+  } catch {
+    const allowed = new Set(
+      memPages
+        .filter((p) => p.organizationId === orgId && (k ? p.kind === k : true))
+        .map((p) => Number(p.id))
+    );
+    for (const id of uniqIds) {
+      if (!allowed.has(Number(id))) throw new Error('Invalid pages');
+    }
+    for (let i = 0; i < uniqIds.length; i++) {
+      const idx = memPages.findIndex((p) => p.organizationId === orgId && Number(p.id) === Number(uniqIds[i]));
+      if (idx !== -1) memPages[idx] = { ...memPages[idx], sortOrder: i + 1, updatedAt: new Date() };
+    }
+    return { orderedIds: uniqIds };
   }
 }
 
@@ -277,5 +345,6 @@ module.exports = {
   publishPage,
   updateMeta,
   getAllPages,
+  reorderPages,
   deletePage
 };

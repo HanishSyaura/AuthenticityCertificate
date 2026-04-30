@@ -75,7 +75,7 @@ const DEVICE_PRESETS = [
   { id: 'ipad-pro-12-9', label: 'iPad Pro 12.9"', kind: 'phone', w: 1024, h: 1366 }
 ];
 
-export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPage, layout, layoutLoaded, setLayout, selectedBlockId, setSelectedBlockId }) {
+export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPage, layout, setLayout, selectedBlockId, setSelectedBlockId }) {
   const { t } = useT();
   const layoutRef = useRef(layout);
 
@@ -84,6 +84,25 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
   const [previewData, setPreviewData] = useState(null);
   const [previewError, setPreviewError] = useState(null);
   const [devicePresetId, setDevicePresetId] = useState('fit');
+
+  const previewLinks = useMemo(() => {
+    const id = String(previewCertId || '').trim();
+    const epc = String(previewEpc || '').trim();
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const toFullUrl = (path) => {
+      if (!origin) return path;
+      try {
+        return new URL(path, origin).toString();
+      } catch {
+        return path;
+      }
+    };
+
+    const links = [];
+    if (id) links.push({ key: 'cert', label: 'Preview URL (Certificate ID)', url: toFullUrl(`/preview/cms?certId=${encodeURIComponent(id)}`) });
+    if (epc) links.push({ key: 'epc', label: 'Preview URL (EPC)', url: toFullUrl(`/preview/cms?epc=${encodeURIComponent(epc)}`) });
+    return links;
+  }, [previewCertId, previewEpc]);
 
   const baseW = 390;
   const baseH = 844;
@@ -107,21 +126,34 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
 
   const hasCertificateBlock = useMemo(() => (Array.isArray(layout) ? layout.some((b) => b?.type === 'certificate') : false), [layout]);
 
-  useEffect(() => {
-    if (kind !== 'landing') return;
-    if (!selectedPage?.id) return;
-    if (!layoutLoaded) return;
-    if (hasCertificateBlock) return;
-    const cert = { id: makeId('cert'), type: 'certificate', x: 0, y: 0, w: baseW, h: baseH };
-    const next = [cert, ...(Array.isArray(layout) ? layout : [])];
-    setLayout(next);
-    setSelectedBlockId(cert.id);
-  }, [baseH, baseW, hasCertificateBlock, kind, layout, layoutLoaded, selectedPage?.id, setLayout, setSelectedBlockId]);
-
   const blocks = useMemo(() => {
     return layout.map((b) => ({
       ...b,
       render: (it) => {
+        if (it.type === 'container') {
+          const bg = String(it.content?.backgroundColor || '#ffffff');
+          const borderColor = String(it.content?.borderColor || '#e4e4e7');
+          const borderWidth = Number(it.content?.borderWidth ?? 1);
+          const radius = Number(it.content?.borderRadius ?? 12);
+          const opacity = Math.max(0, Math.min(1, Number(it.content?.opacity ?? 1)));
+          return (
+            <div className="h-full w-full p-2">
+              <div
+                className="flex h-full w-full items-center justify-center"
+                style={{
+                  backgroundColor: bg,
+                  borderColor,
+                  borderWidth: Number.isFinite(borderWidth) ? borderWidth : 1,
+                  borderStyle: 'solid',
+                  borderRadius: Number.isFinite(radius) ? radius : 12,
+                  opacity
+                }}
+              >
+                <div className="rounded bg-white/70 px-2 py-1 text-xs font-semibold text-zinc-800">{t('container')}</div>
+              </div>
+            </div>
+          );
+        }
         if (it.type === 'text') {
           return (
             <div className="h-full w-full p-2">
@@ -187,6 +219,27 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
               ))}
             </optgroup>
           </select>
+          <button
+            type="button"
+            onClick={() => {
+              const next = [
+                ...layout,
+                {
+                  id: makeId('container'),
+                  type: 'container',
+                  x: 20,
+                  y: 20,
+                  w: 260,
+                  h: 120,
+                  content: { backgroundColor: '#ffffff', borderColor: '#e4e4e7', borderWidth: 1, borderRadius: 16, opacity: 1 }
+                },
+              ];
+              setLayout(next);
+            }}
+            className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+          >
+            {t('addContainer')}
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -295,6 +348,37 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
                 {t('load')}
               </button>
             </div>
+            {previewLinks.length ? (
+              <div className="mt-3 rounded-xl border border-zinc-200 bg-white px-3 py-2">
+                <div className="text-[11px] font-semibold text-zinc-600">{t('previewUrl')}</div>
+                <div className="mt-1 space-y-2">
+                  {previewLinks.map((l) => (
+                    <div key={l.key} className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-[11px] text-zinc-500">{l.label}</div>
+                        <a href={l.url} target="_blank" rel="noreferrer" className="mt-0.5 block truncate font-mono text-xs text-brand-700 hover:underline">
+                          {l.url}
+                        </a>
+                      </div>
+                      <button
+                        type="button"
+                        className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(l.url);
+                          } catch {
+                            void 0;
+                          }
+                        }}
+                      >
+                        {t('copy')}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 text-[11px] text-zinc-500">{t('previewUrlHint')}</div>
+              </div>
+            ) : null}
             {previewError ? <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{previewError}</div> : null}
           </div>
           <div className="overflow-auto bg-white">

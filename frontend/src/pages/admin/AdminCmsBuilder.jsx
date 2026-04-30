@@ -17,6 +17,7 @@ export default function AdminCmsBuilder({ kind = 'landing' }) {
     loadLayoutForPage,
     saveLayout,
     publishPage,
+    reorderPages,
     language,
     setLanguage,
     setKind,
@@ -32,6 +33,7 @@ export default function AdminCmsBuilder({ kind = 'landing' }) {
     loadLayoutForPage: s.loadLayoutForPage,
     saveLayout: s.saveLayout,
     publishPage: s.publishPage,
+    reorderPages: s.reorderPages,
     language: s.language,
     setLanguage: s.setLanguage,
     setKind: s.setKind,
@@ -82,6 +84,15 @@ export default function AdminCmsBuilder({ kind = 'landing' }) {
     }
   }, [language, loadLayoutForPage, selectedPage]);
 
+  useEffect(() => {
+    if (viewMode !== 'preview') return;
+    try {
+      localStorage.setItem('ac_cms_preview', JSON.stringify({ layout, kind, language: language || 'en', ts: Date.now() }));
+    } catch {
+      void 0;
+    }
+  }, [kind, language, layout, viewMode]);
+
   const setLayout = (next) => {
     if (!selectedPageId) return;
     saveLayout({ pageId: selectedPageId, layoutJson: next, language });
@@ -129,12 +140,6 @@ export default function AdminCmsBuilder({ kind = 'landing' }) {
           <button
             type="button"
             onClick={() => {
-              try {
-                localStorage.setItem('ac_cms_preview', JSON.stringify({ layout, kind, language: language || 'en', ts: Date.now() }));
-              } catch {
-                void 0;
-              }
-              window.open('/preview/cms', '_blank', 'noopener,noreferrer');
               setViewMode('preview');
             }}
             className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
@@ -153,6 +158,9 @@ export default function AdminCmsBuilder({ kind = 'landing' }) {
           onSelectPage={(id) => {
             selectPage(id);
             setSelectedBlockId(null);
+          }}
+          onReorderPages={async (orderedIds) => {
+            await reorderPages({ orderedIds });
           }}
           onCreatePage={async ({ name, slug }) => {
             const created = await createPage({ name, slug });

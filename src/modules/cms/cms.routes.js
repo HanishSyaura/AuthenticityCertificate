@@ -18,6 +18,15 @@ router.post(
   cmsController.createPage
 );
 router.get('/pages', verifyToken, attachAccessContext, requirePermission('cms.read'), requireOrganization, cmsController.listPages);
+router.patch(
+  '/pages/order',
+  verifyToken,
+  attachAccessContext,
+  requirePermission('cms.write'),
+  requireOrganization,
+  auditAction('REORDER_CMS_PAGES', { targetType: 'cms_page' }),
+  cmsController.reorderPages
+);
 router.delete(
   '/page/:id',
   verifyToken,

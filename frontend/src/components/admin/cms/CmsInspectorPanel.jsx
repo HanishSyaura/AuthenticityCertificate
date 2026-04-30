@@ -50,6 +50,68 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
             </div>
           ) : null}
 
+          {selectedBlock.type === 'container' ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-700">{t('backgroundColor')}</label>
+                  <input
+                    type="color"
+                    value={String(selectedBlock.content?.backgroundColor || '#ffffff')}
+                    onChange={(e) => updateSelectedContent({ backgroundColor: e.target.value })}
+                    className="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-700">{t('borderColor')}</label>
+                  <input
+                    type="color"
+                    value={String(selectedBlock.content?.borderColor || '#e4e4e7')}
+                    onChange={(e) => updateSelectedContent({ borderColor: e.target.value })}
+                    className="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-2"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-700">{t('borderWidth')}</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={20}
+                    value={Number(selectedBlock.content?.borderWidth ?? 1)}
+                    onChange={(e) => updateSelectedContent({ borderWidth: Number(e.target.value) })}
+                    className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-700">{t('borderRadius')}</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={80}
+                    value={Number(selectedBlock.content?.borderRadius ?? 12)}
+                    onChange={(e) => updateSelectedContent({ borderRadius: Number(e.target.value) })}
+                    className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-700">{t('opacity')}</label>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={Number(selectedBlock.content?.opacity ?? 1)}
+                  onChange={(e) => updateSelectedContent({ opacity: Number(e.target.value) })}
+                  className="mt-2 w-full"
+                />
+                <div className="mt-1 text-xs text-zinc-500">{Number(selectedBlock.content?.opacity ?? 1).toFixed(2)}</div>
+              </div>
+            </div>
+          ) : null}
+
           {selectedBlock.type === 'image' || selectedBlock.type === 'video' ? (
             <div>
               <label className="block text-xs font-medium text-zinc-700">{t('url')}</label>

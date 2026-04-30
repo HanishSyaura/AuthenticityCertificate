@@ -3,7 +3,6 @@ import useRecordsStore from '../../store/useRecordsStore';
 import useEpcStore from '../../store/useEpcStore';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import { useT } from '../../i18n/useT';
-import RichTextEditor from '../../components/admin/RichTextEditor';
 
 function formatDateTime(input) {
   if (!input) return '';
@@ -19,6 +18,13 @@ function toBase64(file) {
     reader.onerror = () => reject(new Error('Failed to read file'));
     reader.readAsDataURL(file);
   });
+}
+
+function getValue(path, data) {
+  const parts = String(path || '').split('.');
+  let cur = data;
+  for (const p of parts) cur = cur?.[p];
+  return cur ?? '';
 }
 
 export default function AdminEpc() {
@@ -78,6 +84,7 @@ export default function AdminEpc() {
 
   const [corpPrefix] = useState('DA01');
   const [productId, setProductId] = useState('');
+  const [productionDate, setProductionDate] = useState('');
   const [batchName, setBatchName] = useState('');
   const [batchQty, setBatchQty] = useState(1);
   const [remark, setRemark] = useState('');
@@ -119,32 +126,31 @@ export default function AdminEpc() {
   useEffect(() => {
     setTemplateData((prev) => {
       const next = {};
+      const ctx = {
+        product: selectedProduct,
+        batch: { batchName, batchQty, productionDate, remark },
+        corpPrefix
+      };
       for (const p of placeholders) {
         const key = String(p?.key || '').trim();
         if (!key) continue;
-        const existing = prev?.[key];
-        if (existing != null && String(existing).length > 0) {
-          next[key] = existing;
-          continue;
-        }
-        const source = String(p?.source || 'manual');
+        const source = String(p?.source || 'static');
         if (source === 'static') {
           next[key] = String(p?.staticValue || '');
           continue;
         }
-        if (source === 'product' && selectedProduct) {
+        if (source === 'product') {
           const bindPath = String(p?.bindPath || '').trim();
-          if (bindPath.startsWith('product.')) {
-            const prop = bindPath.slice('product.'.length);
-            next[key] = selectedProduct?.[prop] == null ? '' : String(selectedProduct[prop]);
-            continue;
-          }
+          const v = bindPath ? getValue(bindPath, ctx) : '';
+          next[key] = v == null ? '' : String(v);
+          continue;
         }
-        next[key] = '';
+        const existing = prev?.[key];
+        next[key] = existing == null ? '' : String(existing);
       }
       return next;
     });
-  }, [certificateTemplateId, placeholders, selectedProduct]);
+  }, [batchName, batchQty, certificateTemplateId, corpPrefix, placeholders, productionDate, remark, selectedProduct]);
 
   const openBatchItems = async (b) => {
     if (!b?.id) return;
@@ -203,8 +209,7 @@ export default function AdminEpc() {
               {placeholders.map((p) => {
                 const key = String(p?.key || '').trim();
                 const label = String(p?.label || key);
-                const type = String(p?.type || 'text');
-                const source = String(p?.source || 'manual');
+                const source = String(p?.source || 'static');
                 const bindPath = String(p?.bindPath || '').trim();
                 if (!key) return null;
                 return (
@@ -212,22 +217,15 @@ export default function AdminEpc() {
                     <div className="mb-1 text-[11px] font-semibold text-zinc-600">{label}</div>
                     {source === 'product' && bindPath ? (
                       <div className="-mt-1 mb-2 text-[11px] text-zinc-500">
-                        {t('sourceProduct')}: {bindPath}
+                        {t('bindTo')}: {bindPath}
                       </div>
                     ) : null}
-                    {source === 'static' ? (
-                      type === 'rich_text' ? (
-                        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm" dangerouslySetInnerHTML={{ __html: String(templateData?.[key] || '') }} />
-                      ) : (
-                        <input value={String(templateData?.[key] || '')} disabled className="ac-input" />
-                      )
-                    ) : type === 'rich_text' ? (
-                      <RichTextEditor value={String(templateData?.[key] || '')} onChange={(v) => setTemplateData((prev) => ({ ...(prev || {}), [key]: v }))} />
+                    {source === 'product' ? (
+                      <input value={String(templateData?.[key] || '')} disabled className="ac-input" />
                     ) : (
-                      <input
-                        value={String(templateData?.[key] || '')}
-                        onChange={(e) => setTemplateData((prev) => ({ ...(prev || {}), [key]: e.target.value }))}
-                        className="ac-input"
+                      <div
+                        className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm"
+                        dangerouslySetInnerHTML={{ __html: String(templateData?.[key] || '') }}
                       />
                     )}
                   </div>
@@ -271,6 +269,11 @@ export default function AdminEpc() {
               </div>
 
               <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('productionDate')}</div>
+                <input type="date" value={productionDate} onChange={(e) => setProductionDate(e.target.value)} className="ac-input" />
+              </div>
+
+              <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('certTemplate')}</div>
                 <select value={certificateTemplateId} onChange={(e) => setCertificateTemplateId(e.target.value)} className="ac-input">
                   <option value="">{t('none')}</option>
@@ -305,6 +308,7 @@ export default function AdminEpc() {
                     setBatchName('');
                     setBatchQty(1);
                     setRemark('');
+                    setProductionDate('');
                     setTemplateData({});
                     clearLastGenerated();
                   }}
@@ -319,6 +323,7 @@ export default function AdminEpc() {
                     const created = await generateBatch({
                       corpPrefix,
                       productId,
+                      productionDate: String(productionDate || '').trim() || undefined,
                       batchName: String(batchName).trim(),
                       batchQty,
                       remark: String(remark || '').trim() || undefined,
@@ -371,7 +376,8 @@ export default function AdminEpc() {
                     {b.batchName} <span className="text-xs text-zinc-500">#{b.id}</span>
                   </div>
                   <div className="mt-1 text-[11px] text-zinc-500">
-                    {b.product?.name || '-'} • {b.batchQty} • {formatDateTime(b.createdAt)}
+                    {b.product?.name || '-'} • {b.batchQty} • {formatDateTime(b.createdAt)} • {t('certificateId')}:{' '}
+                    {b.certificateId ? <span className="font-mono">{String(b.certificateId)}</span> : '-'}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -408,7 +414,9 @@ export default function AdminEpc() {
                 <div className="truncate text-sm font-semibold text-zinc-900">
                   {t('epcItems')}: {itemsBatch.batchName} <span className="text-xs text-zinc-500">#{itemsBatch.id}</span>
                 </div>
-                <div className="mt-1 text-[11px] text-zinc-500">{itemsBatch.product?.name || '-'}</div>
+                <div className="mt-1 text-[11px] text-zinc-500">
+                  {itemsBatch.product?.name || '-'} • {t('certificateId')}: {itemsBatch.certificateId ? <span className="font-mono">{String(itemsBatch.certificateId)}</span> : '-'}
+                </div>
               </div>
               <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => setItemsOpen(false)}>
                 {t('close')}
@@ -423,7 +431,6 @@ export default function AdminEpc() {
                       <th className="px-3 py-2 text-left font-semibold text-zinc-700">{t('epcCode')}</th>
                       <th className="px-3 py-2 text-left font-semibold text-zinc-700">{t('runningNo')}</th>
                       <th className="px-3 py-2 text-left font-semibold text-zinc-700">{t('netWeight')}</th>
-                      <th className="px-3 py-2 text-left font-semibold text-zinc-700">{t('productionDate')}</th>
                       <th className="px-3 py-2 text-left font-semibold text-zinc-700">{t('caiqNumber')}</th>
                     </tr>
                   </thead>
@@ -433,13 +440,12 @@ export default function AdminEpc() {
                         <td className="whitespace-nowrap px-3 py-2 font-mono text-[11px] text-zinc-900">{String(it.epcCode || '')}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-zinc-800">{it.runningNo == null ? '-' : String(it.runningNo)}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-zinc-800">{it.netWeight == null ? '-' : String(it.netWeight)}</td>
-                        <td className="whitespace-nowrap px-3 py-2 text-zinc-800">{it.productionDate ? formatDateTime(it.productionDate) : '-'}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-zinc-800">{it.caiqNumber == null ? '-' : String(it.caiqNumber)}</td>
                       </tr>
                     ))}
                     {(!items || items.length === 0) && !loading ? (
                       <tr>
-                        <td colSpan={5} className="px-3 py-6 text-center text-zinc-500">
+                        <td colSpan={4} className="px-3 py-6 text-center text-zinc-500">
                           {t('noEpc')}
                         </td>
                       </tr>

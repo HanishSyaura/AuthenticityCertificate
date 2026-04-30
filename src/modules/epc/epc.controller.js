@@ -4,6 +4,10 @@ const epcService = require('./epc.service');
 const generateSchema = z.object({
   corpPrefix: z.string().min(1),
   productId: z.number().int().positive(),
+  productionDate: z
+    .string()
+    .optional()
+    .refine((v) => v == null || !Number.isNaN(new Date(v).getTime()), 'Invalid productionDate'),
   batchName: z.string().min(1),
   batchQty: z.number().int().positive().max(5000),
   remark: z.string().optional(),
@@ -55,6 +59,7 @@ async function generateBatch(req, res) {
       organizationId: req.organization.id,
       corpPrefix: validated.corpPrefix,
       productId: validated.productId,
+      productionDate: validated.productionDate,
       batchName: validated.batchName,
       batchQty: validated.batchQty,
       remark: validated.remark,

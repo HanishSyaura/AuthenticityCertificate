@@ -1,12 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import CanvasStage from '../../components/admin/CanvasStage';
 import RichTextEditor from '../../components/admin/RichTextEditor';
 import { useT } from '../../i18n/useT';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
-import useAdminAuthStore from '../../store/useAdminAuthStore';
 import useMediaStore from '../../store/useMediaStore';
 import useEpcStore from '../../store/useEpcStore';
-import { createAdminApi } from '../../utils/adminApi';
 
 function makeId(prefix) {
   return `${prefix}-${Math.random().toString(16).slice(2)}-${Date.now()}`;
@@ -19,6 +17,19 @@ function getValue(path, data) {
     cur = cur?.[p];
   }
   return cur ?? '';
+}
+
+function escapeHtml(input) {
+  return String(input ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function escapeTextToHtml(input) {
+  return escapeHtml(input).replaceAll('\n', '<br/>');
 }
 
 function clamp(n, min, max) {
@@ -60,7 +71,6 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     updateTemplate: s.updateTemplate,
     deleteTemplate: s.deleteTemplate
   }));
-  const { token } = useAdminAuthStore((s) => ({ token: s.token }));
   const { uploadMedia } = useMediaStore((s) => ({ uploadMedia: s.uploadMedia }));
   const { batches, fetchBatches, updateBatch } = useEpcStore((s) => ({
     batches: s.batches,
@@ -70,9 +80,6 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
 
   const [selectedId, setSelectedId] = useState(initialSelectedId);
   const [selectedFieldId, setSelectedFieldId] = useState(null);
-  const [previewId, setPreviewId] = useState('');
-  const [previewData, setPreviewData] = useState(null);
-  const [previewError, setPreviewError] = useState(null);
   const [bgUploading, setBgUploading] = useState(false);
   const [bgError, setBgError] = useState(null);
   const [bgFileKey, setBgFileKey] = useState(0);
@@ -83,9 +90,13 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const [assignedBatchIds, setAssignedBatchIds] = useState(() => new Set());
   const [draftPlaceholders, setDraftPlaceholders] = useState([]);
   const [draftLayout, setDraftLayout] = useState([]);
+  const [saveStatus, setSaveStatus] = useState('idle');
   const persistTimerRef = useRef(null);
   const pendingPatchRef = useRef(null);
   const previewNowRef = useRef(new Date().toISOString());
+  const hydratedTemplateIdRef = useRef(null);
+  const saveSeqRef = useRef(0);
+  const prevSelectedIdRef = useRef(null);
   const selectedPlaceholdersRef = useRef([]);
 
   const selected = useMemo(() => templates.find((it) => String(it.id) === String(selectedId)) || null, [templates, selectedId]);
@@ -125,17 +136,8 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
 
   const safePreview = useMemo(() => {
     const list = Array.isArray(placeholders) ? placeholders : [];
-    const templateData = {};
-    for (const p of list) {
-      const key = String(p?.key || '').trim();
-      if (!key) continue;
-      const fromCert = previewData?.templateData?.[key];
-      const fromSample = p?.sample;
-      const fromStatic = String(p?.source || '') === 'static' ? p?.staticValue : '';
-      templateData[key] = fromCert ?? fromSample ?? fromStatic ?? '';
-    }
     const fallback = {
-      certificateId: String(selected?.name || '').trim() || `CERT-${String(previewId || '').trim() || '0001'}`,
+      certificateId: selected?.id != null ? `CERT-${selected.id}` : 'CERT-0001',
       status: 'valid',
       issuedAt: previewNowRef.current,
       product: {
@@ -150,16 +152,29 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         batchNo: 'BATCH-001'
       }
     };
-    const base = previewData
-      ? {
-          ...fallback,
-          ...previewData,
-          product: { ...fallback.product, ...(previewData.product || {}) },
-          batch: { ...fallback.batch, ...(previewData.batch || {}) }
-        }
-      : fallback;
+    const base = fallback;
+    const templateData = {};
+    for (const p of list) {
+      const key = String(p?.key || '').trim();
+      if (!key) continue;
+      const source = String(p?.source || '').trim();
+      const bindPath = String(p?.bindPath || '').trim();
+      if (source === 'product') {
+        templateData[key] = bindPath ? getValue(bindPath, base) : '';
+        continue;
+      }
+      if (source === 'static') {
+        templateData[key] = String(p?.staticValue || '');
+        continue;
+      }
+      if (source === 'manual') {
+        templateData[key] = String(p?.sample || '');
+        continue;
+      }
+      templateData[key] = '';
+    }
     return { ...base, templateData: { ...(base.templateData || {}), ...templateData } };
-  }, [placeholders, previewData, previewId, selected?.name]);
+  }, [placeholders, selected?.id]);
 
   const canvasItems = useMemo(() => {
     const layout = Array.isArray(draftLayout) ? draftLayout : [];
@@ -173,32 +188,17 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             const path = String(it.path || '');
             const key = path.startsWith('templateData.') ? path.slice('templateData.'.length) : '';
             const ph = key ? placeholderByKey.get(key) : null;
-            const typ = String(ph?.type || '');
             const val = raw == null ? '' : String(raw);
-            const fallbackLabel = key ? String(ph?.label || key) : '';
-            const display = val || fallbackLabel;
+            const label = key ? String(ph?.label || key) : String(it.label || '');
+            const separator = key ? String(ph?.separator ?? ': ') : ': ';
+            const prefix = label ? `${label}${separator}` : '';
+            const source = String(ph?.source || '').trim();
+            const valueHtml = source === 'static' || source === 'manual' ? val : escapeTextToHtml(val);
+            const html = `${escapeHtml(prefix)}${valueHtml || ''}`;
             const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
             const align = textAlignClass(it.align);
-            if (typ === 'rich_text') {
-              if (!val) {
-                return (
-                  <div className={`mt-1 font-semibold text-zinc-500 ${align}`} style={{ fontSize: fs }}>
-                    {fallbackLabel}
-                  </div>
-                );
-              }
-              return (
-                <div
-                  className={`mt-1 font-semibold text-zinc-900 ${align}`}
-                  style={{ fontSize: fs }}
-                  dangerouslySetInnerHTML={{ __html: display }}
-                />
-              );
-            }
             return (
-              <div className={`mt-1 truncate font-semibold text-zinc-900 ${align}`} style={{ fontSize: fs }}>
-                {display}
-              </div>
+              <div className={`mt-1 font-semibold text-zinc-900 ${align}`} style={{ fontSize: fs }} dangerouslySetInnerHTML={{ __html: html }} />
             );
           })()}
         </div>
@@ -215,21 +215,16 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         const path = String(it.path || '');
         const key = path.startsWith('templateData.') ? path.slice('templateData.'.length) : '';
         const ph = key ? placeholderByKey.get(key) : null;
-        const typ = String(ph?.type || '');
         const val = raw == null ? '' : String(raw);
-        const fallbackLabel = key ? String(ph?.label || key) : '';
-        const display = val || fallbackLabel;
+        const label = key ? String(ph?.label || key) : String(it.label || '');
+        const separator = key ? String(ph?.separator ?? ': ') : ': ';
+        const prefix = label ? `${label}${separator}` : '';
+        const source = String(ph?.source || '').trim();
+        const valueHtml = source === 'static' || source === 'manual' ? val : escapeTextToHtml(val);
+        const html = `${escapeHtml(prefix)}${valueHtml || ''}`;
         const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
         const align = textAlignClass(it.align);
-        if (typ === 'rich_text') {
-          if (!val) return <div className={`h-full w-full font-semibold text-zinc-500 ${align}`} style={{ fontSize: fs }}>{fallbackLabel}</div>;
-          return <div className={`h-full w-full ${align}`} style={{ fontSize: fs }} dangerouslySetInnerHTML={{ __html: display }} />;
-        }
-        return (
-          <div className={`h-full w-full whitespace-pre-wrap break-words font-semibold text-zinc-900 ${align}`} style={{ fontSize: fs }}>
-            {display}
-          </div>
-        );
+        return <div className={`h-full w-full ${align}`} style={{ fontSize: fs }} dangerouslySetInnerHTML={{ __html: html }} />;
       }
     }));
   }, [draftLayout, placeholderByKey, safePreview]);
@@ -237,10 +232,14 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const selectedField = useMemo(() => (Array.isArray(draftLayout) ? draftLayout : []).find((f) => f.id === selectedFieldId) || null, [draftLayout, selectedFieldId]);
 
   useEffect(() => {
-    if (!selected?.id) return;
+    const id = selected?.id ? String(selected.id) : null;
+    if (!id) return;
+    if (hydratedTemplateIdRef.current === id) return;
+    hydratedTemplateIdRef.current = id;
     setDraftPlaceholders(Array.isArray(selected?.placeholders) ? selected.placeholders : []);
     setDraftLayout(Array.isArray(selected?.layoutJson) ? selected.layoutJson : []);
     pendingPatchRef.current = null;
+    setSaveStatus('idle');
     if (persistTimerRef.current) {
       window.clearTimeout(persistTimerRef.current);
       persistTimerRef.current = null;
@@ -255,13 +254,33 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       const toSend = pendingPatchRef.current;
       pendingPatchRef.current = null;
       if (!toSend) return;
-      void updateTemplate({ id: selected.id, patch: toSend });
+      const seq = (saveSeqRef.current += 1);
+      setSaveStatus('saving');
+      void (async () => {
+        try {
+          await updateTemplate({ id: selected.id, patch: toSend });
+          if (seq !== saveSeqRef.current) return;
+          setSaveStatus('saved');
+        } catch (e) {
+          if (seq !== saveSeqRef.current) return;
+          setSaveStatus('error');
+        }
+      })();
     }, 350);
   };
 
   const updateSelected = async (patch) => {
     if (!selected) return;
-    await updateTemplate({ id: selected.id, patch });
+    const seq = (saveSeqRef.current += 1);
+    setSaveStatus('saving');
+    try {
+      await updateTemplate({ id: selected.id, patch });
+      if (seq !== saveSeqRef.current) return;
+      setSaveStatus('saved');
+    } catch (e) {
+      if (seq !== saveSeqRef.current) return;
+      setSaveStatus('error');
+    }
   };
 
   const addCanvasItemForKey = (key) => {
@@ -331,7 +350,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       const p = list[i] || {};
       const key = String(p.key || '').trim();
       const label = String(p.label || '').trim();
-      const source = String(p.source || 'manual');
+      const source = String(p.source || 'static');
       const bindPath = String(p.bindPath || '').trim();
       if (!key) errors.push(`${t('key')} #${i + 1}: required`);
       if (key && !/^[a-zA-Z0-9_]+$/.test(key)) errors.push(`${t('key')} "${key}": invalid`);
@@ -364,7 +383,10 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   }, [templates, selectedId]);
 
   useEffect(() => {
-    if (!selected?.id) return;
+    const id = selected?.id ? String(selected.id) : null;
+    if (!id) return;
+    if (prevSelectedIdRef.current === id) return;
+    prevSelectedIdRef.current = id;
     setWizardStep('fields');
     setSelectedFieldId(null);
     const firstKey = String((Array.isArray(selectedPlaceholdersRef.current) ? selectedPlaceholdersRef.current : [])?.[0]?.key || '').trim();
@@ -392,50 +414,6 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     setAssignedBatchIds(next);
   }, [batches, selected?.id]);
 
-  const fetchPreview = useCallback(async (certId) => {
-    setPreviewError(null);
-    setPreviewData(null);
-    const id = String(certId || '').trim();
-    if (!id) return;
-    if (!token) {
-      setPreviewError('Not authenticated');
-      return;
-    }
-    try {
-      const api = createAdminApi({ token });
-      const res = await api.get(`/analytics/cert/${encodeURIComponent(id)}`);
-      const cert = res?.data?.data?.certificate || null;
-      if (!cert) {
-        setPreviewError(t('notFound'));
-        return;
-      }
-      setPreviewData(cert);
-    } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || t('verificationFailed');
-      setPreviewError(msg);
-    }
-  }, [t, token]);
-
-  useEffect(() => {
-    const certId = String(previewId || '').trim();
-    if (!certId) {
-      setPreviewError(null);
-      setPreviewData(null);
-      return;
-    }
-    let alive = true;
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        if (!alive) return;
-        await fetchPreview(certId);
-      })();
-    }, 450);
-    return () => {
-      alive = false;
-      window.clearTimeout(timer);
-    };
-  }, [fetchPreview, previewId]);
-
   return (
     <div className="ac-page">
       <div className="mb-4">
@@ -454,7 +432,10 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <div className="text-xs font-semibold text-zinc-500">{t('canvas')}</div>
-                  <div className="text-sm font-semibold text-zinc-900">{selected.name}</div>
+                  <div className="text-sm font-semibold text-zinc-900">#{selected.id}</div>
+                  {saveStatus === 'saving' ? <div className="mt-0.5 text-[11px] font-semibold text-zinc-500">Saving…</div> : null}
+                  {saveStatus === 'saved' ? <div className="mt-0.5 text-[11px] font-semibold text-emerald-700">Saved</div> : null}
+                  {saveStatus === 'error' ? <div className="mt-0.5 text-[11px] font-semibold text-rose-700">Save failed</div> : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="inline-flex overflow-hidden rounded-lg border border-zinc-200 bg-white">
@@ -577,12 +558,12 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   <div className="mt-3 space-y-2">
                     {placeholders.map((p, idx) => {
                       const key = String(p?.key || '');
-                      const type = String(p?.type || 'text');
-                      const source = String(p?.source || 'manual');
+                      const source = String(p?.source || 'static');
+                      const uiSource = source === 'manual' ? 'static' : source;
                       return (
                         <div key={`${p?.key || ''}-${idx}`} className="rounded-lg border border-zinc-200 bg-white p-2">
                           <div className="grid grid-cols-1 gap-2">
-                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                               <input
                                 value={key}
                                 onChange={(e) => {
@@ -616,83 +597,78 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                 placeholder={t('fieldLabel')}
                                 className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                               />
-                            </div>
-                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                              <select
-                                value={type}
+                              <input
+                                value={String(p?.separator ?? ': ')}
                                 onChange={(e) => {
                                   const next = placeholders.slice();
-                                  next[idx] = { ...(next[idx] || {}), type: e.target.value };
+                                  next[idx] = { ...(next[idx] || {}), separator: e.target.value };
                                   replacePlaceholders(next);
                                 }}
+                                placeholder={t('separator')}
                                 className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                              >
-                                <option value="text">{t('text')}</option>
-                                <option value="rich_text">{t('richText')}</option>
-                              </select>
+                              />
+                            </div>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                               <select
-                                value={source}
+                                value={uiSource}
                                 onChange={(e) => {
                                   const nextSource = e.target.value;
                                   const next = placeholders.slice();
                                   const cur = next[idx] || {};
-                                  const shouldAutoRichText = nextSource === 'manual' && String(cur.type || 'text') === 'text';
-                                  next[idx] = { ...cur, source: nextSource, type: shouldAutoRichText ? 'rich_text' : cur.type };
+                                  next[idx] = {
+                                    ...cur,
+                                    source: nextSource,
+                                    ...(nextSource === 'static' ? { bindPath: String(cur.bindPath || '') } : { staticValue: String(cur.staticValue || '') })
+                                  };
                                   replacePlaceholders(next);
                                 }}
                                 className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                               >
-                                <option value="manual">{t('sourceManual')}</option>
-                                <option value="product">{t('sourceProduct')}</option>
-                                <option value="static">{t('sourceStatic')}</option>
+                                <option value="static">{t('sourceManual')}</option>
+                                <option value="product">{t('bindTo')}</option>
                               </select>
-                              {source === 'product' ? (
-                                <select
+                              {uiSource === 'product' ? (
+                                <div>
+                                  <input
                                   value={String(p?.bindPath || '')}
                                   onChange={(e) => {
                                     const next = placeholders.slice();
                                     next[idx] = { ...(next[idx] || {}), bindPath: e.target.value };
                                     replacePlaceholders(next);
                                   }}
-                                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                                >
-                                  <option value="">{t('bindTo')}</option>
-                                  <option value="product.name">product.name</option>
-                                  <option value="product.sku">product.sku</option>
-                                  <option value="product.code">product.code</option>
-                                  <option value="product.category">product.category</option>
-                                  <option value="product.origin">product.origin</option>
-                                  <option value="product.description">product.description</option>
-                                </select>
+                                    placeholder={t('bindTo')}
+                                    list="certTplBindPaths"
+                                    className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                                  />
+                                  <datalist id="certTplBindPaths">
+                                    <option value="certificateId" />
+                                    <option value="status" />
+                                    <option value="issuedAt" />
+                                    <option value="product.name" />
+                                    <option value="product.sku" />
+                                    <option value="product.code" />
+                                    <option value="product.category" />
+                                    <option value="product.origin" />
+                                    <option value="product.description" />
+                                    <option value="batch.batchNo" />
+                                  </datalist>
+                                </div>
                               ) : (
                                 <div />
                               )}
                             </div>
-                            {source === 'static' ? (
-                              type === 'rich_text' ? (
-                                <div>
-                                  <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('staticValue')}</div>
-                                  <RichTextEditor
-                                    value={String(p?.staticValue || '')}
-                                    onChange={(v) => {
-                                      const next = placeholders.slice();
-                                      next[idx] = { ...(next[idx] || {}), staticValue: v };
-                                      replacePlaceholders(next);
-                                    }}
-                                  />
-                                </div>
-                              ) : (
-                                <input
+                            {uiSource === 'static' ? (
+                              <div>
+                                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('staticValue')}</div>
+                                <RichTextEditor
                                   value={String(p?.staticValue || '')}
-                                  onChange={(e) => {
+                                  onChange={(v) => {
                                     const next = placeholders.slice();
-                                    next[idx] = { ...(next[idx] || {}), staticValue: e.target.value };
+                                    next[idx] = { ...(next[idx] || {}), staticValue: v };
                                     replacePlaceholders(next);
                                   }}
-                                  placeholder={t('staticValue')}
-                                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                                 />
-                              )
+                              </div>
                             ) : null}
                             <div className="flex items-center justify-between gap-2">
                               <button
@@ -725,7 +701,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                       onClick={() =>
                         replacePlaceholders([
                           ...placeholders,
-                          { key: '', label: '', type: 'rich_text', source: 'manual', bindPath: '', staticValue: '', sample: '' }
+                          { key: '', label: '', separator: ': ', source: 'static', bindPath: '', staticValue: '', sample: '' }
                         ])
                       }
                       className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
@@ -747,10 +723,10 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
           {!selected ? null : (
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-zinc-700">{t('templateName')}</label>
+                <label className="block text-xs font-medium text-zinc-700">{t('certificateId')}</label>
                 <input
-                  value={selected.name}
-                  onChange={(e) => void updateSelected({ name: e.target.value })}
+                  value={selected.id != null ? `#${selected.id}` : ''}
+                  disabled
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
               </div>
@@ -1018,16 +994,6 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
           <div className="mb-3 text-xs font-semibold text-zinc-500">{t('preview')}</div>
           {!selected ? null : (
             <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-zinc-700">{t('certificateId')}</label>
-                <input
-                  value={previewId}
-                  onChange={(e) => setPreviewId(e.target.value)}
-                  placeholder={t('certificateId')}
-                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                />
-              </div>
-              {previewError ? <div className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">{previewError}</div> : null}
               <CanvasStage
                 mode="preview"
                 width={canvasW}

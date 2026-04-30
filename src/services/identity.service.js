@@ -139,6 +139,78 @@ async function assignIdentity({ organizationId, certificateId, nfcUid, epc }) {
 
   const now = new Date();
   try {
+    if (e) {
+      return await withTimeout(
+        prisma.$transaction(async (tx) => {
+          const item = await tx.epcItem.findFirst({
+            where: { organizationId: orgId, epcCode: e },
+            select: { batchId: true, batch: { select: { certificateId: true } } }
+          });
+
+          const batchCert = item?.batch?.certificateId || null;
+          if (batchCert && batchCert !== certId) {
+            throw new Error(`EPC batch sudah assigned kepada certificate ${batchCert}`);
+          }
+
+          if (item?.batchId) {
+            const res = await tx.epcBatch.updateMany({
+              where: {
+                id: item.batchId,
+                organizationId: orgId,
+                OR: [{ certificateId: null }, { certificateId: certId }]
+              },
+              data: { certificateId: certId }
+            });
+            if (!res.count) {
+              const b = await tx.epcBatch.findFirst({
+                where: { id: item.batchId, organizationId: orgId },
+                select: { certificateId: true }
+              });
+              const current = b?.certificateId || null;
+              if (current && current !== certId) {
+                throw new Error(`EPC batch sudah assigned kepada certificate ${current}`);
+              }
+            }
+          }
+
+          const existingRow = await tx.tagIdentity.findFirst({
+            where: {
+              organizationId: orgId,
+              OR: [uid ? { nfcUid: uid } : undefined, e ? { epc: e } : undefined].filter(Boolean)
+            }
+          });
+
+          if (!existingRow) {
+            return await tx.tagIdentity.create({
+              data: {
+                organizationId: orgId,
+                certificateId: certId,
+                nfcUid: uid,
+                epc: e,
+                assignedAt: now
+              }
+            });
+          }
+
+          if (existingRow.unassignedAt == null && existingRow.certificateId !== certId) {
+            throw new Error('Identity is already assigned to another certificate');
+          }
+
+          return await tx.tagIdentity.update({
+            where: { id: existingRow.id },
+            data: {
+              certificateId: certId,
+              nfcUid: uid || existingRow.nfcUid,
+              epc: e || existingRow.epc,
+              assignedAt: now,
+              unassignedAt: null
+            }
+          });
+        }),
+        2500
+      );
+    }
+
     const existingRow = await withTimeout(
       prisma.tagIdentity.findFirst({
         where: {
@@ -183,7 +255,9 @@ async function assignIdentity({ organizationId, certificateId, nfcUid, epc }) {
       1200
     );
     return updated;
-  } catch {
+  } catch (err) {
+    const msg = String(err?.message || '');
+    if (msg.includes('already assigned') || msg.includes('EPC batch sudah assigned')) throw err;
     const next = {
       id: Date.now(),
       organizationId: orgId,

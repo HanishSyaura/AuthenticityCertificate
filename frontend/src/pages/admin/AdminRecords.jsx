@@ -340,8 +340,8 @@ export default function AdminRecords() {
             </div>
           ) : null}
           <div className="overflow-x-auto">
-            <div className="min-w-[1160px]">
-              <div className="ac-table-head grid grid-cols-[36px_1fr_2fr_1fr_1fr_1fr_1fr_220px] gap-4">
+            <div className="min-w-[1300px]">
+              <div className="ac-table-head grid grid-cols-[36px_1fr_2fr_1.5fr_1fr_1fr_1fr_1fr_220px] gap-4">
                 <div className="flex items-center justify-center">
                   <input
                     ref={headerCheckboxRef}
@@ -364,6 +364,7 @@ export default function AdminRecords() {
                 </div>
                 <div>{t('sku')}</div>
                 <div>{t('product')}</div>
+                <div>{t('remark')}</div>
                 <div>{t('productCode')}</div>
                 <div>{t('category')}</div>
                 <div>{t('status')}</div>
@@ -382,7 +383,7 @@ export default function AdminRecords() {
                   const isInactive = String(p?.status || '').toLowerCase() === 'inactive';
                   const canDeactivate = !isInactive;
                   return (
-                    <div key={p.id} className="ac-table-row grid grid-cols-[36px_1fr_2fr_1fr_1fr_1fr_1fr_220px] gap-4">
+                    <div key={p.id} className="ac-table-row grid grid-cols-[36px_1fr_2fr_1.5fr_1fr_1fr_1fr_1fr_220px] gap-4">
                       <div className="flex items-center justify-center">
                         <input
                           type="checkbox"
@@ -393,9 +394,9 @@ export default function AdminRecords() {
                         />
                       </div>
                       <div className="font-mono text-sm text-zinc-700">{p.sku}</div>
+                      <div className="font-medium text-zinc-900">{p.name}</div>
                       <div>
-                        <div className="font-medium text-zinc-900">{p.name}</div>
-                        <div className="mt-0.5 text-sm text-zinc-600">{p.remark || '-'}</div>
+                        <div className="text-sm text-zinc-600">{String(p.remark ?? '').trim() ? p.remark : '-'}</div>
                       </div>
                       <div className="font-mono text-sm text-zinc-700">{p.code}</div>
                       <div className="text-sm text-zinc-700">{categoryByCode.get(String(p.category || ''))?.name || p.category || '-'}</div>

@@ -335,6 +335,7 @@ async function ensureEpcSchemaCompat() {
         \`batchName\` VARCHAR(191) NOT NULL,
         \`batchQty\` INT NOT NULL,
         \`remark\` VARCHAR(191) NULL,
+        \`certificateId\` VARCHAR(191) NULL,
         \`certificateTemplateId\` INT NULL,
         \`templateData\` JSON NULL,
         \`productionUploadedAt\` DATETIME NULL,
@@ -364,6 +365,30 @@ async function ensureEpcSchemaCompat() {
     null,
     null
   );
+  await ensureColumn(
+    'EpcBatch',
+    'certificateId',
+    `ALTER TABLE \`EpcBatch\` ADD COLUMN \`certificateId\` VARCHAR(191) NULL`,
+    null,
+    null
+  );
+  try {
+    await prisma.$executeRawUnsafe(`
+      UPDATE \`EpcBatch\` b
+      JOIN (
+        SELECT i.batchId AS batchId, MIN(t.certificateId) AS certificateId, COUNT(DISTINCT t.certificateId) AS c
+        FROM \`EpcItem\` i
+        JOIN \`TagIdentity\` t
+          ON t.organizationId = i.organizationId
+         AND t.epc = i.epcCode
+         AND t.unassignedAt IS NULL
+        GROUP BY i.batchId
+      ) x ON x.batchId = b.id
+      SET b.certificateId = x.certificateId
+      WHERE b.certificateId IS NULL AND x.c = 1
+    `);
+  } catch {
+  }
   await ensureColumn('EpcBatch', 'templateData', `ALTER TABLE \`EpcBatch\` ADD COLUMN \`templateData\` JSON NULL`, null, null);
   await ensureColumn(
     'EpcBatch',
@@ -379,6 +404,10 @@ async function ensureEpcSchemaCompat() {
     null,
     null
   );
+
+  const idxCert = `EpcBatch_organizationId_certificateId_idx`;
+  if (!(await indexExists('EpcBatch', idxCert)))
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${idxCert}\` ON \`EpcBatch\` (\`organizationId\`, \`certificateId\`)`);
 
   const hasEpcItem = await tableExists('EpcItem');
   if (!hasEpcItem) {

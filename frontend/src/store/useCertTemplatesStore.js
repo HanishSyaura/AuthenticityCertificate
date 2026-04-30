@@ -12,6 +12,8 @@ const useCertTemplatesStore = create((set, get) => ({
   loading: false,
   error: null,
   lastSyncAt: null,
+  saveSeqById: {},
+  savingById: {},
 
   fetchTemplates: async () => {
     set({ loading: true, error: null });
@@ -53,17 +55,35 @@ const useCertTemplatesStore = create((set, get) => ({
   },
 
   updateTemplate: async ({ id, patch }) => {
-    set({ loading: true, error: null });
+    const key = String(id);
+    const seq = (get().saveSeqById?.[key] || 0) + 1;
+    set((s) => ({
+      error: null,
+      saveSeqById: { ...(s.saveSeqById || {}), [key]: seq },
+      savingById: { ...(s.savingById || {}), [key]: true }
+    }));
     try {
       const api = getApi();
       const res = await api.patch(`/templates/${encodeURIComponent(id)}`, patch);
       const updated = res?.data?.data;
-      const templates = get().templates.map((t) => (String(t.id) === String(id) ? updated : t));
-      set({ templates, loading: false, lastSyncAt: Date.now() });
-      return updated;
+      const isLatest = (get().saveSeqById?.[key] || 0) === seq;
+      if (isLatest) {
+        const templates = get().templates.map((t) => (String(t.id) === String(id) ? updated : t));
+        set((s) => ({
+          templates,
+          lastSyncAt: Date.now(),
+          savingById: { ...(s.savingById || {}), [key]: false }
+        }));
+        return updated;
+      }
+      return null;
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || 'Failed to update template';
-      set({ loading: false, error: msg });
+      const isLatest = (get().saveSeqById?.[key] || 0) === seq;
+      set((s) => ({
+        error: msg,
+        savingById: { ...(s.savingById || {}), [key]: isLatest ? false : s.savingById?.[key] }
+      }));
       throw e;
     }
   },

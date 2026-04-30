@@ -79,6 +79,45 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     if (!cert) return res.error('Certificate not found', 404);
     dbGate.markDbSuccess();
 
+    const resolvedOrgId = Number(req.organization?.id || cert.organizationId || 0) || null;
+    const identityFromReq = identity || null;
+    let resolvedEpc = identityFromReq?.epc || null;
+    let resolvedNfcUid = identityFromReq?.nfcUid || null;
+    if ((resolvedEpc == null && resolvedNfcUid == null) || resolvedOrgId == null) {
+      try {
+        if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
+        const idRow = await Promise.race([
+          prisma.tagIdentity.findFirst({
+            where: { organizationId: resolvedOrgId || Number(cert.organizationId || 0), certificateId: String(certificateId), unassignedAt: null },
+            orderBy: { assignedAt: 'desc' }
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
+        ]);
+        if (idRow) {
+          resolvedEpc = resolvedEpc || idRow.epc || null;
+          resolvedNfcUid = resolvedNfcUid || idRow.nfcUid || null;
+        }
+      } catch {
+        dbGate.markDbFailure({ cooldownMs: 10_000 });
+      }
+    }
+
+    let epcItem = null;
+    if (resolvedOrgId && resolvedEpc) {
+      try {
+        if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
+        epcItem = await Promise.race([
+          prisma.epcItem.findUnique({
+            where: { organizationId_epcCode: { organizationId: resolvedOrgId, epcCode: String(resolvedEpc) } },
+            select: { netWeight: true, productionDate: true, caiqNumber: true }
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
+        ]);
+      } catch {
+        dbGate.markDbFailure({ cooldownMs: 10_000 });
+      }
+    }
+
     let layout = cert.batch?.product?.cmsPage?.publishedVersion?.layoutJson || null;
     const pageId = cert.batch?.product?.cmsPage?.id || null;
     let certificateLayout = cert.batch?.product?.cmsCertificatePage?.publishedVersion?.layoutJson || null;
@@ -89,7 +128,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         const translation = await Promise.race([
           prisma.cmsTranslation.findFirst({
             where: {
-              organizationId: Number(req.organization?.id || cert.organizationId || 0),
+              organizationId: resolvedOrgId || Number(req.organization?.id || cert.organizationId || 0),
               pageId: Number(pageId),
               language: lang
             }
@@ -107,7 +146,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         const translation = await Promise.race([
           prisma.cmsTranslation.findFirst({
             where: {
-              organizationId: Number(req.organization?.id || cert.organizationId || 0),
+              organizationId: resolvedOrgId || Number(req.organization?.id || cert.organizationId || 0),
               pageId: Number(certificatePageId),
               language: lang
             }
@@ -131,7 +170,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         status,
         statusStored: cert.status,
         verifiedVia,
-        identity: identity || null,
+        identity: identityFromReq || null,
         issuedAt: cert.issuedAt || cert.createdAt,
         expiresAt: cert.expiresAt || null,
         revokedAt: cert.revokedAt || null,
@@ -143,6 +182,13 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
             }
           : null,
         batch: cert.batch ? { batchNo: cert.batch.batchNo } : null,
+        epcItem: epcItem
+          ? {
+              netWeight: epcItem.netWeight || null,
+              productionDate: epcItem.productionDate || null,
+              caiqNumber: epcItem.caiqNumber || null
+            }
+          : null,
         layout,
         certificateLayout,
         certificateTemplate: cert.batch?.product?.certificateTemplate || null,

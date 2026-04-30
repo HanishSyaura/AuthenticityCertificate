@@ -149,7 +149,7 @@ async function deleteAllBatches({ organizationId, corpPrefix }) {
   };
 }
 
-async function generateEpcBatch({ organizationId, corpPrefix, productId, batchName, batchQty, remark, certificateTemplateId, templateData }) {
+async function generateEpcBatch({ organizationId, corpPrefix, productId, productionDate, batchName, batchQty, remark, certificateTemplateId, templateData }) {
   const allowed = getAllowedCorpPrefixes();
   if (!allowed.includes(corpPrefix)) throw new Error('Corp code tidak dibenarkan');
 
@@ -162,7 +162,9 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, batchNa
   );
   if (!product) throw new Error('Product tidak dijumpai');
   const skuCode = normalizeSkuCode(product);
-  const mmyy = formatMMyy(new Date());
+  const pd = productionDate ? toDateOrNull(productionDate) : null;
+  if (productionDate && !pd) throw new Error('Invalid production date');
+  const mmyy = formatMMyy(pd || new Date());
 
   const result = await prisma.$transaction(
     async (tx) => {
@@ -229,7 +231,7 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, batchNa
           epcCode,
           runningNo,
           netWeight: null,
-          productionDate: null,
+          productionDate: pd || null,
           caiqNumber: null
         });
       }
@@ -365,7 +367,8 @@ async function exportBatchXlsx({ organizationId, batchId }) {
     { key: 'batchName', value: batch.batchName },
     { key: 'batchQty', value: batch.batchQty },
     { key: 'product', value: batch.product?.name || '' },
-    { key: 'sku', value: batch.sku || batch.product?.sku || '' }
+    { key: 'sku', value: batch.sku || batch.product?.sku || '' },
+    { key: 'certificateId', value: batch.certificateId || '' }
   ];
 
   const wsInfo = XLSX.utils.json_to_sheet(header, { header: ['key', 'value'] });
@@ -446,6 +449,7 @@ async function listItems({ organizationId, q, batchId, limit, offset }) {
               corpPrefix: true,
               batchName: true,
               batchQty: true,
+              certificateId: true,
               sku: true,
               createdAt: true,
               product: { select: { id: true, sku: true, name: true, code: true } }

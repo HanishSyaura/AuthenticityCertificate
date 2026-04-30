@@ -1,6 +1,23 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useT } from '../i18n/useT';
 
+function getValue(path, data) {
+  const parts = String(path || '').split('.').filter(Boolean);
+  let cur = data;
+  for (const p of parts) {
+    cur = cur?.[p];
+  }
+  return cur ?? '';
+}
+
+function interpolateText(text, data) {
+  const s = String(text || '');
+  return s.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, expr) => {
+    const v = getValue(String(expr || '').trim(), data);
+    return v == null ? '' : String(v);
+  });
+}
+
 const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed = false }) => {
   const { t, locale } = useT();
   const layoutSafe = Array.isArray(layout) ? layout : null;
@@ -50,10 +67,32 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
     };
 
     switch (block.type) {
+      case 'container':
+        {
+          const bg = String(block.content?.backgroundColor || '#ffffff');
+          const borderColor = String(block.content?.borderColor || '#e4e4e7');
+          const borderWidth = Number(block.content?.borderWidth ?? 1);
+          const radius = Number(block.content?.borderRadius ?? 12);
+          const opacity = Math.max(0, Math.min(1, Number(block.content?.opacity ?? 1)));
+          return (
+            <div
+              key={block.id}
+              style={{
+                ...style,
+                backgroundColor: bg,
+                borderColor,
+                borderWidth: Number.isFinite(borderWidth) ? borderWidth : 1,
+                borderStyle: 'solid',
+                borderRadius: Number.isFinite(radius) ? radius : 12,
+                opacity
+              }}
+            />
+          );
+        }
       case 'text':
         return (
           <div key={block.id} style={style} className="overflow-hidden">
-            <p className="whitespace-pre-wrap text-sm text-zinc-900">{block.content?.text || ''}</p>
+            <p className="whitespace-pre-wrap text-sm text-zinc-900">{interpolateText(block.content?.text || '', data)}</p>
           </div>
         );
       case 'image':
@@ -79,6 +118,9 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
           const productName = data?.product?.name || '-';
           const batchNo = data?.batch?.batchNo || '-';
           const issued = data?.issuedAt ? new Date(data.issuedAt) : null;
+          const netWeight = data?.epcItem?.netWeight || null;
+          const caiqNumber = data?.epcItem?.caiqNumber || null;
+          const productionDate = data?.epcItem?.productionDate ? new Date(data.epcItem.productionDate) : null;
           const certLayout = !disableCertificateEmbed && Array.isArray(data?.certificateLayout) ? data.certificateLayout : null;
           if (certLayout) {
             const rawW = Number(data?.certificateTemplate?.canvasWidth || block.content?.canvasWidth || 390);
@@ -129,6 +171,28 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                 <span className="font-semibold">{t('issued')}:</span>
                 <span className="truncate">{issued ? issued.toLocaleDateString(locale) : '-'}</span>
               </div>
+              {netWeight || caiqNumber || productionDate ? (
+                <div className="mt-2 border-t border-white/40 pt-2">
+                  {netWeight ? (
+                    <div className="flex justify-between gap-3">
+                      <span className="font-semibold">{t('netWeight')}:</span>
+                      <span className="truncate">{String(netWeight)}</span>
+                    </div>
+                  ) : null}
+                  {caiqNumber ? (
+                    <div className={`flex justify-between gap-3${netWeight ? ' mt-1' : ''}`}>
+                      <span className="font-semibold">{t('caiqNo')}:</span>
+                      <span className="truncate">{String(caiqNumber)}</span>
+                    </div>
+                  ) : null}
+                  {productionDate ? (
+                    <div className={`flex justify-between gap-3${netWeight || caiqNumber ? ' mt-1' : ''}`}>
+                      <span className="font-semibold">{t('productionDate')}:</span>
+                      <span className="truncate">{productionDate.toLocaleDateString(locale)}</span>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
         );
