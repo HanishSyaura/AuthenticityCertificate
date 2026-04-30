@@ -37,48 +37,53 @@ export default function RichTextEditor({ value, onChange }) {
     onChange(el.innerHTML);
   };
 
+  const run = (cmd, v = null) => {
+    exec(cmd, v);
+    emit();
+  };
+
   return (
     <div className="rounded-xl border border-zinc-200 bg-white">
       <div className="flex flex-wrap items-center gap-2 border-b border-zinc-200 bg-zinc-50 p-2">
-        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onMouseDown={(e) => e.preventDefault()} onClick={() => exec('bold')}>
+        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onMouseDown={(e) => e.preventDefault()} onClick={() => run('bold')}>
           B
         </button>
-        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold italic" onMouseDown={(e) => e.preventDefault()} onClick={() => exec('italic')}>
+        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold italic" onMouseDown={(e) => e.preventDefault()} onClick={() => run('italic')}>
           I
         </button>
-        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold underline" onMouseDown={(e) => e.preventDefault()} onClick={() => exec('underline')}>
+        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold underline" onMouseDown={(e) => e.preventDefault()} onClick={() => run('underline')}>
           U
         </button>
         <button
           type="button"
           className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold line-through"
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => exec('strikeThrough')}
+          onClick={() => run('strikeThrough')}
         >
           S
         </button>
-        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onMouseDown={(e) => e.preventDefault()} onClick={() => exec('superscript')}>
+        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onMouseDown={(e) => e.preventDefault()} onClick={() => run('superscript')}>
           x²
         </button>
-        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onMouseDown={(e) => e.preventDefault()} onClick={() => exec('subscript')}>
+        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onMouseDown={(e) => e.preventDefault()} onClick={() => run('subscript')}>
           x₂
         </button>
 
         <div className="mx-1 h-5 w-px bg-zinc-200" />
 
-        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onMouseDown={(e) => e.preventDefault()} onClick={() => exec('formatBlock', 'h1')}>
+        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onMouseDown={(e) => e.preventDefault()} onClick={() => run('formatBlock', '<h1>')}>
           H1
         </button>
-        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onMouseDown={(e) => e.preventDefault()} onClick={() => exec('formatBlock', 'h2')}>
+        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onMouseDown={(e) => e.preventDefault()} onClick={() => run('formatBlock', '<h2>')}>
           H2
         </button>
-        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onMouseDown={(e) => e.preventDefault()} onClick={() => exec('insertUnorderedList')}>
+        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onMouseDown={(e) => e.preventDefault()} onClick={() => run('insertUnorderedList')}>
           • List
         </button>
-        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onMouseDown={(e) => e.preventDefault()} onClick={() => exec('insertOrderedList')}>
+        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onMouseDown={(e) => e.preventDefault()} onClick={() => run('insertOrderedList')}>
           1. List
         </button>
-        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onMouseDown={(e) => e.preventDefault()} onClick={() => exec('formatBlock', 'blockquote')}>
+        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onMouseDown={(e) => e.preventDefault()} onClick={() => run('formatBlock', '<blockquote>')}>
           “ ”
         </button>
 
@@ -99,10 +104,8 @@ export default function RichTextEditor({ value, onChange }) {
           className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold"
           defaultValue="3"
           onChange={(e) => {
-            exec('fontSize', e.target.value);
-            emit();
+            run('fontSize', e.target.value);
           }}
-          onMouseDown={(e) => e.preventDefault()}
         >
           {sizeOptions.map((n) => (
             <option key={n} value={String(n)}>
@@ -120,8 +123,7 @@ export default function RichTextEditor({ value, onChange }) {
           onClick={() => {
             const url = window.prompt('Link URL');
             if (!url) return;
-            exec('createLink', url);
-            emit();
+            run('createLink', url);
           }}
         >
           Link
@@ -133,8 +135,7 @@ export default function RichTextEditor({ value, onChange }) {
           onClick={() => {
             const url = window.prompt('Image URL');
             if (!url) return;
-            exec('insertImage', url);
-            emit();
+            run('insertImage', url);
           }}
         >
           Image
@@ -147,13 +148,21 @@ export default function RichTextEditor({ value, onChange }) {
             const rows = window.prompt('Table rows', '2');
             const cols = window.prompt('Table columns', '2');
             if (!rows || !cols) return;
-            exec('insertHTML', buildTableHtml(rows, cols));
-            emit();
+            run('insertHTML', buildTableHtml(rows, cols));
           }}
         >
           Table
         </button>
-        <button type="button" className="ml-auto rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onMouseDown={(e) => e.preventDefault()} onClick={() => exec('removeFormat')}>
+        <button
+          type="button"
+          className="ml-auto rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            exec('removeFormat');
+            exec('unlink');
+            emit();
+          }}
+        >
           Clear
         </button>
       </div>

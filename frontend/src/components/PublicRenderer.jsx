@@ -10,10 +10,56 @@ function getValue(path, data) {
   return cur ?? '';
 }
 
-function interpolateText(text, data) {
+function toDateOrNull(input) {
+  if (!input) return null;
+  if (input instanceof Date && !Number.isNaN(input.getTime())) return input;
+  const s = String(input || '').trim();
+  if (!s) return null;
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) return d;
+  return null;
+}
+
+function applyFormatter(token, value, locale) {
+  const raw = String(token || '').trim();
+  if (!raw) return value;
+  const [nameRaw, argRaw] = raw.split(':');
+  const name = String(nameRaw || '').trim().toLowerCase();
+  const arg = String(argRaw || '').trim().toLowerCase();
+
+  if (name === 'date' || name === 'datetime') {
+    const d = toDateOrNull(value);
+    if (!d) return value;
+    if (name === 'datetime') return d.toLocaleString(locale);
+    const opts =
+      arg === 'long'
+        ? { year: 'numeric', month: 'long', day: '2-digit' }
+        : arg === 'medium'
+          ? { year: 'numeric', month: 'short', day: '2-digit' }
+          : { year: 'numeric', month: '2-digit', day: '2-digit' };
+    return d.toLocaleDateString(locale, opts);
+  }
+
+  if (name === 'upper') return String(value ?? '').toUpperCase();
+  if (name === 'lower') return String(value ?? '').toLowerCase();
+  if (name === 'trim') return String(value ?? '').trim();
+
+  return value;
+}
+
+function interpolateText(text, data, locale) {
   const s = String(text || '');
   return s.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, expr) => {
-    const v = getValue(String(expr || '').trim(), data);
+    const raw = String(expr || '').trim();
+    if (!raw) return '';
+    const parts = raw.split('|').map((p) => String(p || '').trim()).filter(Boolean);
+    const path = parts[0] || '';
+    const formatters = parts.slice(1);
+    let v = getValue(path, data);
+    if (v == null) v = '';
+    for (const f of formatters) {
+      v = applyFormatter(f, v, locale);
+    }
     return v == null ? '' : String(v);
   });
 }
@@ -92,7 +138,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
       case 'text':
         return (
           <div key={block.id} style={style} className="overflow-hidden">
-            <p className="whitespace-pre-wrap text-sm text-zinc-900">{interpolateText(block.content?.text || '', data)}</p>
+            <p className="whitespace-pre-wrap text-sm text-zinc-900">{interpolateText(block.content?.text || '', data, locale)}</p>
           </div>
         );
       case 'image':

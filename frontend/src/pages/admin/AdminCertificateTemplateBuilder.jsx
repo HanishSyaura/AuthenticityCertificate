@@ -105,6 +105,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const [bgFileKey, setBgFileKey] = useState(0);
   const [wizardStep, setWizardStep] = useState('fields');
   const [addOverlayKey, setAddOverlayKey] = useState('');
+  const [expandedPlaceholderKey, setExpandedPlaceholderKey] = useState(null);
   const [devicePresetId, setDevicePresetId] = useState('fit');
   const [backgroundMode, setBackgroundMode] = useState('background');
   const [assignedBatchIds, setAssignedBatchIds] = useState(() => new Set());
@@ -183,7 +184,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         templateData[key] = bindPath ? getValue(bindPath, base) : '';
         continue;
       }
-      if (source === 'static') {
+      if (source === 'static' || source === 'title') {
         templateData[key] = String(p?.staticValue || '');
         continue;
       }
@@ -208,10 +209,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             const key = path.startsWith('templateData.') ? path.slice('templateData.'.length) : '';
             const ph = key ? placeholderByKey.get(key) : null;
             const val = raw == null ? '' : String(raw);
-            const label = key ? String(ph?.label || key) : String(it.label || '');
-            const separator = key ? String(ph?.separator ?? ': ') : ': ';
-            const prefix = label ? `${label}${separator}` : '';
             const source = String(ph?.source || '').trim();
+            const showPrefix = source !== 'title';
+            const label = showPrefix ? (key ? String(ph?.label || key) : String(it.label || '')) : '';
+            const separator = showPrefix ? (key ? String(ph?.separator ?? ': ') : ': ') : '';
+            const prefix = showPrefix && label ? `${label}${separator}` : '';
             const valueHtml = source === 'static' || source === 'manual' ? val : escapeTextToHtml(val);
             const html = `${escapeHtml(prefix)}${valueHtml || ''}`;
             const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
@@ -235,10 +237,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         const key = path.startsWith('templateData.') ? path.slice('templateData.'.length) : '';
         const ph = key ? placeholderByKey.get(key) : null;
         const val = raw == null ? '' : String(raw);
-        const label = key ? String(ph?.label || key) : String(it.label || '');
-        const separator = key ? String(ph?.separator ?? ': ') : ': ';
-        const prefix = label ? `${label}${separator}` : '';
         const source = String(ph?.source || '').trim();
+        const showPrefix = source !== 'title';
+        const label = showPrefix ? (key ? String(ph?.label || key) : String(it.label || '')) : '';
+        const separator = showPrefix ? (key ? String(ph?.separator ?? ': ') : ': ') : '';
+        const prefix = showPrefix && label ? `${label}${separator}` : '';
         const valueHtml = source === 'static' || source === 'manual' ? val : escapeTextToHtml(val);
         const html = `${escapeHtml(prefix)}${valueHtml || ''}`;
         const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
@@ -430,6 +433,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     setSelectedFieldId(null);
     const firstKey = String((Array.isArray(selectedPlaceholdersRef.current) ? selectedPlaceholdersRef.current : [])?.[0]?.key || '').trim();
     setAddOverlayKey(firstKey);
+    setExpandedPlaceholderKey(firstKey || null);
   }, [selected?.id]);
 
   useEffect(() => {
@@ -443,6 +447,18 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     const cur = String(addOverlayKey || '').trim();
     if (!cur || !keys.includes(cur)) setAddOverlayKey(keys[0]);
   }, [placeholders, addOverlayKey]);
+
+  useEffect(() => {
+    const keys = (Array.isArray(placeholders) ? placeholders : [])
+      .map((p) => String(p?.key || '').trim())
+      .filter((k) => k);
+    if (keys.length === 0) {
+      if (expandedPlaceholderKey) setExpandedPlaceholderKey(null);
+      return;
+    }
+    const cur = String(expandedPlaceholderKey || '').trim();
+    if (!cur || !keys.includes(cur)) setExpandedPlaceholderKey(keys[0]);
+  }, [placeholders, expandedPlaceholderKey]);
 
   useEffect(() => {
     if (!selected?.id) return;
@@ -599,127 +615,152 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                     {placeholders.map((p, idx) => {
                       const source = String(p?.source || 'static');
                       const uiSource = source === 'manual' ? 'static' : source;
+                      const isTitle = uiSource === 'title';
+                      const cardKey = String(p?.key || '').trim() || `idx-${idx}`;
+                      const isOpen = String(expandedPlaceholderKey || '') === cardKey;
+                      const title = String(p?.label || '').trim() || String(p?.key || '').trim() || `#${idx + 1}`;
                       return (
                         <div key={`${p?.key || ''}-${idx}`} className="rounded-lg border border-zinc-200 bg-white p-2">
-                          <div className="grid grid-cols-1 gap-2">
-                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                              <input
-                                value={String(p?.label || '')}
-                                onChange={(e) => {
-                                  const nextLabel = e.target.value;
-                                  const next = placeholders.slice();
-                                  const cur = next[idx] || {};
-                                  const curKey = String(cur.key || '').trim();
-                                  if (!curKey) {
-                                    const used = new Set(
-                                      next
-                                        .map((it, i) => (i === idx ? '' : String(it?.key || '').trim().toLowerCase()))
-                                        .filter(Boolean)
-                                    );
-                                    const gen = makeUniqueKey(nextLabel, used);
-                                    next[idx] = { ...cur, label: nextLabel, key: gen };
-                                  } else {
-                                    next[idx] = { ...cur, label: nextLabel };
-                                  }
-                                  replacePlaceholders(next);
-                                }}
-                                placeholder={t('fieldLabel')}
-                                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                              />
-                              <input
-                                value={String(p?.separator ?? ': ')}
-                                onChange={(e) => {
-                                  const next = placeholders.slice();
-                                  next[idx] = { ...(next[idx] || {}), separator: e.target.value };
-                                  replacePlaceholders(next);
-                                }}
-                                placeholder={t('separator')}
-                                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                              />
-                            </div>
-                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                              <select
-                                value={uiSource}
-                                onChange={(e) => {
-                                  const nextSource = e.target.value;
-                                  const next = placeholders.slice();
-                                  const cur = next[idx] || {};
-                                  next[idx] = {
-                                    ...cur,
-                                    source: nextSource,
-                                    ...(nextSource === 'static' ? { bindPath: String(cur.bindPath || '') } : { staticValue: String(cur.staticValue || '') })
-                                  };
-                                  replacePlaceholders(next);
-                                }}
-                                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                              >
-                                <option value="static">{t('sourceManual')}</option>
-                                <option value="product">{t('bindTo')}</option>
-                              </select>
-                              {uiSource === 'product' ? (
-                                <div>
-                                  <input
-                                  value={String(p?.bindPath || '')}
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedPlaceholderKey(isOpen ? null : cardKey)}
+                              className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left hover:bg-zinc-50"
+                            >
+                              <div className="text-xs font-semibold text-zinc-500">{isOpen ? '▾' : '▸'}</div>
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-semibold text-zinc-900">{title}</div>
+                                <div className="mt-0.5 truncate text-[11px] text-zinc-500">
+                                  {String(p?.key || '').trim() ? `${t('key')}: ${String(p?.key || '').trim()} · ` : ''}
+                                  {uiSource === 'product' ? t('bindTo') : uiSource === 'title' ? t('sourceTitle') : t('sourceManual')}
+                                </div>
+                              </div>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const deletingKey = String(placeholders[idx]?.key || '').trim();
+                                const deletingCardKey = deletingKey || `idx-${idx}`;
+                                const nextPlaceholders = placeholders.filter((_, i) => i !== idx);
+                                if (String(expandedPlaceholderKey || '') === deletingCardKey) {
+                                  const nextExpanded = String(nextPlaceholders?.[0]?.key || '').trim();
+                                  setExpandedPlaceholderKey(nextExpanded || null);
+                                }
+                                if (deletingKey) {
+                                  const nextLayout = (Array.isArray(draftLayout) ? draftLayout : []).filter((it) => String(it?.path || '') !== `templateData.${deletingKey}`);
+                                  if (String(addOverlayKey || '').trim() === deletingKey) setAddOverlayKey('');
+                                  if (selectedField && String(selectedField.path || '') === `templateData.${deletingKey}`) setSelectedFieldId(null);
+                                  replacePlaceholdersAndLayout({ nextPlaceholders, nextLayout });
+                                  return;
+                                }
+                                replacePlaceholders(nextPlaceholders);
+                              }}
+                              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                            >
+                              {t('delete')}
+                            </button>
+                          </div>
+                          {isOpen ? (
+                            <div className="mt-2 grid grid-cols-1 gap-2" onFocusCapture={() => setExpandedPlaceholderKey(cardKey)}>
+                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <input
+                                  value={String(p?.label || '')}
+                                  onChange={(e) => {
+                                    const nextLabel = e.target.value;
+                                    const next = placeholders.slice();
+                                    const cur = next[idx] || {};
+                                    const curKey = String(cur.key || '').trim();
+                                    if (!curKey) {
+                                      const used = new Set(
+                                        next
+                                          .map((it, i) => (i === idx ? '' : String(it?.key || '').trim().toLowerCase()))
+                                          .filter(Boolean)
+                                      );
+                                      const gen = makeUniqueKey(nextLabel, used);
+                                      next[idx] = { ...cur, label: nextLabel, key: gen };
+                                    } else {
+                                      next[idx] = { ...cur, label: nextLabel };
+                                    }
+                                    replacePlaceholders(next);
+                                    const nextKey = String(next[idx]?.key || '').trim();
+                                    if (nextKey && String(expandedPlaceholderKey || '') === cardKey) setExpandedPlaceholderKey(nextKey);
+                                  }}
+                                  placeholder={t('fieldLabel')}
+                                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                                />
+                                <input
+                                  value={String(p?.separator ?? ': ')}
                                   onChange={(e) => {
                                     const next = placeholders.slice();
-                                    next[idx] = { ...(next[idx] || {}), bindPath: e.target.value };
+                                    next[idx] = { ...(next[idx] || {}), separator: e.target.value };
                                     replacePlaceholders(next);
                                   }}
-                                    placeholder={t('bindTo')}
-                                    list="certTplBindPaths"
-                                    className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                                  />
-                                  <datalist id="certTplBindPaths">
-                                    <option value="certificateId" />
-                                    <option value="status" />
-                                    <option value="issuedAt" />
-                                    <option value="product.name" />
-                                    <option value="product.sku" />
-                                    <option value="product.code" />
-                                    <option value="product.category" />
-                                    <option value="product.origin" />
-                                    <option value="product.description" />
-                                    <option value="batch.batchNo" />
-                                  </datalist>
-                                </div>
-                              ) : (
-                                <div />
-                              )}
-                            </div>
-                            {uiSource === 'static' ? (
-                              <div>
-                                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('staticValue')}</div>
-                                <RichTextEditor
-                                  value={String(p?.staticValue || '')}
-                                  onChange={(v) => {
-                                    const next = placeholders.slice();
-                                    next[idx] = { ...(next[idx] || {}), staticValue: v };
-                                    replacePlaceholders(next);
-                                  }}
+                                  placeholder={t('separator')}
+                                  disabled={isTitle}
+                                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                                 />
                               </div>
-                            ) : null}
-                            <div className="flex items-center justify-between gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const oldKeyTrim = String(placeholders[idx]?.key || '').trim();
-                                  const nextPlaceholders = placeholders.filter((_, i) => i !== idx);
-                                  if (oldKeyTrim) {
-                                    const nextLayout = (Array.isArray(draftLayout) ? draftLayout : []).filter((it) => String(it?.path || '') !== `templateData.${oldKeyTrim}`);
-                                    if (String(addOverlayKey || '').trim() === oldKeyTrim) setAddOverlayKey('');
-                                    if (selectedField && String(selectedField.path || '') === `templateData.${oldKeyTrim}`) setSelectedFieldId(null);
-                                    replacePlaceholdersAndLayout({ nextPlaceholders, nextLayout });
-                                    return;
-                                  }
-                                  replacePlaceholders(nextPlaceholders);
-                                }}
-                                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-                              >
-                                {t('delete')}
-                              </button>
+                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <select
+                                  value={uiSource}
+                                  onChange={(e) => {
+                                    const nextSource = e.target.value;
+                                    const next = placeholders.slice();
+                                    const cur = next[idx] || {};
+                                    next[idx] = { ...cur, source: nextSource };
+                                    replacePlaceholders(next);
+                                  }}
+                                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                                >
+                                  <option value="static">{t('sourceManual')}</option>
+                                  <option value="title">{t('sourceTitle')}</option>
+                                  <option value="product">{t('bindTo')}</option>
+                                </select>
+                                {uiSource === 'product' ? (
+                                  <div>
+                                    <input
+                                      value={String(p?.bindPath || '')}
+                                      onChange={(e) => {
+                                        const next = placeholders.slice();
+                                        next[idx] = { ...(next[idx] || {}), bindPath: e.target.value };
+                                        replacePlaceholders(next);
+                                      }}
+                                      placeholder={t('bindTo')}
+                                      list="certTplBindPaths"
+                                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                                    />
+                                    <datalist id="certTplBindPaths">
+                                      <option value="certificateId" />
+                                      <option value="status" />
+                                      <option value="issuedAt" />
+                                      <option value="product.name" />
+                                      <option value="product.sku" />
+                                      <option value="product.code" />
+                                      <option value="product.category" />
+                                      <option value="product.origin" />
+                                      <option value="product.description" />
+                                      <option value="batch.batchNo" />
+                                    </datalist>
+                                  </div>
+                                ) : (
+                                  <div />
+                                )}
+                              </div>
+                              {uiSource === 'static' || uiSource === 'title' ? (
+                                <div>
+                                  <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('staticValue')}</div>
+                                  <RichTextEditor
+                                    value={String(p?.staticValue || '')}
+                                    onChange={(v) => {
+                                      const next = placeholders.slice();
+                                      next[idx] = { ...(next[idx] || {}), staticValue: v };
+                                      replacePlaceholders(next);
+                                    }}
+                                  />
+                                </div>
+                              ) : null}
                             </div>
-                          </div>
+                          ) : null}
                         </div>
                       );
                     })}
@@ -733,10 +774,8 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                             placeholders.map((it) => String(it?.key || '').trim().toLowerCase()).filter(Boolean)
                           );
                           const key = makeUniqueKey(`field_${placeholders.length + 1}`, used);
-                          replacePlaceholders([
-                            ...placeholders,
-                            { key, label: '', separator: ': ', source: 'static', bindPath: '', staticValue: '', sample: '' }
-                          ]);
+                          replacePlaceholders([...placeholders, { key, label: '', separator: ': ', source: 'static', bindPath: '', staticValue: '', sample: '' }]);
+                          setExpandedPlaceholderKey(key);
                         })()
                       }
                       className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
@@ -773,11 +812,6 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   onChange={(e) => queueTemplatePatch({ name: e.target.value })}
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-zinc-700">{t('templateRecordId')}</label>
-                <input value={selected.id != null ? `#${selected.id}` : ''} disabled className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm" />
               </div>
 
               <div>

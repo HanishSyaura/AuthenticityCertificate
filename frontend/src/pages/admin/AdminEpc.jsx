@@ -135,7 +135,7 @@ export default function AdminEpc() {
         const key = String(p?.key || '').trim();
         if (!key) continue;
         const source = String(p?.source || 'static');
-        if (source === 'static') {
+        if (source === 'static' || source === 'title') {
           next[key] = String(p?.staticValue || '');
           continue;
         }
