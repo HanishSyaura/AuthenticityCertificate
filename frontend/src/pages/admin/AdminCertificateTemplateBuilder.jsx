@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CanvasStage from '../../components/admin/CanvasStage';
 import RichTextEditor from '../../components/admin/RichTextEditor';
 import { useT } from '../../i18n/useT';
@@ -66,6 +66,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const [draftLayout, setDraftLayout] = useState([]);
   const persistTimerRef = useRef(null);
   const pendingPatchRef = useRef(null);
+  const previewNowRef = useRef(new Date().toISOString());
 
   const selected = useMemo(() => templates.find((it) => String(it.id) === String(selectedId)) || null, [templates, selectedId]);
   const canvasW = Number(selected?.canvasWidth) > 0 ? Number(selected.canvasWidth) : 390;
@@ -79,29 +80,63 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
 
   const placeholders = useMemo(() => (Array.isArray(draftPlaceholders) ? draftPlaceholders : []), [draftPlaceholders]);
 
-  const fields = useMemo(() => {
-    const layout = Array.isArray(draftLayout) ? draftLayout : [];
-    const placeholderByKey = new Map();
-    for (const p of placeholders) {
+  const placeholderByKey = useMemo(() => {
+    const map = new Map();
+    for (const p of Array.isArray(placeholders) ? placeholders : []) {
       const key = String(p?.key || '').trim();
       if (!key) continue;
-      placeholderByKey.set(key, p);
+      map.set(key, p);
     }
-    const textAlignClass = (align) => {
-      const a = String(align || '').toLowerCase();
-      if (a === 'center') return 'text-center';
-      if (a === 'right') return 'text-right';
-      return 'text-left';
+    return map;
+  }, [placeholders]);
+
+  const textAlignClass = (align) => {
+    const a = String(align || '').toLowerCase();
+    if (a === 'center') return 'text-center';
+    if (a === 'right') return 'text-right';
+    return 'text-left';
+  };
+
+  const safePreview = useMemo(() => {
+    const list = Array.isArray(placeholders) ? placeholders : [];
+    const templateData = {};
+    for (const p of list) {
+      const key = String(p?.key || '').trim();
+      if (!key) continue;
+      const fromCert = previewData?.templateData?.[key];
+      const fromSample = p?.sample;
+      const fromStatic = String(p?.source || '') === 'static' ? p?.staticValue : '';
+      templateData[key] = fromCert ?? fromSample ?? fromStatic ?? '';
+    }
+    const fallback = {
+      certificateId: `CERT-${String(previewId || '').trim() || '0001'}`,
+      status: 'valid',
+      issuedAt: previewNowRef.current,
+      product: {
+        name: 'Sample Product',
+        sku: 'SKU-001',
+        code: 'CODE-001',
+        category: '',
+        origin: '',
+        description: ''
+      },
+      batch: {
+        batchNo: 'BATCH-001'
+      }
     };
-    const safePreview = previewData
+    const base = previewData
       ? {
+          ...fallback,
           ...previewData,
-          templateData: {
-            ...(previewData.templateData || {}),
-            ...Object.fromEntries(placeholders.map((p) => [String(p?.key || '').trim(), previewData?.templateData?.[String(p?.key || '').trim()] || p?.sample || '']))
-          }
+          product: { ...fallback.product, ...(previewData.product || {}) },
+          batch: { ...fallback.batch, ...(previewData.batch || {}) }
         }
-      : null;
+      : fallback;
+    return { ...base, templateData: { ...(base.templateData || {}), ...templateData } };
+  }, [placeholders, previewData, previewId]);
+
+  const canvasItems = useMemo(() => {
+    const layout = Array.isArray(draftLayout) ? draftLayout : [];
     return layout.map((f) => ({
       ...(f || {}),
       render: (it) => (
@@ -134,7 +169,32 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         </div>
       )
     }));
-  }, [draftLayout, placeholders, previewData]);
+  }, [draftLayout, placeholderByKey, safePreview]);
+
+  const previewItems = useMemo(() => {
+    const layout = Array.isArray(draftLayout) ? draftLayout : [];
+    return layout.map((f) => ({
+      ...(f || {}),
+      render: (it) => {
+        const raw = safePreview ? getValue(it.path, safePreview) : '';
+        const path = String(it.path || '');
+        const key = path.startsWith('templateData.') ? path.slice('templateData.'.length) : '';
+        const ph = key ? placeholderByKey.get(key) : null;
+        const typ = String(ph?.type || '');
+        const val = raw == null ? '' : String(raw);
+        const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
+        const align = textAlignClass(it.align);
+        if (typ === 'rich_text') {
+          return <div className={`h-full w-full ${align}`} style={{ fontSize: fs }} dangerouslySetInnerHTML={{ __html: val }} />;
+        }
+        return (
+          <div className={`h-full w-full whitespace-pre-wrap break-words font-semibold text-zinc-900 ${align}`} style={{ fontSize: fs }}>
+            {val}
+          </div>
+        );
+      }
+    }));
+  }, [draftLayout, placeholderByKey, safePreview]);
 
   const selectedField = useMemo(() => (Array.isArray(draftLayout) ? draftLayout : []).find((f) => f.id === selectedFieldId) || null, [draftLayout, selectedFieldId]);
 
@@ -271,7 +331,19 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     setSelectedFieldId(null);
     const firstKey = String((Array.isArray(selected.placeholders) ? selected.placeholders : [])?.[0]?.key || '').trim();
     setAddOverlayKey(firstKey);
-  }, [selected?.id, selected?.placeholders]);
+  }, [selected?.id]);
+
+  useEffect(() => {
+    const keys = (Array.isArray(placeholders) ? placeholders : [])
+      .map((p) => String(p?.key || '').trim())
+      .filter((k) => k);
+    if (keys.length === 0) {
+      if (addOverlayKey) setAddOverlayKey('');
+      return;
+    }
+    const cur = String(addOverlayKey || '').trim();
+    if (!cur || !keys.includes(cur)) setAddOverlayKey(keys[0]);
+  }, [placeholders, addOverlayKey]);
 
   useEffect(() => {
     if (!selected?.id) return;
@@ -282,18 +354,18 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     setAssignedBatchIds(next);
   }, [batches, selected?.id]);
 
-  const fetchPreview = async () => {
+  const fetchPreview = useCallback(async (certId) => {
     setPreviewError(null);
     setPreviewData(null);
-    const certId = String(previewId || '').trim();
-    if (!certId) return;
+    const id = String(certId || '').trim();
+    if (!id) return;
     if (!token) {
       setPreviewError('Not authenticated');
       return;
     }
     try {
       const api = createAdminApi({ token });
-      const res = await api.get(`/analytics/cert/${encodeURIComponent(certId)}`);
+      const res = await api.get(`/analytics/cert/${encodeURIComponent(id)}`);
       const cert = res?.data?.data?.certificate || null;
       if (!cert) {
         setPreviewError(t('notFound'));
@@ -304,7 +376,27 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       const msg = e?.response?.data?.message || e?.message || t('verificationFailed');
       setPreviewError(msg);
     }
-  };
+  }, [t, token]);
+
+  useEffect(() => {
+    const certId = String(previewId || '').trim();
+    if (!certId) {
+      setPreviewError(null);
+      setPreviewData(null);
+      return;
+    }
+    let alive = true;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        if (!alive) return;
+        await fetchPreview(certId);
+      })();
+    }, 450);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [fetchPreview, previewId]);
 
   return (
     <div className="ac-page">
@@ -315,7 +407,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
 
       {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,540px)_420px]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,540px)_minmax(0,420px)_minmax(0,420px)]">
         <div className="ac-card p-3">
           {!selected ? (
             <div className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{t('selectTemplate')}</div>
@@ -360,17 +452,6 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           </option>
                         ))}
                       </select>
-                      <div className="flex items-center gap-2">
-                        <input
-                          value={previewId}
-                          onChange={(e) => setPreviewId(e.target.value)}
-                          placeholder={t('certificateId')}
-                          className="ac-input w-44 rounded-lg px-3 py-2 text-xs"
-                        />
-                        <button type="button" onClick={fetchPreview} className="ac-btn ac-btn-soft px-3 py-2 text-xs">
-                          {t('preview')}
-                        </button>
-                      </div>
                       <select value={addOverlayKey} onChange={(e) => setAddOverlayKey(e.target.value)} className="ac-input w-52 rounded-lg px-3 py-2 text-xs">
                         <option value="">{t('selectDataField')}</option>
                         {placeholders
@@ -423,7 +504,6 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                 </div>
               </div>
 
-              {previewError ? <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">{previewError}</div> : null}
               {wizardStep === 'fields' && !validatePlaceholders.ok && validatePlaceholders.errors.length > 0 ? (
                 <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
                   {validatePlaceholders.errors[0]}
@@ -438,7 +518,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   backgroundMode={backgroundMode}
                   backgroundColor={canvasBgColor}
                   backgroundUrl={selected.background || ''}
-                  items={fields}
+                  items={canvasItems}
                   setItems={setCanvasItems}
                   selectedId={selectedFieldId}
                   setSelectedId={setSelectedFieldId}
@@ -887,6 +967,34 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   </div>
                 </>
               )}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-white p-3">
+          <div className="mb-3 text-xs font-semibold text-zinc-500">{t('preview')}</div>
+          {!selected ? null : (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-zinc-700">{t('certificateId')}</label>
+                <input
+                  value={previewId}
+                  onChange={(e) => setPreviewId(e.target.value)}
+                  placeholder={t('certificateId')}
+                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                />
+              </div>
+              {previewError ? <div className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">{previewError}</div> : null}
+              <CanvasStage
+                mode="preview"
+                width={canvasW}
+                height={canvasH}
+                scale={Math.max(0.1, Math.min(1, 360 / canvasW))}
+                backgroundMode={backgroundMode}
+                backgroundColor={canvasBgColor}
+                backgroundUrl={selected.background || ''}
+                items={previewItems}
+              />
             </div>
           )}
         </div>

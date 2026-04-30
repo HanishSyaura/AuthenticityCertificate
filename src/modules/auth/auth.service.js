@@ -19,7 +19,6 @@ async function login(email, password) {
 
   try {
     user = await withTimeout(prisma.user.findUnique({ where: { email } }), dbTimeoutMs);
-    if (user && user.deletedAt) user = null;
     if (user) role = user.role;
   } catch {
   }
@@ -69,7 +68,7 @@ async function resolveCurrentUser(tokenUser) {
   const dbTimeoutMs = getDbTimeoutMs();
   try {
     const u = await withTimeout(prisma.user.findUnique({ where: { id } }), dbTimeoutMs);
-    if (u && !u.deletedAt && String(u.email || '').trim().toLowerCase() === email) {
+    if (u && String(u.email || '').trim().toLowerCase() === email) {
       return { kind: 'user', row: u };
     }
   } catch {

@@ -10,8 +10,8 @@ function getAllowedCorpPrefixes() {
 }
 
 function getRunningPadLen() {
-  const n = Number(process.env.EPC_RUNNING_PAD || 7);
-  if (!Number.isFinite(n) || n < 1) return 7;
+  const n = Number(process.env.EPC_RUNNING_PAD || 8);
+  if (!Number.isFinite(n) || n < 1) return 8;
   return Math.floor(n);
 }
 
@@ -26,18 +26,25 @@ function formatMMyy(d = new Date()) {
 }
 
 function normalizeSkuCode(product) {
-  const raw = String(product?.sku || '').trim();
-  const digits = raw.replace(/\D+/g, '');
-  if (digits) return digits.length >= 2 ? digits.slice(-2) : digits.padStart(2, '0');
-  const fallback = String(product?.code || '').trim().replace(/\D+/g, '');
-  if (fallback) return fallback.length >= 2 ? fallback.slice(-2) : fallback.padStart(2, '0');
-  return '00';
+  const rawSku = String(product?.sku || '').trim();
+  const skuDigits = rawSku.replace(/\D+/g, '');
+  if (skuDigits) return skuDigits;
+  const skuAlnum = rawSku.replace(/[^a-z0-9]+/gi, '');
+  if (skuAlnum) return skuAlnum.toUpperCase();
+
+  const rawCode = String(product?.code || '').trim();
+  const codeDigits = rawCode.replace(/\D+/g, '');
+  if (codeDigits) return codeDigits;
+  const codeAlnum = rawCode.replace(/[^a-z0-9]+/gi, '');
+  if (codeAlnum) return codeAlnum.toUpperCase();
+
+  return '0';
 }
 
 function buildEpcCode({ corpPrefix, runningNo, skuCode, mmyy }) {
   const padLen = getRunningPadLen();
   const run = padRunningNo(runningNo, padLen);
-  return `${corpPrefix}${run}${skuCode}${mmyy}${run}`;
+  return `${corpPrefix}${skuCode}${mmyy}${run}`;
 }
 
 function parseRunningNoFromEpcCode({ epcCode, corpPrefix }) {
@@ -47,15 +54,18 @@ function parseRunningNoFromEpcCode({ epcCode, corpPrefix }) {
   if (!code.startsWith(prefix)) throw new Error(`EPC code does not start with ${prefix}`);
 
   const padLen = getRunningPadLen();
-  const expectedMinLen = prefix.length + padLen;
+  const expectedMinLen = prefix.length + 4 + padLen;
   if (code.length < expectedMinLen) throw new Error('EPC code too short');
 
-  const run1 = code.slice(prefix.length, prefix.length + padLen);
-  if (!/^\d+$/.test(run1)) throw new Error('Invalid running number in EPC code');
-  const run2 = code.slice(code.length - padLen);
-  if (!/^\d+$/.test(run2)) throw new Error('Invalid running number in EPC code');
-  if (run1 !== run2) throw new Error('EPC code running numbers mismatch');
-  return BigInt(run1);
+  const run = code.slice(code.length - padLen);
+  if (!/^\d+$/.test(run)) throw new Error('Invalid running number in EPC code');
+
+  const mmyy = code.slice(code.length - (padLen + 4), code.length - padLen);
+  if (!/^\d{4}$/.test(mmyy)) throw new Error('Invalid MMYY in EPC code');
+  const mm = Number(mmyy.slice(0, 2));
+  if (!Number.isFinite(mm) || mm < 1 || mm > 12) throw new Error('Invalid month in EPC code');
+
+  return BigInt(run);
 }
 
 function chunkArray(arr, size) {
@@ -72,7 +82,7 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, batchNa
   const prodId = Number(productId);
 
   const product = await withTimeout(
-    prisma.product.findFirst({ where: { id: prodId, organizationId: orgId, deletedAt: null } }),
+    prisma.product.findFirst({ where: { id: prodId, organizationId: orgId } }),
     1200
   );
   if (!product) throw new Error('Product tidak dijumpai');
@@ -83,7 +93,7 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, batchNa
     async (tx) => {
       await tx.batch.upsert({
         where: { organizationId_batchNo: { organizationId: orgId, batchNo: batchName } },
-        update: { productId: prodId, deletedAt: null },
+        update: { productId: prodId },
         create: { organizationId: orgId, batchNo: batchName, productId: prodId }
       });
 
@@ -169,7 +179,7 @@ async function importExistingEpc({ organizationId, productId, batchName, base64 
   const corpPrefix = 'DA01';
 
   const product = await withTimeout(
-    prisma.product.findFirst({ where: { id: prodId, organizationId: orgId, deletedAt: null } }),
+    prisma.product.findFirst({ where: { id: prodId, organizationId: orgId } }),
     1200
   );
   if (!product) throw new Error('Product tidak dijumpai');

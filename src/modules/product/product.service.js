@@ -4,10 +4,6 @@ async function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), ms))]);
 }
 
-function notDeleted(where) {
-  return { ...where, deletedAt: null };
-}
-
 function withSkuFallback(row) {
   if (!row) return row;
   if (row.sku) return row;
@@ -56,15 +52,15 @@ function normalizeRawProduct(row) {
     certificateTemplateId: p.certificateTemplateId ?? null,
     versionNo: p.versionNo ?? 1,
     createdAt: p.createdAt ?? null,
-    updatedAt: p.updatedAt ?? null,
-    deletedAt: p.deletedAt ?? null
+    updatedAt: p.updatedAt ?? null
   };
 }
 
-async function rawListProducts({ organizationId, includeDeleted }) {
+async function rawListProducts({ organizationId, status }) {
   const tableName = await resolveProductTableName();
   if (!tableName) return [];
   const cols = await getTableColumns(tableName);
+  const statusFilter = status && String(status).toLowerCase() !== 'all' ? String(status).toLowerCase() : null;
 
   const desired = [
     'id',
@@ -82,8 +78,7 @@ async function rawListProducts({ organizationId, includeDeleted }) {
     'certificateTemplateId',
     'versionNo',
     'createdAt',
-    'updatedAt',
-    'deletedAt'
+    'updatedAt'
   ];
   const selected = desired.filter((c) => cols.has(c));
   if (selected.length === 0) return [];
@@ -95,7 +90,10 @@ async function rawListProducts({ organizationId, includeDeleted }) {
     where.push('`organizationId` = ?');
     args.push(Number(organizationId));
   }
-  if (!includeDeleted && cols.has('deletedAt')) where.push('`deletedAt` IS NULL');
+  if (statusFilter && cols.has('status')) {
+    where.push('`status` = ?');
+    args.push(statusFilter);
+  }
 
   const orderBy = cols.has('createdAt') ? ' ORDER BY `createdAt` DESC' : cols.has('id') ? ' ORDER BY `id` DESC' : '';
   const whereSql = where.length ? ` WHERE ${where.join(' AND ')}` : '';
@@ -120,8 +118,7 @@ const productSelectWithoutSku = {
   certificateTemplateId: true,
   versionNo: true,
   createdAt: true,
-  updatedAt: true,
-  deletedAt: true
+  updatedAt: true
 };
 
 // Product Services
@@ -147,18 +144,22 @@ async function createProduct(data) {
   );
 }
 
-async function getAllProducts({ organizationId, includeDeleted }) {
+async function getAllProducts({ organizationId, status }) {
   try {
+    const statusFilter = status && String(status).toLowerCase() !== 'all' ? String(status).toLowerCase() : null;
     const rows = await withTimeout(
       prisma.product.findMany({
-        where: includeDeleted ? { organizationId: Number(organizationId) } : notDeleted({ organizationId: Number(organizationId) }),
+        where: {
+          organizationId: Number(organizationId),
+          ...(statusFilter ? { status: statusFilter } : {})
+        },
         orderBy: { createdAt: 'desc' }
       }),
       1200
     );
     return rows.map(withSkuFallback);
   } catch (e) {
-    if (e?.code === 'P2022') return await rawListProducts({ organizationId, includeDeleted });
+    if (e?.code === 'P2022') return await rawListProducts({ organizationId, status });
     throw e;
   }
 }
@@ -178,7 +179,7 @@ async function getProductById(id) {
       });
       if (!product) return product;
       const batches = await prisma.batch.findMany({
-        where: notDeleted({ productId: parseInt(id), organizationId: Number(product.organizationId) }),
+        where: { productId: parseInt(id), organizationId: Number(product.organizationId) },
         include: { certificates: true }
       });
       return { ...withSkuFallback(product), batches };
@@ -201,7 +202,7 @@ async function updateProduct({ organizationId, productId, patch }) {
 
   const res = await withTimeout(
     prisma.product.updateMany({
-      where: notDeleted({ id: Number(productId), organizationId: Number(organizationId) }),
+      where: { id: Number(productId), organizationId: Number(organizationId) },
       data
     }),
     1500
@@ -219,7 +220,7 @@ async function updateProduct({ organizationId, productId, patch }) {
       if (!product) return product;
       const batches = await withTimeout(
         prisma.batch.findMany({
-          where: notDeleted({ productId: Number(productId), organizationId: Number(organizationId) }),
+          where: { productId: Number(productId), organizationId: Number(organizationId) },
           include: { certificates: true }
         }),
         1200
@@ -233,8 +234,8 @@ async function updateProduct({ organizationId, productId, patch }) {
 async function deactivateProduct({ organizationId, productId }) {
   const res = await withTimeout(
     prisma.product.updateMany({
-      where: notDeleted({ id: Number(productId), organizationId: Number(organizationId) }),
-      data: { deletedAt: new Date() }
+      where: { id: Number(productId), organizationId: Number(organizationId) },
+      data: { status: 'inactive' }
     }),
     1500
   );
@@ -251,7 +252,7 @@ async function deactivateProduct({ organizationId, productId }) {
       if (!product) return product;
       const batches = await withTimeout(
         prisma.batch.findMany({
-          where: notDeleted({ productId: Number(productId), organizationId: Number(organizationId) }),
+          where: { productId: Number(productId), organizationId: Number(organizationId) },
           include: { certificates: true }
         }),
         1200
@@ -260,6 +261,96 @@ async function deactivateProduct({ organizationId, productId }) {
     }
     throw e;
   }
+}
+
+async function activateProduct({ organizationId, productId }) {
+  const res = await withTimeout(
+    prisma.product.updateMany({
+      where: { id: Number(productId), organizationId: Number(organizationId) },
+      data: { status: 'active' }
+    }),
+    1500
+  );
+  if (!res.count) throw new Error('Product not found');
+  try {
+    const row = await withTimeout(prisma.product.findUnique({ where: { id: Number(productId) }, include: { batches: true } }), 1200);
+    return row ? withSkuFallback(row) : row;
+  } catch (e) {
+    if (e?.code === 'P2022' && String(e?.message || '').toLowerCase().includes('sku')) {
+      const product = await withTimeout(
+        prisma.product.findUnique({ where: { id: Number(productId) }, select: productSelectWithoutSku }),
+        1200
+      );
+      if (!product) return product;
+      const batches = await withTimeout(
+        prisma.batch.findMany({
+          where: { productId: Number(productId), organizationId: Number(organizationId) },
+          include: { certificates: true }
+        }),
+        1200
+      );
+      return { ...withSkuFallback(product), batches };
+    }
+    throw e;
+  }
+}
+
+async function deleteProduct({ organizationId, productId }) {
+  const existing = await withTimeout(
+    prisma.product.findFirst({
+      where: { id: Number(productId), organizationId: Number(organizationId) },
+      select: { id: true, status: true }
+    }),
+    1200
+  );
+  if (!existing) throw new Error('Product not found');
+  if (String(existing.status || '').toLowerCase() !== 'inactive') throw new Error('Product must be inactive before delete');
+
+  await prisma.$transaction(async (tx) => {
+    const batchIds = (
+      await tx.batch.findMany({
+        where: { organizationId: Number(organizationId), productId: Number(productId) },
+        select: { id: true }
+      })
+    ).map((r) => r.id);
+
+    if (batchIds.length) {
+      const certIds = (
+        await tx.certificate.findMany({
+          where: { batchId: { in: batchIds } },
+          select: { certificateId: true }
+        })
+      ).map((r) => r.certificateId);
+
+      if (certIds.length) {
+        await tx.scanLog.deleteMany({ where: { certificateId: { in: certIds } } });
+        await tx.fraudFlag.deleteMany({ where: { certificateId: { in: certIds } } });
+        await tx.tagIdentity.deleteMany({ where: { certificateId: { in: certIds } } });
+      }
+
+      await tx.certificate.deleteMany({ where: { batchId: { in: batchIds } } });
+      await tx.batch.deleteMany({ where: { id: { in: batchIds } } });
+    }
+
+    const epcBatchIds = (
+      await tx.epcBatch.findMany({
+        where: { organizationId: Number(organizationId), productId: Number(productId) },
+        select: { id: true }
+      })
+    ).map((r) => r.id);
+
+    if (epcBatchIds.length) {
+      await tx.epcItem.deleteMany({ where: { batchId: { in: epcBatchIds } } });
+      await tx.epcBatch.deleteMany({ where: { id: { in: epcBatchIds } } });
+    }
+
+    const res = await tx.product.deleteMany({
+      where: { id: Number(productId), organizationId: Number(organizationId), status: 'inactive' }
+    });
+    if (!res.count) throw new Error('Product not found');
+  });
+
+  return { id: Number(productId), deleted: true };
 }
 
 // Batch Services
@@ -279,7 +370,7 @@ async function createBatch(data) {
 async function getBatchesByProduct({ organizationId, productId }) {
   return await withTimeout(
     prisma.batch.findMany({
-      where: notDeleted({ organizationId: Number(organizationId), productId: parseInt(productId) }),
+      where: { organizationId: Number(organizationId), productId: parseInt(productId) },
       include: { certificates: true }
     }),
     1200
@@ -292,6 +383,8 @@ module.exports = {
   getProductById,
   updateProduct,
   deactivateProduct,
+  activateProduct,
+  deleteProduct,
   createBatch,
   getBatchesByProduct
 };

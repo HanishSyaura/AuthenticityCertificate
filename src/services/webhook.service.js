@@ -16,11 +16,11 @@ async function listWebhooks({ organizationId }) {
   const orgId = Number(organizationId);
   try {
     return await withTimeout(
-      prisma.webhookEndpoint.findMany({ where: { organizationId: orgId, deletedAt: null }, orderBy: { createdAt: 'desc' } }),
+      prisma.webhookEndpoint.findMany({ where: { organizationId: orgId }, orderBy: { createdAt: 'desc' } }),
       600
     );
   } catch {
-    return memHooks.filter((h) => h.organizationId === orgId && !h.deletedAt);
+    return memHooks.filter((h) => h.organizationId === orgId);
   }
 }
 
@@ -36,7 +36,7 @@ async function createWebhook({ organizationId, url, secret, events }) {
   try {
     return await withTimeout(prisma.webhookEndpoint.create({ data }), 600);
   } catch {
-    const next = { id: Date.now(), ...data, createdAt: new Date(), updatedAt: new Date(), deletedAt: null };
+    const next = { id: Date.now(), ...data, createdAt: new Date(), updatedAt: new Date() };
     memHooks.unshift(next);
     return next;
   }
@@ -120,4 +120,3 @@ module.exports = {
   setWebhookActive,
   emitEvent
 };
-

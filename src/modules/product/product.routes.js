@@ -2,15 +2,16 @@ const express = require('express');
 const router = express.Router();
 const productController = require('./product.controller');
 const { verifyToken } = require('../../middleware/auth.middleware');
-const { requireRole } = require('../../middleware/rbac.middleware');
+const { attachAccessContext, requireAccess } = require('../../middleware/access.middleware');
 const { auditAction } = require('../../services/audit.service');
 const { attachOrganization, requireOrganization } = require('../../middleware/org.middleware');
 
 // Protect all product/batch routes
 router.use(verifyToken);
+router.use(attachAccessContext);
 router.use(attachOrganization);
-router.use(requireRole(['super_admin', 'admin']));
 router.use(requireOrganization);
+router.use(requireAccess({ read: 'products.read', write: 'products.write' }));
 
 router.post('/', auditAction('CREATE_PRODUCT', { targetType: 'product' }), productController.createProduct);
 router.patch(
@@ -22,6 +23,16 @@ router.post(
   '/:id/deactivate',
   auditAction('DEACTIVATE_PRODUCT', { targetType: 'product', getTargetId: (req) => req.params.id }),
   productController.deactivateProduct
+);
+router.post(
+  '/:id/activate',
+  auditAction('ACTIVATE_PRODUCT', { targetType: 'product', getTargetId: (req) => req.params.id }),
+  productController.activateProduct
+);
+router.delete(
+  '/:id',
+  auditAction('DELETE_PRODUCT', { targetType: 'product', getTargetId: (req) => req.params.id }),
+  productController.deleteProduct
 );
 router.get('/', productController.getAllProducts);
 

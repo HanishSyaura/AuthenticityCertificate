@@ -14,6 +14,32 @@ const useAdminAuthStore = create((set) => ({
     set({ user });
   },
 
+  fetchMe: async () => {
+    const { token } = useAdminAuthStore.getState();
+    if (!token) return null;
+    set({ loading: true, error: null });
+    try {
+      const api = createAdminApi({ token });
+      const res = await api.get('/auth/me');
+      const user = res?.data?.data?.user;
+      if (!user) throw new Error('Session invalid');
+      writeJson(ADMIN_KEYS.user, user);
+      set({ user, loading: false });
+      return user;
+    } catch (e) {
+      const status = e?.response?.status;
+      if (status === 401 || status === 403) {
+        removeKey(ADMIN_KEYS.token);
+        removeKey(ADMIN_KEYS.user);
+        set({ token: null, user: null, loading: false, error: null });
+        return null;
+      }
+      const msg = e?.response?.data?.message || e?.message || 'Failed to load session';
+      set({ loading: false, error: msg });
+      return null;
+    }
+  },
+
   logout: () => {
     removeKey(ADMIN_KEYS.token);
     removeKey(ADMIN_KEYS.user);
@@ -32,6 +58,7 @@ const useAdminAuthStore = create((set) => ({
       writeJson(ADMIN_KEYS.token, token);
       writeJson(ADMIN_KEYS.user, user);
       set({ token, user, loading: false });
+      await useAdminAuthStore.getState().fetchMe();
     } catch (e) {
       const status = e?.response?.status;
       const serverMsg = e?.response?.data?.message;

@@ -86,14 +86,43 @@ async function deactivateProduct(req, res) {
     });
     res.success(product, 'Product deactivated successfully');
   } catch (error) {
-    res.error(error.message, 400);
+    sendProductError(res, error);
+  }
+}
+
+async function activateProduct(req, res) {
+  try {
+    const { id } = req.params;
+    const product = await productService.activateProduct({
+      organizationId: req.organization.id,
+      productId: id
+    });
+    res.success(product, 'Product activated successfully');
+  } catch (error) {
+    sendProductError(res, error);
+  }
+}
+
+async function deleteProduct(req, res) {
+  try {
+    const { id } = req.params;
+    const result = await productService.deleteProduct({
+      organizationId: req.organization.id,
+      productId: id
+    });
+    res.success(result, 'Product deleted successfully');
+  } catch (error) {
+    sendProductError(res, error);
   }
 }
 
 async function getAllProducts(req, res) {
   try {
-    const includeDeleted = String(req.query?.includeDeleted || '').toLowerCase() === 'true';
-    const products = await productService.getAllProducts({ organizationId: req.organization.id, includeDeleted });
+    const status = String(req.query?.status || 'all').toLowerCase();
+    if (!['all', 'active', 'inactive'].includes(status)) {
+      return res.error('status: Invalid value', 400);
+    }
+    const products = await productService.getAllProducts({ organizationId: req.organization.id, status });
     res.success(products);
   } catch (error) {
     res.error(error.message);
@@ -127,6 +156,8 @@ module.exports = {
   createProduct,
   updateProduct,
   deactivateProduct,
+  activateProduct,
+  deleteProduct,
   getAllProducts,
   createBatch,
   getProductBatches

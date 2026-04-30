@@ -47,7 +47,6 @@ async function createPage(data) {
       versionNo: 1,
       createdAt: new Date(),
       updatedAt: new Date(),
-      deletedAt: null,
       layout: null
     };
     memPages.unshift(next);
@@ -61,7 +60,7 @@ async function getPageBySlug({ organizationId, slug, language }) {
     return await withTimeout(
       (async () => {
         const page = await prisma.cmsPage.findFirst({
-          where: { organizationId: Number(organizationId), slug, deletedAt: null },
+          where: { organizationId: Number(organizationId), slug },
           include: { layout: true, publishedVersion: true, draftVersion: true }
         });
         if (!page) return null;
@@ -79,7 +78,7 @@ async function getPageBySlug({ organizationId, slug, language }) {
       300
     );
   } catch {
-    const page = memPages.find((p) => p.organizationId === Number(organizationId) && p.slug === slug && !p.deletedAt) || null;
+    const page = memPages.find((p) => p.organizationId === Number(organizationId) && p.slug === slug) || null;
     if (!page) return null;
     const translation = memTranslations.get(`${page.id}:${lang}`) || null;
     const publishedVersion = page.publishedVersionId ? memVersions.get(String(page.publishedVersionId)) : null;
@@ -233,30 +232,39 @@ async function getAllPages({ organizationId, kind }) {
   const k = typeof kind === 'string' && kind ? kind : null;
   try {
     return await withTimeout(
-      prisma.cmsPage.findMany({ where: { organizationId: Number(organizationId), deletedAt: null, ...(k ? { kind: k } : {}) } }),
+      prisma.cmsPage.findMany({ where: { organizationId: Number(organizationId), ...(k ? { kind: k } : {}) } }),
       250
     );
   } catch {
-    return memPages.filter((p) => p.organizationId === Number(organizationId) && !p.deletedAt && (k ? p.kind === k : true));
+    return memPages.filter((p) => p.organizationId === Number(organizationId) && (k ? p.kind === k : true));
   }
 }
 
 async function deletePage({ organizationId, pageId }) {
   const pid = parseInt(pageId);
   try {
-    const res = await withTimeout(
-      prisma.cmsPage.updateMany({
-        where: { id: pid, organizationId: Number(organizationId), deletedAt: null },
-        data: { deletedAt: new Date() }
-      }),
-      300
-    );
-    if (!res.count) throw new Error('Page not found');
+    const orgId = Number(organizationId);
+    await prisma.$transaction(async (tx) => {
+      const existing = await withTimeout(
+        tx.cmsPage.findFirst({ where: { id: pid, organizationId: orgId }, select: { id: true } }),
+        300
+      );
+      if (!existing) throw new Error('Page not found');
+
+      await tx.cmsPage.updateMany({ where: { id: pid, organizationId: orgId }, data: { draftVersionId: null, publishedVersionId: null } });
+      await tx.product.updateMany({ where: { organizationId: orgId, cmsPageId: pid }, data: { cmsPageId: null } });
+      await tx.product.updateMany({ where: { organizationId: orgId, cmsCertificatePageId: pid }, data: { cmsCertificatePageId: null } });
+      await tx.cmsLayout.deleteMany({ where: { pageId: pid } });
+      await tx.cmsTranslation.deleteMany({ where: { pageId: pid } });
+      await tx.cmsVersion.deleteMany({ where: { pageId: pid } });
+      await tx.cmsPage.deleteMany({ where: { id: pid, organizationId: orgId } });
+    });
+
     return { id: pid };
   } catch {
-    const idx = memPages.findIndex((p) => p.id === pid && p.organizationId === Number(organizationId) && !p.deletedAt);
+    const idx = memPages.findIndex((p) => p.id === pid && p.organizationId === Number(organizationId));
     if (idx === -1) throw new Error('Page not found');
-    memPages[idx] = { ...memPages[idx], deletedAt: new Date() };
+    memPages.splice(idx, 1);
     memLayouts.delete(String(pid));
     return { id: pid };
   }

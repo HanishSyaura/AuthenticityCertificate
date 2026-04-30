@@ -11,8 +11,7 @@ function sanitize(org) {
     name: org.name,
     code: org.code,
     createdAt: org.createdAt,
-    updatedAt: org.updatedAt,
-    deletedAt: org.deletedAt
+    updatedAt: org.updatedAt
   };
 }
 
@@ -40,7 +39,7 @@ async function getByCode(code) {
 
 async function getOrCreateDefault() {
   const existing = await withTimeout(
-    prisma.organization.findFirst({ where: { deletedAt: null }, orderBy: { createdAt: 'asc' } }),
+    prisma.organization.findFirst({ orderBy: { createdAt: 'asc' } }),
     1200
   );
   if (existing) return sanitize(existing);

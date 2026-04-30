@@ -50,9 +50,6 @@ const updateSchema = z.object({
 
 async function updateSettings(req, res) {
   try {
-    const role = req.user?.role;
-    if (role !== 'super_admin') return res.error('Insufficient permissions', 403);
-
     const orgId = req.organization?.id;
     if (!orgId) return res.error('Organization required', 400);
     const validated = updateSchema.parse(req.body || {});
@@ -109,4 +106,3 @@ module.exports = {
   getSettings,
   updateSettings
 };
-

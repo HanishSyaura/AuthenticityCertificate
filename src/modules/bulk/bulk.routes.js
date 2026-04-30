@@ -4,13 +4,14 @@ const router = express.Router();
 const bulkController = require('./bulk.controller');
 const { verifyToken } = require('../../middleware/auth.middleware');
 const { attachOrganization, requireOrganization } = require('../../middleware/org.middleware');
-const { requireRole } = require('../../middleware/rbac.middleware');
+const { attachAccessContext, requireAccess } = require('../../middleware/access.middleware');
 const { auditAction } = require('../../services/audit.service');
 
 router.use(verifyToken);
+router.use(attachAccessContext);
 router.use(attachOrganization);
 router.use(requireOrganization);
-router.use(requireRole(['super_admin', 'admin', 'operator']));
+router.use(requireAccess({ read: 'bulk.read', write: 'bulk.write' }));
 
 router.post('/certificates/generate', auditAction('BULK_GENERATE_CERTS', { targetType: 'batch' }), bulkController.generate);
 router.post('/certificates/revoke', auditAction('BULK_REVOKE_CERTS', { targetType: 'certificate' }), bulkController.revoke);

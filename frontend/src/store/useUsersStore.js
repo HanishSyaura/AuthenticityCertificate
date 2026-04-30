@@ -64,11 +64,10 @@ const useUsersStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const res = await api.delete(`/users/${encodeURIComponent(id)}`);
-      const updated = res?.data?.data;
-      const users = get().users.map((u) => (String(u.id) === String(id) ? updated : u));
+      await api.delete(`/users/${encodeURIComponent(id)}`);
+      const users = get().users.filter((u) => String(u.id) !== String(id));
       set({ users, loading: false, lastSyncAt: Date.now() });
-      return updated;
+      return true;
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || 'Failed to delete user';
       set({ loading: false, error: msg });

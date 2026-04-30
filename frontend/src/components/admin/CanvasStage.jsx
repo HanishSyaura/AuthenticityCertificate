@@ -13,6 +13,7 @@ export default function CanvasStage({
   width,
   height,
   scale = 1,
+  mode = 'edit',
   backgroundMode = 'background',
   backgroundColor = '#ffffff',
   items,
@@ -26,18 +27,22 @@ export default function CanvasStage({
   const dragRef = useRef(null);
   const itemsRef = useRef(items);
   const [activePointer, setActivePointer] = useState(false);
+  const interactive = mode === 'edit';
 
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
 
   const applyUpdate = useCallback((updater) => {
+    if (!interactive) return;
+    if (!setItems) return;
     const current = itemsRef.current || [];
     const next = typeof updater === 'function' ? updater(current) : updater;
     setItems(next);
-  }, [setItems]);
+  }, [interactive, setItems]);
 
   useEffect(() => {
+    if (!interactive) return undefined;
     if (!activePointer) return;
 
     const onMove = (e) => {
@@ -82,12 +87,13 @@ export default function CanvasStage({
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
     };
-  }, [activePointer, applyUpdate, grid, height, scale, width]);
+  }, [activePointer, applyUpdate, grid, height, interactive, scale, width]);
 
   const onItemPointerDown = (e, item, kind) => {
+    if (!interactive) return;
     e.preventDefault();
     e.stopPropagation();
-    setSelectedId(item.id);
+    if (setSelectedId) setSelectedId(item.id);
 
     const rect = stageRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -122,7 +128,10 @@ export default function CanvasStage({
           ref={stageRef}
           className="relative rounded-xl border border-zinc-200 shadow-sm"
           style={{ width, height, transform: `scale(${scale})`, transformOrigin: 'top left', backgroundColor: String(backgroundColor || '#ffffff') }}
-          onPointerDown={() => setSelectedId(null)}
+          onPointerDown={() => {
+            if (!interactive) return;
+            if (setSelectedId) setSelectedId(null);
+          }}
         >
           {backgroundUrl ? (
             /\.(mp4|webm|ogg)(\?.*)?$/i.test(String(backgroundUrl || '')) ? (
@@ -152,12 +161,14 @@ export default function CanvasStage({
             )
           ) : null}
 
-          {items.map((it) => {
-            const selected = it.id === selectedId;
+          {(Array.isArray(items) ? items : []).map((it) => {
+            const selected = interactive && it.id === selectedId;
             return (
               <div
                 key={it.id}
-                className={`absolute rounded-lg ${selected ? 'ring-2 ring-brand-500' : 'ring-1 ring-zinc-200/80'} bg-white/70 backdrop-blur-sm`}
+                className={`absolute rounded-lg ${
+                  interactive ? (selected ? 'ring-2 ring-brand-500 bg-white/70 backdrop-blur-sm' : 'ring-1 ring-zinc-200/80 bg-white/70 backdrop-blur-sm') : 'pointer-events-none'
+                }`}
                 style={{ left: it.x, top: it.y, width: it.w, height: it.h }}
                 onPointerDown={(e) => onItemPointerDown(e, it, 'drag')}
               >
@@ -168,7 +179,7 @@ export default function CanvasStage({
                 <div
                   role="button"
                   tabIndex={0}
-                  className={`absolute -bottom-2 -right-2 h-4 w-4 rounded bg-brand-600 ${selected ? '' : 'hidden'}`}
+                  className={`absolute -bottom-2 -right-2 h-4 w-4 rounded bg-brand-600 ${interactive && selected ? '' : 'hidden'}`}
                   onPointerDown={(e) => onItemPointerDown(e, it, 'resize')}
                 />
               </div>

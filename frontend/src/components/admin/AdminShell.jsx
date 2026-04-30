@@ -6,6 +6,7 @@ import LanguageSwitcher from '../LanguageSwitcher';
 import TourOverlay from '../tour/TourOverlay';
 import useTourStore from '../../store/useTourStore';
 import { getAdminGettingStartedTourSteps } from '../../tour/adminGettingStartedTour';
+import { hasPermission } from '../../utils/permissions';
 
 function NavItem({ to, label, tourId }) {
   return (
@@ -43,7 +44,8 @@ export default function AdminShell() {
   }));
 
   const role = user?.role || 'admin';
-  const canSeeUsers = role === 'super_admin';
+  const perms = user?.permissions || [];
+  const canSeeUsers = role === 'super_admin' || hasPermission(perms, 'users.manage') || hasPermission(perms, 'access.manage');
 
   return (
     <div className="min-h-screen bg-zinc-100">

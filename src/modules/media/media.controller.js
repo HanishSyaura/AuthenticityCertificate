@@ -65,7 +65,7 @@ function uploadFile(req, res) {
 async function remove(req, res) {
   try {
     const { id } = req.params;
-    const result = await mediaService.softDeleteMedia({ organizationId: req.organization.id, id });
+    const result = await mediaService.deleteMedia({ organizationId: req.organization.id, id });
     res.success(result, 'Deleted');
   } catch (e) {
     res.error(e.message, 400);
@@ -77,4 +77,3 @@ module.exports = {
   uploadFile,
   remove
 };
-

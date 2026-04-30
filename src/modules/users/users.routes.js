@@ -3,11 +3,12 @@ const router = express.Router();
 
 const usersController = require('./users.controller');
 const { verifyToken } = require('../../middleware/auth.middleware');
-const { requireRole } = require('../../middleware/rbac.middleware');
+const { attachAccessContext, requirePermission } = require('../../middleware/access.middleware');
 const { auditAction } = require('../../services/audit.service');
 
 router.use(verifyToken);
-router.use(requireRole(['super_admin']));
+router.use(attachAccessContext);
+router.use(requirePermission('users.manage'));
 
 router.get('/', usersController.list);
 router.post('/', auditAction('CREATE_USER', { targetType: 'user' }), usersController.create);

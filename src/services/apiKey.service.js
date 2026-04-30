@@ -43,7 +43,7 @@ async function createApiKey({ organizationId, name, rateLimitPerMin }) {
 async function listApiKeys({ organizationId }) {
   const orgId = Number(organizationId);
   return await withTimeout(
-    prisma.apiKey.findMany({ where: { organizationId: orgId, deletedAt: null }, orderBy: { createdAt: 'desc' } }),
+    prisma.apiKey.findMany({ where: { organizationId: orgId }, orderBy: { createdAt: 'desc' } }),
     1200
   );
 }
@@ -56,7 +56,7 @@ async function revokeApiKey({ organizationId, id }) {
 async function findApiKey(raw) {
   const key = String(raw || '').trim();
   if (!key) return null;
-  const found = await withTimeout(prisma.apiKey.findFirst({ where: { key, deletedAt: null } }), 800);
+  const found = await withTimeout(prisma.apiKey.findFirst({ where: { key } }), 800);
   if (!found) return null;
   if (found.revokedAt) return null;
   return found;

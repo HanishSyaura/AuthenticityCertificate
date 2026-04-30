@@ -22,6 +22,7 @@ const uploadsRoutes = require('./modules/uploads/uploads.routes');
 const identityRoutes = require('./modules/identity/identity.routes');
 const organizationsRoutes = require('./modules/organizations/organizations.routes');
 const settingsRoutes = require('./modules/settings/settings.routes');
+const accessRoutes = require('./modules/access/access.routes');
 const { rateLimit } = require('./middleware/rateLimit.middleware');
 const { applyDbPatches } = require('./config/dbPatches');
 
@@ -160,6 +161,8 @@ app.use('/api/identities', identityRoutes);
 app.use('/api/organizations', organizationsRoutes);
 app.use('/settings', settingsRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/access', accessRoutes);
+app.use('/api/access', accessRoutes);
 
 app.get('/health', async (req, res) => {
   let db = 'unknown';

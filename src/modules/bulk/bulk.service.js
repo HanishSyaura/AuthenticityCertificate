@@ -61,7 +61,7 @@ async function handleBulkImportXlsx({ organizationId, sheets, dryRun }) {
     const certificateTemplateId = row.certificateTemplateId ? Number(row.certificateTemplateId) : null;
 
     try {
-      const existing = await prisma.product.findFirst({ where: { organizationId: orgId, code, deletedAt: null } });
+      const existing = await prisma.product.findFirst({ where: { organizationId: orgId, code } });
       if (dryRun) {
         if (existing) result.products.updated++;
         else result.products.created++;
@@ -94,9 +94,9 @@ async function handleBulkImportXlsx({ organizationId, sheets, dryRun }) {
       continue;
     }
     try {
-      const product = await prisma.product.findFirst({ where: { organizationId: orgId, code: productCode, deletedAt: null } });
+      const product = await prisma.product.findFirst({ where: { organizationId: orgId, code: productCode } });
       if (!product) throw new Error('Product not found for batch');
-      const existing = await prisma.batch.findFirst({ where: { organizationId: orgId, batchNo, deletedAt: null } });
+      const existing = await prisma.batch.findFirst({ where: { organizationId: orgId, batchNo } });
       if (dryRun) {
         if (existing) result.batches.updated++;
         else result.batches.created++;
@@ -125,7 +125,7 @@ async function handleBulkImportXlsx({ organizationId, sheets, dryRun }) {
       continue;
     }
     try {
-      const batch = await prisma.batch.findFirst({ where: { organizationId: orgId, batchNo, deletedAt: null } });
+      const batch = await prisma.batch.findFirst({ where: { organizationId: orgId, batchNo } });
       if (!batch) throw new Error('Batch not found for certificate');
 
       if (dryRun) {

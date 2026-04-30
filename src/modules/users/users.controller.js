@@ -56,8 +56,8 @@ async function updateRole(req, res) {
 async function remove(req, res) {
   try {
     const { id } = req.params;
-    const user = await usersService.softDeleteUser({ id });
-    res.success(user, 'User deleted');
+    const result = await usersService.deleteUser({ id });
+    res.success(result, 'User deleted');
   } catch (e) {
     res.error(e.message, 400);
   }

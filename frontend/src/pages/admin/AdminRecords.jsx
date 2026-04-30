@@ -24,7 +24,9 @@ export default function AdminRecords() {
     updateCategory,
     createProduct,
     updateProduct,
-    deactivateProduct
+    deactivateProduct,
+    activateProduct,
+    deleteProduct
   } = useRecordsStore((s) => ({
     products: s.products,
     categories: s.categories,
@@ -37,7 +39,9 @@ export default function AdminRecords() {
     updateCategory: s.updateCategory,
     createProduct: s.createProduct,
     updateProduct: s.updateProduct,
-    deactivateProduct: s.deactivateProduct
+    deactivateProduct: s.deactivateProduct,
+    activateProduct: s.activateProduct,
+    deleteProduct: s.deleteProduct
   }));
 
   const [activeTab, setActiveTab] = useState('products');
@@ -65,13 +69,13 @@ export default function AdminRecords() {
   const [categoryStatusEdit, setCategoryStatusEdit] = useState('active');
 
   useEffect(() => {
-    void fetchProducts({ includeDeleted: true });
+    void fetchProducts();
     void fetchCategories();
   }, [fetchProducts, fetchCategories]);
 
   useEffect(() => {
     const id = setInterval(() => {
-      void fetchProducts({ includeDeleted: true });
+      void fetchProducts();
     }, 10_000);
     return () => clearInterval(id);
   }, [fetchProducts]);
@@ -97,10 +101,7 @@ export default function AdminRecords() {
       return skuStr.includes(q) || nameStr.includes(q) || codeStr.includes(q) || categoryCodeStr.includes(q) || categoryNameStr.includes(q);
     };
 
-    const isInactive = (p) => {
-      if (p?.deletedAt) return true;
-      return String(p?.status || '').toLowerCase() === 'inactive';
-    };
+    const isInactive = (p) => String(p?.status || '').toLowerCase() === 'inactive';
 
     return products.filter((p) => {
       if (!matchesQuery(p)) return false;
@@ -132,7 +133,7 @@ export default function AdminRecords() {
               className="underline"
               onClick={() => {
                 if (activeTab === 'categories') return void fetchCategories();
-                return void fetchProducts({ includeDeleted: true });
+                return void fetchProducts();
               }}
             >
               {t('refresh')}
@@ -230,8 +231,10 @@ export default function AdminRecords() {
                 </div>
               ) : (
                 filteredProducts.map((p) => {
-                  const isInactive = Boolean(p?.deletedAt) || String(p?.status || '').toLowerCase() === 'inactive';
-                  const canDeactivate = !p?.deletedAt;
+                  const isInactive = String(p?.status || '').toLowerCase() === 'inactive';
+                  const canDeactivate = !isInactive;
+                  const canActivate = isInactive;
+                  const canDelete = isInactive;
                   return (
                     <div key={p.id} className="ac-table-row grid grid-cols-[1fr_2fr_1fr_1fr_1fr_1fr_220px] gap-4">
                       <div className="font-mono text-xs text-zinc-700">{p.sku}</div>
@@ -264,19 +267,44 @@ export default function AdminRecords() {
                           >
                             {t('edit')}
                           </button>
-                          <button
-                            type="button"
-                            className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                            disabled={!canDeactivate}
-                            onClick={async () => {
-                              if (!canDeactivate) return;
-                              if (!window.confirm(t('confirmDeactivateProduct'))) return;
-                              await deactivateProduct({ id: p.id });
-                              void fetchProducts({ includeDeleted: true });
-                            }}
-                          >
-                            {t('deactivate')}
-                          </button>
+                          {canDeactivate ? (
+                            <button
+                              type="button"
+                              className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                              onClick={async () => {
+                                if (!window.confirm(t('confirmDeactivateProduct'))) return;
+                                await deactivateProduct({ id: p.id });
+                                void fetchProducts();
+                              }}
+                            >
+                              {t('deactivate')}
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                                onClick={async () => {
+                                  if (!window.confirm(t('confirmActivateProduct'))) return;
+                                  await activateProduct({ id: p.id });
+                                  void fetchProducts();
+                                }}
+                              >
+                                {t('activate')}
+                              </button>
+                              <button
+                                type="button"
+                                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                                onClick={async () => {
+                                  if (!window.confirm(t('confirmDeleteProduct'))) return;
+                                  await deleteProduct({ id: p.id });
+                                  void fetchProducts();
+                                }}
+                              >
+                                {t('delete')}
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>

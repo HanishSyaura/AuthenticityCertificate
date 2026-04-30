@@ -4,13 +4,14 @@ const router = express.Router();
 const integrations = require('./integrations.controller');
 const { verifyToken } = require('../../middleware/auth.middleware');
 const { attachOrganization, requireOrganization } = require('../../middleware/org.middleware');
-const { requireRole } = require('../../middleware/rbac.middleware');
+const { attachAccessContext, requireAccess } = require('../../middleware/access.middleware');
 const { auditAction } = require('../../services/audit.service');
 
 router.use(verifyToken);
+router.use(attachAccessContext);
 router.use(attachOrganization);
 router.use(requireOrganization);
-router.use(requireRole(['super_admin', 'admin']));
+router.use(requireAccess({ read: 'integrations.read', write: 'integrations.write' }));
 
 router.get('/api-keys', integrations.listApiKeys);
 router.post('/api-keys', auditAction('CREATE_API_KEY', { targetType: 'api_key' }), integrations.createApiKey);
@@ -21,4 +22,3 @@ router.post('/webhooks', auditAction('CREATE_WEBHOOK', { targetType: 'webhook' }
 router.patch('/webhooks/:id', auditAction('UPDATE_WEBHOOK', { targetType: 'webhook', getTargetId: (req) => String(req.params.id) }), integrations.setWebhookActive);
 
 module.exports = router;
-

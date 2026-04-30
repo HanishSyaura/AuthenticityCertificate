@@ -37,11 +37,14 @@ export default function AdminEpc() {
   const {
     corpCodes,
     batches,
+    items,
+    itemTotal,
     loading,
     error,
     lastGenerated,
     fetchCorpCodes,
     fetchBatches,
+    fetchItems,
     generateBatch,
     exportBatchXlsx,
     importProductionXlsx,
@@ -52,11 +55,14 @@ export default function AdminEpc() {
   } = useEpcStore((s) => ({
     corpCodes: s.corpCodes,
     batches: s.batches,
+    items: s.items,
+    itemTotal: s.itemTotal,
     loading: s.loading,
     error: s.error,
     lastGenerated: s.lastGenerated,
     fetchCorpCodes: s.fetchCorpCodes,
     fetchBatches: s.fetchBatches,
+    fetchItems: s.fetchItems,
     generateBatch: s.generateBatch,
     exportBatchXlsx: s.exportBatchXlsx,
     importProductionXlsx: s.importProductionXlsx,
@@ -77,6 +83,10 @@ export default function AdminEpc() {
   const [templateData, setTemplateData] = useState({});
   const [importProductId, setImportProductId] = useState('');
   const [importBatchName, setImportBatchName] = useState('');
+  const [itemsOpen, setItemsOpen] = useState(false);
+  const [itemsBatch, setItemsBatch] = useState(null);
+  const [itemsOffset, setItemsOffset] = useState(0);
+  const itemsLimit = 50;
 
   useEffect(() => {
     void fetchProducts();
@@ -133,6 +143,14 @@ export default function AdminEpc() {
       return next;
     });
   }, [certificateTemplateId, placeholders, selectedProduct]);
+
+  const openBatchItems = async (b) => {
+    if (!b?.id) return;
+    setItemsBatch(b);
+    setItemsOffset(0);
+    setItemsOpen(true);
+    await fetchItems({ batchId: b.id, limit: itemsLimit, offset: 0 });
+  };
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -325,6 +343,9 @@ export default function AdminEpc() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openBatchItems(b)}>
+                    {t('viewEpc')}
+                  </button>
                   <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchXlsx(b.id)}>
                     {t('exportXlsx')}
                   </button>
@@ -343,6 +364,90 @@ export default function AdminEpc() {
               </div>
             ))}
             {(!batches || batches.length === 0) && !loading ? <div className="px-4 py-6 text-xs text-zinc-500">{t('noBatches')}</div> : null}
+          </div>
+        </div>
+      ) : null}
+
+      {itemsOpen && itemsBatch ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-5xl rounded-xl border border-zinc-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-zinc-900">
+                  {t('epcItems')}: {itemsBatch.batchName} <span className="text-xs text-zinc-500">#{itemsBatch.id}</span>
+                </div>
+                <div className="mt-1 text-[11px] text-zinc-500">{itemsBatch.product?.name || '-'}</div>
+              </div>
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => setItemsOpen(false)}>
+                {t('close')}
+              </button>
+            </div>
+
+            <div className="p-4">
+              <div className="overflow-auto rounded-lg border border-zinc-200">
+                <table className="min-w-full divide-y divide-zinc-200 text-xs">
+                  <thead className="bg-zinc-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-zinc-700">{t('epcCode')}</th>
+                      <th className="px-3 py-2 text-left font-semibold text-zinc-700">{t('runningNo')}</th>
+                      <th className="px-3 py-2 text-left font-semibold text-zinc-700">{t('netWeight')}</th>
+                      <th className="px-3 py-2 text-left font-semibold text-zinc-700">{t('productionDate')}</th>
+                      <th className="px-3 py-2 text-left font-semibold text-zinc-700">{t('caiqNumber')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 bg-white">
+                    {(Array.isArray(items) ? items : []).map((it) => (
+                      <tr key={it.id}>
+                        <td className="whitespace-nowrap px-3 py-2 font-mono text-[11px] text-zinc-900">{String(it.epcCode || '')}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-zinc-800">{it.runningNo == null ? '-' : String(it.runningNo)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-zinc-800">{it.netWeight == null ? '-' : String(it.netWeight)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-zinc-800">{it.productionDate ? formatDateTime(it.productionDate) : '-'}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-zinc-800">{it.caiqNumber == null ? '-' : String(it.caiqNumber)}</td>
+                      </tr>
+                    ))}
+                    {(!items || items.length === 0) && !loading ? (
+                      <tr>
+                        <td colSpan={5} className="px-3 py-6 text-center text-zinc-500">
+                          {t('noEpc')}
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="text-[11px] text-zinc-500">
+                  {t('total', { value: Number(itemTotal) || 0 })}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                    disabled={loading || itemsOffset <= 0}
+                    onClick={async () => {
+                      const nextOffset = Math.max(0, itemsOffset - itemsLimit);
+                      setItemsOffset(nextOffset);
+                      await fetchItems({ batchId: itemsBatch.id, limit: itemsLimit, offset: nextOffset });
+                    }}
+                  >
+                    {t('prev')}
+                  </button>
+                  <button
+                    type="button"
+                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                    disabled={loading || itemsOffset + itemsLimit >= (Number(itemTotal) || 0)}
+                    onClick={async () => {
+                      const nextOffset = itemsOffset + itemsLimit;
+                      setItemsOffset(nextOffset);
+                      await fetchItems({ batchId: itemsBatch.id, limit: itemsLimit, offset: nextOffset });
+                    }}
+                  >
+                    {t('next')}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       ) : null}

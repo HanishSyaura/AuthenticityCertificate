@@ -15,11 +15,14 @@ const useRecordsStore = create((set, get) => ({
   error: null,
   lastSyncAt: null,
 
-  fetchProducts: async ({ includeDeleted } = {}) => {
+  fetchProducts: async ({ status } = {}) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const res = await api.get('/products/', includeDeleted ? { params: { includeDeleted: 'true' } } : undefined);
+      const params = {};
+      if (status && String(status).toLowerCase() !== 'all') params.status = String(status).toLowerCase();
+      const hasParams = Object.keys(params).length > 0;
+      const res = await api.get('/products/', hasParams ? { params } : undefined);
       const products = Array.isArray(res?.data?.data) ? res.data.data : [];
       set({ products, loading: false, lastSyncAt: Date.now() });
       return products;
@@ -180,6 +183,37 @@ const useRecordsStore = create((set, get) => ({
       return updated;
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || 'Failed to deactivate product';
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
+  activateProduct: async ({ id }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.post(`/products/${encodeURIComponent(id)}/activate`);
+      const updated = res?.data?.data;
+      const products = get().products.map((p) => (String(p.id) === String(id) ? updated : p));
+      set({ products, loading: false, lastSyncAt: Date.now() });
+      return updated;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Failed to activate product';
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
+  deleteProduct: async ({ id }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      await api.delete(`/products/${encodeURIComponent(id)}`);
+      const products = get().products.filter((p) => String(p.id) !== String(id));
+      set({ products, loading: false, lastSyncAt: Date.now() });
+      return true;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Failed to delete product';
       set({ loading: false, error: msg });
       throw e;
     }

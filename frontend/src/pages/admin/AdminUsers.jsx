@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import useUsersStore from '../../store/useUsersStore';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
+import useAccessStore from '../../store/useAccessStore';
 import { useT } from '../../i18n/useT';
+import { hasPermission } from '../../utils/permissions';
 
 function formatDate(input) {
   if (!input) return '';
@@ -14,7 +16,9 @@ export default function AdminUsers() {
   const { t } = useT();
   const authUser = useAdminAuthStore((s) => s.user);
   const role = authUser?.role || 'admin';
-  const canManage = role === 'super_admin';
+  const perms = authUser?.permissions || [];
+  const canManageUsers = role === 'super_admin' || hasPermission(perms, 'users.manage');
+  const canManageAccess = role === 'super_admin' || hasPermission(perms, 'access.manage');
 
   const { users, loading, error, lastSyncAt, fetchUsers, createUser, updateUserRole, deleteUser, resetUserPassword } =
     useUsersStore((s) => ({
@@ -34,14 +38,35 @@ export default function AdminUsers() {
   const [showReset, setShowReset] = useState(false);
   const [resetUser, setResetUser] = useState(null);
   const [resetPassword, setResetPassword] = useState('');
+  const [showAccess, setShowAccess] = useState(false);
+  const [showUserRoles, setShowUserRoles] = useState(false);
+  const [rolesUser, setRolesUser] = useState(null);
+  const [selectedUserRoleIds, setSelectedUserRoleIds] = useState([]);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [newRole, setNewRole] = useState('admin');
 
   useEffect(() => {
-    if (canManage) void fetchUsers();
-  }, [canManage, fetchUsers]);
+    if (canManageUsers) void fetchUsers();
+  }, [canManageUsers, fetchUsers]);
+
+  const { roles, permissions, fetchRoles, fetchPermissions, setRolePermissions, createRole: createAccessRole, deleteRole: deleteAccessRole, setUserRoles } =
+    useAccessStore((s) => ({
+    roles: s.roles,
+    permissions: s.permissions,
+    fetchRoles: s.fetchRoles,
+    fetchPermissions: s.fetchPermissions,
+    setRolePermissions: s.setRolePermissions,
+    createRole: s.createRole,
+    deleteRole: s.deleteRole,
+    setUserRoles: s.setUserRoles
+  }));
+
+  const [selectedRoleId, setSelectedRoleId] = useState(null);
+  const [selectedPermissionKeys, setSelectedPermissionKeys] = useState([]);
+  const [newRoleName, setNewRoleName] = useState('');
+  const [newRoleDesc, setNewRoleDesc] = useState('');
 
   const filtered = useMemo(() => {
     const q = String(query || '').trim().toLowerCase();
@@ -53,7 +78,12 @@ export default function AdminUsers() {
     });
   }, [users, query]);
 
-  if (!canManage) {
+  const selectedRole = useMemo(() => {
+    if (!selectedRoleId) return null;
+    return roles.find((r) => String(r.id) === String(selectedRoleId)) || null;
+  }, [roles, selectedRoleId]);
+
+  if (!canManageUsers) {
     return (
       <div className="p-4 sm:p-6 lg:p-8">
         <h2 className="text-base font-semibold text-zinc-900">{t('usersRoles')}</h2>
@@ -77,9 +107,28 @@ export default function AdminUsers() {
             {lastSyncAt ? <span>{t('lastUpdated', { value: formatDate(lastSyncAt) })}</span> : null}
           </div>
         </div>
-        <button type="button" className="ac-btn px-3 py-2 text-xs" onClick={() => setShowCreate(true)}>
-          {t('createUser')}
-        </button>
+        <div className="flex items-center gap-2">
+          {canManageAccess ? (
+            <button
+              type="button"
+              className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+              onClick={async () => {
+                const [, fetchedRoles] = await Promise.all([fetchPermissions(), fetchRoles()]);
+                const first = Array.isArray(fetchedRoles) && fetchedRoles.length > 0 ? fetchedRoles[0] : null;
+                if (first?.id) {
+                  setSelectedRoleId(first.id);
+                  setSelectedPermissionKeys(Array.isArray(first.permissions) ? first.permissions : []);
+                }
+                setShowAccess(true);
+              }}
+            >
+              Manage access
+            </button>
+          ) : null}
+          <button type="button" className="ac-btn px-3 py-2 text-xs" onClick={() => setShowCreate(true)}>
+            {t('createUser')}
+          </button>
+        </div>
       </div>
 
       <div className="mb-4">
@@ -111,7 +160,7 @@ export default function AdminUsers() {
               </div>
             ) : (
               filtered.map((u) => {
-                const disabled = Boolean(u.deletedAt) || String(u.email) === String(authUser?.email);
+                const disabled = String(u.email) === String(authUser?.email);
                 return (
                   <div
                     key={u.id}
@@ -135,13 +184,30 @@ export default function AdminUsers() {
                         <option value="admin">admin</option>
                         <option value="operator">operator</option>
                       </select>
+                      {canManageAccess ? (
+                        <button
+                          type="button"
+                          className="mt-1 text-[11px] text-zinc-600 underline disabled:text-zinc-400"
+                          disabled={disabled}
+                          onClick={async () => {
+                            if (roles.length === 0) await fetchRoles();
+                            setRolesUser(u);
+                            const selected = (roles || [])
+                              .filter((r) => (u.roles || []).includes(r.name) || String(u.role) === String(r.name))
+                              .map((r) => r.id);
+                            setSelectedUserRoleIds(Array.from(new Set(selected)));
+                            setShowUserRoles(true);
+                          }}
+                        >
+                          Edit access
+                        </button>
+                      ) : null}
+                      {Array.isArray(u.roles) && u.roles.length > 0 ? (
+                        <div className="mt-1 text-[11px] text-zinc-500">{u.roles.join(', ')}</div>
+                      ) : null}
                     </div>
                     <div className="text-xs text-zinc-700">
-                      {u.deletedAt ? (
-                        <span className="rounded-full bg-zinc-100 px-2 py-0.5">{t('inactive')}</span>
-                      ) : (
-                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">{t('active')}</span>
-                      )}
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">{t('active')}</span>
                       <div className="mt-1 text-[11px] text-zinc-500">{formatDate(u.updatedAt || u.createdAt)}</div>
                     </div>
                     <div className="flex justify-end">
@@ -167,7 +233,7 @@ export default function AdminUsers() {
                         await deleteUser({ id: u.id });
                       }}
                     >
-                      {t('deactivate')}
+                      {t('delete')}
                     </button>
                   </div>
                     </div>
@@ -303,6 +369,205 @@ export default function AdminUsers() {
               >
                 {t('save')}
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showUserRoles ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5">
+            <div className="mb-4">
+              <div className="text-sm font-semibold text-zinc-900">Edit access</div>
+              <div className="mt-1 text-xs text-zinc-600">{rolesUser?.email}</div>
+            </div>
+            <div className="max-h-[50vh] overflow-auto rounded-xl border border-zinc-200 bg-white">
+              {roles.length === 0 ? (
+                <div className="p-4 text-sm text-zinc-600">{t('loading')}</div>
+              ) : (
+                roles.map((r) => (
+                  <label key={r.id} className="flex items-center gap-2 border-b border-zinc-100 px-4 py-3 text-sm last:border-b-0">
+                    <input
+                      type="checkbox"
+                      checked={selectedUserRoleIds.includes(r.id)}
+                      onChange={(e) => {
+                        const next = new Set(selectedUserRoleIds);
+                        if (e.target.checked) next.add(r.id);
+                        else next.delete(r.id);
+                        setSelectedUserRoleIds(Array.from(next));
+                      }}
+                    />
+                    <span className="font-medium text-zinc-900">{r.name}</span>
+                    {r.isSystem ? <span className="text-[11px] text-zinc-500">system</span> : null}
+                  </label>
+                ))
+              )}
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                onClick={() => {
+                  setShowUserRoles(false);
+                  setRolesUser(null);
+                  setSelectedUserRoleIds([]);
+                }}
+              >
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                className="ac-btn px-3 py-2 text-xs"
+                disabled={!rolesUser?.id}
+                onClick={async () => {
+                  await setUserRoles({ userId: rolesUser.id, roleIds: selectedUserRoleIds });
+                  await fetchUsers();
+                  setShowUserRoles(false);
+                  setRolesUser(null);
+                  setSelectedUserRoleIds([]);
+                }}
+              >
+                {t('save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showAccess ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-3xl rounded-2xl bg-white p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-zinc-900">Access management</div>
+                <div className="mt-1 text-xs text-zinc-600">Edit role permissions</div>
+              </div>
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                onClick={() => {
+                  setShowAccess(false);
+                }}
+              >
+                {t('close')}
+              </button>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-[260px_1fr]">
+              <div className="rounded-xl border border-zinc-200 p-3">
+                <div className="mb-2 text-xs font-semibold text-zinc-600">Roles</div>
+                <select
+                  value={selectedRoleId || ''}
+                  onChange={(e) => {
+                    const id = Number(e.target.value);
+                    setSelectedRoleId(id);
+                    const nextRole = roles.find((r) => String(r.id) === String(id));
+                    setSelectedPermissionKeys(Array.isArray(nextRole?.permissions) ? nextRole.permissions : []);
+                  }}
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+                >
+                  <option value="" disabled>
+                    Select a role
+                  </option>
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+
+                {selectedRole && !selectedRole.isSystem ? (
+                  <button
+                    type="button"
+                    className="mt-2 w-full rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700"
+                    onClick={async () => {
+                      if (!window.confirm('Delete this role?')) return;
+                      await deleteAccessRole({ roleId: selectedRole.id });
+                      const nextRoles = await fetchRoles();
+                      const first = Array.isArray(nextRoles) && nextRoles.length > 0 ? nextRoles[0] : null;
+                      setSelectedRoleId(first?.id || null);
+                      setSelectedPermissionKeys(Array.isArray(first?.permissions) ? first.permissions : []);
+                    }}
+                  >
+                    Delete role
+                  </button>
+                ) : null}
+
+                <div className="mt-4 border-t border-zinc-200 pt-3">
+                  <div className="mb-2 text-xs font-semibold text-zinc-600">Create role</div>
+                  <input
+                    value={newRoleName}
+                    onChange={(e) => setNewRoleName(e.target.value)}
+                    placeholder="role.name"
+                    className="mb-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+                  />
+                  <input
+                    value={newRoleDesc}
+                    onChange={(e) => setNewRoleDesc(e.target.value)}
+                    placeholder="Description (optional)"
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+                  />
+                  <button
+                    type="button"
+                    className="mt-2 w-full ac-btn px-3 py-2 text-xs"
+                    disabled={!String(newRoleName || '').trim()}
+                    onClick={async () => {
+                      const name = String(newRoleName || '').trim();
+                      const description = String(newRoleDesc || '').trim();
+                      const created = await createAccessRole({ name, description: description || undefined });
+                      await fetchRoles();
+                      setSelectedRoleId(created?.id || null);
+                      setSelectedPermissionKeys([]);
+                      setNewRoleName('');
+                      setNewRoleDesc('');
+                    }}
+                  >
+                    {t('create')}
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-zinc-200 p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="text-xs font-semibold text-zinc-600">Permissions</div>
+                  <button
+                    type="button"
+                    className="ac-btn px-3 py-2 text-xs"
+                    disabled={!selectedRole?.id}
+                    onClick={async () => {
+                      await setRolePermissions({ roleId: selectedRole.id, permissionKeys: selectedPermissionKeys });
+                      await fetchRoles();
+                    }}
+                  >
+                    {t('save')}
+                  </button>
+                </div>
+                <div className="max-h-[55vh] overflow-auto rounded-xl border border-zinc-200">
+                  {permissions.length === 0 ? (
+                    <div className="p-4 text-sm text-zinc-600">{t('loading')}</div>
+                  ) : (
+                    permissions.map((p) => (
+                      <label key={p.id} className="flex items-start gap-2 border-b border-zinc-100 px-4 py-3 last:border-b-0">
+                        <input
+                          type="checkbox"
+                          disabled={!selectedRole?.id}
+                          checked={selectedPermissionKeys.includes(p.key)}
+                          onChange={(e) => {
+                            const next = new Set(selectedPermissionKeys);
+                            if (e.target.checked) next.add(p.key);
+                            else next.delete(p.key);
+                            setSelectedPermissionKeys(Array.from(next));
+                          }}
+                        />
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-zinc-900">{p.key}</div>
+                          {p.description ? <div className="mt-0.5 text-[11px] text-zinc-500">{p.description}</div> : null}
+                        </div>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

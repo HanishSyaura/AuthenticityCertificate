@@ -452,6 +452,189 @@ async function ensureOrganizationSettingsSchemaCompat() {
   }
 }
 
+async function ensureAccessControlSchemaCompat() {
+  const hasRole = await tableExists('Role');
+  if (!hasRole) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`Role\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`name\` VARCHAR(191) NOT NULL,
+        \`description\` VARCHAR(191) NULL,
+        \`isSystem\` TINYINT(1) NOT NULL DEFAULT 0,
+        \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`),
+        UNIQUE KEY \`Role_name_key\` (\`name\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+
+  const hasPermission = await tableExists('Permission');
+  if (!hasPermission) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`Permission\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`key\` VARCHAR(191) NOT NULL,
+        \`description\` VARCHAR(191) NULL,
+        \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`),
+        UNIQUE KEY \`Permission_key_key\` (\`key\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+
+  const hasRolePermission = await tableExists('RolePermission');
+  if (!hasRolePermission) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`RolePermission\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`roleId\` INT NOT NULL,
+        \`permissionId\` INT NOT NULL,
+        \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`),
+        UNIQUE KEY \`RolePermission_roleId_permissionId_key\` (\`roleId\`, \`permissionId\`),
+        KEY \`RolePermission_permissionId_idx\` (\`permissionId\`),
+        CONSTRAINT \`RolePermission_roleId_fkey\` FOREIGN KEY (\`roleId\`) REFERENCES \`Role\`(\`id\`) ON DELETE CASCADE ON UPDATE CASCADE,
+        CONSTRAINT \`RolePermission_permissionId_fkey\` FOREIGN KEY (\`permissionId\`) REFERENCES \`Permission\`(\`id\`) ON DELETE CASCADE ON UPDATE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+
+  const hasUserRole = await tableExists('UserRole');
+  if (!hasUserRole) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`UserRole\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`userId\` INT NOT NULL,
+        \`roleId\` INT NOT NULL,
+        \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`),
+        UNIQUE KEY \`UserRole_userId_roleId_key\` (\`userId\`, \`roleId\`),
+        KEY \`UserRole_roleId_idx\` (\`roleId\`),
+        CONSTRAINT \`UserRole_userId_fkey\` FOREIGN KEY (\`userId\`) REFERENCES \`User\`(\`id\`) ON DELETE CASCADE ON UPDATE CASCADE,
+        CONSTRAINT \`UserRole_roleId_fkey\` FOREIGN KEY (\`roleId\`) REFERENCES \`Role\`(\`id\`) ON DELETE CASCADE ON UPDATE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+
+  const permissions = [
+    ['*', 'Full access'],
+    ['users.manage', 'Manage users'],
+    ['access.manage', 'Manage roles & permissions'],
+    ['products.read', 'Read products & batches'],
+    ['products.write', 'Write products & batches'],
+    ['categories.read', 'Read categories'],
+    ['categories.write', 'Write categories'],
+    ['epc.read', 'Read EPC'],
+    ['epc.write', 'Write EPC'],
+    ['certificates.read', 'Read certificates'],
+    ['certificates.write', 'Write certificates'],
+    ['templates.read', 'Read templates'],
+    ['templates.write', 'Write templates'],
+    ['media.read', 'Read media'],
+    ['media.write', 'Write media'],
+    ['uploads.write', 'Upload files'],
+    ['audit.read', 'Read audit logs'],
+    ['analytics.read', 'Read analytics'],
+    ['fraud.read', 'Read fraud flags'],
+    ['fraud.write', 'Write fraud flags'],
+    ['integrations.read', 'Read integrations'],
+    ['integrations.write', 'Write integrations'],
+    ['bulk.read', 'Read bulk jobs'],
+    ['bulk.write', 'Execute bulk jobs'],
+    ['identities.read', 'Read identities'],
+    ['identities.write', 'Write identities'],
+    ['organizations.read', 'Read organizations'],
+    ['organizations.write', 'Write organizations'],
+    ['settings.read', 'Read settings'],
+    ['settings.write', 'Write settings'],
+    ['cms.read', 'Read CMS'],
+    ['cms.write', 'Write CMS'],
+    ['cms.publish', 'Publish CMS'],
+    ['cms.meta.write', 'Edit CMS meta']
+  ];
+
+  for (const [key, description] of permissions) {
+    await prisma.$executeRaw`
+      INSERT IGNORE INTO \`Permission\` (\`key\`, \`description\`, \`createdAt\`, \`updatedAt\`)
+      VALUES (${key}, ${description}, NOW(), NOW())
+    `;
+  }
+
+  const roles = [
+    { name: 'super_admin', description: 'System Super Admin', isSystem: 1 },
+    { name: 'admin', description: 'System Admin', isSystem: 1 },
+    { name: 'operator', description: 'System Operator', isSystem: 1 }
+  ];
+
+  for (const r of roles) {
+    await prisma.$executeRaw`
+      INSERT IGNORE INTO \`Role\` (\`name\`, \`description\`, \`isSystem\`, \`createdAt\`, \`updatedAt\`)
+      VALUES (${r.name}, ${r.description}, ${Number(r.isSystem)}, NOW(), NOW())
+    `;
+  }
+
+  const rolePerms = {
+    super_admin: ['*'],
+    admin: [
+      'products.read',
+      'products.write',
+      'categories.read',
+      'categories.write',
+      'epc.read',
+      'epc.write',
+      'certificates.read',
+      'certificates.write',
+      'templates.read',
+      'templates.write',
+      'media.read',
+      'media.write',
+      'uploads.write',
+      'audit.read',
+      'analytics.read',
+      'fraud.read',
+      'fraud.write',
+      'integrations.read',
+      'integrations.write',
+      'bulk.read',
+      'bulk.write',
+      'identities.read',
+      'identities.write',
+      'organizations.read',
+      'settings.read',
+      'cms.read',
+      'cms.write',
+      'cms.publish',
+      'cms.meta.write'
+    ],
+    operator: ['bulk.read', 'bulk.write', 'cms.read', 'cms.write']
+  };
+
+  for (const [roleName, keys] of Object.entries(rolePerms)) {
+    for (const key of keys) {
+      await prisma.$executeRaw`
+        INSERT IGNORE INTO \`RolePermission\` (\`roleId\`, \`permissionId\`, \`createdAt\`)
+        SELECT r.id, p.id, NOW()
+        FROM \`Role\` r
+        JOIN \`Permission\` p ON p.\`key\` = ${key}
+        WHERE r.\`name\` = ${roleName}
+      `;
+    }
+  }
+
+  const hasUserTable = await tableExists('User');
+  if (hasUserTable) {
+    await prisma.$executeRawUnsafe(`
+      INSERT IGNORE INTO \`UserRole\` (\`userId\`, \`roleId\`, \`createdAt\`)
+      SELECT u.id, r.id, NOW()
+      FROM \`User\` u
+      JOIN \`Role\` r ON r.\`name\` = u.\`role\`
+      WHERE u.\`deletedAt\` IS NULL
+    `);
+  }
+}
+
 async function applyDbPatches() {
   await ensureProductSchemaCompat();
   await ensureCategorySchemaCompat();
@@ -459,6 +642,7 @@ async function applyDbPatches() {
   await ensureCertificateTemplateSchemaCompat();
   await ensureEpcSchemaCompat();
   await ensureOrganizationSettingsSchemaCompat();
+  await ensureAccessControlSchemaCompat();
 }
 
 module.exports = { applyDbPatches };

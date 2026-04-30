@@ -33,9 +33,8 @@ async function login(req, res, next) {
 
 async function me(req, res) {
   try {
-    const user = await authService.getMe(req.user);
-    if (!user) return res.error('Unauthorized', 401);
-    res.success({ user }, 'OK');
+    if (!req.user?.id) return res.error('Unauthorized', 401);
+    res.success({ user: req.user }, 'OK');
   } catch {
     res.error('Service temporarily unavailable', 503);
   }

@@ -4,14 +4,10 @@ async function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), ms))]);
 }
 
-function notDeleted(where) {
-  return { ...where, deletedAt: null };
-}
-
 async function listTemplates({ organizationId }) {
   return await withTimeout(
     prisma.certificateTemplate.findMany({
-      where: notDeleted({ organizationId: Number(organizationId) }),
+      where: { organizationId: Number(organizationId) },
       orderBy: { createdAt: 'desc' }
     }),
     1200
@@ -48,7 +44,7 @@ async function updateTemplate({ organizationId, id, patch }) {
 
   const res = await withTimeout(
     prisma.certificateTemplate.updateMany({
-      where: notDeleted({ id: Number(id), organizationId: Number(organizationId) }),
+      where: { id: Number(id), organizationId: Number(organizationId) },
       data
     }),
     1500
@@ -58,15 +54,22 @@ async function updateTemplate({ organizationId, id, patch }) {
 }
 
 async function deleteTemplate({ organizationId, id }) {
-  const res = await withTimeout(
-    prisma.certificateTemplate.updateMany({
-      where: notDeleted({ id: Number(id), organizationId: Number(organizationId) }),
-      data: { deletedAt: new Date() }
-    }),
-    1500
-  );
-  if (!res.count) throw new Error('Template not found');
-  return { id: Number(id) };
+  const tplId = Number(id);
+  const orgId = Number(organizationId);
+
+  await prisma.$transaction(async (tx) => {
+    const existing = await withTimeout(
+      tx.certificateTemplate.findFirst({ where: { id: tplId, organizationId: orgId }, select: { id: true } }),
+      1200
+    );
+    if (!existing) throw new Error('Template not found');
+
+    await tx.product.updateMany({ where: { organizationId: orgId, certificateTemplateId: tplId }, data: { certificateTemplateId: null } });
+    await tx.epcBatch.updateMany({ where: { organizationId: orgId, certificateTemplateId: tplId }, data: { certificateTemplateId: null } });
+    await tx.certificateTemplate.deleteMany({ where: { id: tplId, organizationId: orgId } });
+  });
+
+  return { id: tplId };
 }
 
 module.exports = {

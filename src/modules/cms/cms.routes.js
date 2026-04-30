@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const cmsController = require('./cms.controller');
 const { verifyToken } = require('../../middleware/auth.middleware');
-const { requireRole } = require('../../middleware/rbac.middleware');
+const { attachAccessContext, requirePermission } = require('../../middleware/access.middleware');
 const { auditAction } = require('../../services/audit.service');
 const { attachOrganization, requireOrganization } = require('../../middleware/org.middleware');
 
@@ -11,16 +11,18 @@ router.use(attachOrganization);
 router.post(
   '/page',
   verifyToken,
-  requireRole(['super_admin', 'admin', 'operator']),
+  attachAccessContext,
+  requirePermission('cms.write'),
   requireOrganization,
   auditAction('CREATE_CMS_PAGE', { targetType: 'cms_page' }),
   cmsController.createPage
 );
-router.get('/pages', verifyToken, requireRole(['super_admin', 'admin', 'operator']), requireOrganization, cmsController.listPages);
+router.get('/pages', verifyToken, attachAccessContext, requirePermission('cms.read'), requireOrganization, cmsController.listPages);
 router.delete(
   '/page/:id',
   verifyToken,
-  requireRole(['super_admin', 'admin']),
+  attachAccessContext,
+  requirePermission('cms.write'),
   requireOrganization,
   auditAction('DELETE_CMS_PAGE', { targetType: 'cms_page', getTargetId: (req) => String(req.params?.id || '') }),
   cmsController.removePage
@@ -28,7 +30,8 @@ router.delete(
 router.post(
   '/layout',
   verifyToken,
-  requireRole(['super_admin', 'admin', 'operator']),
+  attachAccessContext,
+  requirePermission('cms.write'),
   requireOrganization,
   auditAction('UPDATE_CMS', { targetType: 'cms_page', getTargetId: (req) => String(req.body?.pageId || '') }),
   cmsController.saveLayout
@@ -36,7 +39,8 @@ router.post(
 router.post(
   '/publish',
   verifyToken,
-  requireRole(['super_admin', 'admin']),
+  attachAccessContext,
+  requirePermission('cms.publish'),
   requireOrganization,
   auditAction('PUBLISH_CMS', { targetType: 'cms_page', getTargetId: (req) => String(req.body?.pageId || '') }),
   cmsController.publish
@@ -44,7 +48,8 @@ router.post(
 router.patch(
   '/page/:id/meta',
   verifyToken,
-  requireRole(['super_admin', 'admin']),
+  attachAccessContext,
+  requirePermission('cms.meta.write'),
   requireOrganization,
   auditAction('UPDATE_CMS_META', { targetType: 'cms_page', getTargetId: (req) => String(req.params?.id || '') }),
   cmsController.updateMeta

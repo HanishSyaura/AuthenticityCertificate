@@ -2,14 +2,15 @@ const express = require('express');
 const router = express.Router();
 const certificateController = require('./certificate.controller');
 const { verifyToken } = require('../../middleware/auth.middleware');
-const { requireRole } = require('../../middleware/rbac.middleware');
+const { attachAccessContext, requireAccess } = require('../../middleware/access.middleware');
 const { auditAction } = require('../../services/audit.service');
 const { attachOrganization, requireOrganization } = require('../../middleware/org.middleware');
 
 router.use(verifyToken);
+router.use(attachAccessContext);
 router.use(attachOrganization);
-router.use(requireRole(['super_admin', 'admin']));
 router.use(requireOrganization);
+router.use(requireAccess({ read: 'certificates.read', write: 'certificates.write' }));
 
 router.get('/', certificateController.list);
 router.get('/:id', certificateController.get);

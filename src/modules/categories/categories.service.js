@@ -15,13 +15,9 @@ function toIsActive(status) {
   return String(status).toLowerCase() === 'active';
 }
 
-function notDeleted(where) {
-  return { ...where, deletedAt: null };
-}
-
 async function getAllCategories({ organizationId }) {
   const rows = await prisma.category.findMany({
-    where: notDeleted({ organizationId: Number(organizationId) }),
+    where: { organizationId: Number(organizationId) },
     orderBy: [{ name: 'asc' }, { code: 'asc' }]
   });
   return rows;
@@ -56,7 +52,7 @@ async function updateCategory({ organizationId, categoryId, patch }) {
   if (patch.status !== undefined) data.isActive = toIsActive(patch.status);
 
   const res = await prisma.category.updateMany({
-    where: notDeleted({ id: Number(categoryId), organizationId: Number(organizationId) }),
+    where: { id: Number(categoryId), organizationId: Number(organizationId) },
     data
   });
   if (!res.count) throw new Error('Category not found');

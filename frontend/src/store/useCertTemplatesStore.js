@@ -28,11 +28,19 @@ const useCertTemplatesStore = create((set, get) => ({
     }
   },
 
-  createTemplate: async ({ name, background, layoutJson }) => {
+  createTemplate: async ({ name, background, backgroundColor, layoutJson, placeholders, canvasWidth, canvasHeight }) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const res = await api.post('/templates', { name, background, layoutJson });
+      const res = await api.post('/templates', {
+        name,
+        background,
+        backgroundColor,
+        layoutJson,
+        placeholders,
+        canvasWidth,
+        canvasHeight
+      });
       const created = res?.data?.data;
       const templates = [created, ...get().templates].filter(Boolean);
       set({ templates, loading: false, lastSyncAt: Date.now() });
