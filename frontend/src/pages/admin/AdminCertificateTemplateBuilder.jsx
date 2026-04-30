@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CanvasStage from '../../components/admin/CanvasStage';
 import RichTextEditor from '../../components/admin/RichTextEditor';
 import { useT } from '../../i18n/useT';
@@ -195,7 +195,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       templateData[key] = '';
     }
     return { ...base, templateData: { ...(base.templateData || {}), ...templateData } };
-  }, [placeholders, selected?.id]);
+  }, [placeholders, selected?.certificateId, selected?.id]);
 
   const canvasItems = useMemo(() => {
     const layout = Array.isArray(draftLayout) ? draftLayout : [];
@@ -214,7 +214,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             const label = showPrefix ? (key ? String(ph?.label || key) : String(it.label || '')) : '';
             const separator = showPrefix ? (key ? String(ph?.separator ?? ': ') : ': ') : '';
             const prefix = showPrefix && label ? `${label}${separator}` : '';
-            const valueHtml = source === 'static' || source === 'manual' ? val : escapeTextToHtml(val);
+            const valueHtml = source === 'static' || source === 'manual' || source === 'title' ? val : escapeTextToHtml(val);
             const html = `${escapeHtml(prefix)}${valueHtml || ''}`;
             const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
             const align = textAlignClass(it.align);
@@ -242,7 +242,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         const label = showPrefix ? (key ? String(ph?.label || key) : String(it.label || '')) : '';
         const separator = showPrefix ? (key ? String(ph?.separator ?? ': ') : ': ') : '';
         const prefix = showPrefix && label ? `${label}${separator}` : '';
-        const valueHtml = source === 'static' || source === 'manual' ? val : escapeTextToHtml(val);
+        const valueHtml = source === 'static' || source === 'manual' || source === 'title' ? val : escapeTextToHtml(val);
         const html = `${escapeHtml(prefix)}${valueHtml || ''}`;
         const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
         const align = textAlignClass(it.align);
@@ -268,8 +268,9 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     }
   }, [selected?.id, selected?.layoutJson, selected?.placeholders]);
 
-  const queueTemplatePatch = (patch) => {
-    if (!selected?.id) return;
+  const queueTemplatePatch = useCallback((patch) => {
+    const id = selected?.id;
+    if (!id) return;
     pendingPatchRef.current = { ...(pendingPatchRef.current || {}), ...(patch || {}) };
     if (persistTimerRef.current) window.clearTimeout(persistTimerRef.current);
     persistTimerRef.current = window.setTimeout(() => {
@@ -280,7 +281,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       setSaveStatus('saving');
       void (async () => {
         try {
-          await updateTemplate({ id: selected.id, patch: toSend });
+          await updateTemplate({ id, patch: toSend });
           if (seq !== saveSeqRef.current) return;
           setSaveStatus('saved');
         } catch (e) {
@@ -289,7 +290,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         }
       })();
     }, 350);
-  };
+  }, [selected?.id, updateTemplate]);
 
   const updateSelected = async (patch) => {
     if (!selected) return;
@@ -350,11 +351,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     queueTemplatePatch({ layoutJson: nextLayout });
   };
 
-  const replacePlaceholders = (next) => {
+  const replacePlaceholders = useCallback((next) => {
     const arr = Array.isArray(next) ? next : [];
     setDraftPlaceholders(arr);
     queueTemplatePatch({ placeholders: arr });
-  };
+  }, [queueTemplatePatch]);
 
   useEffect(() => {
     const list = Array.isArray(placeholders) ? placeholders : [];
@@ -631,7 +632,6 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                               <div className="min-w-0 flex-1">
                                 <div className="truncate text-sm font-semibold text-zinc-900">{title}</div>
                                 <div className="mt-0.5 truncate text-[11px] text-zinc-500">
-                                  {String(p?.key || '').trim() ? `${t('key')}: ${String(p?.key || '').trim()} · ` : ''}
                                   {uiSource === 'product' ? t('bindTo') : uiSource === 'title' ? t('sourceTitle') : t('sourceManual')}
                                 </div>
                               </div>

@@ -32,8 +32,11 @@ describe('RichTextEditor', () => {
     fireEvent.click(screen.getByRole('button', { name: /• List/i }));
     expect(document.execCommand).toHaveBeenCalledWith('insertUnorderedList', false, null);
 
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: '5' } });
+    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '5' } });
     expect(document.execCommand).toHaveBeenCalledWith('fontSize', false, '5');
+
+    fireEvent.change(screen.getAllByRole('combobox')[1], { target: { value: 'Georgia' } });
+    expect(document.execCommand).toHaveBeenCalledWith('fontName', false, 'Georgia');
   });
 
   it('runs clear formatting (removeFormat + unlink)', () => {
@@ -46,4 +49,3 @@ describe('RichTextEditor', () => {
     expect(onChange).toHaveBeenCalled();
   });
 });
-

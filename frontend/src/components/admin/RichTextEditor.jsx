@@ -21,7 +21,19 @@ export default function RichTextEditor({ value, onChange }) {
   const ref = useRef(null);
   const [focused, setFocused] = useState(false);
   const [color, setColor] = useState('#111827');
+  const [font, setFont] = useState('Arial');
   const sizeOptions = useMemo(() => [1, 2, 3, 4, 5, 6, 7], []);
+  const fontOptions = useMemo(
+    () => [
+      { label: 'Arial', value: 'Arial' },
+      { label: 'Verdana', value: 'Verdana' },
+      { label: 'Tahoma', value: 'Tahoma' },
+      { label: 'Georgia', value: 'Georgia' },
+      { label: 'Times New Roman', value: 'Times New Roman' },
+      { label: 'Courier New', value: 'Courier New' }
+    ],
+    []
+  );
 
   useEffect(() => {
     if (focused) return;
@@ -110,6 +122,22 @@ export default function RichTextEditor({ value, onChange }) {
           {sizeOptions.map((n) => (
             <option key={n} value={String(n)}>
               Size {n}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold"
+          value={font}
+          onChange={(e) => {
+            const next = e.target.value;
+            setFont(next);
+            run('fontName', next);
+          }}
+        >
+          {fontOptions.map((it) => (
+            <option key={it.value} value={it.value}>
+              {it.label}
             </option>
           ))}
         </select>

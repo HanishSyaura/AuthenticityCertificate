@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useT } from '../../../i18n/useT';
 import useMediaStore from '../../../store/useMediaStore';
 
@@ -8,6 +8,21 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
   const [fileKey, setFileKey] = useState(0);
+  const textAreaRef = useRef(null);
+
+  const textPlaceholders = useMemo(() => {
+    return [
+      { label: t('certificateId'), value: '{{certificateId}}' },
+      { label: 'Status', value: '{{status}}' },
+      { label: `${t('product')}: ${t('name')}`, value: '{{product.name}}' },
+      { label: `${t('product')}: ${t('code')}`, value: '{{product.code}}' },
+      { label: `${t('batch')}: ${t('batchNo')}`, value: '{{batch.batchNo}}' },
+      { label: t('netWeight'), value: '{{epcItem.netWeight}}' },
+      { label: t('caiqNo'), value: '{{epcItem.caiqNumber}}' },
+      { label: t('productionDate'), value: '{{epcItem.productionDate|date}}' }
+    ];
+  }, [t]);
+
   const updateSelected = (patch) => {
     if (!selectedBlock) return;
     const next = layout.map((b) => (b.id === selectedBlock.id ? { ...b, ...patch } : b));
@@ -42,7 +57,39 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
           {selectedBlock.type === 'text' ? (
             <div>
               <label className="block text-xs font-medium text-zinc-700">{t('text')}</label>
+              <div className="mt-1">
+                <label className="block text-[11px] font-semibold text-zinc-600">{t('insertPlaceholder')}</label>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const token = String(e.target.value || '');
+                    if (!token) return;
+                    const current = String(selectedBlock.content?.text || '');
+                    const el = textAreaRef.current;
+                    const start = el && typeof el.selectionStart === 'number' ? el.selectionStart : current.length;
+                    const end = el && typeof el.selectionEnd === 'number' ? el.selectionEnd : current.length;
+                    const next = `${current.slice(0, start)}${token}${current.slice(end)}`;
+                    updateSelectedContent({ text: next });
+                    requestAnimationFrame(() => {
+                      const node = textAreaRef.current;
+                      if (!node) return;
+                      node.focus();
+                      const pos = start + token.length;
+                      node.setSelectionRange(pos, pos);
+                    });
+                  }}
+                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="">{t('selectPlaceholder')}</option>
+                  {textPlaceholders.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <textarea
+                ref={textAreaRef}
                 value={selectedBlock.content?.text || ''}
                 onChange={(e) => updateSelectedContent({ text: e.target.value })}
                 className="mt-1 h-28 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
