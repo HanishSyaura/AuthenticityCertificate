@@ -22,10 +22,29 @@ function sampleCert(id = 'CERTIFICATE_ID') {
 }
 
 const DEVICE_PRESETS = [
-  { id: 'fit', label: 'Fit', w: null, h: null },
-  { id: 'iphone-se', label: 'iPhone SE', w: 320, h: 568 },
-  { id: 'iphone-14', label: 'iPhone 14', w: 390, h: 844 },
-  { id: 'pixel-7', label: 'Pixel 7', w: 412, h: 915 }
+  { id: 'fit', label: 'Fit', kind: 'scale' },
+  { id: 'scale-1-2', label: '1:2', kind: 'scale', scale: 0.5 },
+  { id: 'scale-1-3', label: '1:3', kind: 'scale', scale: 1 / 3 },
+  { id: 'iphone-se', label: 'iPhone SE', kind: 'phone', w: 320, h: 568 },
+  { id: 'iphone-8', label: 'iPhone 8', kind: 'phone', w: 375, h: 667 },
+  { id: 'iphone-12-mini', label: 'iPhone 12 mini', kind: 'phone', w: 360, h: 780 },
+  { id: 'iphone-13-14', label: 'iPhone 13/14', kind: 'phone', w: 390, h: 844 },
+  { id: 'iphone-14', label: 'iPhone 14', kind: 'phone', w: 390, h: 844 },
+  { id: 'iphone-14-pro', label: 'iPhone 14 Pro', kind: 'phone', w: 393, h: 852 },
+  { id: 'iphone-14-pro-max', label: 'iPhone 14 Pro Max', kind: 'phone', w: 430, h: 932 },
+  { id: 'iphone-15-pro', label: 'iPhone 15 Pro', kind: 'phone', w: 393, h: 852 },
+  { id: 'iphone-15-pro-max', label: 'iPhone 15 Pro Max', kind: 'phone', w: 430, h: 932 },
+  { id: 'pixel-5', label: 'Pixel 5', kind: 'phone', w: 393, h: 851 },
+  { id: 'pixel-7', label: 'Pixel 7', kind: 'phone', w: 412, h: 915 },
+  { id: 'pixel-8', label: 'Pixel 8', kind: 'phone', w: 412, h: 915 },
+  { id: 'pixel-8-pro', label: 'Pixel 8 Pro', kind: 'phone', w: 448, h: 998 },
+  { id: 'galaxy-s22', label: 'Galaxy S22', kind: 'phone', w: 360, h: 780 },
+  { id: 'galaxy-s23-ultra', label: 'Galaxy S23 Ultra', kind: 'phone', w: 384, h: 854 },
+  { id: 'galaxy-s24-ultra', label: 'Galaxy S24 Ultra', kind: 'phone', w: 384, h: 854 },
+  { id: 'ipad-mini', label: 'iPad mini', kind: 'phone', w: 768, h: 1024 },
+  { id: 'ipad-10-2', label: 'iPad 10.2"', kind: 'phone', w: 810, h: 1080 },
+  { id: 'ipad-pro-11', label: 'iPad Pro 11"', kind: 'phone', w: 834, h: 1194 },
+  { id: 'ipad-pro-12-9', label: 'iPad Pro 12.9"', kind: 'phone', w: 1024, h: 1366 }
 ];
 
 export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayout, selectedBlockId, setSelectedBlockId }) {
@@ -46,7 +65,9 @@ export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayo
   const baseH = 844;
   const devicePreset = useMemo(() => DEVICE_PRESETS.find((d) => d.id === devicePresetId) || DEVICE_PRESETS[0], [devicePresetId]);
   const scale = useMemo(() => {
-    if (!devicePreset || !devicePreset.w) return 1;
+    if (!devicePreset) return 1;
+    if (Number(devicePreset.scale) > 0) return Math.max(0.1, Math.min(2, Number(devicePreset.scale)));
+    if (!devicePreset.w) return 1;
     return Math.max(0.1, Math.min(2, Number(devicePreset.w) / baseW));
   }, [devicePreset]);
 
@@ -138,16 +159,21 @@ export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayo
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={devicePresetId}
-            onChange={(e) => setDevicePresetId(e.target.value)}
-            className="ac-input w-36 rounded-lg px-3 py-2 text-xs font-semibold"
-          >
-            {DEVICE_PRESETS.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.label}
-              </option>
-            ))}
+          <select value={devicePresetId} onChange={(e) => setDevicePresetId(e.target.value)} className="ac-input w-36 rounded-lg px-3 py-2 text-xs font-semibold">
+            <optgroup label="Scale">
+              {DEVICE_PRESETS.filter((d) => d.kind === 'scale').map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.label}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Phone">
+              {DEVICE_PRESETS.filter((d) => d.kind === 'phone').map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.label}
+                </option>
+              ))}
+            </optgroup>
           </select>
           <button
             type="button"

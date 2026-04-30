@@ -202,26 +202,29 @@ export default function AdminEpc() {
                 const key = String(p?.key || '').trim();
                 const label = String(p?.label || key);
                 const type = String(p?.type || 'text');
-                const help = String(p?.help || '').trim();
                 const source = String(p?.source || 'manual');
                 const bindPath = String(p?.bindPath || '').trim();
                 if (!key) return null;
                 return (
                   <div key={key}>
                     <div className="mb-1 text-[11px] font-semibold text-zinc-600">{label}</div>
-                    {help ? <div className="-mt-1 mb-2 text-[11px] text-zinc-500">{help}</div> : null}
                     {source === 'product' && bindPath ? (
                       <div className="-mt-1 mb-2 text-[11px] text-zinc-500">
                         {t('sourceProduct')}: {bindPath}
                       </div>
                     ) : null}
-                    {type === 'rich_text' ? (
+                    {source === 'static' ? (
+                      type === 'rich_text' ? (
+                        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm" dangerouslySetInnerHTML={{ __html: String(templateData?.[key] || '') }} />
+                      ) : (
+                        <input value={String(templateData?.[key] || '')} disabled className="ac-input" />
+                      )
+                    ) : type === 'rich_text' ? (
                       <RichTextEditor value={String(templateData?.[key] || '')} onChange={(v) => setTemplateData((prev) => ({ ...(prev || {}), [key]: v }))} />
                     ) : (
                       <input
                         value={String(templateData?.[key] || '')}
                         onChange={(e) => setTemplateData((prev) => ({ ...(prev || {}), [key]: e.target.value }))}
-                        disabled={source === 'static'}
                         className="ac-input"
                       />
                     )}

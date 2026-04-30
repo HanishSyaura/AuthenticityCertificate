@@ -8,7 +8,7 @@ const generateSchema = z.object({
   batchQty: z.number().int().positive().max(5000),
   remark: z.string().optional(),
   certificateTemplateId: z.number().int().nullable().optional(),
-  templateData: z.record(z.any()).optional()
+  templateData: z.record(z.string(), z.unknown()).optional()
 });
 
 const importProductionSchema = z.object({
@@ -42,7 +42,7 @@ async function getCorpCodes(req, res) {
 
 async function generateBatch(req, res) {
   try {
-    const validated = generateSchema.parse(req.body);
+    const validated = generateSchema.parse(req.body || {});
     const result = await epcService.generateEpcBatch({
       organizationId: req.organization.id,
       corpPrefix: validated.corpPrefix,

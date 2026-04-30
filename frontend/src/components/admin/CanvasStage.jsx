@@ -140,6 +140,8 @@ export default function CanvasStage({
                 className={
                   backgroundMode === 'actual'
                     ? 'absolute left-1/2 top-1/2 max-w-none -translate-x-1/2 -translate-y-1/2 rounded-xl object-center'
+                    : backgroundMode === 'fit'
+                      ? 'absolute inset-0 h-full w-full rounded-xl object-contain object-center'
                     : 'absolute inset-0 h-full w-full rounded-xl object-fill object-center'
                 }
                 muted
@@ -154,6 +156,8 @@ export default function CanvasStage({
                 className={
                   backgroundMode === 'actual'
                     ? 'absolute left-1/2 top-1/2 max-w-none -translate-x-1/2 -translate-y-1/2 rounded-xl object-center'
+                    : backgroundMode === 'fit'
+                      ? 'absolute inset-0 h-full w-full rounded-xl object-contain object-center'
                     : 'absolute inset-0 h-full w-full rounded-xl object-fill object-center'
                 }
                 draggable={false}

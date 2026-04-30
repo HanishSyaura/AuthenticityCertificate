@@ -26,10 +26,29 @@ function clamp(n, min, max) {
 }
 
 const DEVICE_PRESETS = [
-  { id: 'fit', label: 'Fit', w: null, h: null },
-  { id: 'iphone-se', label: 'iPhone SE', w: 320, h: 568 },
-  { id: 'iphone-14', label: 'iPhone 14', w: 390, h: 844 },
-  { id: 'pixel-7', label: 'Pixel 7', w: 412, h: 915 }
+  { id: 'fit', label: 'Fit', kind: 'scale' },
+  { id: 'scale-1-2', label: '1:2', kind: 'scale', scale: 0.5 },
+  { id: 'scale-1-3', label: '1:3', kind: 'scale', scale: 1 / 3 },
+  { id: 'iphone-se', label: 'iPhone SE', kind: 'phone', w: 320, h: 568 },
+  { id: 'iphone-8', label: 'iPhone 8', kind: 'phone', w: 375, h: 667 },
+  { id: 'iphone-12-mini', label: 'iPhone 12 mini', kind: 'phone', w: 360, h: 780 },
+  { id: 'iphone-13-14', label: 'iPhone 13/14', kind: 'phone', w: 390, h: 844 },
+  { id: 'iphone-14', label: 'iPhone 14', kind: 'phone', w: 390, h: 844 },
+  { id: 'iphone-14-pro', label: 'iPhone 14 Pro', kind: 'phone', w: 393, h: 852 },
+  { id: 'iphone-14-pro-max', label: 'iPhone 14 Pro Max', kind: 'phone', w: 430, h: 932 },
+  { id: 'iphone-15-pro', label: 'iPhone 15 Pro', kind: 'phone', w: 393, h: 852 },
+  { id: 'iphone-15-pro-max', label: 'iPhone 15 Pro Max', kind: 'phone', w: 430, h: 932 },
+  { id: 'pixel-5', label: 'Pixel 5', kind: 'phone', w: 393, h: 851 },
+  { id: 'pixel-7', label: 'Pixel 7', kind: 'phone', w: 412, h: 915 },
+  { id: 'pixel-8', label: 'Pixel 8', kind: 'phone', w: 412, h: 915 },
+  { id: 'pixel-8-pro', label: 'Pixel 8 Pro', kind: 'phone', w: 448, h: 998 },
+  { id: 'galaxy-s22', label: 'Galaxy S22', kind: 'phone', w: 360, h: 780 },
+  { id: 'galaxy-s23-ultra', label: 'Galaxy S23 Ultra', kind: 'phone', w: 384, h: 854 },
+  { id: 'galaxy-s24-ultra', label: 'Galaxy S24 Ultra', kind: 'phone', w: 384, h: 854 },
+  { id: 'ipad-mini', label: 'iPad mini', kind: 'phone', w: 768, h: 1024 },
+  { id: 'ipad-10-2', label: 'iPad 10.2"', kind: 'phone', w: 810, h: 1080 },
+  { id: 'ipad-pro-11', label: 'iPad Pro 11"', kind: 'phone', w: 834, h: 1194 },
+  { id: 'ipad-pro-12-9', label: 'iPad Pro 12.9"', kind: 'phone', w: 1024, h: 1366 }
 ];
 
 export default function AdminCertificateTemplateBuilder({ initialSelectedId = null }) {
@@ -74,7 +93,9 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const canvasBgColor = String(selected?.backgroundColor || '#ffffff');
   const devicePreset = useMemo(() => DEVICE_PRESETS.find((d) => d.id === devicePresetId) || DEVICE_PRESETS[0], [devicePresetId]);
   const scale = useMemo(() => {
-    if (!devicePreset || !devicePreset.w) return 1;
+    if (!devicePreset) return 1;
+    if (Number(devicePreset.scale) > 0) return Math.max(0.1, Math.min(2, Number(devicePreset.scale)));
+    if (!devicePreset.w) return 1;
     return Math.max(0.1, Math.min(2, Number(devicePreset.w) / canvasW));
   }, [canvasW, devicePreset]);
 
@@ -109,7 +130,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       templateData[key] = fromCert ?? fromSample ?? fromStatic ?? '';
     }
     const fallback = {
-      certificateId: `CERT-${String(previewId || '').trim() || '0001'}`,
+      certificateId: String(selected?.name || '').trim() || `CERT-${String(previewId || '').trim() || '0001'}`,
       status: 'valid',
       issuedAt: previewNowRef.current,
       product: {
@@ -133,7 +154,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         }
       : fallback;
     return { ...base, templateData: { ...(base.templateData || {}), ...templateData } };
-  }, [placeholders, previewData, previewId]);
+  }, [placeholders, previewData, previewId, selected?.name]);
 
   const canvasItems = useMemo(() => {
     const layout = Array.isArray(draftLayout) ? draftLayout : [];
@@ -149,20 +170,29 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             const ph = key ? placeholderByKey.get(key) : null;
             const typ = String(ph?.type || '');
             const val = raw == null ? '' : String(raw);
+            const fallbackLabel = key ? String(ph?.label || key) : '';
+            const display = val || fallbackLabel;
             const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
             const align = textAlignClass(it.align);
             if (typ === 'rich_text') {
+              if (!val) {
+                return (
+                  <div className={`mt-1 font-semibold text-zinc-500 ${align}`} style={{ fontSize: fs }}>
+                    {fallbackLabel}
+                  </div>
+                );
+              }
               return (
                 <div
                   className={`mt-1 font-semibold text-zinc-900 ${align}`}
                   style={{ fontSize: fs }}
-                  dangerouslySetInnerHTML={{ __html: val }}
+                  dangerouslySetInnerHTML={{ __html: display }}
                 />
               );
             }
             return (
               <div className={`mt-1 truncate font-semibold text-zinc-900 ${align}`} style={{ fontSize: fs }}>
-                {val}
+                {display}
               </div>
             );
           })()}
@@ -182,14 +212,17 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         const ph = key ? placeholderByKey.get(key) : null;
         const typ = String(ph?.type || '');
         const val = raw == null ? '' : String(raw);
+        const fallbackLabel = key ? String(ph?.label || key) : '';
+        const display = val || fallbackLabel;
         const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
         const align = textAlignClass(it.align);
         if (typ === 'rich_text') {
-          return <div className={`h-full w-full ${align}`} style={{ fontSize: fs }} dangerouslySetInnerHTML={{ __html: val }} />;
+          if (!val) return <div className={`h-full w-full font-semibold text-zinc-500 ${align}`} style={{ fontSize: fs }}>{fallbackLabel}</div>;
+          return <div className={`h-full w-full ${align}`} style={{ fontSize: fs }} dangerouslySetInnerHTML={{ __html: display }} />;
         }
         return (
           <div className={`h-full w-full whitespace-pre-wrap break-words font-semibold text-zinc-900 ${align}`} style={{ fontSize: fs }}>
-            {val}
+            {display}
           </div>
         );
       }
@@ -441,16 +474,21 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   </div>
                   {wizardStep === 'canvas' ? (
                     <>
-                      <select
-                        value={devicePresetId}
-                        onChange={(e) => setDevicePresetId(e.target.value)}
-                        className="ac-input w-36 rounded-lg px-3 py-2 text-xs font-semibold"
-                      >
-                        {DEVICE_PRESETS.map((d) => (
-                          <option key={d.id} value={d.id}>
-                            {d.label}
-                          </option>
-                        ))}
+                      <select value={devicePresetId} onChange={(e) => setDevicePresetId(e.target.value)} className="ac-input w-36 rounded-lg px-3 py-2 text-xs font-semibold">
+                        <optgroup label="Scale">
+                          {DEVICE_PRESETS.filter((d) => d.kind === 'scale').map((d) => (
+                            <option key={d.id} value={d.id}>
+                              {d.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Phone">
+                          {DEVICE_PRESETS.filter((d) => d.kind === 'phone').map((d) => (
+                            <option key={d.id} value={d.id}>
+                              {d.label}
+                            </option>
+                          ))}
+                        </optgroup>
                       </select>
                       <select value={addOverlayKey} onChange={(e) => setAddOverlayKey(e.target.value)} className="ac-input w-52 rounded-lg px-3 py-2 text-xs">
                         <option value="">{t('selectDataField')}</option>
@@ -590,8 +628,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                               <select
                                 value={source}
                                 onChange={(e) => {
+                                  const nextSource = e.target.value;
                                   const next = placeholders.slice();
-                                  next[idx] = { ...(next[idx] || {}), source: e.target.value };
+                                  const cur = next[idx] || {};
+                                  const shouldAutoRichText = nextSource === 'manual' && String(cur.type || 'text') === 'text';
+                                  next[idx] = { ...cur, source: nextSource, type: shouldAutoRichText ? 'rich_text' : cur.type };
                                   replacePlaceholders(next);
                                 }}
                                 className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
@@ -600,58 +641,54 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                 <option value="product">{t('sourceProduct')}</option>
                                 <option value="static">{t('sourceStatic')}</option>
                               </select>
-                              <select
-                                value={String(p?.bindPath || '')}
-                                onChange={(e) => {
-                                  const next = placeholders.slice();
-                                  next[idx] = { ...(next[idx] || {}), bindPath: e.target.value };
-                                  replacePlaceholders(next);
-                                }}
-                                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                              >
-                                <option value="">{t('bindTo')}</option>
-                                <option value="product.name">product.name</option>
-                                <option value="product.sku">product.sku</option>
-                                <option value="product.code">product.code</option>
-                                <option value="product.category">product.category</option>
-                                <option value="product.origin">product.origin</option>
-                                <option value="product.description">product.description</option>
-                              </select>
-                            </div>
-                            {type === 'rich_text' ? (
-                              <div>
-                                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('staticValue')}</div>
-                                <RichTextEditor
-                                  value={String(p?.staticValue || '')}
-                                  onChange={(v) => {
+                              {source === 'product' ? (
+                                <select
+                                  value={String(p?.bindPath || '')}
+                                  onChange={(e) => {
                                     const next = placeholders.slice();
-                                    next[idx] = { ...(next[idx] || {}), staticValue: v };
+                                    next[idx] = { ...(next[idx] || {}), bindPath: e.target.value };
                                     replacePlaceholders(next);
                                   }}
+                                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                                >
+                                  <option value="">{t('bindTo')}</option>
+                                  <option value="product.name">product.name</option>
+                                  <option value="product.sku">product.sku</option>
+                                  <option value="product.code">product.code</option>
+                                  <option value="product.category">product.category</option>
+                                  <option value="product.origin">product.origin</option>
+                                  <option value="product.description">product.description</option>
+                                </select>
+                              ) : (
+                                <div />
+                              )}
+                            </div>
+                            {source === 'static' ? (
+                              type === 'rich_text' ? (
+                                <div>
+                                  <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('staticValue')}</div>
+                                  <RichTextEditor
+                                    value={String(p?.staticValue || '')}
+                                    onChange={(v) => {
+                                      const next = placeholders.slice();
+                                      next[idx] = { ...(next[idx] || {}), staticValue: v };
+                                      replacePlaceholders(next);
+                                    }}
+                                  />
+                                </div>
+                              ) : (
+                                <input
+                                  value={String(p?.staticValue || '')}
+                                  onChange={(e) => {
+                                    const next = placeholders.slice();
+                                    next[idx] = { ...(next[idx] || {}), staticValue: e.target.value };
+                                    replacePlaceholders(next);
+                                  }}
+                                  placeholder={t('staticValue')}
+                                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                                 />
-                              </div>
-                            ) : (
-                              <input
-                                value={String(p?.staticValue || '')}
-                                onChange={(e) => {
-                                  const next = placeholders.slice();
-                                  next[idx] = { ...(next[idx] || {}), staticValue: e.target.value };
-                                  replacePlaceholders(next);
-                                }}
-                                placeholder={t('staticValue')}
-                                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                              />
-                            )}
-                            <input
-                              value={String(p?.help || '')}
-                              onChange={(e) => {
-                                const next = placeholders.slice();
-                                next[idx] = { ...(next[idx] || {}), help: e.target.value };
-                                replacePlaceholders(next);
-                              }}
-                              placeholder={t('helpText')}
-                              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                            />
+                              )
+                            ) : null}
                             <div className="flex items-center justify-between gap-2">
                               <button
                                 type="button"
@@ -683,7 +720,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                       onClick={() =>
                         replacePlaceholders([
                           ...placeholders,
-                          { key: '', label: '', type: 'text', source: 'manual', bindPath: '', staticValue: '', help: '', sample: '' }
+                          { key: '', label: '', type: 'rich_text', source: 'manual', bindPath: '', staticValue: '', sample: '' }
                         ])
                       }
                       className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
@@ -745,6 +782,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                     className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                   >
                     <option value="background">{t('stretchBackground')}</option>
+                    <option value="fit">{t('fitBackground')}</option>
                     <option value="actual">{t('actualSize')}</option>
                   </select>
                   <div className="mt-1 text-[11px] text-zinc-500">{t('backgroundSizeAdvice')}</div>

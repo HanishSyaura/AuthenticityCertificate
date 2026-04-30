@@ -74,7 +74,7 @@ model WebhookEndpoint {
   @@index([organizationId, isActive])
 }
 
-enum UserRole {
+enum UserRoleEnum {
   super_admin
   admin
   operator
@@ -85,7 +85,7 @@ model User {
   name           String
   email          String        @unique
   password       String
-  role           UserRole      @default(admin)
+  role           UserRoleEnum  @default(admin)
   organizationId Int?
   organization   Organization? @relation(fields: [organizationId], references: [id])
   createdAt      DateTime      @default(now())
