@@ -73,6 +73,33 @@ app.use((req, res, next) => {
   next();
 });
 
+const dbInit = { ready: false, error: null, promise: null };
+dbInit.promise = applyDbPatches()
+  .then(() => {
+    dbInit.ready = true;
+  })
+  .catch((err) => {
+    dbInit.error = err;
+    console.error(err);
+  });
+
+app.use(async (req, res, next) => {
+  if (req.path === '/' || req.path === '/health') return next();
+  if (dbInit.ready) return next();
+
+  const timeoutMs = Number(process.env.DB_PATCH_TIMEOUT_MS || 3000);
+  try {
+    await Promise.race([
+      dbInit.promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('db_patches_timeout')), timeoutMs))
+    ]);
+  } catch {}
+
+  if (dbInit.ready) return next();
+  if (dbInit.error) return res.error('Database belum siap (inisialisasi gagal). Sila semak log server.', 503);
+  return res.error('Database sedang diinisialisasi. Sila cuba lagi.', 503);
+});
+
 // Routes
 app.use('/auth', authRoutes);
 app.use('/products', productRoutes);
@@ -153,11 +180,11 @@ app.get('/', (req, res) => {
 
 // Centralized Error Handling Middleware
 app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
   console.error(err.stack);
-  res.status(500).json({
-    success: false,
-    message: err.message || 'Internal Server Error'
-  });
+  const code = err?.code;
+  if (code === 'P2021') return res.error('Database schema belum siap (table tiada). Sila jalankan patch/migrasi DB.', 503);
+  return res.error(err.message || 'Internal Server Error', 500);
 });
 
 async function start() {
@@ -168,10 +195,6 @@ async function start() {
   server.on('error', (err) => {
     console.error(err);
     process.exit(1);
-  });
-
-  applyDbPatches().catch((err) => {
-    console.error(err);
   });
 }
 

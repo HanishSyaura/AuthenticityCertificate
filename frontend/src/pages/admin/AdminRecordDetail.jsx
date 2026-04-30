@@ -60,7 +60,7 @@ export default function AdminRecordDetail() {
   }, [categories]);
 
   useEffect(() => {
-    void fetchProducts();
+    void fetchProducts({ includeDeleted: true });
     void fetchCategories();
     void fetchTemplates();
   }, [fetchProducts, fetchCategories, fetchTemplates]);

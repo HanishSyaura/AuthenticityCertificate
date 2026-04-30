@@ -61,7 +61,7 @@ function normalizeRawProduct(row) {
   };
 }
 
-async function rawListProducts({ organizationId }) {
+async function rawListProducts({ organizationId, includeDeleted }) {
   const tableName = await resolveProductTableName();
   if (!tableName) return [];
   const cols = await getTableColumns(tableName);
@@ -95,7 +95,7 @@ async function rawListProducts({ organizationId }) {
     where.push('`organizationId` = ?');
     args.push(Number(organizationId));
   }
-  if (cols.has('deletedAt')) where.push('`deletedAt` IS NULL');
+  if (!includeDeleted && cols.has('deletedAt')) where.push('`deletedAt` IS NULL');
 
   const orderBy = cols.has('createdAt') ? ' ORDER BY `createdAt` DESC' : cols.has('id') ? ' ORDER BY `id` DESC' : '';
   const whereSql = where.length ? ` WHERE ${where.join(' AND ')}` : '';
@@ -147,18 +147,18 @@ async function createProduct(data) {
   );
 }
 
-async function getAllProducts({ organizationId }) {
+async function getAllProducts({ organizationId, includeDeleted }) {
   try {
     const rows = await withTimeout(
       prisma.product.findMany({
-        where: notDeleted({ organizationId: Number(organizationId) }),
+        where: includeDeleted ? { organizationId: Number(organizationId) } : notDeleted({ organizationId: Number(organizationId) }),
         orderBy: { createdAt: 'desc' }
       }),
       1200
     );
     return rows.map(withSkuFallback);
   } catch (e) {
-    if (e?.code === 'P2022') return await rawListProducts({ organizationId });
+    if (e?.code === 'P2022') return await rawListProducts({ organizationId, includeDeleted });
     throw e;
   }
 }

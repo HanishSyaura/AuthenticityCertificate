@@ -50,9 +50,17 @@ export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayo
     return Math.max(0.1, Math.min(2, Number(devicePreset.w) / baseW));
   }, [devicePreset]);
 
+  const templatesById = useMemo(() => {
+    const map = new Map();
+    (templates || []).forEach((tpl) => {
+      map.set(String(tpl.id), tpl);
+    });
+    return map;
+  }, [templates]);
+
   useEffect(() => {
     layoutRef.current = layout;
-  }, [layout, t, templatesById]);
+  }, [layout]);
 
   useEffect(() => {
     if (!token) return;
@@ -64,14 +72,6 @@ export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayo
     if (!Array.isArray(templates) || templates.length === 0) return;
     setSelectedTemplateId(String(templates[0]?.id || ''));
   }, [selectedTemplateId, templates]);
-
-  const templatesById = useMemo(() => {
-    const map = new Map();
-    (templates || []).forEach((tpl) => {
-      map.set(String(tpl.id), tpl);
-    });
-    return map;
-  }, [templates]);
 
   const setCanvasItems = (updaterOrNext) => {
     const current = layoutRef.current || [];

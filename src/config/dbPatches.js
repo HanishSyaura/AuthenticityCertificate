@@ -300,20 +300,118 @@ async function ensureCertificateTemplateSchemaCompat() {
 }
 
 async function ensureEpcSchemaCompat() {
-  const batchTable = await resolveTableName(['EpcBatch', 'epcBatch', 'epc_batches']);
-  if (batchTable) {
-    await ensureColumn(batchTable, 'certificateTemplateId', `ALTER TABLE \`${batchTable}\` ADD COLUMN \`certificateTemplateId\` INT NULL`, null, null);
-    await ensureColumn(batchTable, 'templateData', `ALTER TABLE \`${batchTable}\` ADD COLUMN \`templateData\` JSON NULL`, null, null);
-    await ensureColumn(batchTable, 'productionUploadedAt', `ALTER TABLE \`${batchTable}\` ADD COLUMN \`productionUploadedAt\` DATETIME NULL`, null, null);
-    await ensureColumn(batchTable, 'productionDoneAt', `ALTER TABLE \`${batchTable}\` ADD COLUMN \`productionDoneAt\` DATETIME NULL`, null, null);
+  const hasCorpSequence = await tableExists('CorpSequence');
+  if (!hasCorpSequence) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`CorpSequence\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`organizationId\` INT NOT NULL,
+        \`corpPrefix\` VARCHAR(191) NOT NULL,
+        \`lastNo\` BIGINT NOT NULL DEFAULT 0,
+        \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    const idxUnique = `CorpSequence_organizationId_corpPrefix_key`;
+    const hasIdxUnique = await indexExists('CorpSequence', idxUnique);
+    if (!hasIdxUnique)
+      await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX \`${idxUnique}\` ON \`CorpSequence\` (\`organizationId\`, \`corpPrefix\`)`);
+
+    const idxOrg = `CorpSequence_organizationId_idx`;
+    const hasIdxOrg = await indexExists('CorpSequence', idxOrg);
+    if (!hasIdxOrg) await prisma.$executeRawUnsafe(`CREATE INDEX \`${idxOrg}\` ON \`CorpSequence\` (\`organizationId\`)`);
   }
 
-  const itemTable = await resolveTableName(['EpcItem', 'epcItem', 'epc_items']);
-  if (itemTable) {
-    await ensureColumn(itemTable, 'netWeight', `ALTER TABLE \`${itemTable}\` ADD COLUMN \`netWeight\` VARCHAR(191) NULL`, null, null);
-    await ensureColumn(itemTable, 'productionDate', `ALTER TABLE \`${itemTable}\` ADD COLUMN \`productionDate\` DATETIME NULL`, null, null);
-    await ensureColumn(itemTable, 'caiqNumber', `ALTER TABLE \`${itemTable}\` ADD COLUMN \`caiqNumber\` VARCHAR(191) NULL`, null, null);
+  const hasEpcBatch = await tableExists('EpcBatch');
+  if (!hasEpcBatch) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`EpcBatch\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`organizationId\` INT NOT NULL,
+        \`corpPrefix\` VARCHAR(191) NOT NULL,
+        \`productId\` INT NOT NULL,
+        \`sku\` VARCHAR(191) NOT NULL,
+        \`batchName\` VARCHAR(191) NOT NULL,
+        \`batchQty\` INT NOT NULL,
+        \`remark\` VARCHAR(191) NULL,
+        \`certificateTemplateId\` INT NULL,
+        \`templateData\` JSON NULL,
+        \`productionUploadedAt\` DATETIME NULL,
+        \`productionDoneAt\` DATETIME NULL,
+        \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    const idx1 = `EpcBatch_organizationId_createdAt_idx`;
+    if (!(await indexExists('EpcBatch', idx1)))
+      await prisma.$executeRawUnsafe(`CREATE INDEX \`${idx1}\` ON \`EpcBatch\` (\`organizationId\`, \`createdAt\`)`);
+
+    const idx2 = `EpcBatch_organizationId_corpPrefix_idx`;
+    if (!(await indexExists('EpcBatch', idx2)))
+      await prisma.$executeRawUnsafe(`CREATE INDEX \`${idx2}\` ON \`EpcBatch\` (\`organizationId\`, \`corpPrefix\`)`);
+
+    const idx3 = `EpcBatch_organizationId_productId_idx`;
+    if (!(await indexExists('EpcBatch', idx3)))
+      await prisma.$executeRawUnsafe(`CREATE INDEX \`${idx3}\` ON \`EpcBatch\` (\`organizationId\`, \`productId\`)`);
   }
+
+  await ensureColumn(
+    'EpcBatch',
+    'certificateTemplateId',
+    `ALTER TABLE \`EpcBatch\` ADD COLUMN \`certificateTemplateId\` INT NULL`,
+    null,
+    null
+  );
+  await ensureColumn('EpcBatch', 'templateData', `ALTER TABLE \`EpcBatch\` ADD COLUMN \`templateData\` JSON NULL`, null, null);
+  await ensureColumn(
+    'EpcBatch',
+    'productionUploadedAt',
+    `ALTER TABLE \`EpcBatch\` ADD COLUMN \`productionUploadedAt\` DATETIME NULL`,
+    null,
+    null
+  );
+  await ensureColumn(
+    'EpcBatch',
+    'productionDoneAt',
+    `ALTER TABLE \`EpcBatch\` ADD COLUMN \`productionDoneAt\` DATETIME NULL`,
+    null,
+    null
+  );
+
+  const hasEpcItem = await tableExists('EpcItem');
+  if (!hasEpcItem) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`EpcItem\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`organizationId\` INT NOT NULL,
+        \`batchId\` INT NOT NULL,
+        \`epcCode\` VARCHAR(191) NOT NULL,
+        \`runningNo\` BIGINT NOT NULL,
+        \`netWeight\` VARCHAR(191) NULL,
+        \`productionDate\` DATETIME NULL,
+        \`caiqNumber\` VARCHAR(191) NULL,
+        \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    const idxUnique = `EpcItem_organizationId_epcCode_key`;
+    if (!(await indexExists('EpcItem', idxUnique)))
+      await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX \`${idxUnique}\` ON \`EpcItem\` (\`organizationId\`, \`epcCode\`)`);
+
+    const idx1 = `EpcItem_organizationId_createdAt_idx`;
+    if (!(await indexExists('EpcItem', idx1)))
+      await prisma.$executeRawUnsafe(`CREATE INDEX \`${idx1}\` ON \`EpcItem\` (\`organizationId\`, \`createdAt\`)`);
+
+    const idx2 = `EpcItem_batchId_idx`;
+    if (!(await indexExists('EpcItem', idx2))) await prisma.$executeRawUnsafe(`CREATE INDEX \`${idx2}\` ON \`EpcItem\` (\`batchId\`)`);
+  }
+
+  await ensureColumn('EpcItem', 'netWeight', `ALTER TABLE \`EpcItem\` ADD COLUMN \`netWeight\` VARCHAR(191) NULL`, null, null);
+  await ensureColumn('EpcItem', 'productionDate', `ALTER TABLE \`EpcItem\` ADD COLUMN \`productionDate\` DATETIME NULL`, null, null);
+  await ensureColumn('EpcItem', 'caiqNumber', `ALTER TABLE \`EpcItem\` ADD COLUMN \`caiqNumber\` VARCHAR(191) NULL`, null, null);
 }
 
 async function applyDbPatches() {

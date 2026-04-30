@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import CanvasStage from '../../components/admin/CanvasStage';
+import RichTextEditor from '../../components/admin/RichTextEditor';
 import { useT } from '../../i18n/useT';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
@@ -11,21 +12,6 @@ function makeId(prefix) {
   return `${prefix}-${Math.random().toString(16).slice(2)}-${Date.now()}`;
 }
 
-function makeFieldKey(label, existingKeys) {
-  const base = String(label || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '') || 'field';
-  let k = base;
-  let i = 2;
-  while (existingKeys.has(k)) {
-    k = `${base}_${i}`;
-    i += 1;
-  }
-  return k;
-}
-
 function getValue(path, data) {
   const parts = String(path).split('.');
   let cur = data;
@@ -33,6 +19,10 @@ function getValue(path, data) {
     cur = cur?.[p];
   }
   return cur ?? '';
+}
+
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
 }
 
 const DEVICE_PRESETS = [
@@ -72,8 +62,10 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const [devicePresetId, setDevicePresetId] = useState('fit');
   const [backgroundMode, setBackgroundMode] = useState('background');
   const [assignedBatchIds, setAssignedBatchIds] = useState(() => new Set());
-
-  const fieldsRef = useRef([]);
+  const [draftPlaceholders, setDraftPlaceholders] = useState([]);
+  const [draftLayout, setDraftLayout] = useState([]);
+  const persistTimerRef = useRef(null);
+  const pendingPatchRef = useRef(null);
 
   const selected = useMemo(() => templates.find((it) => String(it.id) === String(selectedId)) || null, [templates, selectedId]);
   const canvasW = Number(selected?.canvasWidth) > 0 ? Number(selected.canvasWidth) : 390;
@@ -85,9 +77,10 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     return Math.max(0.1, Math.min(2, Number(devicePreset.w) / canvasW));
   }, [canvasW, devicePreset]);
 
+  const placeholders = useMemo(() => (Array.isArray(draftPlaceholders) ? draftPlaceholders : []), [draftPlaceholders]);
+
   const fields = useMemo(() => {
-    const layout = Array.isArray(selected?.layoutJson) ? selected.layoutJson : [];
-    const placeholders = Array.isArray(selected?.placeholders) ? selected.placeholders : [];
+    const layout = Array.isArray(draftLayout) ? draftLayout : [];
     const placeholderByKey = new Map();
     for (const p of placeholders) {
       const key = String(p?.key || '').trim();
@@ -141,86 +134,117 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         </div>
       )
     }));
-  }, [selected, previewData]);
+  }, [draftLayout, placeholders, previewData]);
+
+  const selectedField = useMemo(() => (Array.isArray(draftLayout) ? draftLayout : []).find((f) => f.id === selectedFieldId) || null, [draftLayout, selectedFieldId]);
 
   useEffect(() => {
-    fieldsRef.current = Array.isArray(selected?.layoutJson) ? selected.layoutJson : [];
-  }, [selected]);
+    if (!selected?.id) return;
+    setDraftPlaceholders(Array.isArray(selected?.placeholders) ? selected.placeholders : []);
+    setDraftLayout(Array.isArray(selected?.layoutJson) ? selected.layoutJson : []);
+    pendingPatchRef.current = null;
+    if (persistTimerRef.current) {
+      window.clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+  }, [selected?.id]);
 
-  const selectedField = useMemo(() => (fieldsRef.current || []).find((f) => f.id === selectedFieldId) || null, [selectedFieldId]);
-
-  const placeholders = useMemo(() => (Array.isArray(selected?.placeholders) ? selected.placeholders : []), [selected]);
+  const queueTemplatePatch = (patch) => {
+    if (!selected?.id) return;
+    pendingPatchRef.current = { ...(pendingPatchRef.current || {}), ...(patch || {}) };
+    if (persistTimerRef.current) window.clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = window.setTimeout(() => {
+      const toSend = pendingPatchRef.current;
+      pendingPatchRef.current = null;
+      if (!toSend) return;
+      void updateTemplate({ id: selected.id, patch: toSend });
+    }, 350);
+  };
 
   const updateSelected = async (patch) => {
     if (!selected) return;
     await updateTemplate({ id: selected.id, patch });
   };
 
-  const addDataFieldAndCanvasItem = async ({ label = '', type = 'text' } = {}) => {
-    if (!selected) return;
-    const existingKeys = new Set((Array.isArray(selected.placeholders) ? selected.placeholders : []).map((p) => String(p?.key || '').trim()).filter(Boolean));
-    const key = makeFieldKey(label || t('fieldLabel'), existingKeys);
-    const ph = {
-      key,
-      label: String(label || t('fieldLabel')).trim() || key,
-      type: type === 'rich_text' ? 'rich_text' : 'text',
-      source: 'manual',
-      bindPath: '',
-      staticValue: '',
-      help: '',
-      sample: ''
-    };
-    const item = {
-      id: makeId('field'),
-      path: `templateData.${key}`,
-      label: ph.label,
-      x: 20,
-      y: 40,
-      w: 240,
-      h: 56,
-      fontSize: 14,
-      align: 'left'
-    };
-    const nextPlaceholders = [...(Array.isArray(selected.placeholders) ? selected.placeholders : []), ph];
-    const nextLayout = [...(Array.isArray(selected.layoutJson) ? selected.layoutJson : []), item];
-    await updateSelected({ placeholders: nextPlaceholders, layoutJson: nextLayout });
-    setSelectedFieldId(item.id);
-  };
-
-  const addCanvasItemForKey = async (key) => {
+  const addCanvasItemForKey = (key) => {
     if (!selected) return;
     const k = String(key || '').trim();
     if (!k) return;
-    const placeholders = Array.isArray(selected.placeholders) ? selected.placeholders : [];
     const ph = placeholders.find((p) => String(p?.key || '').trim() === k) || null;
     const label = String(ph?.label || k).trim() || k;
     const item = { id: makeId('field'), path: `templateData.${k}`, label, x: 20, y: 40, w: 240, h: 56, fontSize: 14, align: 'left' };
-    const nextLayout = [...(Array.isArray(selected.layoutJson) ? selected.layoutJson : []), item];
-    await updateSelected({ layoutJson: nextLayout });
+    const nextLayout = [...(Array.isArray(draftLayout) ? draftLayout : []), item];
+    setDraftLayout(nextLayout);
+    queueTemplatePatch({ layoutJson: nextLayout });
     setSelectedFieldId(item.id);
   };
 
-  const setFields = async (nextFields) => {
-    if (!selected) return;
-    const sanitized = (nextFields || []).map((field) => {
+  const sanitizeLayout = (nextFields) =>
+    (nextFields || []).map((field) => {
       const next = { ...(field || {}) };
       delete next.render;
       return next;
     });
-    await updateSelected({ layoutJson: sanitized });
-  };
 
   const setCanvasItems = (updaterOrNext) => {
-    const current = fieldsRef.current || [];
+    const current = Array.isArray(draftLayout) ? draftLayout : [];
     const next = typeof updaterOrNext === 'function' ? updaterOrNext(current) : updaterOrNext;
-    void setFields(next);
+    const sanitized = sanitizeLayout(next);
+    setDraftLayout(sanitized);
+    queueTemplatePatch({ layoutJson: sanitized });
   };
 
   const updateField = (patch) => {
     if (!selectedField || !selected) return;
-    const current = fieldsRef.current || [];
-    void setFields(current.map((f) => (f.id === selectedField.id ? { ...f, ...patch } : f)));
+    const minW = 40;
+    const minH = 30;
+    const nextLayout = (Array.isArray(draftLayout) ? draftLayout : []).map((f) => {
+      if (f.id !== selectedField.id) return f;
+      const merged = { ...f, ...(patch || {}) };
+      const w = clamp(Number(merged.w) || minW, minW, Math.max(minW, canvasW - (Number(merged.x) || 0)));
+      const h = clamp(Number(merged.h) || minH, minH, Math.max(minH, canvasH - (Number(merged.y) || 0)));
+      const x = clamp(Number(merged.x) || 0, 0, Math.max(0, canvasW - w));
+      const y = clamp(Number(merged.y) || 0, 0, Math.max(0, canvasH - h));
+      return { ...merged, x, y, w, h };
+    });
+    setDraftLayout(nextLayout);
+    queueTemplatePatch({ layoutJson: nextLayout });
   };
+
+  const replacePlaceholders = (next) => {
+    const arr = Array.isArray(next) ? next : [];
+    setDraftPlaceholders(arr);
+    queueTemplatePatch({ placeholders: arr });
+  };
+
+  const replacePlaceholdersAndLayout = ({ nextPlaceholders, nextLayout }) => {
+    const ph = Array.isArray(nextPlaceholders) ? nextPlaceholders : [];
+    const ly = Array.isArray(nextLayout) ? nextLayout : [];
+    setDraftPlaceholders(ph);
+    setDraftLayout(ly);
+    queueTemplatePatch({ placeholders: ph, layoutJson: ly });
+  };
+
+  const validatePlaceholders = useMemo(() => {
+    const list = Array.isArray(placeholders) ? placeholders : [];
+    const errors = [];
+    const seen = new Set();
+    for (let i = 0; i < list.length; i += 1) {
+      const p = list[i] || {};
+      const key = String(p.key || '').trim();
+      const label = String(p.label || '').trim();
+      const source = String(p.source || 'manual');
+      const bindPath = String(p.bindPath || '').trim();
+      if (!key) errors.push(`${t('key')} #${i + 1}: required`);
+      if (key && !/^[a-zA-Z0-9_]+$/.test(key)) errors.push(`${t('key')} "${key}": invalid`);
+      const norm = key.toLowerCase();
+      if (key && seen.has(norm)) errors.push(`${t('key')} "${key}": duplicate`);
+      if (key) seen.add(norm);
+      if (!label) errors.push(`${t('fieldLabel')} #${i + 1}: required`);
+      if (source === 'product' && !bindPath) errors.push(`${t('bindTo')} #${i + 1}: required`);
+    }
+    return { ok: errors.length === 0, errors };
+  }, [placeholders, t]);
 
   useEffect(() => {
     void fetchTemplates();
@@ -313,7 +337,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                     </button>
                     <button
                       type="button"
-                      onClick={() => setWizardStep('canvas')}
+                      onClick={() => {
+                        if (!validatePlaceholders.ok) return;
+                        setWizardStep('canvas');
+                      }}
+                      disabled={!validatePlaceholders.ok}
                       className={`px-3 py-2 text-xs font-semibold ${wizardStep === 'canvas' ? 'bg-brand-50 text-brand-800' : 'text-zinc-700 hover:bg-zinc-50'}`}
                     >
                       {t('step2PlaceCanvas')}
@@ -356,7 +384,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                       </select>
                       <button
                         type="button"
-                        onClick={() => void addCanvasItemForKey(addOverlayKey)}
+                        onClick={() => addCanvasItemForKey(addOverlayKey)}
                         className="ac-btn ac-btn-soft rounded-lg px-3 py-2 text-xs"
                         disabled={!String(addOverlayKey || '').trim()}
                       >
@@ -364,16 +392,19 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          void addDataFieldAndCanvasItem({ label: t('fieldLabel'), type: 'text' });
-                        }}
+                        onClick={() => setWizardStep('fields')}
                         className="ac-btn ac-btn-soft rounded-lg px-3 py-2 text-xs"
                       >
-                        {t('addField')}
+                        {t('editFields')}
                       </button>
                     </>
                   ) : (
-                    <button type="button" onClick={() => setWizardStep('canvas')} className="ac-btn ac-btn-soft rounded-lg px-3 py-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setWizardStep('canvas')}
+                      className="ac-btn ac-btn-soft rounded-lg px-3 py-2 text-xs"
+                      disabled={!validatePlaceholders.ok}
+                    >
                       {t('nextStep')}
                     </button>
                   )}
@@ -393,6 +424,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
               </div>
 
               {previewError ? <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">{previewError}</div> : null}
+              {wizardStep === 'fields' && !validatePlaceholders.ok && validatePlaceholders.errors.length > 0 ? (
+                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                  {validatePlaceholders.errors[0]}
+                </div>
+              ) : null}
 
               {wizardStep === 'canvas' ? (
                 <CanvasStage
@@ -415,9 +451,169 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   <div className="mt-1 text-xs text-zinc-500">
                     {t('dataFields')}: {placeholders.length}
                   </div>
-                  <button type="button" onClick={() => setWizardStep('canvas')} className="ac-btn mt-3 rounded-lg px-3 py-2 text-xs">
-                    {t('nextStep')}
-                  </button>
+                  <div className="mt-3 space-y-2">
+                    {placeholders.map((p, idx) => {
+                      const key = String(p?.key || '');
+                      const type = String(p?.type || 'text');
+                      const source = String(p?.source || 'manual');
+                      return (
+                        <div key={`${p?.key || ''}-${idx}`} className="rounded-lg border border-zinc-200 bg-white p-2">
+                          <div className="grid grid-cols-1 gap-2">
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                              <input
+                                value={key}
+                                onChange={(e) => {
+                                  const nextKey = e.target.value;
+                                  const oldKey = String(placeholders[idx]?.key || '');
+                                  const nextPlaceholders = placeholders.slice();
+                                  nextPlaceholders[idx] = { ...(nextPlaceholders[idx] || {}), key: nextKey };
+                                  const oldTrim = String(oldKey || '').trim();
+                                  const newTrim = String(nextKey || '').trim();
+                                  if (oldTrim && newTrim && oldTrim !== newTrim) {
+                                    const nextLayout = (Array.isArray(draftLayout) ? draftLayout : []).map((it) => {
+                                      const path = String(it?.path || '');
+                                      return path === `templateData.${oldTrim}` ? { ...it, path: `templateData.${newTrim}` } : it;
+                                    });
+                                    if (String(addOverlayKey || '').trim() === oldTrim) setAddOverlayKey(newTrim);
+                                    replacePlaceholdersAndLayout({ nextPlaceholders, nextLayout });
+                                    return;
+                                  }
+                                  replacePlaceholders(nextPlaceholders);
+                                }}
+                                placeholder={t('key')}
+                                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                              />
+                              <input
+                                value={String(p?.label || '')}
+                                onChange={(e) => {
+                                  const next = placeholders.slice();
+                                  next[idx] = { ...(next[idx] || {}), label: e.target.value };
+                                  replacePlaceholders(next);
+                                }}
+                                placeholder={t('fieldLabel')}
+                                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                              />
+                            </div>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                              <select
+                                value={type}
+                                onChange={(e) => {
+                                  const next = placeholders.slice();
+                                  next[idx] = { ...(next[idx] || {}), type: e.target.value };
+                                  replacePlaceholders(next);
+                                }}
+                                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                              >
+                                <option value="text">{t('text')}</option>
+                                <option value="rich_text">{t('richText')}</option>
+                              </select>
+                              <select
+                                value={source}
+                                onChange={(e) => {
+                                  const next = placeholders.slice();
+                                  next[idx] = { ...(next[idx] || {}), source: e.target.value };
+                                  replacePlaceholders(next);
+                                }}
+                                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                              >
+                                <option value="manual">{t('sourceManual')}</option>
+                                <option value="product">{t('sourceProduct')}</option>
+                                <option value="static">{t('sourceStatic')}</option>
+                              </select>
+                              <select
+                                value={String(p?.bindPath || '')}
+                                onChange={(e) => {
+                                  const next = placeholders.slice();
+                                  next[idx] = { ...(next[idx] || {}), bindPath: e.target.value };
+                                  replacePlaceholders(next);
+                                }}
+                                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                              >
+                                <option value="">{t('bindTo')}</option>
+                                <option value="product.name">product.name</option>
+                                <option value="product.sku">product.sku</option>
+                                <option value="product.code">product.code</option>
+                                <option value="product.category">product.category</option>
+                                <option value="product.origin">product.origin</option>
+                                <option value="product.description">product.description</option>
+                              </select>
+                            </div>
+                            {type === 'rich_text' ? (
+                              <div>
+                                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('staticValue')}</div>
+                                <RichTextEditor
+                                  value={String(p?.staticValue || '')}
+                                  onChange={(v) => {
+                                    const next = placeholders.slice();
+                                    next[idx] = { ...(next[idx] || {}), staticValue: v };
+                                    replacePlaceholders(next);
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              <input
+                                value={String(p?.staticValue || '')}
+                                onChange={(e) => {
+                                  const next = placeholders.slice();
+                                  next[idx] = { ...(next[idx] || {}), staticValue: e.target.value };
+                                  replacePlaceholders(next);
+                                }}
+                                placeholder={t('staticValue')}
+                                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                              />
+                            )}
+                            <input
+                              value={String(p?.help || '')}
+                              onChange={(e) => {
+                                const next = placeholders.slice();
+                                next[idx] = { ...(next[idx] || {}), help: e.target.value };
+                                replacePlaceholders(next);
+                              }}
+                              placeholder={t('helpText')}
+                              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                            />
+                            <div className="flex items-center justify-between gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const oldKeyTrim = String(placeholders[idx]?.key || '').trim();
+                                  const nextPlaceholders = placeholders.filter((_, i) => i !== idx);
+                                  if (oldKeyTrim) {
+                                    const nextLayout = (Array.isArray(draftLayout) ? draftLayout : []).filter((it) => String(it?.path || '') !== `templateData.${oldKeyTrim}`);
+                                    if (String(addOverlayKey || '').trim() === oldKeyTrim) setAddOverlayKey('');
+                                    if (selectedField && String(selectedField.path || '') === `templateData.${oldKeyTrim}`) setSelectedFieldId(null);
+                                    replacePlaceholdersAndLayout({ nextPlaceholders, nextLayout });
+                                    return;
+                                  }
+                                  replacePlaceholders(nextPlaceholders);
+                                }}
+                                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                              >
+                                {t('delete')}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        replacePlaceholders([
+                          ...placeholders,
+                          { key: '', label: '', type: 'text', source: 'manual', bindPath: '', staticValue: '', help: '', sample: '' }
+                        ])
+                      }
+                      className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                    >
+                      {t('addPlaceholder')}
+                    </button>
+                    <button type="button" onClick={() => setWizardStep('canvas')} className="ac-btn rounded-lg px-3 py-2 text-xs" disabled={!validatePlaceholders.ok}>
+                      {t('nextStep')}
+                    </button>
+                  </div>
                 </div>
               )}
             </>
@@ -570,142 +766,6 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                 </button>
               </div>
 
-              {wizardStep === 'fields' ? (
-                <div className="rounded-lg border border-zinc-200 bg-white p-3">
-                  <div className="mb-2 text-xs font-semibold text-zinc-700">{t('dataFields')}</div>
-                  <div className="space-y-2">
-                    {placeholders.map((p, idx) => (
-                      <div key={`${p?.key || ''}-${idx}`} className="rounded-lg border border-zinc-200 bg-white p-2">
-                        <div className="grid grid-cols-1 gap-2">
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                            <input
-                              value={String(p?.key || '')}
-                              onChange={(e) => {
-                                const next = placeholders.slice();
-                                next[idx] = { ...(next[idx] || {}), key: e.target.value };
-                                void updateSelected({ placeholders: next });
-                              }}
-                              placeholder={t('key')}
-                              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                            />
-                            <input
-                              value={String(p?.label || '')}
-                              onChange={(e) => {
-                                const next = placeholders.slice();
-                                next[idx] = { ...(next[idx] || {}), label: e.target.value };
-                                void updateSelected({ placeholders: next });
-                              }}
-                              placeholder={t('fieldLabel')}
-                              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                            />
-                          </div>
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                            <select
-                              value={String(p?.type || 'text')}
-                              onChange={(e) => {
-                                const next = placeholders.slice();
-                                next[idx] = { ...(next[idx] || {}), type: e.target.value };
-                                void updateSelected({ placeholders: next });
-                              }}
-                              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                            >
-                              <option value="text">{t('text')}</option>
-                              <option value="rich_text">{t('richText')}</option>
-                            </select>
-                            <select
-                              value={String(p?.source || 'manual')}
-                              onChange={(e) => {
-                                const next = placeholders.slice();
-                                next[idx] = { ...(next[idx] || {}), source: e.target.value };
-                                void updateSelected({ placeholders: next });
-                              }}
-                              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                            >
-                              <option value="manual">{t('sourceManual')}</option>
-                              <option value="product">{t('sourceProduct')}</option>
-                              <option value="static">{t('sourceStatic')}</option>
-                            </select>
-                            <select
-                              value={String(p?.bindPath || '')}
-                              onChange={(e) => {
-                                const next = placeholders.slice();
-                                next[idx] = { ...(next[idx] || {}), bindPath: e.target.value };
-                                void updateSelected({ placeholders: next });
-                              }}
-                              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                            >
-                              <option value="">{t('bindTo')}</option>
-                              <option value="product.name">product.name</option>
-                              <option value="product.sku">product.sku</option>
-                              <option value="product.code">product.code</option>
-                              <option value="product.category">product.category</option>
-                              <option value="product.origin">product.origin</option>
-                              <option value="product.description">product.description</option>
-                            </select>
-                          </div>
-                          <input
-                            value={String(p?.staticValue || '')}
-                            onChange={(e) => {
-                              const next = placeholders.slice();
-                              next[idx] = { ...(next[idx] || {}), staticValue: e.target.value };
-                              void updateSelected({ placeholders: next });
-                            }}
-                            placeholder={t('staticValue')}
-                            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                          />
-                          <input
-                            value={String(p?.help || '')}
-                            onChange={(e) => {
-                              const next = placeholders.slice();
-                              next[idx] = { ...(next[idx] || {}), help: e.target.value };
-                              void updateSelected({ placeholders: next });
-                            }}
-                            placeholder={t('helpText')}
-                            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                          />
-                          <div className="flex items-center justify-between gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const next = placeholders.filter((_, i) => i !== idx);
-                                void updateSelected({ placeholders: next });
-                              }}
-                              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-                            >
-                              {t('delete')}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void updateSelected({
-                        placeholders: [...placeholders, { key: '', label: '', type: 'text', source: 'manual', bindPath: '', staticValue: '', help: '', sample: '' }]
-                      })
-                    }
-                    className="mt-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-                  >
-                    {t('addPlaceholder')}
-                  </button>
-                </div>
-              ) : (
-                <div className="rounded-lg border border-zinc-200 bg-white p-3">
-                  <div className="text-xs font-semibold text-zinc-700">{t('dataFields')}</div>
-                  <div className="mt-1 text-xs text-zinc-600">{t('wizardCanvasHint')}</div>
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    <div className="text-xs text-zinc-500">
-                      {t('dataFields')}: {placeholders.length}
-                    </div>
-                    <button type="button" onClick={() => setWizardStep('fields')} className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50">
-                      {t('editFields')}
-                    </button>
-                  </div>
-                </div>
-              )}
-
               {!selectedField ? (
                 <div className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{t('selectField')}</div>
               ) : (
@@ -713,11 +773,43 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   <div className="rounded-lg border border-zinc-200 bg-white p-3">
                     <div className="text-xs font-semibold text-zinc-700">Field</div>
                     <div className="mt-1 text-sm font-semibold text-zinc-900">{selectedField.label || selectedField.path}</div>
-                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                      <div className="rounded bg-zinc-50 p-2">x: {selectedField.x}</div>
-                      <div className="rounded bg-zinc-50 p-2">y: {selectedField.y}</div>
-                      <div className="rounded bg-zinc-50 p-2">w: {selectedField.w}</div>
-                      <div className="rounded bg-zinc-50 p-2">h: {selectedField.h}</div>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-zinc-600">x</label>
+                        <input
+                          type="number"
+                          value={Number(selectedField.x) || 0}
+                          onChange={(e) => updateField({ x: Number(e.target.value) || 0 })}
+                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-zinc-600">y</label>
+                        <input
+                          type="number"
+                          value={Number(selectedField.y) || 0}
+                          onChange={(e) => updateField({ y: Number(e.target.value) || 0 })}
+                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-zinc-600">w</label>
+                        <input
+                          type="number"
+                          value={Number(selectedField.w) || 0}
+                          onChange={(e) => updateField({ w: Number(e.target.value) || 0 })}
+                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-zinc-600">h</label>
+                        <input
+                          type="number"
+                          value={Number(selectedField.h) || 0}
+                          onChange={(e) => updateField({ h: Number(e.target.value) || 0 })}
+                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -783,9 +875,10 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                     <button
                       type="button"
                       onClick={() => {
-                        const next = (fieldsRef.current || []).filter((f) => f.id !== selectedField.id);
+                        const next = (Array.isArray(draftLayout) ? draftLayout : []).filter((f) => f.id !== selectedField.id);
                         setSelectedFieldId(null);
-                        setFields(next);
+                        setDraftLayout(next);
+                        queueTemplatePatch({ layoutJson: next });
                       }}
                       className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
                     >

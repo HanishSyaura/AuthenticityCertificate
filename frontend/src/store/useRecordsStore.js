@@ -15,11 +15,11 @@ const useRecordsStore = create((set, get) => ({
   error: null,
   lastSyncAt: null,
 
-  fetchProducts: async () => {
+  fetchProducts: async ({ includeDeleted } = {}) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const res = await api.get('/products/');
+      const res = await api.get('/products/', includeDeleted ? { params: { includeDeleted: 'true' } } : undefined);
       const products = Array.isArray(res?.data?.data) ? res.data.data : [];
       set({ products, loading: false, lastSyncAt: Date.now() });
       return products;
@@ -56,6 +56,22 @@ const useRecordsStore = create((set, get) => ({
       return created;
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || 'Failed to create category';
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
+  updateCategory: async ({ id, patch }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.patch(`/categories/${encodeURIComponent(id)}`, patch);
+      const updated = res?.data?.data;
+      const categories = get().categories.map((c) => (String(c.id) === String(id) ? updated : c));
+      set({ categories, loading: false, lastSyncAt: Date.now() });
+      return updated;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Failed to update category';
       set({ loading: false, error: msg });
       throw e;
     }
