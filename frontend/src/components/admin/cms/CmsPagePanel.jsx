@@ -1,10 +1,28 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useT } from '../../../i18n/useT';
 
 export default function CmsPagePanel({ pages, selectedPageId, onSelectPage, onCreatePage, onDeletePage }) {
   const { t } = useT();
-  const [newName, setNewName] = useState('Product Page');
-  const [newSlug, setNewSlug] = useState('product-page');
+  const [sectionName, setSectionName] = useState('');
+
+  const nextPageNo = useMemo(() => {
+    const list = Array.isArray(pages) ? pages : [];
+    const maxFromName = list.reduce((max, p) => {
+      const name = String(p?.name || '');
+      const m = name.match(/^Page\s+(\d+)\b/i) || name.match(/^(\d+)\b/);
+      const n = m ? Number(m[1]) : NaN;
+      return Number.isFinite(n) ? Math.max(max, n) : max;
+    }, 0);
+    return Math.max(list.length, maxFromName) + 1;
+  }, [pages]);
+
+  const slugify = (value) =>
+    String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .replace(/-+/g, '-');
 
   return (
     <div className="ac-card p-3">
@@ -43,20 +61,29 @@ export default function CmsPagePanel({ pages, selectedPageId, onSelectPage, onCr
         <div className="text-xs font-semibold text-zinc-700">{t('createPage')}</div>
         <div className="mt-2 space-y-2">
           <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
+            value={String(nextPageNo)}
+            disabled
             className="ac-input rounded-lg px-3 py-2"
             placeholder={t('pageName')}
           />
           <input
-            value={newSlug}
-            onChange={(e) => setNewSlug(e.target.value)}
+            value={sectionName}
+            onChange={(e) => setSectionName(e.target.value)}
             className="ac-input rounded-lg px-3 py-2"
             placeholder={t('pageSlug')}
           />
           <button
             type="button"
-            onClick={() => onCreatePage({ name: newName, slug: newSlug })}
+            disabled={!sectionName.trim()}
+            onClick={() => {
+              const section = sectionName.trim();
+              const base = slugify(section);
+              let slug = base || `page-${nextPageNo}`;
+              if ((pages || []).some((p) => String(p?.slug) === slug)) slug = `${slug}-${nextPageNo}`;
+              const name = `Page ${nextPageNo}${section ? ` - ${section}` : ''}`;
+              onCreatePage({ name, slug });
+              setSectionName('');
+            }}
             className="ac-btn w-full rounded-lg px-3 py-2 text-sm"
           >
             {t('create')}

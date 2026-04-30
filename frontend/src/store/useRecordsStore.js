@@ -217,6 +217,27 @@ const useRecordsStore = create((set, get) => ({
       set({ loading: false, error: msg });
       throw e;
     }
+  },
+
+  bulkDeleteProducts: async ({ ids }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const normalizedIds = Array.from(
+        new Set((Array.isArray(ids) ? ids : []).map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0))
+      );
+      const res = await api.post('/products/bulk-delete', { ids: normalizedIds });
+      const result = res?.data?.data || { deletedIds: [], notFoundIds: [], notInactiveIds: [] };
+      const deletedIds = Array.isArray(result.deletedIds) ? result.deletedIds : [];
+      const deletedIdSet = new Set(deletedIds.map((v) => String(v)));
+      const products = get().products.filter((p) => !deletedIdSet.has(String(p.id)));
+      set({ products, loading: false, lastSyncAt: Date.now() });
+      return result;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Failed to delete products';
+      set({ loading: false, error: msg });
+      throw e;
+    }
   }
 }));
 

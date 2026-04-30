@@ -86,6 +86,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const persistTimerRef = useRef(null);
   const pendingPatchRef = useRef(null);
   const previewNowRef = useRef(new Date().toISOString());
+  const selectedPlaceholdersRef = useRef([]);
 
   const selected = useMemo(() => templates.find((it) => String(it.id) === String(selectedId)) || null, [templates, selectedId]);
   const canvasW = Number(selected?.canvasWidth) > 0 ? Number(selected.canvasWidth) : 390;
@@ -100,6 +101,10 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   }, [canvasW, devicePreset]);
 
   const placeholders = useMemo(() => (Array.isArray(draftPlaceholders) ? draftPlaceholders : []), [draftPlaceholders]);
+
+  useEffect(() => {
+    selectedPlaceholdersRef.current = Array.isArray(selected?.placeholders) ? selected.placeholders : [];
+  }, [selected?.placeholders]);
 
   const placeholderByKey = useMemo(() => {
     const map = new Map();
@@ -362,7 +367,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     if (!selected?.id) return;
     setWizardStep('fields');
     setSelectedFieldId(null);
-    const firstKey = String((Array.isArray(selected.placeholders) ? selected.placeholders : [])?.[0]?.key || '').trim();
+    const firstKey = String((Array.isArray(selectedPlaceholdersRef.current) ? selectedPlaceholdersRef.current : [])?.[0]?.key || '').trim();
     setAddOverlayKey(firstKey);
   }, [selected?.id]);
 

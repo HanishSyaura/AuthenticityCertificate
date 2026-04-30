@@ -35,7 +35,6 @@ export default function AdminEpc() {
   }));
 
   const {
-    corpCodes,
     batches,
     items,
     itemTotal,
@@ -50,10 +49,11 @@ export default function AdminEpc() {
     importProductionXlsx,
     markProductionDone,
     deleteBatch,
+    recalculateSequence,
+    deleteAllBatches,
     importExistingXlsx,
     clearLastGenerated
   } = useEpcStore((s) => ({
-    corpCodes: s.corpCodes,
     batches: s.batches,
     items: s.items,
     itemTotal: s.itemTotal,
@@ -68,6 +68,8 @@ export default function AdminEpc() {
     importProductionXlsx: s.importProductionXlsx,
     markProductionDone: s.markProductionDone,
     deleteBatch: s.deleteBatch,
+    recalculateSequence: s.recalculateSequence,
+    deleteAllBatches: s.deleteAllBatches,
     importExistingXlsx: s.importExistingXlsx,
     clearLastGenerated: s.clearLastGenerated
   }));
@@ -240,6 +242,17 @@ export default function AdminEpc() {
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('corpCode')}</div>
                 <input value={corpPrefix} disabled className="ac-input" />
+                <button
+                  type="button"
+                  className="mt-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                  disabled={loading || !corpPrefix}
+                  onClick={async () => {
+                    if (!window.confirm('Reset running number ikut data semasa? (Jika semua EPC sudah dipadam, next akan start dari 00000001)')) return;
+                    await recalculateSequence({ corpPrefix });
+                  }}
+                >
+                  Reset running number
+                </button>
               </div>
 
               <div>
@@ -333,7 +346,23 @@ export default function AdminEpc() {
 
       {tab === 'batches' ? (
         <div className="rounded-xl border border-zinc-200 bg-white">
-          <div className="border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-600">{t('epcBatches')}</div>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 px-4 py-3">
+            <div className="text-xs font-semibold text-zinc-600">{t('epcBatches')}</div>
+            <button
+              type="button"
+              className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+              disabled={loading}
+              onClick={async () => {
+                if (!window.confirm('Delete semua EPC batch & items sekali gus? (Running number akan reset ikut data yang tinggal)')) return;
+                const res = await deleteAllBatches({ corpPrefix });
+                if (res) {
+                  await fetchBatches({ limit: 50, offset: 0 });
+                }
+              }}
+            >
+              Delete all
+            </button>
+          </div>
           <div className="divide-y divide-zinc-100">
             {(Array.isArray(batches) ? batches : []).map((b) => (
               <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">

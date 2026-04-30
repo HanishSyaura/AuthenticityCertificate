@@ -66,11 +66,16 @@ app.use(express.json());
 
 // Standardized Response Format Middleware
 app.use((req, res, next) => {
+  const stringifySafe = (payload) =>
+    JSON.stringify(payload, (_key, value) => (typeof value === 'bigint' ? value.toString() : value));
   res.success = (data, message = 'OK') => {
-    res.json({ success: true, data, message });
+    res.set('Content-Type', 'application/json');
+    res.send(stringifySafe({ success: true, data, message }));
   };
   res.error = (message, status = 500) => {
-    res.status(status).json({ success: false, message });
+    res.status(status);
+    res.set('Content-Type', 'application/json');
+    res.send(stringifySafe({ success: false, message }));
   };
   next();
 });

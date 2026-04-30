@@ -176,6 +176,34 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
+  recalculateSequence: async ({ corpPrefix }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.post('/epc/corp-sequence/recalculate', { corpPrefix });
+      set({ loading: false });
+      return res?.data?.data;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Recalculate failed';
+      set({ loading: false, error: msg });
+      return null;
+    }
+  },
+
+  deleteAllBatches: async ({ corpPrefix }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.post('/epc/batches/delete-all', { corpPrefix: corpPrefix || undefined });
+      set({ loading: false, batches: [], batchTotal: 0, items: [], itemTotal: 0, lastGenerated: null });
+      return res?.data?.data;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Delete all failed';
+      set({ loading: false, error: msg });
+      return null;
+    }
+  },
+
   updateBatch: async ({ batchId, patch }) => {
     set({ loading: true, error: null });
     try {

@@ -41,6 +41,30 @@ const useAuthStore = create((set) => ({
       });
     }
   },
+
+  resolveCertificate: async (params, opts = {}) => {
+    set({ loading: true, error: null });
+    try {
+      const q = params || {};
+      const epc = typeof q.epc === 'string' ? q.epc : null;
+      const nfcUid = typeof q.nfcUid === 'string' ? q.nfcUid : null;
+      const lang = opts?.lang ? String(opts.lang) : null;
+      const response = await axios.get(`${getPublicApiBaseUrl()}/resolve`, {
+        params: {
+          ...(epc ? { epc } : {}),
+          ...(nfcUid ? { nfcUid } : {}),
+          ...(lang ? { lang } : {})
+        }
+      });
+      set({ certificate: response.data.data, loading: false });
+    } catch (err) {
+      set({
+        error: err.response?.data?.message || 'Verification failed',
+        loading: false,
+        certificate: null
+      });
+    }
+  },
 }));
 
 export default useAuthStore;

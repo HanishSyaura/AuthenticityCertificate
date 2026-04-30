@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import useRecordsStore from '../../store/useRecordsStore';
 import { useT } from '../../i18n/useT';
@@ -26,7 +26,8 @@ export default function AdminRecords() {
     updateProduct,
     deactivateProduct,
     activateProduct,
-    deleteProduct
+    deleteProduct,
+    bulkDeleteProducts
   } = useRecordsStore((s) => ({
     products: s.products,
     categories: s.categories,
@@ -41,7 +42,8 @@ export default function AdminRecords() {
     updateProduct: s.updateProduct,
     deactivateProduct: s.deactivateProduct,
     activateProduct: s.activateProduct,
-    deleteProduct: s.deleteProduct
+    deleteProduct: s.deleteProduct,
+    bulkDeleteProducts: s.bulkDeleteProducts
   }));
 
   const [activeTab, setActiveTab] = useState('products');
@@ -68,6 +70,10 @@ export default function AdminRecords() {
   const [categoryCodeEdit, setCategoryCodeEdit] = useState('');
   const [categoryStatusEdit, setCategoryStatusEdit] = useState('active');
 
+  const [selectedProductIds, setSelectedProductIds] = useState(() => new Set());
+  const [bulkNotice, setBulkNotice] = useState(null);
+  const headerCheckboxRef = useRef(null);
+
   useEffect(() => {
     void fetchProducts();
     void fetchCategories();
@@ -88,6 +94,15 @@ export default function AdminRecords() {
     });
     return map;
   }, [categories]);
+
+  const productById = useMemo(() => {
+    const map = new Map();
+    (Array.isArray(products) ? products : []).forEach((p) => {
+      if (p?.id == null) return;
+      map.set(String(p.id), p);
+    });
+    return map;
+  }, [products]);
 
   const filteredProducts = useMemo(() => {
     const q = String(query || '').trim().toLowerCase();
@@ -111,6 +126,41 @@ export default function AdminRecords() {
     });
   }, [products, query, categoryByCode, productStatusFilter]);
 
+  const visibleProductIds = useMemo(() => filteredProducts.map((p) => p.id).filter((v) => v != null), [filteredProducts]);
+  const visibleSelectedCount = useMemo(
+    () => visibleProductIds.filter((id) => selectedProductIds.has(id)).length,
+    [visibleProductIds, selectedProductIds]
+  );
+  const allVisibleSelected = visibleProductIds.length > 0 && visibleSelectedCount === visibleProductIds.length;
+  const someVisibleSelected = visibleSelectedCount > 0 && !allVisibleSelected;
+  const selectedCount = selectedProductIds.size;
+
+  useEffect(() => {
+    if (!headerCheckboxRef.current) return;
+    headerCheckboxRef.current.indeterminate = someVisibleSelected;
+  }, [someVisibleSelected]);
+
+  useEffect(() => {
+    setSelectedProductIds((prev) => {
+      if (!prev.size) return prev;
+      const next = new Set();
+      for (const id of prev) {
+        if (productById.has(String(id))) next.add(id);
+      }
+      if (next.size === prev.size) return prev;
+      return next;
+    });
+  }, [productById]);
+
+  function toggleSelected(id) {
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   const filteredCategories = useMemo(() => {
     const q = String(categoryQuery || '').trim().toLowerCase();
     if (!q) return categories;
@@ -127,7 +177,7 @@ export default function AdminRecords() {
         <div>
           <h2 className="text-base font-semibold text-zinc-900">{t('records')}</h2>
           <p className="mt-1 text-sm text-zinc-600">{t('recordsSubtitle')}</p>
-          <div className="mt-2 flex items-center gap-2 text-[11px] text-zinc-500">
+          <div className="mt-2 flex items-center gap-2 text-sm text-zinc-500">
             <button
               type="button"
               className="underline"
@@ -143,11 +193,11 @@ export default function AdminRecords() {
         </div>
         <div className="flex items-center gap-2">
           {activeTab === 'categories' ? (
-            <button type="button" className="ac-btn px-3 py-2 text-xs" onClick={() => setShowCreateCategory(true)}>
+            <button type="button" className="ac-btn px-3 py-2" onClick={() => setShowCreateCategory(true)}>
               {t('addCategory')}
             </button>
           ) : (
-            <button type="button" className="ac-btn px-3 py-2 text-xs" onClick={() => setShowCreate(true)}>
+            <button type="button" className="ac-btn px-3 py-2" onClick={() => setShowCreate(true)}>
               {t('createProduct')}
             </button>
           )}
@@ -159,14 +209,14 @@ export default function AdminRecords() {
           <div className="inline-flex rounded-xl border border-zinc-200 bg-white p-1">
             <button
               type="button"
-              className={activeTab === 'products' ? 'rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white' : 'rounded-lg px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50'}
+              className={activeTab === 'products' ? 'rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white' : 'rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50'}
               onClick={() => setActiveTab('products')}
             >
               {t('productsTab')}
             </button>
             <button
               type="button"
-              className={activeTab === 'categories' ? 'rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white' : 'rounded-lg px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50'}
+              className={activeTab === 'categories' ? 'rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white' : 'rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50'}
               onClick={() => setActiveTab('categories')}
             >
               {t('categoriesTab')}
@@ -177,21 +227,21 @@ export default function AdminRecords() {
             <div className="inline-flex rounded-xl border border-zinc-200 bg-white p-1">
               <button
                 type="button"
-                className={productStatusFilter === 'active' ? 'rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white' : 'rounded-lg px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50'}
+                className={productStatusFilter === 'active' ? 'rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white' : 'rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50'}
                 onClick={() => setProductStatusFilter('active')}
               >
                 {t('activeProducts')}
               </button>
               <button
                 type="button"
-                className={productStatusFilter === 'inactive' ? 'rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white' : 'rounded-lg px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50'}
+                className={productStatusFilter === 'inactive' ? 'rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white' : 'rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50'}
                 onClick={() => setProductStatusFilter('inactive')}
               >
                 {t('inactiveProducts')}
               </button>
               <button
                 type="button"
-                className={productStatusFilter === 'all' ? 'rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white' : 'rounded-lg px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50'}
+                className={productStatusFilter === 'all' ? 'rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white' : 'rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50'}
                 onClick={() => setProductStatusFilter('all')}
               >
                 {t('allProducts')}
@@ -207,13 +257,111 @@ export default function AdminRecords() {
         )}
       </div>
 
-      {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
+      {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div> : null}
+      {bulkNotice ? (
+        <div
+          className={
+            bulkNotice.type === 'warning'
+              ? 'mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900'
+              : 'mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900'
+          }
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>{bulkNotice.message}</div>
+            <button type="button" className="underline" onClick={() => setBulkNotice(null)}>
+              {t('dismiss')}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {activeTab === 'products' ? (
         <div className="ac-table">
+          {selectedCount ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200/70 bg-white px-4 py-3">
+              <div className="text-sm font-semibold text-zinc-900">{t('selectedProducts', { value: selectedCount })}</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" className="ac-btn ac-btn-soft px-3 py-2" onClick={() => setSelectedProductIds(new Set())}>
+                  {t('clearSelection')}
+                </button>
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-soft px-3 py-2"
+                  onClick={async () => {
+                    const ids = Array.from(selectedProductIds);
+                    const activeIds = ids.filter((id) => {
+                      const p = productById.get(String(id));
+                      return String(p?.status || '').toLowerCase() !== 'inactive';
+                    });
+                    if (!activeIds.length) return;
+                    if (!window.confirm(t('confirmDeactivateSelectedProducts', { value: activeIds.length }))) return;
+                    for (const id of activeIds) {
+                      await deactivateProduct({ id });
+                    }
+                    void fetchProducts();
+                  }}
+                  disabled={Array.from(selectedProductIds).every((id) => String(productById.get(String(id))?.status || '').toLowerCase() === 'inactive')}
+                >
+                  {t('deactivateSelected')}
+                </button>
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-soft px-3 py-2"
+                  onClick={async () => {
+                    const ids = Array.from(selectedProductIds);
+                    if (!ids.length) return;
+                    if (!window.confirm(t('confirmDeleteSelectedProducts', { value: ids.length }))) return;
+                    const result = await bulkDeleteProducts({ ids });
+                    const deletedCount = Array.isArray(result?.deletedIds) ? result.deletedIds.length : 0;
+                    const notInactiveCount = Array.isArray(result?.notInactiveIds) ? result.notInactiveIds.length : 0;
+                    const notFoundCount = Array.isArray(result?.notFoundIds) ? result.notFoundIds.length : 0;
+
+                    setSelectedProductIds((prev) => {
+                      if (!prev.size) return prev;
+                      const next = new Set(prev);
+                      (Array.isArray(result?.deletedIds) ? result.deletedIds : []).forEach((id) => next.delete(id));
+                      return next;
+                    });
+                    void fetchProducts();
+
+                    if (notInactiveCount || notFoundCount) {
+                      setBulkNotice({
+                        type: 'warning',
+                        message: t('bulkDeletePartial', { deleted: deletedCount, notInactive: notInactiveCount, notFound: notFoundCount })
+                      });
+                    } else {
+                      setBulkNotice({ type: 'success', message: t('bulkDeleteSuccess', { value: deletedCount }) });
+                    }
+                  }}
+                >
+                  {t('deleteSelected')}
+                </button>
+              </div>
+            </div>
+          ) : null}
           <div className="overflow-x-auto">
-            <div className="min-w-[1100px]">
-              <div className="ac-table-head grid grid-cols-[1fr_2fr_1fr_1fr_1fr_1fr_220px] gap-4">
+            <div className="min-w-[1160px]">
+              <div className="ac-table-head grid grid-cols-[36px_1fr_2fr_1fr_1fr_1fr_1fr_220px] gap-4">
+                <div className="flex items-center justify-center">
+                  <input
+                    ref={headerCheckboxRef}
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-zinc-300 text-brand-600"
+                    checked={allVisibleSelected}
+                    onChange={() => {
+                      setSelectedProductIds((prev) => {
+                        const next = new Set(prev);
+                        if (allVisibleSelected) {
+                          visibleProductIds.forEach((id) => next.delete(id));
+                        } else {
+                          visibleProductIds.forEach((id) => next.add(id));
+                        }
+                        return next;
+                      });
+                    }}
+                    aria-label={t('selectAll')}
+                  />
+                </div>
                 <div>{t('sku')}</div>
                 <div>{t('product')}</div>
                 <div>{t('productCode')}</div>
@@ -227,33 +375,40 @@ export default function AdminRecords() {
               ) : filteredProducts.length === 0 ? (
                 <div className="p-8 text-center">
                   <div className="text-sm font-semibold text-zinc-900">{t('noProducts')}</div>
-                  <div className="mt-1 text-xs text-zinc-600">{t('noProductsHint')}</div>
+                  <div className="mt-1 text-sm text-zinc-600">{t('noProductsHint')}</div>
                 </div>
               ) : (
                 filteredProducts.map((p) => {
                   const isInactive = String(p?.status || '').toLowerCase() === 'inactive';
                   const canDeactivate = !isInactive;
-                  const canActivate = isInactive;
-                  const canDelete = isInactive;
                   return (
-                    <div key={p.id} className="ac-table-row grid grid-cols-[1fr_2fr_1fr_1fr_1fr_1fr_220px] gap-4">
-                      <div className="font-mono text-xs text-zinc-700">{p.sku}</div>
+                    <div key={p.id} className="ac-table-row grid grid-cols-[36px_1fr_2fr_1fr_1fr_1fr_1fr_220px] gap-4">
+                      <div className="flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-zinc-300 text-brand-600"
+                          checked={selectedProductIds.has(p.id)}
+                          onChange={() => toggleSelected(p.id)}
+                          aria-label={t('selectProduct')}
+                        />
+                      </div>
+                      <div className="font-mono text-sm text-zinc-700">{p.sku}</div>
                       <div>
                         <div className="font-medium text-zinc-900">{p.name}</div>
-                        <div className="mt-0.5 text-[11px] text-zinc-500">{p.remark || '-'}</div>
+                        <div className="mt-0.5 text-sm text-zinc-600">{p.remark || '-'}</div>
                       </div>
-                      <div className="font-mono text-xs text-zinc-700">{p.code}</div>
-                      <div className="text-xs text-zinc-700">{categoryByCode.get(String(p.category || ''))?.name || p.category || '-'}</div>
-                      <div className="text-xs text-zinc-700">{isInactive ? t('inactive') : t('active')}</div>
-                      <div className="text-xs text-zinc-600">{formatDate(p.updatedAt || p.createdAt)}</div>
+                      <div className="font-mono text-sm text-zinc-700">{p.code}</div>
+                      <div className="text-sm text-zinc-700">{categoryByCode.get(String(p.category || ''))?.name || p.category || '-'}</div>
+                      <div className="text-sm text-zinc-700">{isInactive ? t('inactive') : t('active')}</div>
+                      <div className="text-sm text-zinc-600">{formatDate(p.updatedAt || p.createdAt)}</div>
                       <div className="flex justify-end">
                         <div className="flex items-center gap-2">
-                          <Link className="ac-btn ac-btn-soft px-3 py-2 text-xs" to={`/admin/records/${p.id}`}>
+                          <Link className="ac-btn ac-btn-soft px-3 py-2" to={`/admin/records/${p.id}`}>
                             {t('view')}
                           </Link>
                           <button
                             type="button"
-                            className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                            className="ac-btn ac-btn-soft px-3 py-2"
                             onClick={() => {
                               setEditing(p);
                               setSku(p.sku || '');
@@ -270,7 +425,7 @@ export default function AdminRecords() {
                           {canDeactivate ? (
                             <button
                               type="button"
-                              className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                              className="ac-btn ac-btn-soft px-3 py-2"
                               onClick={async () => {
                                 if (!window.confirm(t('confirmDeactivateProduct'))) return;
                                 await deactivateProduct({ id: p.id });
@@ -283,7 +438,7 @@ export default function AdminRecords() {
                             <>
                               <button
                                 type="button"
-                                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                                className="ac-btn ac-btn-soft px-3 py-2"
                                 onClick={async () => {
                                   if (!window.confirm(t('confirmActivateProduct'))) return;
                                   await activateProduct({ id: p.id });
@@ -294,7 +449,7 @@ export default function AdminRecords() {
                               </button>
                               <button
                                 type="button"
-                                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                                className="ac-btn ac-btn-soft px-3 py-2"
                                 onClick={async () => {
                                   if (!window.confirm(t('confirmDeleteProduct'))) return;
                                   await deleteProduct({ id: p.id });
@@ -330,20 +485,20 @@ export default function AdminRecords() {
               ) : filteredCategories.length === 0 ? (
                 <div className="p-8 text-center">
                   <div className="text-sm font-semibold text-zinc-900">{t('noCategories')}</div>
-                  <div className="mt-1 text-xs text-zinc-600">{t('noCategoriesHint')}</div>
+                  <div className="mt-1 text-sm text-zinc-600">{t('noCategoriesHint')}</div>
                 </div>
               ) : (
                 filteredCategories.map((c) => (
                   <div key={c.id} className="ac-table-row grid grid-cols-[2fr_1fr_1fr_1fr_180px] gap-4">
                     <div className="font-medium text-zinc-900">{c.name}</div>
-                    <div className="font-mono text-xs text-zinc-700">{c.code}</div>
-                    <div className="text-xs text-zinc-700">{c.isActive === false ? t('inactive') : t('active')}</div>
-                    <div className="text-xs text-zinc-600">{formatDate(c.updatedAt || c.createdAt)}</div>
+                    <div className="font-mono text-sm text-zinc-700">{c.code}</div>
+                    <div className="text-sm text-zinc-700">{c.isActive === false ? t('inactive') : t('active')}</div>
+                    <div className="text-sm text-zinc-600">{formatDate(c.updatedAt || c.createdAt)}</div>
                     <div className="flex justify-end">
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                          className="ac-btn ac-btn-soft px-3 py-2"
                           onClick={() => {
                             setEditingCategory(c);
                             setCategoryNameEdit(c.name || '');
@@ -356,7 +511,7 @@ export default function AdminRecords() {
                         </button>
                         <button
                           type="button"
-                          className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                          className="ac-btn ac-btn-soft px-3 py-2"
                           onClick={async () => {
                             const nextStatus = c.isActive === false ? 'active' : 'inactive';
                             await updateCategory({ id: c.id, patch: { status: nextStatus } });

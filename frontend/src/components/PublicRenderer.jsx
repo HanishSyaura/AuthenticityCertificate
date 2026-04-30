@@ -30,6 +30,16 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
     });
   }, [isMobile, layoutSafe]);
 
+  const containerHeight = useMemo(() => {
+    if (!layoutSafe) return null;
+    let maxBottom = 0;
+    for (const b of blocks) {
+      const bottom = Number(b?.__rect?.y || 0) + Number(b?.__rect?.h || 0);
+      if (Number.isFinite(bottom)) maxBottom = Math.max(maxBottom, bottom);
+    }
+    return maxBottom > 0 ? maxBottom : null;
+  }, [blocks, layoutSafe]);
+
   const renderBlock = (block) => {
     const style = {
       position: 'absolute',
@@ -141,7 +151,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
   };
 
   return (
-    <div className={`relative w-full bg-white ${className || ''}`}>
+    <div className={`relative w-full bg-white ${className || ''}`} style={containerHeight ? { minHeight: `${containerHeight}px` } : undefined}>
       {layoutSafe ? blocks.map(renderBlock) : null}
     </div>
   );

@@ -25,6 +25,14 @@ const updateBatchSchema = z.object({
   certificateTemplateId: z.number().int().nullable().optional()
 });
 
+const recalcSequenceSchema = z.object({
+  corpPrefix: z.string().min(1)
+});
+
+const deleteAllSchema = z.object({
+  corpPrefix: z.string().min(1).optional()
+});
+
 function parseLimitOffset(q) {
   const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 200);
   const offset = Math.max(Number(q.offset) || 0, 0);
@@ -163,6 +171,28 @@ async function importExisting(req, res) {
   }
 }
 
+async function recalculateSequence(req, res) {
+  try {
+    const data = recalcSequenceSchema.parse(req.body || {});
+    const result = await epcService.recalculateCorpSequence({ organizationId: req.organization.id, corpPrefix: data.corpPrefix });
+    res.success(result, 'Sequence recalculated');
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    res.error(e.message, 400);
+  }
+}
+
+async function deleteAll(req, res) {
+  try {
+    const data = deleteAllSchema.parse(req.body || {});
+    const result = await epcService.deleteAllBatches({ organizationId: req.organization.id, corpPrefix: data.corpPrefix });
+    res.success(result, 'All EPC batches deleted');
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    res.error(e.message, 400);
+  }
+}
+
 module.exports = {
   getCorpCodes,
   generateBatch,
@@ -174,5 +204,7 @@ module.exports = {
   markProductionDone,
   updateBatch,
   deleteBatch,
-  importExisting
+  importExisting,
+  recalculateSequence,
+  deleteAll
 };

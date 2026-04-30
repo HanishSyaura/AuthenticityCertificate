@@ -9,13 +9,14 @@ export default function AdminProtected({ children }) {
   const fetchMe = useAdminAuthStore((s) => s.fetchMe);
   const location = useLocation();
 
+  useEffect(() => {
+    if (!token) return;
+    if (!user && !loading) void fetchMe();
+  }, [fetchMe, loading, token, user]);
+
   if (!token) {
     return <Navigate to="/admin/login" replace state={{ from: location.pathname }} />;
   }
-
-  useEffect(() => {
-    if (!user && !loading) void fetchMe();
-  }, [user, loading, fetchMe]);
 
   if (!user && loading) {
     return <div className="p-6 text-sm text-zinc-700">Loading…</div>;

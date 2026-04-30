@@ -29,6 +29,11 @@ router.post(
   auditAction('ACTIVATE_PRODUCT', { targetType: 'product', getTargetId: (req) => req.params.id }),
   productController.activateProduct
 );
+router.post(
+  '/bulk-delete',
+  auditAction('BULK_DELETE_PRODUCT', { targetType: 'product' }),
+  productController.deleteProductsBulk
+);
 router.delete(
   '/:id',
   auditAction('DELETE_PRODUCT', { targetType: 'product', getTargetId: (req) => req.params.id }),

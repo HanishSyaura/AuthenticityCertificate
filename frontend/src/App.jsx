@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import VerifyPage from './pages/VerifyPage';
+import CmsPreviewPage from './pages/CmsPreviewPage';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminShell from './components/admin/AdminShell';
 import AdminProtected from './components/admin/AdminProtected';
@@ -21,6 +22,7 @@ function App() {
       <Routes>
         <Route path="/" element={<VerifyPage />} />
         <Route path="/verify/:id" element={<VerifyPage />} />
+        <Route path="/preview/cms" element={<CmsPreviewPage />} />
 
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route

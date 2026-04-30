@@ -47,6 +47,13 @@ export default function AdminCmsBuilder({ kind = 'landing' }) {
     [pages, selectedPageId]
   );
 
+  const layoutLoaded = useMemo(() => {
+    if (!selectedPageId) return false;
+    const byKey = layoutsByPageKey || {};
+    const key = `${selectedPageId}:${language || 'en'}`;
+    return Object.prototype.hasOwnProperty.call(byKey, key) || Object.prototype.hasOwnProperty.call(byKey, String(selectedPageId));
+  }, [language, layoutsByPageKey, selectedPageId]);
+
   const layout = useMemo(() => {
     if (!selectedPageId) return [];
     const key = `${selectedPageId}:${language || 'en'}`;
@@ -121,7 +128,15 @@ export default function AdminCmsBuilder({ kind = 'landing' }) {
           </button>
           <button
             type="button"
-            onClick={() => setViewMode('preview')}
+            onClick={() => {
+              try {
+                localStorage.setItem('ac_cms_preview', JSON.stringify({ layout, kind, language: language || 'en', ts: Date.now() }));
+              } catch {
+                void 0;
+              }
+              window.open('/preview/cms', '_blank', 'noopener,noreferrer');
+              setViewMode('preview');
+            }}
             className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
               viewMode === 'preview' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200/80 bg-white text-zinc-900 hover:bg-zinc-50'
             }`}
@@ -152,8 +167,10 @@ export default function AdminCmsBuilder({ kind = 'landing' }) {
 
         <CmsCanvasPanel
           viewMode={viewMode}
+          kind={kind}
           selectedPage={selectedPage}
           layout={layout}
+          layoutLoaded={layoutLoaded}
           setLayout={setLayout}
           selectedBlockId={selectedBlockId}
           setSelectedBlockId={setSelectedBlockId}

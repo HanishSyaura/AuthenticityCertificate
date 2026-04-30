@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import PublicRenderer from '../components/PublicRenderer';
 import { useT } from '../i18n/useT';
@@ -34,7 +34,8 @@ function IconLoader(props) {
 
 const VerifyPage = () => {
   const { id } = useParams();
-  const { certificate, loading, error, verifyCertificate } = useAuthStore();
+  const location = useLocation();
+  const { certificate, loading, error, verifyCertificate, resolveCertificate } = useAuthStore();
   const [certId, setCertId] = useState(id || '');
   const { t, lang, locale } = useT();
 
@@ -42,8 +43,15 @@ const VerifyPage = () => {
     if (id) {
       verifyCertificate(id, { lang });
       setCertId(id);
+      return;
     }
-  }, [id, lang, verifyCertificate]);
+    const sp = new URLSearchParams(location.search || '');
+    const epc = sp.get('epc');
+    const nfcUid = sp.get('nfcUid');
+    if (epc || nfcUid) {
+      resolveCertificate({ epc: epc || null, nfcUid: nfcUid || null }, { lang });
+    }
+  }, [id, lang, location.search, resolveCertificate, verifyCertificate]);
   const handleManualVerify = (e) => {
     e.preventDefault();
     if (certId) {

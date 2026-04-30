@@ -49,6 +49,10 @@ const batchSchema = z.object({
   productId: z.number().int()
 });
 
+const bulkDeleteSchema = z.object({
+  ids: z.array(z.number().int()).min(1)
+});
+
 async function createProduct(req, res) {
   try {
     const validatedData = productSchema.parse(req.body);
@@ -116,6 +120,19 @@ async function deleteProduct(req, res) {
   }
 }
 
+async function deleteProductsBulk(req, res) {
+  try {
+    const validatedData = bulkDeleteSchema.parse(req.body);
+    const result = await productService.deleteProductsBulk({
+      organizationId: req.organization.id,
+      productIds: validatedData.ids
+    });
+    res.success(result, 'Products deleted successfully');
+  } catch (error) {
+    sendProductError(res, error);
+  }
+}
+
 async function getAllProducts(req, res) {
   try {
     const status = String(req.query?.status || 'all').toLowerCase();
@@ -158,6 +175,7 @@ module.exports = {
   deactivateProduct,
   activateProduct,
   deleteProduct,
+  deleteProductsBulk,
   getAllProducts,
   createBatch,
   getProductBatches

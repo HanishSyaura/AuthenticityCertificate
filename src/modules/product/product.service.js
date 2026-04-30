@@ -353,6 +353,81 @@ async function deleteProduct({ organizationId, productId }) {
   return { id: Number(productId), deleted: true };
 }
 
+async function deleteProductsBulk({ organizationId, productIds }) {
+  const ids = Array.from(
+    new Set(
+      (Array.isArray(productIds) ? productIds : [])
+        .map((v) => Number(v))
+        .filter((v) => Number.isFinite(v) && v > 0)
+    )
+  );
+  if (!ids.length) return { deletedIds: [], notFoundIds: [], notInactiveIds: [] };
+
+  const existing = await withTimeout(
+    prisma.product.findMany({
+      where: { id: { in: ids }, organizationId: Number(organizationId) },
+      select: { id: true, status: true }
+    }),
+    1200
+  );
+
+  const existingIdSet = new Set(existing.map((r) => Number(r.id)));
+  const notFoundIds = ids.filter((id) => !existingIdSet.has(Number(id)));
+  const notInactiveIds = existing
+    .filter((r) => String(r.status || '').toLowerCase() !== 'inactive')
+    .map((r) => Number(r.id));
+  const deletableIds = existing
+    .filter((r) => String(r.status || '').toLowerCase() === 'inactive')
+    .map((r) => Number(r.id));
+
+  if (deletableIds.length) {
+    await prisma.$transaction(async (tx) => {
+      const batchIds = (
+        await tx.batch.findMany({
+          where: { organizationId: Number(organizationId), productId: { in: deletableIds } },
+          select: { id: true }
+        })
+      ).map((r) => r.id);
+
+      if (batchIds.length) {
+        const certIds = (
+          await tx.certificate.findMany({
+            where: { batchId: { in: batchIds } },
+            select: { certificateId: true }
+          })
+        ).map((r) => r.certificateId);
+
+        if (certIds.length) {
+          await tx.scanLog.deleteMany({ where: { certificateId: { in: certIds } } });
+          await tx.fraudFlag.deleteMany({ where: { certificateId: { in: certIds } } });
+          await tx.tagIdentity.deleteMany({ where: { certificateId: { in: certIds } } });
+        }
+
+        await tx.certificate.deleteMany({ where: { batchId: { in: batchIds } } });
+        await tx.batch.deleteMany({ where: { id: { in: batchIds } } });
+      }
+
+      const epcBatchIds = (
+        await tx.epcBatch.findMany({
+          where: { organizationId: Number(organizationId), productId: { in: deletableIds } },
+          select: { id: true }
+        })
+      ).map((r) => r.id);
+
+      if (epcBatchIds.length) {
+        await tx.epcItem.deleteMany({ where: { batchId: { in: epcBatchIds } } });
+        await tx.epcBatch.deleteMany({ where: { id: { in: epcBatchIds } } });
+      }
+
+      await tx.product.deleteMany({
+        where: { id: { in: deletableIds }, organizationId: Number(organizationId), status: 'inactive' }
+      });
+    });
+  }
+
+  return { deletedIds: deletableIds, notFoundIds, notInactiveIds };
+}
+
 // Batch Services
 async function createBatch(data) {
   return await withTimeout(
@@ -385,6 +460,7 @@ module.exports = {
   deactivateProduct,
   activateProduct,
   deleteProduct,
+  deleteProductsBulk,
   createBatch,
   getBatchesByProduct
 };

@@ -27,7 +27,7 @@ function NavItem({ to, label, tourId }) {
 function NavSection({ title, children }) {
   return (
     <div className="mt-3">
-      <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{title}</div>
+      <div className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</div>
       <div className="space-y-1">{children}</div>
     </div>
   );
@@ -87,7 +87,7 @@ export default function AdminShell() {
               <button
                 type="button"
                 onClick={() => setMobileNavOpen((v) => !v)}
-                className="rounded border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 hover:bg-zinc-50 md:hidden"
+                className="rounded border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-50 md:hidden"
               >
                 {mobileNavOpen ? t('close') : t('menu')}
               </button>
@@ -100,15 +100,15 @@ export default function AdminShell() {
               <button
                 type="button"
                 data-tour="nav-guide"
-                className="rounded-lg border border-zinc-200/80 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                className="rounded-lg border border-zinc-200/80 bg-white px-3 py-2 text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
                 onClick={() => openTour({ steps: getAdminGettingStartedTourSteps(t), storageKey: 'ac_seen_admin_tour_v1' })}
               >
                 {t('gettingStarted')}
               </button>
               <LanguageSwitcher size="xs" />
               <div className="text-right">
-                <div className="text-xs font-medium text-zinc-900">{user?.name || 'Admin'}</div>
-                <div className="text-[11px] text-zinc-500">{user?.email}</div>
+                <div className="text-sm font-medium text-zinc-900">{user?.name || 'Admin'}</div>
+                <div className="text-xs text-zinc-500">{user?.email}</div>
               </div>
               <button
                 type="button"
@@ -116,7 +116,7 @@ export default function AdminShell() {
                   logout();
                   navigate('/admin/login');
                 }}
-                className="rounded border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 hover:bg-zinc-50"
+                className="rounded border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-50"
               >
                 {t('signOut')}
               </button>

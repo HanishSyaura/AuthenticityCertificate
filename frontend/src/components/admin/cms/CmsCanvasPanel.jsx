@@ -2,12 +2,38 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import CanvasStage from '../CanvasStage';
 import PublicRenderer from '../../PublicRenderer';
 import { useT } from '../../../i18n/useT';
-import useAdminAuthStore from '../../../store/useAdminAuthStore';
-import useCertTemplatesStore from '../../../store/useCertTemplatesStore';
-import { createAdminApi } from '../../../utils/adminApi';
+import axios from 'axios';
 
 function makeId(prefix) {
   return `${prefix}-${Math.random().toString(16).slice(2)}-${Date.now()}`;
+}
+
+function getApiBaseUrl() {
+  const configured = import.meta.env.VITE_API_BASE_URL;
+  if (configured !== undefined) {
+    const trimmed = String(configured).trim();
+    if (trimmed) return trimmed.replace(/\/+$/, '');
+    return '';
+  }
+  if (import.meta.env.DEV) return 'http://localhost:5000';
+  return '';
+}
+
+function getPublicApiBaseUrl() {
+  const rawBase = getApiBaseUrl();
+  const baseURL = rawBase ? rawBase.replace(/\/+$/, '') : '';
+  if (!baseURL) return '/public';
+  const baseHasApi = baseURL === '/api' || baseURL.endsWith('/api');
+  return baseHasApi ? `${baseURL}/public` : `${baseURL}/public`;
+}
+
+function sampleCertificateLayout() {
+  return [
+    { id: 't1', type: 'text', x: 24, y: 24, w: 342, h: 40, content: { text: 'CERTIFICATE' } },
+    { id: 't2', type: 'text', x: 24, y: 72, w: 342, h: 52, content: { text: 'This is a sample certificate preview.\nLoad a real Certificate ID or EPC to see actual output.' } },
+    { id: 'img1', type: 'image', x: 24, y: 150, w: 342, h: 220, content: { url: '' } },
+    { id: 't3', type: 'text', x: 24, y: 388, w: 342, h: 120, content: { text: 'Certificate ID: CERTIFICATE_ID\nProduct: PRODUCT_NAME\nBatch: BATCH_NO' } }
+  ];
 }
 
 function sampleCert(id = 'CERTIFICATE_ID') {
@@ -17,7 +43,9 @@ function sampleCert(id = 'CERTIFICATE_ID') {
     status: 'VALID',
     issuedAt: new Date().toISOString(),
     product: { name: 'PRODUCT_NAME', code: 'PRODUCT_CODE' },
-    batch: { batchNo: 'BATCH_NO' }
+    batch: { batchNo: 'BATCH_NO' },
+    certificateLayout: sampleCertificateLayout(),
+    certificateTemplate: { canvasWidth: 390, canvasHeight: 844 }
   };
 }
 
@@ -47,19 +75,15 @@ const DEVICE_PRESETS = [
   { id: 'ipad-pro-12-9', label: 'iPad Pro 12.9"', kind: 'phone', w: 1024, h: 1366 }
 ];
 
-export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayout, selectedBlockId, setSelectedBlockId }) {
+export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPage, layout, layoutLoaded, setLayout, selectedBlockId, setSelectedBlockId }) {
   const { t } = useT();
-  const token = useAdminAuthStore((s) => s.token);
-  const templates = useCertTemplatesStore((s) => s.templates);
-  const templatesLoading = useCertTemplatesStore((s) => s.loading);
-  const fetchTemplates = useCertTemplatesStore((s) => s.fetchTemplates);
   const layoutRef = useRef(layout);
 
   const [previewCertId, setPreviewCertId] = useState('');
+  const [previewEpc, setPreviewEpc] = useState('');
   const [previewData, setPreviewData] = useState(null);
   const [previewError, setPreviewError] = useState(null);
   const [devicePresetId, setDevicePresetId] = useState('fit');
-  const [selectedTemplateId, setSelectedTemplateId] = useState('');
 
   const baseW = 390;
   const baseH = 844;
@@ -71,34 +95,28 @@ export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayo
     return Math.max(0.1, Math.min(2, Number(devicePreset.w) / baseW));
   }, [devicePreset]);
 
-  const templatesById = useMemo(() => {
-    const map = new Map();
-    (templates || []).forEach((tpl) => {
-      map.set(String(tpl.id), tpl);
-    });
-    return map;
-  }, [templates]);
-
   useEffect(() => {
     layoutRef.current = layout;
   }, [layout]);
-
-  useEffect(() => {
-    if (!token) return;
-    fetchTemplates();
-  }, [token, fetchTemplates]);
-
-  useEffect(() => {
-    if (selectedTemplateId) return;
-    if (!Array.isArray(templates) || templates.length === 0) return;
-    setSelectedTemplateId(String(templates[0]?.id || ''));
-  }, [selectedTemplateId, templates]);
 
   const setCanvasItems = (updaterOrNext) => {
     const current = layoutRef.current || [];
     const next = typeof updaterOrNext === 'function' ? updaterOrNext(current) : updaterOrNext;
     setLayout(next);
   };
+
+  const hasCertificateBlock = useMemo(() => (Array.isArray(layout) ? layout.some((b) => b?.type === 'certificate') : false), [layout]);
+
+  useEffect(() => {
+    if (kind !== 'landing') return;
+    if (!selectedPage?.id) return;
+    if (!layoutLoaded) return;
+    if (hasCertificateBlock) return;
+    const cert = { id: makeId('cert'), type: 'certificate', x: 0, y: 0, w: baseW, h: baseH };
+    const next = [cert, ...(Array.isArray(layout) ? layout : [])];
+    setLayout(next);
+    setSelectedBlockId(cert.id);
+  }, [baseH, baseW, hasCertificateBlock, kind, layout, layoutLoaded, selectedPage?.id, setLayout, setSelectedBlockId]);
 
   const blocks = useMemo(() => {
     return layout.map((b) => ({
@@ -128,17 +146,11 @@ export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayo
           );
         }
         if (it.type === 'certificate') {
-          const tplId = it.content?.templateId != null ? String(it.content.templateId) : '';
-          const tpl = tplId ? templatesById.get(tplId) : null;
-          const name = tpl?.name || it.content?.templateName || '';
-          const w = Number(tpl?.canvasWidth || it.content?.canvasWidth || 0) || 0;
-          const h = Number(tpl?.canvasHeight || it.content?.canvasHeight || 0) || 0;
           return (
             <div className="flex h-full w-full items-center justify-center p-2">
               <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-center">
                 <div className="text-xs font-semibold text-zinc-800">{t('certificateTitle')}</div>
-                {name ? <div className="mt-0.5 text-[11px] font-semibold text-zinc-600">{name}</div> : null}
-                {w > 0 && h > 0 ? <div className="mt-0.5 text-[11px] text-zinc-500">{w}×{h}</div> : null}
+                <div className="mt-0.5 text-[11px] font-semibold text-zinc-600">Embedded certificate output</div>
               </div>
             </div>
           );
@@ -148,7 +160,7 @@ export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayo
         );
       }
     }));
-  }, [layout, t, templatesById]);
+  }, [layout, t]);
 
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-3">
@@ -221,67 +233,18 @@ export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayo
           >
             {t('addVideo')}
           </button>
-          {Array.isArray(templates) && templates.length > 0 ? (
-            <>
-              <select
-                value={selectedTemplateId}
-                onChange={(e) => setSelectedTemplateId(e.target.value)}
-                className="ac-input w-44 rounded-lg px-3 py-2 text-xs font-semibold"
-                disabled={templatesLoading}
-              >
-                {templates.map((tpl) => (
-                  <option key={tpl.id} value={String(tpl.id)}>
-                    {tpl.name} ({Number(tpl.canvasWidth || 390)}×{Number(tpl.canvasHeight || 844)})
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => {
-                  const tpl = templatesById.get(String(selectedTemplateId || '')) || null;
-                  const tplW = Number(tpl?.canvasWidth || 390);
-                  const tplH = Number(tpl?.canvasHeight || 844);
-                  const maxW = baseW - 40;
-                  const maxH = baseH - 40;
-                  const fit = Math.max(0.1, Math.min(1, Math.min(maxW / tplW, maxH / tplH)));
-                  const w = Math.max(40, Math.round(tplW * fit));
-                  const h = Math.max(30, Math.round(tplH * fit));
-                  const next = [
-                    ...layout,
-                    {
-                      id: makeId('cert'),
-                      type: 'certificate',
-                      x: 20,
-                      y: 400,
-                      w,
-                      h,
-                      content: {
-                        templateId: tpl?.id != null ? String(tpl.id) : null,
-                        templateName: tpl?.name || null,
-                        canvasWidth: tplW,
-                        canvasHeight: tplH
-                      }
-                    }
-                  ];
-                  setLayout(next);
-                }}
-                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-              >
-                {t('addCertificate')}
-              </button>
-            </>
-          ) : (
+          {kind === 'landing' && !hasCertificateBlock ? (
             <button
               type="button"
               onClick={() => {
-                const next = [...layout, { id: makeId('cert'), type: 'certificate', x: 20, y: 400, w: 320, h: 220 }];
+                const next = [...layout, { id: makeId('cert'), type: 'certificate', x: 0, y: 0, w: baseW, h: baseH }];
                 setLayout(next);
               }}
               className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
             >
               {t('addCertificate')}
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -298,6 +261,13 @@ export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayo
                   className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-mono outline-none focus:border-zinc-400"
                 />
                 <div className="mt-1 text-[11px] text-zinc-500">{t('previewCertificateHint')}</div>
+                <div className="mt-3 text-[11px] font-semibold text-zinc-600">EPC</div>
+                <input
+                  value={previewEpc}
+                  onChange={(e) => setPreviewEpc(e.target.value)}
+                  placeholder="EPC_CODE"
+                  className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-mono outline-none focus:border-zinc-400"
+                />
               </div>
               <button
                 type="button"
@@ -305,24 +275,16 @@ export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayo
                 onClick={async () => {
                   setPreviewError(null);
                   const id = String(previewCertId || '').trim();
-                  if (!id) {
+                  const epc = String(previewEpc || '').trim();
+                  if (!id && !epc) {
                     setPreviewData(null);
                     return;
                   }
                   try {
-                    const api = createAdminApi({ token });
-                    const res = await api.get(`/certificates/${encodeURIComponent(id)}`);
-                    const cert = res?.data?.data;
-                    const mapped = {
-                      certificateId: cert?.certificateId,
-                      type: cert?.type,
-                      status: cert?.status,
-                      issuedAt: cert?.issuedAt || cert?.createdAt,
-                      expiresAt: cert?.expiresAt || null,
-                      product: cert?.batch?.product ? { name: cert.batch.product.name, code: cert.batch.product.code } : { name: 'PRODUCT_NAME', code: 'PRODUCT_CODE' },
-                      batch: cert?.batch ? { batchNo: cert.batch.batchNo } : { batchNo: 'BATCH_NO' }
-                    };
-                    setPreviewData(mapped);
+                    const base = getPublicApiBaseUrl();
+                    const url = id ? `${base}/cert/${encodeURIComponent(id)}` : `${base}/resolve`;
+                    const res = await axios.get(url, { params: id ? undefined : { epc } });
+                    setPreviewData(res?.data?.data || null);
                   } catch (e) {
                     const msg = e?.response?.data?.message || e?.message || 'Failed to load certificate';
                     setPreviewData(null);
@@ -338,7 +300,7 @@ export default function CmsCanvasPanel({ viewMode, selectedPage, layout, setLayo
           <div className="overflow-auto bg-white">
             <div className="mx-auto" style={{ width: (devicePreset?.w || baseW), height: (devicePreset?.h || baseH) }}>
               <div style={{ width: baseW * scale, height: baseH * scale }} className="mx-auto">
-                <div style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }} className="overflow-hidden rounded-xl border border-zinc-200">
+                <div style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }} className="overflow-auto rounded-xl border border-zinc-200">
                   <PublicRenderer layout={layout} data={previewData || sampleCert()} />
                 </div>
               </div>

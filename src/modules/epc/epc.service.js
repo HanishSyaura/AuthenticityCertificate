@@ -15,6 +15,12 @@ function getRunningPadLen() {
   return Math.floor(n);
 }
 
+function getSkuLen() {
+  const n = Number(process.env.EPC_SKU_LEN || 8);
+  if (!Number.isFinite(n) || n < 1) return 8;
+  return Math.floor(n);
+}
+
 function padRunningNo(n, len) {
   return String(n).padStart(len, '0');
 }
@@ -26,19 +32,30 @@ function formatMMyy(d = new Date()) {
 }
 
 function normalizeSkuCode(product) {
+  const skuLen = getSkuLen();
   const rawSku = String(product?.sku || '').trim();
-  const skuDigits = rawSku.replace(/\D+/g, '');
-  if (skuDigits) return skuDigits;
-  const skuAlnum = rawSku.replace(/[^a-z0-9]+/gi, '');
-  if (skuAlnum) return skuAlnum.toUpperCase();
-
   const rawCode = String(product?.code || '').trim();
-  const codeDigits = rawCode.replace(/\D+/g, '');
-  if (codeDigits) return codeDigits;
-  const codeAlnum = rawCode.replace(/[^a-z0-9]+/gi, '');
-  if (codeAlnum) return codeAlnum.toUpperCase();
+  const raw = rawSku || rawCode;
 
-  return '0';
+  const cleaned = String(raw || '')
+    .trim()
+    .replace(/[^a-z0-9]+/gi, '')
+    .toUpperCase();
+  if (!cleaned) return '0'.repeat(skuLen);
+
+  const m = cleaned.match(/^([A-Z]+)(\d+)$/);
+  if (m) {
+    const prefix = String(m[1] || '');
+    const digits = String(m[2] || '');
+    if (prefix.length >= skuLen) return prefix.slice(0, skuLen);
+    const digitsLen = Math.max(0, skuLen - prefix.length);
+    const d = digitsLen > 0 ? digits.slice(-digitsLen).padStart(digitsLen, '0') : '';
+    return `${prefix}${d}`;
+  }
+
+  if (/^\d+$/.test(cleaned)) return cleaned.slice(-skuLen).padStart(skuLen, '0');
+  if (cleaned.length >= skuLen) return cleaned.slice(0, skuLen);
+  return cleaned.padEnd(skuLen, '0');
 }
 
 function buildEpcCode({ corpPrefix, runningNo, skuCode, mmyy }) {
@@ -72,6 +89,64 @@ function chunkArray(arr, size) {
   const out = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
+}
+
+async function deleteAllBatches({ organizationId, corpPrefix }) {
+  const orgId = Number(organizationId);
+  const prefix = corpPrefix == null ? null : String(corpPrefix || '').trim();
+  if (prefix) {
+    const allowed = getAllowedCorpPrefixes();
+    if (!allowed.includes(prefix)) throw new Error('Corp code tidak dibenarkan');
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const batches = await tx.epcBatch.findMany({
+      where: { organizationId: orgId, ...(prefix ? { corpPrefix: prefix } : {}) },
+      select: { id: true, corpPrefix: true }
+    });
+    if (!batches.length) return { deletedBatches: 0, deletedItems: 0, corpPrefixes: prefix ? [prefix] : [] };
+
+    const ids = batches.map((b) => Number(b.id)).filter((n) => Number.isFinite(n));
+    const prefixes = Array.from(new Set(batches.map((b) => String(b.corpPrefix || '').trim()).filter((p) => p)));
+
+    let deletedItems = 0;
+    for (const group of chunkArray(ids, 1000)) {
+      const res = await tx.epcItem.deleteMany({ where: { organizationId: orgId, batchId: { in: group } } });
+      deletedItems += Number(res.count) || 0;
+    }
+
+    let deletedBatches = 0;
+    for (const group of chunkArray(ids, 1000)) {
+      const res = await tx.epcBatch.deleteMany({ where: { organizationId: orgId, id: { in: group } } });
+      deletedBatches += Number(res.count) || 0;
+    }
+
+    for (const p of prefixes) {
+      await tx.corpSequence.upsert({
+        where: { organizationId_corpPrefix: { organizationId: orgId, corpPrefix: p } },
+        update: {},
+        create: { organizationId: orgId, corpPrefix: p, lastNo: 0n }
+      });
+      const maxExisting = await tx.epcItem.findFirst({
+        where: { organizationId: orgId, batch: { corpPrefix: p } },
+        orderBy: { runningNo: 'desc' },
+        select: { runningNo: true }
+      });
+      const nextLastNo = maxExisting?.runningNo != null ? BigInt(maxExisting.runningNo) : 0n;
+      await tx.corpSequence.update({
+        where: { organizationId_corpPrefix: { organizationId: orgId, corpPrefix: p } },
+        data: { lastNo: nextLastNo }
+      });
+    }
+
+    return { deletedBatches, deletedItems, corpPrefixes: prefixes };
+  });
+
+  return {
+    deletedBatches: Number(result.deletedBatches) || 0,
+    deletedItems: Number(result.deletedItems) || 0,
+    corpPrefixes: Array.isArray(result.corpPrefixes) ? result.corpPrefixes : []
+  };
 }
 
 async function generateEpcBatch({ organizationId, corpPrefix, productId, batchName, batchQty, remark, certificateTemplateId, templateData }) {
@@ -487,11 +562,57 @@ async function deleteBatch({ organizationId, batchId }) {
   const result = await prisma.$transaction(async (tx) => {
     const batch = await tx.epcBatch.findFirst({ where: { id, organizationId: orgId } });
     if (!batch) throw new Error('Batch tidak dijumpai');
+    const corpPrefix = String(batch.corpPrefix || '').trim();
     await tx.epcItem.deleteMany({ where: { organizationId: orgId, batchId: id } });
     await tx.epcBatch.delete({ where: { id } });
-    return { batchId: id };
+    if (corpPrefix) {
+      await tx.corpSequence.upsert({
+        where: { organizationId_corpPrefix: { organizationId: orgId, corpPrefix } },
+        update: {},
+        create: { organizationId: orgId, corpPrefix, lastNo: 0n }
+      });
+      const maxExisting = await tx.epcItem.findFirst({
+        where: { organizationId: orgId, batch: { corpPrefix } },
+        orderBy: { runningNo: 'desc' },
+        select: { runningNo: true }
+      });
+      const nextLastNo = maxExisting?.runningNo != null ? BigInt(maxExisting.runningNo) : 0n;
+      await tx.corpSequence.update({
+        where: { organizationId_corpPrefix: { organizationId: orgId, corpPrefix } },
+        data: { lastNo: nextLastNo }
+      });
+    }
+    return { batchId: id, corpPrefix: batch.corpPrefix };
   });
   return result;
+}
+
+async function recalculateCorpSequence({ organizationId, corpPrefix }) {
+  const orgId = Number(organizationId);
+  const prefix = String(corpPrefix || '').trim();
+  if (!prefix) throw new Error('corpPrefix required');
+  const allowed = getAllowedCorpPrefixes();
+  if (!allowed.includes(prefix)) throw new Error('Corp code tidak dibenarkan');
+
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.corpSequence.upsert({
+      where: { organizationId_corpPrefix: { organizationId: orgId, corpPrefix: prefix } },
+      update: {},
+      create: { organizationId: orgId, corpPrefix: prefix, lastNo: 0n }
+    });
+    const maxExisting = await tx.epcItem.findFirst({
+      where: { organizationId: orgId, batch: { corpPrefix: prefix } },
+      orderBy: { runningNo: 'desc' },
+      select: { runningNo: true }
+    });
+    const nextLastNo = maxExisting?.runningNo != null ? BigInt(maxExisting.runningNo) : 0n;
+    const updated = await tx.corpSequence.update({
+      where: { organizationId_corpPrefix: { organizationId: orgId, corpPrefix: prefix } },
+      data: { lastNo: nextLastNo }
+    });
+    return { corpPrefix: prefix, lastNo: updated.lastNo };
+  });
+  return { corpPrefix: result.corpPrefix, lastNo: result.lastNo != null ? result.lastNo.toString() : '0' };
 }
 
 async function updateBatch({ organizationId, batchId, patch }) {
@@ -521,5 +642,7 @@ module.exports = {
   markProductionDone,
   updateBatch,
   deleteBatch,
-  importExistingEpc
+  importExistingEpc,
+  recalculateCorpSequence,
+  deleteAllBatches
 };
