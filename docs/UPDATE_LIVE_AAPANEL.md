@@ -44,7 +44,7 @@ cd frontend
 npm ci || npm install
 
 if [ ! -f ".env.production" ]; then
-  echo "VITE_API_BASE_URL=https://wmscertauth.clbgroups.com" > .env.production
+  echo "VITE_API_BASE_URL=https://wmscertauth.clbgroups.com/api" > .env.production
 fi
 
 npm run build
@@ -235,4 +235,3 @@ echo
 ```
 
 login credentials:
-

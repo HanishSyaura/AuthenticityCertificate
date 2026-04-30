@@ -21,6 +21,10 @@ const importExistingSchema = z.object({
   base64: z.string().min(1)
 });
 
+const updateBatchSchema = z.object({
+  certificateTemplateId: z.number().int().nullable().optional()
+});
+
 function parseLimitOffset(q) {
   const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 200);
   const offset = Math.max(Number(q.offset) || 0, 0);
@@ -132,6 +136,18 @@ async function deleteBatch(req, res) {
   }
 }
 
+async function updateBatch(req, res) {
+  try {
+    const batchId = Number(req.params.id);
+    const data = updateBatchSchema.parse(req.body);
+    const updated = await epcService.updateBatch({ organizationId: req.organization.id, batchId, patch: data });
+    res.success(updated, 'Batch updated');
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    res.error(e.message, 400);
+  }
+}
+
 async function importExisting(req, res) {
   try {
     const data = importExistingSchema.parse(req.body);
@@ -156,6 +172,7 @@ module.exports = {
   exportBatch,
   importProductionXlsx,
   markProductionDone,
+  updateBatch,
   deleteBatch,
   importExisting
 };

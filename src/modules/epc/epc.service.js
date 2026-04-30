@@ -484,6 +484,23 @@ async function deleteBatch({ organizationId, batchId }) {
   return result;
 }
 
+async function updateBatch({ organizationId, batchId, patch }) {
+  const orgId = Number(organizationId);
+  const id = Number(batchId);
+  if (!Number.isFinite(id)) throw new Error('Invalid batch id');
+  const data = {};
+  if (patch.certificateTemplateId !== undefined) data.certificateTemplateId = patch.certificateTemplateId == null ? null : Number(patch.certificateTemplateId);
+  const res = await withTimeout(
+    prisma.epcBatch.updateMany({
+      where: { id, organizationId: orgId },
+      data
+    }),
+    1500
+  );
+  if (!res.count) throw new Error('Batch tidak dijumpai');
+  return await withTimeout(prisma.epcBatch.findFirst({ where: { id, organizationId: orgId }, include: { product: { select: { id: true, sku: true, name: true, code: true } } } }), 1500);
+}
+
 module.exports = {
   getAllowedCorpPrefixes,
   generateEpcBatch,
@@ -492,6 +509,7 @@ module.exports = {
   listItems,
   importProductionXlsx,
   markProductionDone,
+  updateBatch,
   deleteBatch,
   importExistingEpc
 };

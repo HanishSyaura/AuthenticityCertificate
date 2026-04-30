@@ -176,6 +176,23 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
+  updateBatch: async ({ batchId, patch }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const id = Number(batchId);
+      const res = await api.patch(`/epc/batches/${id}`, patch || {});
+      const updated = res?.data?.data;
+      const batches = (get().batches || []).map((b) => (String(b.id) === String(id) ? updated : b));
+      set({ loading: false, batches });
+      return updated;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Update failed';
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
   importExistingXlsx: async ({ productId, batchName, base64 }) => {
     set({ loading: true, error: null });
     try {

@@ -4,7 +4,7 @@ import { useT } from '../../i18n/useT';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
 import useMediaStore from '../../store/useMediaStore';
-import useRecordsStore from '../../store/useRecordsStore';
+import useEpcStore from '../../store/useEpcStore';
 import { createAdminApi } from '../../utils/adminApi';
 
 function makeId(prefix) {
@@ -44,29 +44,23 @@ const DEVICE_PRESETS = [
 
 export default function AdminCertificateTemplateBuilder({ initialSelectedId = null }) {
   const { t } = useT();
-  const { templates, error, fetchTemplates, createTemplate, updateTemplate, deleteTemplate } = useCertTemplatesStore((s) => ({
+  const { templates, error, fetchTemplates, updateTemplate, deleteTemplate } = useCertTemplatesStore((s) => ({
     templates: s.templates,
     error: s.error,
     fetchTemplates: s.fetchTemplates,
-    createTemplate: s.createTemplate,
     updateTemplate: s.updateTemplate,
     deleteTemplate: s.deleteTemplate
   }));
   const { token } = useAdminAuthStore((s) => ({ token: s.token }));
   const { uploadMedia } = useMediaStore((s) => ({ uploadMedia: s.uploadMedia }));
-  const { products, fetchProducts, updateProduct } = useRecordsStore((s) => ({
-    products: s.products,
-    fetchProducts: s.fetchProducts,
-    updateProduct: s.updateProduct
+  const { batches, fetchBatches, updateBatch } = useEpcStore((s) => ({
+    batches: s.batches,
+    fetchBatches: s.fetchBatches,
+    updateBatch: s.updateBatch
   }));
 
   const [selectedId, setSelectedId] = useState(initialSelectedId);
   const [selectedFieldId, setSelectedFieldId] = useState(null);
-  const [newName, setNewName] = useState('');
-  const [newBackground, setNewBackground] = useState('');
-  const [newBgUploading, setNewBgUploading] = useState(false);
-  const [newBgError, setNewBgError] = useState(null);
-  const [newBgFileKey, setNewBgFileKey] = useState(0);
   const [previewId, setPreviewId] = useState('');
   const [previewData, setPreviewData] = useState(null);
   const [previewError, setPreviewError] = useState(null);
@@ -77,7 +71,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const [addOverlayKey, setAddOverlayKey] = useState('');
   const [devicePresetId, setDevicePresetId] = useState('fit');
   const [backgroundMode, setBackgroundMode] = useState('background');
-  const [assignedProductIds, setAssignedProductIds] = useState(() => new Set());
+  const [assignedBatchIds, setAssignedBatchIds] = useState(() => new Set());
 
   const fieldsRef = useRef([]);
 
@@ -239,8 +233,8 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   }, [initialSelectedId]);
 
   useEffect(() => {
-    void fetchProducts();
-  }, [fetchProducts]);
+    void fetchBatches({ limit: 200, offset: 0 });
+  }, [fetchBatches]);
 
   useEffect(() => {
     if (selectedId != null) return;
@@ -258,11 +252,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   useEffect(() => {
     if (!selected?.id) return;
     const next = new Set();
-    for (const p of Array.isArray(products) ? products : []) {
-      if (String(p?.certificateTemplateId || '') === String(selected.id)) next.add(String(p.id));
+    for (const b of Array.isArray(batches) ? batches : []) {
+      if (String(b?.certificateTemplateId || '') === String(selected.id)) next.add(String(b.id));
     }
-    setAssignedProductIds(next);
-  }, [products, selected?.id]);
+    setAssignedBatchIds(next);
+  }, [batches, selected?.id]);
 
   const fetchPreview = async () => {
     setPreviewError(null);
@@ -297,153 +291,10 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
 
       {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[280px_minmax(0,540px)_420px]">
-        <div className="ac-card p-3">
-          <div className="mb-3 text-xs font-semibold text-zinc-500">{t('certTemplates')}</div>
-          <div className="space-y-1">
-            {templates.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => {
-                  setSelectedId(t.id);
-                  setSelectedFieldId(null);
-                }}
-                className={`w-full rounded-lg px-3 py-2 text-left text-sm ${
-                  t.id === selectedId ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'text-zinc-900 hover:bg-zinc-50'
-                }`}
-              >
-                <div className="font-semibold">{t.name}</div>
-                <div className={`text-[11px] ${t.id === selectedId ? 'text-brand-700/80' : 'text-zinc-500'}`}>
-                  {(Array.isArray(t.layoutJson) ? t.layoutJson.length : 0)} fields
-                </div>
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-4 rounded-lg bg-zinc-50 p-3">
-            <div className="text-xs font-semibold text-zinc-700">{t('createTemplate')}</div>
-            <div className="mt-2 space-y-2">
-              <input
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                className="ac-input rounded-lg px-3 py-2"
-                placeholder={t('templateName')}
-              />
-              <input
-                value={newBackground}
-                onChange={(e) => setNewBackground(e.target.value)}
-                className="ac-input rounded-lg px-3 py-2"
-                placeholder={t('backgroundUrl')}
-              />
-              <input
-                key={newBgFileKey}
-                type="file"
-                accept="image/*,video/*"
-                disabled={newBgUploading}
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  setNewBgError(null);
-                  setNewBgUploading(true);
-                  try {
-                    const created = await uploadMedia({ file });
-                    if (created?.url) setNewBackground(created.url);
-                    setNewBgFileKey((k) => k + 1);
-                  } catch (err) {
-                    const msg = err?.response?.data?.message || err?.message || 'Upload failed';
-                    setNewBgError(msg);
-                  } finally {
-                    setNewBgUploading(false);
-                  }
-                }}
-                className="ac-input rounded-lg px-3 py-2"
-              />
-              {newBgError ? <div className="text-xs text-rose-700">{newBgError}</div> : null}
-              <button
-                type="button"
-                onClick={() => {
-                  const nm = String(newName || '').trim();
-                  if (!nm) return;
-                  void createTemplate({
-                    name: nm,
-                    background: String(newBackground || '').trim() || '',
-                    backgroundColor: '#ffffff',
-                    layoutJson: [],
-                    placeholders: [],
-                    canvasWidth: 390,
-                    canvasHeight: 844
-                  }).then((created) => {
-                    if (created?.id != null) setSelectedId(created.id);
-                    setSelectedFieldId(null);
-                    setNewName('');
-                    setNewBackground('');
-                  });
-                }}
-                className="ac-btn w-full rounded-lg px-3 py-2 text-sm"
-              >
-                {t('create')}
-              </button>
-            </div>
-          </div>
-
-          {selected ? (
-            <div className="mt-4 rounded-lg bg-zinc-50 p-3">
-              <div className="text-xs font-semibold text-zinc-700">{t('assignProducts')}</div>
-              <div className="mt-2 max-h-56 space-y-1 overflow-auto">
-                {(Array.isArray(products) ? products : [])
-                  .slice()
-                  .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')))
-                  .map((p) => {
-                    const id = String(p.id);
-                    const checked = assignedProductIds.has(id);
-                    return (
-                      <label key={id} className="flex items-center gap-2 rounded px-2 py-1 text-xs text-zinc-800 hover:bg-white">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => {
-                            const next = new Set(assignedProductIds);
-                            if (e.target.checked) next.add(id);
-                            else next.delete(id);
-                            setAssignedProductIds(next);
-                          }}
-                        />
-                        <span className="truncate">
-                          {p.name} <span className="font-mono text-[11px] text-zinc-500">({p.sku})</span>
-                        </span>
-                      </label>
-                    );
-                  })}
-              </div>
-              <button
-                type="button"
-                className="ac-btn mt-3 w-full rounded-lg px-3 py-2 text-sm"
-                onClick={async () => {
-                  const list = Array.isArray(products) ? products : [];
-                  for (const p of list) {
-                    const pid = String(p.id);
-                    const shouldHave = assignedProductIds.has(pid);
-                    const has = String(p.certificateTemplateId || '') === String(selected.id);
-                    if (shouldHave && !has) {
-                      await updateProduct({ id: p.id, patch: { certificateTemplateId: Number(selected.id) } });
-                    }
-                    if (!shouldHave && has) {
-                      await updateProduct({ id: p.id, patch: { certificateTemplateId: null } });
-                    }
-                  }
-                  await fetchProducts();
-                }}
-              >
-                {t('apply')}
-              </button>
-            </div>
-          ) : null}
-        </div>
-
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,540px)_420px]">
         <div className="ac-card p-3">
           {!selected ? (
-            <div className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{t('createTemplate')}</div>
+            <div className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{t('selectTemplate')}</div>
           ) : (
             <>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -671,6 +522,52 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                     className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                   />
                 </div>
+              </div>
+
+              <div className="rounded-lg border border-zinc-200 bg-white p-3">
+                <div className="mb-2 text-xs font-semibold text-zinc-700">{t('assignEpcBatches')}</div>
+                <div className="max-h-56 space-y-1 overflow-auto">
+                  {(Array.isArray(batches) ? batches : []).map((b) => {
+                    const id = String(b.id);
+                    const checked = assignedBatchIds.has(id);
+                    const title = String(b.batchName || `#${b.id}`);
+                    const sku = String(b.sku || b?.product?.sku || '');
+                    return (
+                      <label key={id} className="flex items-center gap-2 rounded px-2 py-1 text-xs text-zinc-800 hover:bg-zinc-50">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            const next = new Set(assignedBatchIds);
+                            if (e.target.checked) next.add(id);
+                            else next.delete(id);
+                            setAssignedBatchIds(next);
+                          }}
+                        />
+                        <span className="min-w-0 truncate">
+                          {title} {sku ? <span className="font-mono text-[11px] text-zinc-500">({sku})</span> : null}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  className="ac-btn mt-3 w-full rounded-lg px-3 py-2 text-sm"
+                  onClick={async () => {
+                    const list = Array.isArray(batches) ? batches : [];
+                    for (const b of list) {
+                      const bid = String(b.id);
+                      const shouldHave = assignedBatchIds.has(bid);
+                      const has = String(b.certificateTemplateId || '') === String(selected.id);
+                      if (shouldHave && !has) await updateBatch({ batchId: b.id, patch: { certificateTemplateId: Number(selected.id) } });
+                      if (!shouldHave && has) await updateBatch({ batchId: b.id, patch: { certificateTemplateId: null } });
+                    }
+                    await fetchBatches({ limit: 200, offset: 0 });
+                  }}
+                >
+                  {t('apply')}
+                </button>
               </div>
 
               {wizardStep === 'fields' ? (

@@ -4,8 +4,16 @@ function getApiBaseUrl() {
   const configured = import.meta.env.VITE_API_BASE_URL;
   if (configured !== undefined) {
     const trimmed = String(configured).trim();
-    if (trimmed) return trimmed.replace(/\/+$/, '');
-    return '';
+    if (!trimmed) return import.meta.env.DEV ? '' : '/api';
+    const normalized = trimmed.replace(/\/+$/, '');
+    if (import.meta.env.PROD && /^https?:\/\//i.test(normalized)) {
+      try {
+        const u = new URL(normalized);
+        const path = u.pathname.replace(/\/+$/, '');
+        if (!path) return `${u.origin}/api`;
+      } catch {}
+    }
+    return normalized;
   }
   if (import.meta.env.DEV) return 'http://localhost:5000';
   return '/api';

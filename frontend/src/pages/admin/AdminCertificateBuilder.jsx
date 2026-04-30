@@ -9,8 +9,12 @@ export default function AdminCertificateBuilder() {
   const { id } = useParams();
 
   useEffect(() => {
-    void id;
-  }, [id]);
+    if (!id) {
+      navigate('/admin/certificates', { replace: true, state: { openCreate: true } });
+    }
+  }, [id, navigate]);
+
+  if (!id) return null;
 
   return (
     <div>
@@ -23,4 +27,3 @@ export default function AdminCertificateBuilder() {
     </div>
   );
 }
-

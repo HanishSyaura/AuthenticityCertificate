@@ -3,6 +3,7 @@ import useRecordsStore from '../../store/useRecordsStore';
 import useEpcStore from '../../store/useEpcStore';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import { useT } from '../../i18n/useT';
+import RichTextEditor from '../../components/admin/RichTextEditor';
 
 function formatDateTime(input) {
   if (!input) return '';
@@ -18,27 +19,6 @@ function toBase64(file) {
     reader.onerror = () => reject(new Error('Failed to read file'));
     reader.readAsDataURL(file);
   });
-}
-
-function RichInput({ value, onChange }) {
-  const [draft, setDraft] = useState(value || '');
-  useEffect(() => setDraft(value || ''), [value]);
-  return (
-    <div className="rounded-xl border border-zinc-200 bg-white">
-      <div className="flex flex-wrap gap-2 border-b border-zinc-200 bg-zinc-50 p-2">
-        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onClick={() => setDraft((v) => `<b>${v}</b>`)}>
-          B
-        </button>
-        <button type="button" className="rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onClick={() => setDraft((v) => `<i>${v}</i>`)}>
-          I
-        </button>
-        <button type="button" className="ml-auto rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold" onClick={() => onChange(draft)}>
-          Save
-        </button>
-      </div>
-      <textarea value={draft} onChange={(e) => setDraft(e.target.value)} className="h-24 w-full resize-none rounded-b-xl px-3 py-2 text-xs outline-none" />
-    </div>
-  );
 }
 
 export default function AdminEpc() {
@@ -220,7 +200,7 @@ export default function AdminEpc() {
                       </div>
                     ) : null}
                     {type === 'rich_text' ? (
-                      <RichInput value={String(templateData?.[key] || '')} onChange={(v) => setTemplateData((prev) => ({ ...(prev || {}), [key]: v }))} />
+                      <RichTextEditor value={String(templateData?.[key] || '')} onChange={(v) => setTemplateData((prev) => ({ ...(prev || {}), [key]: v }))} />
                     ) : (
                       <input
                         value={String(templateData?.[key] || '')}

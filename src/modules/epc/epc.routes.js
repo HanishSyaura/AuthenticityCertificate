@@ -15,6 +15,11 @@ router.get('/corp-codes', epcController.getCorpCodes);
 router.post('/batches/generate', auditAction('GENERATE_EPC_BATCH', { targetType: 'epc_batch' }), epcController.generateBatch);
 router.post('/import-existing-xlsx', auditAction('IMPORT_EXISTING_EPC_XLSX', { targetType: 'epc_batch' }), epcController.importExisting);
 router.get('/batches', epcController.listBatches);
+router.patch(
+  '/batches/:id',
+  auditAction('UPDATE_EPC_BATCH', { targetType: 'epc_batch', getTargetId: (req) => String(req.params?.id || '') }),
+  epcController.updateBatch
+);
 router.delete('/batches/:id', auditAction('DELETE_EPC_BATCH', { targetType: 'epc_batch', getTargetId: (req) => String(req.params?.id || '') }), epcController.deleteBatch);
 router.get('/items', epcController.listItems);
 router.get('/batches/:id/items', epcController.listBatchItems);
