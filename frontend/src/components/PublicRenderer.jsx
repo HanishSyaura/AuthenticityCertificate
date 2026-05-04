@@ -10,6 +10,24 @@ function getValue(path, data) {
   return cur ?? '';
 }
 
+function normalizeJsonArray(input) {
+  if (Array.isArray(input)) return input;
+  if (typeof input === 'string') {
+    const raw = input.trim();
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+      if (parsed && typeof parsed === 'object' && Array.isArray(parsed.items)) return parsed.items;
+    } catch {
+      return null;
+    }
+    return null;
+  }
+  if (input && typeof input === 'object' && Array.isArray(input.items)) return input.items;
+  return null;
+}
+
 function escapeHtml(input) {
   return String(input ?? '')
     .replace(/&/g, '&amp;')
@@ -23,30 +41,235 @@ function escapeTextToHtml(input) {
   return escapeHtml(input).replace(/\r?\n/g, '<br/>');
 }
 
+function sanitizeStyle(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return '';
+  if (/url\s*\(|expression\s*\(|javascript:/i.test(raw)) return '';
+  const allowed = new Set([
+    'color',
+    'background-color',
+    'font-weight',
+    'font-style',
+    'text-decoration',
+    'text-align',
+    'font-size',
+    'font-family',
+    'line-height',
+    'border',
+    'border-color',
+    'border-width',
+    'border-style',
+    'border-collapse',
+    'padding',
+    'padding-left',
+    'padding-right',
+    'padding-top',
+    'padding-bottom',
+    'margin',
+    'margin-left',
+    'margin-right',
+    'margin-top',
+    'margin-bottom',
+    'width',
+    'height',
+    'max-width',
+    'min-width'
+  ]);
+  const parts = raw
+    .split(';')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const kept = [];
+  for (const part of parts) {
+    const idx = part.indexOf(':');
+    if (idx === -1) continue;
+    const prop = part.slice(0, idx).trim().toLowerCase();
+    const val = part.slice(idx + 1).trim();
+    if (!allowed.has(prop)) continue;
+    if (!val) continue;
+    if (/url\s*\(|expression\s*\(|javascript:/i.test(val)) continue;
+    kept.push(`${prop}: ${val}`);
+  }
+  return kept.join('; ');
+}
+
+function sanitizeUrl(input, { allowDataImage = false } = {}) {
+  const raw = String(input || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('#') || raw.startsWith('/') || raw.startsWith('?')) return raw;
+  const lower = raw.toLowerCase();
+  if (lower.startsWith('mailto:') || lower.startsWith('tel:')) return raw;
+  if (lower.startsWith('http://') || lower.startsWith('https://')) return raw;
+  if (allowDataImage && /^data:image\/(png|jpe?g|gif|webp);base64,/i.test(raw)) return raw;
+  return '';
+}
+
 function sanitizeLimitedHtml(input) {
   const raw = String(input ?? '');
   if (!raw) return '';
   if (typeof window === 'undefined' || typeof window.DOMParser !== 'function') return escapeTextToHtml(raw);
-  const allowed = new Set(['BR', 'B', 'STRONG', 'I', 'EM', 'U']);
+  const allowed = new Set([
+    'BR',
+    'B',
+    'STRONG',
+    'I',
+    'EM',
+    'U',
+    'S',
+    'STRIKE',
+    'SUB',
+    'SUP',
+    'DIV',
+    'P',
+    'SPAN',
+    'H1',
+    'H2',
+    'H3',
+    'BLOCKQUOTE',
+    'UL',
+    'OL',
+    'LI',
+    'A',
+    'FONT',
+    'TABLE',
+    'THEAD',
+    'TBODY',
+    'TR',
+    'TD',
+    'TH',
+    'IMG'
+  ]);
   let doc;
   try {
     doc = new window.DOMParser().parseFromString(String(raw), 'text/html');
   } catch {
     return escapeTextToHtml(raw);
   }
+  const allowedAttrs = {
+    A: new Set(['href', 'target', 'rel', 'style']),
+    IMG: new Set(['src', 'alt', 'width', 'height', 'style']),
+    FONT: new Set(['color', 'face', 'size']),
+    TABLE: new Set(['style']),
+    THEAD: new Set(['style']),
+    TBODY: new Set(['style']),
+    TR: new Set(['style']),
+    TD: new Set(['colspan', 'rowspan', 'style']),
+    TH: new Set(['colspan', 'rowspan', 'style']),
+    DIV: new Set(['style']),
+    P: new Set(['style']),
+    SPAN: new Set(['style']),
+    H1: new Set(['style']),
+    H2: new Set(['style']),
+    H3: new Set(['style']),
+    BLOCKQUOTE: new Set(['style']),
+    UL: new Set(['style']),
+    OL: new Set(['style']),
+    LI: new Set(['style']),
+    B: new Set(['style']),
+    STRONG: new Set(['style']),
+    I: new Set(['style']),
+    EM: new Set(['style']),
+    U: new Set(['style']),
+    S: new Set(['style']),
+    STRIKE: new Set(['style']),
+    SUB: new Set(['style']),
+    SUP: new Set(['style']),
+    BR: new Set([])
+  };
   const walk = (node) => {
     const kids = Array.from(node.childNodes || []);
     for (const child of kids) {
       if (child.nodeType === 1) {
         const tag = String(child.tagName || '').toUpperCase();
+        if (tag === 'SCRIPT' || tag === 'STYLE') {
+          child.remove();
+          continue;
+        }
         if (!allowed.has(tag)) {
           const frag = doc.createDocumentFragment();
           while (child.firstChild) frag.appendChild(child.firstChild);
           child.replaceWith(frag);
           continue;
         }
+        const keep = allowedAttrs[tag] || new Set([]);
         const attrs = Array.from(child.attributes || []);
-        for (const a of attrs) child.removeAttribute(a.name);
+        for (const a of attrs) {
+          const name = String(a.name || '').toLowerCase();
+          if (!keep.has(name)) {
+            child.removeAttribute(a.name);
+            continue;
+          }
+          if (name === 'style') {
+            const safe = sanitizeStyle(a.value);
+            if (safe) child.setAttribute('style', safe);
+            else child.removeAttribute('style');
+            continue;
+          }
+          if (tag === 'A' && name === 'href') {
+            const safe = sanitizeUrl(a.value);
+            if (safe) child.setAttribute('href', safe);
+            else child.removeAttribute('href');
+            continue;
+          }
+          if (tag === 'A' && name === 'target') {
+            const v = String(a.value || '').toLowerCase();
+            if (v === '_blank' || v === '_self') child.setAttribute('target', v);
+            else child.removeAttribute('target');
+            continue;
+          }
+          if (tag === 'A' && name === 'rel') {
+            const v = String(a.value || '').toLowerCase();
+            const next = v.includes('noopener') ? v : `${v} noopener`.trim();
+            child.setAttribute('rel', next.includes('noreferrer') ? next : `${next} noreferrer`.trim());
+            continue;
+          }
+          if (tag === 'IMG' && name === 'src') {
+            const safe = sanitizeUrl(a.value, { allowDataImage: true });
+            if (safe) child.setAttribute('src', safe);
+            else child.removeAttribute('src');
+            continue;
+          }
+          if ((tag === 'TD' || tag === 'TH') && (name === 'colspan' || name === 'rowspan')) {
+            const n = Math.max(1, Math.min(50, Number(a.value) || 1));
+            child.setAttribute(name, String(n));
+            continue;
+          }
+          if (tag === 'FONT' && name === 'size') {
+            const n = Math.max(1, Math.min(7, Number(a.value) || 3));
+            child.setAttribute('size', String(n));
+            continue;
+          }
+          if (tag === 'FONT' && name === 'color') {
+            const v = String(a.value || '').trim();
+            if (/^#[0-9a-f]{3,8}$/i.test(v) || /^rgb\(/i.test(v) || /^hsl\(/i.test(v)) child.setAttribute('color', v);
+            else child.removeAttribute('color');
+            continue;
+          }
+          if (tag === 'FONT' && name === 'face') {
+            const v = String(a.value || '').trim();
+            if (v) child.setAttribute('face', v.slice(0, 100));
+            else child.removeAttribute('face');
+            continue;
+          }
+          if (tag === 'IMG' && (name === 'width' || name === 'height')) {
+            const n = Math.max(1, Math.min(2000, Number(a.value) || 0));
+            if (n) child.setAttribute(name, String(n));
+            else child.removeAttribute(name);
+            continue;
+          }
+          if (tag === 'IMG' && name === 'alt') {
+            child.setAttribute('alt', String(a.value || '').slice(0, 200));
+            continue;
+          }
+        }
+        if (tag === 'A') {
+          const target = String(child.getAttribute('target') || '').toLowerCase();
+          if (target === '_blank') {
+            const rel = String(child.getAttribute('rel') || '').toLowerCase();
+            const withNoopener = rel.includes('noopener') ? rel : `${rel} noopener`.trim();
+            child.setAttribute('rel', withNoopener.includes('noreferrer') ? withNoopener : `${withNoopener} noreferrer`.trim());
+          }
+        }
         walk(child);
       } else if (child.nodeType === 8) {
         child.remove();
@@ -98,7 +321,7 @@ function applyFormatter(token, value, locale) {
   return value;
 }
 
-function interpolateText(text, data, locale) {
+function interpolateText(text, data, locale, opts = {}) {
   const s = String(text || '');
   return s.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, expr) => {
     const raw = String(expr || '').trim();
@@ -111,7 +334,8 @@ function interpolateText(text, data, locale) {
     for (const f of formatters) {
       v = applyFormatter(f, v, locale);
     }
-    return v == null ? '' : String(v);
+    const out = v == null ? '' : String(v);
+    return opts.escapeValue ? escapeHtml(out) : out;
   });
 }
 
@@ -194,11 +418,15 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
           );
         }
       case 'text':
-        return (
-          <div key={block.id} style={style} className="overflow-hidden">
-            <p className="whitespace-pre-wrap text-sm text-zinc-900">{interpolateText(block.content?.text || '', data, locale)}</p>
-          </div>
-        );
+        {
+          const interpolated = interpolateText(block.content?.text || '', data, locale, { escapeValue: true });
+          const html = sanitizeLimitedHtml(interpolated);
+          return (
+            <div key={block.id} style={style} className="overflow-hidden">
+              <div className="ac-richtext text-sm text-zinc-900" dangerouslySetInnerHTML={{ __html: html }} />
+            </div>
+          );
+        }
       case 'image':
         {
           const mode = String(block.content?.mode || 'fit');
@@ -227,7 +455,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
           const productionDate = data?.epcItem?.productionDate ? new Date(data.epcItem.productionDate) : null;
 
           const template = data?.certificateTemplate || null;
-          const templateLayout = Array.isArray(template?.layoutJson) ? template.layoutJson : null;
+          const templateLayout = normalizeJsonArray(template?.layoutJson);
           if (!disableCertificateEmbed && template && templateLayout) {
             const rawW = Number(template?.canvasWidth || block.content?.canvasWidth || 390);
             const rawH = Number(template?.canvasHeight || block.content?.canvasHeight || 844);
@@ -235,8 +463,9 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
             const baseH = Number.isFinite(rawH) && rawH > 0 ? rawH : 844;
             const scale = Math.max(0.1, Math.min(4, Math.min((block.__rect.w || baseW) / baseW, (block.__rect.h || baseH) / baseH)));
 
+            const placeholdersArr = normalizeJsonArray(template?.placeholders) || [];
             const placeholderByKey = new Map(
-              (Array.isArray(template?.placeholders) ? template.placeholders : [])
+              placeholdersArr
                 .map((p) => {
                   const k = String(p?.key || '').trim();
                   if (!k) return null;
@@ -326,7 +555,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                             lineHeight: 1.2
                           }}
                         >
-                          <div className={`h-full w-full font-semibold ${textAlignClass(it.align)}`} dangerouslySetInnerHTML={{ __html: html }} />
+                          <div className={`ac-richtext h-full w-full font-semibold ${textAlignClass(it.align)}`} dangerouslySetInnerHTML={{ __html: html }} />
                         </div>
                       );
                     })}

@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useT } from '../../../i18n/useT';
 import useMediaStore from '../../../store/useMediaStore';
+import RichTextEditor from '../RichTextEditor';
 
 export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, clearSelection }) {
   const { t } = useT();
@@ -8,7 +9,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
   const [fileKey, setFileKey] = useState(0);
-  const textAreaRef = useRef(null);
+  const editorRef = useRef(null);
 
   const textPlaceholders = useMemo(() => {
     return [
@@ -56,7 +57,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
 
           {selectedBlock.type === 'text' ? (
             <div>
-              <label className="block text-xs font-medium text-zinc-700">{t('text')}</label>
+              <label className="block text-xs font-medium text-zinc-700">{t('content')}</label>
               <div className="mt-1">
                 <label className="block text-[11px] font-semibold text-zinc-600">{t('insertPlaceholder')}</label>
                 <select
@@ -64,19 +65,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
                   onChange={(e) => {
                     const token = String(e.target.value || '');
                     if (!token) return;
-                    const current = String(selectedBlock.content?.text || '');
-                    const el = textAreaRef.current;
-                    const start = el && typeof el.selectionStart === 'number' ? el.selectionStart : current.length;
-                    const end = el && typeof el.selectionEnd === 'number' ? el.selectionEnd : current.length;
-                    const next = `${current.slice(0, start)}${token}${current.slice(end)}`;
-                    updateSelectedContent({ text: next });
-                    requestAnimationFrame(() => {
-                      const node = textAreaRef.current;
-                      if (!node) return;
-                      node.focus();
-                      const pos = start + token.length;
-                      node.setSelectionRange(pos, pos);
-                    });
+                    editorRef.current?.insertText?.(token);
                   }}
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 >
@@ -88,12 +77,13 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
                   ))}
                 </select>
               </div>
-              <textarea
-                ref={textAreaRef}
-                value={selectedBlock.content?.text || ''}
-                onChange={(e) => updateSelectedContent({ text: e.target.value })}
-                className="mt-1 h-28 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-              />
+              <div className="mt-1">
+                <RichTextEditor
+                  ref={editorRef}
+                  value={selectedBlock.content?.text || ''}
+                  onChange={(html) => updateSelectedContent({ text: html })}
+                />
+              </div>
             </div>
           ) : null}
 

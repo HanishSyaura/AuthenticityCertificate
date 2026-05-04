@@ -8,6 +8,20 @@ function makeId(prefix) {
   return `${prefix}-${Math.random().toString(16).slice(2)}-${Date.now()}`;
 }
 
+function stripHtmlToText(input) {
+  const raw = String(input ?? '');
+  if (!raw) return '';
+  if (typeof window !== 'undefined' && typeof window.DOMParser === 'function') {
+    try {
+      const doc = new window.DOMParser().parseFromString(raw, 'text/html');
+      return String(doc.body?.textContent || '');
+    } catch {
+      return raw.replace(/<[^>]*>/g, '');
+    }
+  }
+  return raw.replace(/<[^>]*>/g, '');
+}
+
 function getApiBaseUrl() {
   const configured = import.meta.env.VITE_API_BASE_URL;
   if (configured !== undefined) {
@@ -155,10 +169,10 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
           );
         }
         if (it.type === 'text') {
+          const preview = stripHtmlToText(it.content?.text || '');
           return (
             <div className="h-full w-full p-2">
-              <div className="text-xs font-semibold text-zinc-800">{t('text')}</div>
-              <div className="mt-1 whitespace-pre-wrap text-sm text-zinc-900">{it.content?.text || t('text')}</div>
+              <div className="whitespace-pre-wrap text-sm text-zinc-900">{preview || ''}</div>
             </div>
           );
         }

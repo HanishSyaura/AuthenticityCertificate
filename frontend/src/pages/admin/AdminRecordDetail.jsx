@@ -5,6 +5,8 @@ import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
 import { createAdminApi } from '../../utils/adminApi';
 import { useT } from '../../i18n/useT';
+import RichTextEditor from '../../components/admin/RichTextEditor';
+import { isRichTextEmpty, toQuillHtml } from '../../utils/richText';
 
 function formatDate(input) {
   if (!input) return '';
@@ -80,7 +82,7 @@ export default function AdminRecordDetail() {
     setProductCode(product.code || '');
     setCategory(product.category || '');
     setStatus(String(product.status || '').toLowerCase() === 'inactive' ? 'inactive' : 'active');
-    setRemark(product.remark || '');
+    setRemark(toQuillHtml(product.remark || ''));
     setCmsPageId(product.cmsPageId != null ? String(product.cmsPageId) : '');
     setCertificateTemplateId(product.certificateTemplateId != null ? String(product.certificateTemplateId) : '');
   }, [product]);
@@ -171,7 +173,7 @@ export default function AdminRecordDetail() {
             </div>
             <div>
               <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('remark')}</div>
-              <textarea value={remark} onChange={(e) => setRemark(e.target.value)} className="h-20 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400" />
+              <RichTextEditor value={remark} onChange={setRemark} />
             </div>
           </div>
         </div>
@@ -224,7 +226,7 @@ export default function AdminRecordDetail() {
                       product_code: String(productCode || '').trim(),
                       category: String(category || '').trim(),
                       status: String(status || '').trim() || 'active',
-                      remark: String(remark || '').trim() || null,
+                      remark: isRichTextEmpty(remark) ? null : String(remark || ''),
                       cmsPageId: cmsPageId ? Number(cmsPageId) : null,
                       certificateTemplateId: certificateTemplateId ? Number(certificateTemplateId) : null
                     }

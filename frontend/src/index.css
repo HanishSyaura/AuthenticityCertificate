@@ -120,4 +120,45 @@
   .ac-pill {
     @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset;
   }
+
+  .ac-richtext p,
+  .ac-richtext h1,
+  .ac-richtext h2,
+  .ac-richtext h3,
+  .ac-richtext blockquote,
+  .ac-richtext pre,
+  .ac-richtext ul,
+  .ac-richtext ol {
+    margin: 0;
+  }
+
+  .ac-richtext ul,
+  .ac-richtext ol {
+    padding-left: 1.25rem;
+  }
+
+  .ac-richtext a {
+    color: rgb(67 56 202);
+    text-decoration: underline;
+  }
+
+  .ac-richtext blockquote {
+    padding-left: 0.75rem;
+    border-left: 3px solid rgb(228 228 231);
+  }
+
+  .ql-toolbar.ql-snow {
+    border: 0;
+    border-bottom: 1px solid rgb(228 228 231);
+    background: rgb(250 250 250);
+  }
+
+  .ql-container.ql-snow {
+    border: 0;
+  }
+
+  .ql-editor {
+    min-height: 6rem;
+    font-size: 0.875rem;
+  }
 }

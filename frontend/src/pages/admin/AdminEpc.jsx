@@ -3,6 +3,8 @@ import useRecordsStore from '../../store/useRecordsStore';
 import useEpcStore from '../../store/useEpcStore';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import { useT } from '../../i18n/useT';
+import RichTextEditor from '../../components/admin/RichTextEditor';
+import { isRichTextEmpty, stripHtmlToText } from '../../utils/richText';
 
 function formatDateTime(input) {
   if (!input) return '';
@@ -97,12 +99,26 @@ export default function AdminEpc() {
   const [itemsOffset, setItemsOffset] = useState(0);
   const itemsLimit = 50;
 
-  const openCertificate = (certificateId) => {
-    const id = String(certificateId || '').trim();
-    if (!id) return;
-    const url = `/verify/${encodeURIComponent(id)}`;
-    const w = window.open(url, '_blank', 'noopener,noreferrer');
+  const openVerifyUrl = (url) => {
+    const u = String(url || '').trim();
+    if (!u) return;
+    const w = window.open(u, '_blank', 'noopener,noreferrer');
     if (w) w.opener = null;
+  };
+
+  const openCertificate = async (b) => {
+    const templateCode = String(b?.certificateTemplate?.certificateId || b?.certificateId || '').trim();
+    const batchId = b?.id != null ? Number(b.id) : null;
+    if (Number.isFinite(batchId)) {
+      const data = await fetchItems({ batchId, limit: 1, offset: 0 });
+      const firstEpc = String(data?.items?.[0]?.epcCode || '').trim();
+      if (firstEpc) {
+        openVerifyUrl(`/verify?epc=${encodeURIComponent(firstEpc)}`);
+        return;
+      }
+    }
+    if (!templateCode) return;
+    openVerifyUrl(`/verify/${encodeURIComponent(templateCode)}`);
   };
 
   useEffect(() => {
@@ -136,7 +152,7 @@ export default function AdminEpc() {
       const next = {};
       const ctx = {
         product: selectedProduct,
-        batch: { batchName, batchQty, productionDate, remark },
+        batch: { batchName, batchQty, productionDate, remark: stripHtmlToText(remark) },
         corpPrefix
       };
       for (const p of placeholders) {
@@ -294,7 +310,7 @@ export default function AdminEpc() {
 
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
-                <textarea value={remark} onChange={(e) => setRemark(e.target.value)} className="h-20 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-400" />
+                <RichTextEditor value={remark} onChange={setRemark} />
               </div>
 
               <div className="flex justify-end gap-2">
@@ -323,7 +339,7 @@ export default function AdminEpc() {
                       productionDate: String(productionDate || '').trim() || undefined,
                       batchName: String(batchName).trim(),
                       batchQty,
-                      remark: String(remark || '').trim() || undefined,
+                      remark: isRichTextEmpty(remark) ? undefined : String(remark || ''),
                       certificateTemplateId: certificateTemplateId ? Number(certificateTemplateId) : null,
                       templateData
                     });
@@ -387,7 +403,11 @@ export default function AdminEpc() {
                   </div>
                   <div className="mt-1 text-[11px] text-zinc-500">
                     {b.product?.name || '-'} • {b.batchQty} • {formatDateTime(b.createdAt)} • {t('certificateId')}:{' '}
-                    {b.certificateId ? <span className="font-mono">{String(b.certificateId)}</span> : '-'}
+                    {b.certificateTemplate?.certificateId || b.certificateId ? (
+                      <span className="font-mono">{String(b.certificateTemplate?.certificateId || b.certificateId)}</span>
+                    ) : (
+                      '-'
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -397,8 +417,8 @@ export default function AdminEpc() {
                   <button
                     type="button"
                     className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                    disabled={!b.certificateId}
-                    onClick={() => openCertificate(b.certificateId)}
+                    disabled={!b?.id}
+                    onClick={() => void openCertificate(b)}
                   >
                     {t('viewCertificate')}
                   </button>
@@ -433,15 +453,19 @@ export default function AdminEpc() {
                   {t('epcItems')}: {itemsBatch.batchName} <span className="text-xs text-zinc-500">#{itemsBatch.id}</span>
                 </div>
                 <div className="mt-1 text-[11px] text-zinc-500">
-                  {itemsBatch.product?.name || '-'} • {t('certificateId')}: {itemsBatch.certificateId ? <span className="font-mono">{String(itemsBatch.certificateId)}</span> : '-'}
+                  {itemsBatch.product?.name || '-'} • {t('certificateId')}: {itemsBatch.certificateTemplate?.certificateId || itemsBatch.certificateId ? (
+                    <span className="font-mono">{String(itemsBatch.certificateTemplate?.certificateId || itemsBatch.certificateId)}</span>
+                  ) : (
+                    '-'
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                  disabled={!itemsBatch.certificateId}
-                  onClick={() => openCertificate(itemsBatch.certificateId)}
+                  disabled={!itemsBatch?.id}
+                  onClick={() => void openCertificate(itemsBatch)}
                 >
                   {t('viewCertificate')}
                 </button>

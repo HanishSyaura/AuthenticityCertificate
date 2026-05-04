@@ -1,51 +1,60 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import RichTextEditor from '../RichTextEditor';
+
+const editor = {
+  focus: vi.fn(),
+  getSelection: vi.fn(),
+  getLength: vi.fn(),
+  insertText: vi.fn(),
+  setSelection: vi.fn()
+};
+
+let RichTextEditor;
+
+vi.mock('react-quill', () => {
+  return {
+    default: React.forwardRef((props, ref) => {
+      React.useImperativeHandle(ref, () => ({ getEditor: () => editor }));
+      return (
+        <button type="button" data-testid="mock-quill" onClick={() => props.onChange('<p>changed</p>')}>
+          MockQuill
+        </button>
+      );
+    })
+  };
+});
 
 describe('RichTextEditor', () => {
   beforeEach(() => {
-    document.execCommand = vi.fn();
+    editor.focus.mockReset();
+    editor.getSelection.mockReset();
+    editor.getLength.mockReset();
+    editor.insertText.mockReset();
+    editor.setSelection.mockReset();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('runs basic formatting commands', () => {
+  it('calls onChange with HTML', async () => {
+    if (!RichTextEditor) RichTextEditor = (await import('../RichTextEditor')).default;
     const onChange = vi.fn();
     render(<RichTextEditor value="<p>Hello</p>" onChange={onChange} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'B' }));
-    expect(document.execCommand).toHaveBeenCalledWith('styleWithCSS', false, true);
-    expect(document.execCommand).toHaveBeenCalledWith('bold', false, null);
-    expect(onChange).toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole('button', { name: 'H1' }));
-    expect(document.execCommand).toHaveBeenCalledWith('formatBlock', false, '<h1>');
+    fireEvent.click(screen.getByTestId('mock-quill'));
+    expect(onChange).toHaveBeenCalledWith('<p>changed</p>');
   });
 
-  it('runs list and font size commands', () => {
+  it('supports insertText via ref', async () => {
+    if (!RichTextEditor) RichTextEditor = (await import('../RichTextEditor')).default;
     const onChange = vi.fn();
-    render(<RichTextEditor value="<p>Hello</p>" onChange={onChange} />);
-
-    fireEvent.click(screen.getByRole('button', { name: /• List/i }));
-    expect(document.execCommand).toHaveBeenCalledWith('insertUnorderedList', false, null);
-
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: '5' } });
-    expect(document.execCommand).toHaveBeenCalledWith('fontSize', false, '5');
-
-    fireEvent.change(screen.getAllByRole('combobox')[1], { target: { value: 'Georgia' } });
-    expect(document.execCommand).toHaveBeenCalledWith('fontName', false, 'Georgia');
-  });
-
-  it('runs clear formatting (removeFormat + unlink)', () => {
-    const onChange = vi.fn();
-    render(<RichTextEditor value='<a href="https://example.com">Link</a>' onChange={onChange} />);
-
-    fireEvent.click(screen.getByRole('button', { name: /clear/i }));
-    expect(document.execCommand).toHaveBeenCalledWith('removeFormat', false, null);
-    expect(document.execCommand).toHaveBeenCalledWith('unlink', false, null);
-    expect(onChange).toHaveBeenCalled();
+    const ref = React.createRef();
+    editor.getSelection.mockReturnValue({ index: 2 });
+    editor.getLength.mockReturnValue(10);
+    render(<RichTextEditor ref={ref} value="<p>Hello</p>" onChange={onChange} />);
+    ref.current.insertText('ABC');
+    expect(editor.insertText).toHaveBeenCalledWith(2, 'ABC', 'user');
+    expect(editor.setSelection).toHaveBeenCalledWith(5, 0, 'user');
   });
 });

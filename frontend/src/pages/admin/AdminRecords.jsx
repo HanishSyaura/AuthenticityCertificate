@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import useRecordsStore from '../../store/useRecordsStore';
 import { useT } from '../../i18n/useT';
+import RichTextEditor from '../../components/admin/RichTextEditor';
+import { isRichTextEmpty, stripHtmlToText, toQuillHtml } from '../../utils/richText';
 
 function formatDate(input) {
   if (!input) return '';
@@ -396,7 +398,7 @@ export default function AdminRecords() {
                       <div className="font-mono text-sm text-zinc-700">{p.sku}</div>
                       <div className="font-medium text-zinc-900">{p.name}</div>
                       <div>
-                        <div className="text-sm text-zinc-600">{String(p.remark ?? '').trim() ? p.remark : '-'}</div>
+                        <div className="text-sm text-zinc-600">{String(stripHtmlToText(p.remark) || '').trim() ? stripHtmlToText(p.remark) : '-'}</div>
                       </div>
                       <div className="font-mono text-sm text-zinc-700">{p.code}</div>
                       <div className="text-sm text-zinc-700">{categoryByCode.get(String(p.category || ''))?.name || p.category || '-'}</div>
@@ -417,7 +419,7 @@ export default function AdminRecords() {
                               setProductCode(p.code || '');
                               setCategory(p.category || '');
                               setStatus(String(p.status || '').toLowerCase() === 'inactive' ? 'inactive' : 'active');
-                              setRemark(p.remark || '');
+                              setRemark(toQuillHtml(p.remark || ''));
                               setShowEdit(true);
                             }}
                           >
@@ -594,11 +596,7 @@ export default function AdminRecords() {
               </div>
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
-                <textarea
-                  value={remark}
-                  onChange={(e) => setRemark(e.target.value)}
-                  className="ac-input h-24 resize-none"
-                />
+                <RichTextEditor value={remark} onChange={setRemark} />
               </div>
             </div>
             <div className="mt-5 flex justify-end gap-2">
@@ -634,7 +632,7 @@ export default function AdminRecords() {
                       product_code: trimmedProductCode,
                       category: trimmedCategory,
                       status: trimmedStatus,
-                      remark: String(remark || '').trim() || undefined
+                      remark: isRichTextEmpty(remark) ? undefined : String(remark || '')
                     });
                     setShowCreate(false);
                     setSku('');
@@ -718,11 +716,7 @@ export default function AdminRecords() {
               </div>
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
-                <textarea
-                  value={remark}
-                  onChange={(e) => setRemark(e.target.value)}
-                  className="ac-input h-24 resize-none"
-                />
+                <RichTextEditor value={remark} onChange={setRemark} />
               </div>
             </div>
             <div className="mt-5 flex justify-end gap-2">
@@ -750,7 +744,7 @@ export default function AdminRecords() {
                       product_code: String(productCode || '').trim(),
                       category: String(category || '').trim(),
                       status: String(status || '').trim() || 'active',
-                      remark: String(remark || '').trim() || null
+                      remark: isRichTextEmpty(remark) ? null : String(remark || '')
                     }
                   });
                   setShowEdit(false);

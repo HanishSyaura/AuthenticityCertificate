@@ -182,26 +182,38 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, product
         create: { organizationId: orgId, corpPrefix, lastNo: 0n }
       });
 
-      let batchCertId = null;
-      const existingBatchCert = await tx.certificate.findFirst({
-        where: { organizationId: orgId, batchId: appBatch.id, type: 'batch', deletedAt: null },
-        orderBy: { createdAt: 'desc' },
-        select: { certificateId: true }
-      });
-      if (existingBatchCert?.certificateId) {
-        batchCertId = String(existingBatchCert.certificateId);
-      } else {
-        batchCertId = generateCertificateId();
-        await tx.certificate.create({
-          data: {
-            certificateId: batchCertId,
-            organizationId: orgId,
-            type: 'batch',
-            batchId: appBatch.id,
-            status: 'VALID',
-            issuedAt: new Date()
-          }
+      let templateCode = null;
+      if (typeof certificateTemplateId === 'number') {
+        const tpl = await tx.certificateTemplate.findFirst({
+          where: { organizationId: orgId, id: Number(certificateTemplateId), deletedAt: null },
+          select: { certificateId: true }
         });
+        const code = String(tpl?.certificateId || '').trim();
+        if (code) templateCode = code;
+      }
+
+      let batchCertId = null;
+      if (!templateCode) {
+        const existingBatchCert = await tx.certificate.findFirst({
+          where: { organizationId: orgId, batchId: appBatch.id, type: 'batch', deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+          select: { certificateId: true }
+        });
+        if (existingBatchCert?.certificateId) {
+          batchCertId = String(existingBatchCert.certificateId);
+        } else {
+          batchCertId = generateCertificateId();
+          await tx.certificate.create({
+            data: {
+              certificateId: batchCertId,
+              organizationId: orgId,
+              type: 'batch',
+              batchId: appBatch.id,
+              status: 'VALID',
+              issuedAt: new Date()
+            }
+          });
+        }
       }
 
       const rows = await tx.$queryRaw`
@@ -242,7 +254,8 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, product
           productionDoneAt: null
         },
         include: {
-          product: { select: { id: true, sku: true, name: true, code: true } }
+          product: { select: { id: true, sku: true, name: true, code: true } },
+          certificateTemplate: { select: { id: true, certificateId: true, name: true } }
         }
       });
 
@@ -402,7 +415,10 @@ async function exportBatchXlsx({ organizationId, batchId }) {
   const batch = await withTimeout(
     prisma.epcBatch.findFirst({
       where: { id, organizationId: orgId },
-      include: { product: { select: { id: true, sku: true, name: true, code: true } } }
+      include: {
+        product: { select: { id: true, sku: true, name: true, code: true } },
+        certificateTemplate: { select: { id: true, certificateId: true, name: true } }
+      }
     }),
     2500
   );
@@ -423,7 +439,7 @@ async function exportBatchXlsx({ organizationId, batchId }) {
     { key: 'batchQty', value: batch.batchQty },
     { key: 'product', value: batch.product?.name || '' },
     { key: 'sku', value: batch.sku || batch.product?.sku || '' },
-    { key: 'certificateId', value: batch.certificateId || '' }
+    { key: 'certificateId', value: String(batch.certificateTemplate?.certificateId || batch.certificateId || '') }
   ];
 
   const wsInfo = XLSX.utils.json_to_sheet(header, { header: ['key', 'value'] });
@@ -468,7 +484,10 @@ async function listBatches({ organizationId, q, limit, offset }) {
       prisma.epcBatch.count({ where }),
       prisma.epcBatch.findMany({
         where,
-        include: { product: { select: { id: true, sku: true, name: true, code: true } } },
+        include: {
+          product: { select: { id: true, sku: true, name: true, code: true } },
+          certificateTemplate: { select: { id: true, certificateId: true, name: true } }
+        },
         orderBy: { createdAt: 'desc' },
         take: limit,
         skip: offset
