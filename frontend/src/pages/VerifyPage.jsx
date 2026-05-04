@@ -38,6 +38,8 @@ const VerifyPage = () => {
   const { certificate, loading, error, verifyCertificate, resolveCertificate } = useAuthStore();
   const [certId, setCertId] = useState(id || '');
   const { t, lang, locale } = useT();
+  const hasTemplate = Boolean(Array.isArray(certificate?.certificateTemplate?.layoutJson));
+  const hasCertBlock = Boolean(Array.isArray(certificate?.layout) && certificate.layout.some((b) => String(b?.type || '') === 'certificate'));
 
   useEffect(() => {
     if (id) {
@@ -54,9 +56,24 @@ const VerifyPage = () => {
   }, [id, lang, location.search, resolveCertificate, verifyCertificate]);
   const handleManualVerify = (e) => {
     e.preventDefault();
-    if (certId) {
-      verifyCertificate(certId, { lang });
+    const raw = String(certId || '').trim();
+    if (!raw) return;
+    const value = raw.toUpperCase();
+    if (value !== certId) setCertId(value);
+
+    const looksLikeCertId = /^BN-[A-Z0-9]+$/.test(value);
+    if (looksLikeCertId) {
+      verifyCertificate(value, { lang });
+      return;
     }
+
+    const looksLikeHex = /^[0-9A-F]+$/.test(value);
+    if (looksLikeHex && value.length >= 8 && value.length <= 32) {
+      resolveCertificate({ epc: null, nfcUid: value }, { lang });
+      return;
+    }
+
+    resolveCertificate({ epc: value, nfcUid: null }, { lang });
   };
 
   if (loading) {
@@ -95,6 +112,33 @@ const VerifyPage = () => {
           {certificate.layout ? (
             <div className="min-h-screen bg-white">
               <PublicRenderer layout={certificate.layout} data={certificate} />
+              {!hasCertBlock && hasTemplate ? (
+                (() => {
+                  const canvasW = Number(certificate?.certificateTemplate?.canvasWidth || 390);
+                  const canvasH = Number(certificate?.certificateTemplate?.canvasHeight || 844);
+                  const baseW = Number.isFinite(canvasW) && canvasW > 0 ? canvasW : 390;
+                  const baseH = Number.isFinite(canvasH) && canvasH > 0 ? canvasH : 844;
+                  const mobileW = Math.max(240, Math.min(baseW, 320));
+                  return (
+                    <div className="mt-6">
+                      <div className="mx-auto w-full px-2" style={{ maxWidth: `${baseW}px` }}>
+                        <PublicRenderer
+                          layout={[
+                            {
+                              id: '__certificate',
+                              type: 'certificate',
+                              desktop: { x: 0, y: 0, w: baseW, h: baseH },
+                              mobile: { x: 0, y: 0, w: mobileW, h: baseH },
+                              content: { canvasWidth: baseW, canvasHeight: baseH }
+                            }
+                          ]}
+                          data={certificate}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()
+              ) : null}
             </div>
           ) : Array.isArray(certificate?.certificateTemplate?.layoutJson) ? (
             (() => {
@@ -158,7 +202,7 @@ const VerifyPage = () => {
           <form onSubmit={handleManualVerify} className="mt-5 space-y-3">
             <input
               type="text"
-              placeholder="BN-XXXXXXXXXX"
+              placeholder="BN-XXXXXXXXXX / EPC"
               value={certId}
               onChange={(e) => setCertId(e.target.value)}
               className="ac-input text-center font-mono uppercase"

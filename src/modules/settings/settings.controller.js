@@ -22,7 +22,8 @@ async function getSettings(req, res) {
           ? {
               defaultLocale: row.defaultLocale,
               defaultTimezone: row.defaultTimezone,
-              maintenanceMode: Boolean(row.maintenanceMode)
+              maintenanceMode: Boolean(row.maintenanceMode),
+              logoUrl: row.logoUrl ? String(row.logoUrl) : null
             }
           : null
       },
@@ -45,7 +46,16 @@ const updateSchema = z.object({
     .optional(),
   defaultLocale: z.string().trim().min(2).max(20).optional(),
   defaultTimezone: z.string().trim().min(3).max(64).optional(),
-  maintenanceMode: z.boolean().optional()
+  maintenanceMode: z.boolean().optional(),
+  logoUrl: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      const s = String(v).trim();
+      return s ? s : null;
+    },
+    z.string().min(1).max(512).nullable().optional()
+  )
 });
 
 async function updateSettings(req, res) {
@@ -82,7 +92,8 @@ async function updateSettings(req, res) {
           ? {
               defaultLocale: row.defaultLocale,
               defaultTimezone: row.defaultTimezone,
-              maintenanceMode: Boolean(row.maintenanceMode)
+              maintenanceMode: Boolean(row.maintenanceMode),
+              logoUrl: row.logoUrl ? String(row.logoUrl) : null
             }
           : null
       },

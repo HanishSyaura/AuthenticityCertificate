@@ -335,24 +335,6 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
               </div>
             );
           }
-
-          const certLayout = !disableCertificateEmbed && Array.isArray(data?.certificateLayout) ? data.certificateLayout : null;
-          if (certLayout) {
-            const rawW = Number(data?.certificateTemplate?.canvasWidth || block.content?.canvasWidth || 390);
-            const rawH = Number(data?.certificateTemplate?.canvasHeight || block.content?.canvasHeight || 844);
-            const baseW = Number.isFinite(rawW) && rawW > 0 ? rawW : 390;
-            const baseH = Number.isFinite(rawH) && rawH > 0 ? rawH : 844;
-            const scale = Math.max(0.1, Math.min(4, Math.min((block.__rect.w || baseW) / baseW, (block.__rect.h || baseH) / baseH)));
-            return (
-              <div key={block.id} style={style} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
-                <div style={{ width: baseW * scale, height: baseH * scale }} className="mx-auto">
-                  <div style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
-                    <PublicRenderer layout={certLayout} data={data} disableCertificateEmbed />
-                  </div>
-                </div>
-              </div>
-            );
-          }
         return (
           <div
             key={block.id}

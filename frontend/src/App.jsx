@@ -21,6 +21,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/" element={<VerifyPage />} />
+        <Route path="/verify" element={<VerifyPage />} />
         <Route path="/verify/:id" element={<VerifyPage />} />
         <Route path="/preview/cms" element={<CmsPreviewPage />} />
 

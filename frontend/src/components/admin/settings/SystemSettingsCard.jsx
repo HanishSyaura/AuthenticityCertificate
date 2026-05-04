@@ -11,9 +11,12 @@ export default function SystemSettingsCard({
   dirty,
   invalid,
   saving,
+  logoUploading,
+  logoUploadError,
   localeOptions,
   timezoneOptions,
   onChange,
+  onUploadLogo,
   onSave
 }) {
   return (
@@ -77,6 +80,48 @@ export default function SystemSettingsCard({
             <div className="text-sm text-zinc-700">{draft.maintenanceMode ? 'Enabled' : 'Disabled'}</div>
           </div>
         </Field>
+
+        <div className="sm:col-span-2">
+          <Field label="Brand logo" hint="Shown in the admin sidebar" error={logoUploadError}>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex h-16 w-48 items-center justify-center overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
+                {draft.logoUrl ? (
+                  <img src={draft.logoUrl} alt="Brand logo" className="h-full w-full object-contain" />
+                ) : (
+                  <div className="text-xs text-zinc-500">No logo</div>
+                )}
+              </div>
+
+              <label
+                className={`inline-flex cursor-pointer items-center rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-50 ${
+                  !canEdit || logoUploading ? 'cursor-not-allowed opacity-50 hover:bg-white' : ''
+                }`}
+              >
+                {logoUploading ? 'Uploading…' : 'Upload image'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={!canEdit || logoUploading}
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] || null;
+                    e.target.value = '';
+                    if (f) onUploadLogo?.(f);
+                  }}
+                />
+              </label>
+
+              <button
+                type="button"
+                disabled={!canEdit || logoUploading || !draft.logoUrl}
+                onClick={() => onChange({ logoUrl: '' })}
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Remove
+              </button>
+            </div>
+          </Field>
+        </div>
       </div>
 
       <div className="mt-5 flex justify-end">

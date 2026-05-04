@@ -5,7 +5,7 @@ async function getOrganizationSettingsRow(organizationId) {
   if (!Number.isFinite(orgId) || orgId <= 0) return null;
 
   const rows = await prisma.$queryRaw`
-    SELECT id, organizationId, defaultLocale, defaultTimezone, maintenanceMode, createdAt, updatedAt
+    SELECT id, organizationId, defaultLocale, defaultTimezone, maintenanceMode, logoUrl, createdAt, updatedAt
     FROM OrganizationSettings
     WHERE organizationId = ${orgId}
     LIMIT 1
@@ -37,6 +37,8 @@ async function updateOrganizationSettings(organizationId, input) {
   const defaultLocale = typeof input.defaultLocale === 'string' ? input.defaultLocale.trim() : null;
   const defaultTimezone = typeof input.defaultTimezone === 'string' ? input.defaultTimezone.trim() : null;
   const maintenanceMode = typeof input.maintenanceMode === 'boolean' ? input.maintenanceMode : null;
+  const hasLogoUrl = Object.prototype.hasOwnProperty.call(input, 'logoUrl');
+  const logoUrl = typeof input.logoUrl === 'string' ? input.logoUrl.trim() : input.logoUrl === null ? null : null;
 
   await prisma.$executeRaw`
     UPDATE OrganizationSettings
@@ -44,6 +46,7 @@ async function updateOrganizationSettings(organizationId, input) {
       defaultLocale = COALESCE(${defaultLocale}, defaultLocale),
       defaultTimezone = COALESCE(${defaultTimezone}, defaultTimezone),
       maintenanceMode = COALESCE(${maintenanceMode}, maintenanceMode),
+      logoUrl = CASE WHEN ${hasLogoUrl} THEN ${logoUrl} ELSE logoUrl END,
       updatedAt = NOW()
     WHERE organizationId = ${orgId}
   `;
@@ -55,4 +58,3 @@ module.exports = {
   ensureOrganizationSettings,
   updateOrganizationSettings
 };
-

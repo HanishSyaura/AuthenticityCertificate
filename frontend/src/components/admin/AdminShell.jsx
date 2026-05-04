@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
+import useAdminSettingsStore from '../../store/useAdminSettingsStore';
 import { useT } from '../../i18n/useT';
 import LanguageSwitcher from '../LanguageSwitcher';
 import TourOverlay from '../tour/TourOverlay';
@@ -38,10 +39,18 @@ export default function AdminShell() {
   const { t } = useT();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const { openTour } = useTourStore((s) => ({ openTour: s.openTour }));
-  const { user, logout } = useAdminAuthStore((s) => ({
+  const { token, user, logout } = useAdminAuthStore((s) => ({
+    token: s.token,
     user: s.user,
     logout: s.logout
   }));
+  const { settings, fetchSettings } = useAdminSettingsStore((s) => ({ settings: s.settings, fetchSettings: s.fetchSettings }));
+
+  useEffect(() => {
+    if (!token) return;
+    if (settings) return;
+    fetchSettings();
+  }, [token, settings, fetchSettings]);
 
   const role = user?.role || 'admin';
   const perms = user?.permissions || [];
@@ -52,8 +61,14 @@ export default function AdminShell() {
       <div className="flex min-h-screen">
         <aside className={`w-[260px] flex-shrink-0 bg-slate-900 text-slate-200 ${mobileNavOpen ? 'block' : 'hidden'} md:block`}>
           <div className="flex h-14 items-center gap-2 border-b border-slate-800 px-4">
-            <div className="h-7 w-7 rounded bg-orange-500" />
-            <div className="text-sm font-semibold tracking-tight text-white">WMS Console</div>
+            {settings?.logoUrl ? (
+              <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded bg-white/10">
+                <img src={settings.logoUrl} alt="Brand logo" className="h-full w-full object-contain" />
+              </div>
+            ) : (
+              <div className="h-7 w-7 rounded bg-orange-500" />
+            )}
+            <div className="text-sm font-semibold tracking-tight text-white">Certificate Authenticity</div>
           </div>
 
           <div className="h-[calc(100vh-3.5rem)] overflow-auto px-2 py-3">

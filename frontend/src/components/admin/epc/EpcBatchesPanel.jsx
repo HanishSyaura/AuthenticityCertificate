@@ -1,6 +1,18 @@
 import React from 'react';
 
-export default function EpcBatchesPanel({ t, batches, batchTotal, loading, batchQuery, setBatchQuery, formatDate, onSearch, onViewEpc, onExport }) {
+export default function EpcBatchesPanel({
+  t,
+  batches,
+  batchTotal,
+  loading,
+  batchQuery,
+  setBatchQuery,
+  formatDate,
+  onSearch,
+  onViewEpc,
+  onViewCertificate,
+  onExport
+}) {
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -36,6 +48,16 @@ export default function EpcBatchesPanel({ t, batches, batchTotal, loading, batch
                 <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => onViewEpc(b.id)}>
                   {t('viewEpc')}
                 </button>
+                {typeof onViewCertificate === 'function' ? (
+                  <button
+                    type="button"
+                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                    disabled={!b.certificateId}
+                    onClick={() => onViewCertificate(b.certificateId)}
+                  >
+                    {t('viewCertificate')}
+                  </button>
+                ) : null}
                 <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => onExport?.(b.id)}>
                   {t('exportXlsx')}
                 </button>

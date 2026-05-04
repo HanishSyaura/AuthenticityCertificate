@@ -27,15 +27,13 @@ const useCmsStore = create((set, get) => ({
   selectedPageId: null,
   loading: false,
   error: null,
-  kind: 'landing',
 
   selectPage: (pageId) => set({ selectedPageId: pageId }),
-  setKind: (kind) => set({ kind }),
 
   fetchPages: async () => {
     const { token } = useAdminAuthStore.getState();
     set({ loading: true, error: null });
-    const kind = get().kind || 'landing';
+    const kind = 'landing';
 
     if (!token) {
       set({ pages: [], loading: false, error: 'Not authenticated' });
@@ -57,7 +55,7 @@ const useCmsStore = create((set, get) => ({
     const { token } = useAdminAuthStore.getState();
     const safeSlug = safeSlugify(slug || name);
     const pages = get().pages;
-    const kind = get().kind || 'landing';
+    const kind = 'landing';
 
     if (!token) throw new Error('Not authenticated');
 
@@ -140,7 +138,7 @@ const useCmsStore = create((set, get) => ({
     if (!token) throw new Error('Not authenticated');
 
     const prevPages = get().pages || [];
-    const kind = get().kind || 'landing';
+    const kind = 'landing';
     const ids = Array.from(new Set((orderedIds || []).map((v) => Number(v)).filter((n) => Number.isFinite(n))));
     if (!ids.length) return;
 

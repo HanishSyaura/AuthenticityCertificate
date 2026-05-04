@@ -223,8 +223,8 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
 
     let layout = cert.batch?.product?.cmsPage?.publishedVersion?.layoutJson || null;
     const pageId = cert.batch?.product?.cmsPage?.id || null;
-    let certificateLayout = cert.batch?.product?.cmsCertificatePage?.publishedVersion?.layoutJson || null;
-    const certificatePageId = cert.batch?.product?.cmsCertificatePage?.id || null;
+    const certificateLayout = null;
+    const certificatePageId = null;
 
     const landingOrgId = resolvedOrgId || Number(req.organization?.id || cert.organizationId || 0) || null;
     if (landingOrgId) {
@@ -280,26 +280,9 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
       }
     }
 
-    if (certificatePageId) {
-      try {
-        if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
-        const translation = await Promise.race([
-          prisma.cmsTranslation.findFirst({
-            where: {
-              organizationId: resolvedOrgId || Number(req.organization?.id || cert.organizationId || 0),
-              pageId: Number(certificatePageId),
-              language: lang
-            }
-          }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
-        ]);
-        if (translation?.contentJson) certificateLayout = translation.contentJson;
-      } catch {
-        dbGate.markDbFailure({ cooldownMs: 10_000 });
-      }
-    }
+    void certificatePageId;
     if (!layout) layout = cert.batch?.product?.cmsPage?.layout?.layoutJson || null;
-    if (!certificateLayout) certificateLayout = cert.batch?.product?.cmsCertificatePage?.layout?.layoutJson || null;
+    void certificateLayout;
     let effectiveStatus = certificateService.computeEffectiveStatus(cert);
     if (effectiveStatus === 'PENDING' && (verifiedVia === 'epc' || verifiedVia === 'nfc_uid')) {
       effectiveStatus = 'VALID';
@@ -334,7 +317,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
           : null,
         templateData: templateData || null,
         layout,
-        certificateLayout,
+        certificateLayout: null,
         certificateTemplate: epcBatchTemplate || cert.batch?.product?.certificateTemplate || null,
         risk: {
           score: scanEntry.riskScore,

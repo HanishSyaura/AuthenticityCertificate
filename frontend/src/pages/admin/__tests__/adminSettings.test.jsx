@@ -105,7 +105,7 @@ describe('AdminSettings', () => {
     render(<AdminSettings />);
 
     await screen.findByText(/Profile settings/i);
-    const newPassword = screen.getByLabelText(/New password/i);
+    const newPassword = screen.getByLabelText(/^New password$/i);
     fireEvent.change(newPassword, { target: { value: 'newpassword123' } });
 
     const saveProfile = screen.getByRole('button', { name: /Save Changes/i });
@@ -116,4 +116,3 @@ describe('AdminSettings', () => {
     });
   });
 });
-

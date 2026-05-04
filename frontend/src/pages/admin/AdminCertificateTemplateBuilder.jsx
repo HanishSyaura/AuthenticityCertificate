@@ -267,7 +267,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       window.clearTimeout(persistTimerRef.current);
       persistTimerRef.current = null;
     }
-  }, [selected?.id, selected?.layoutJson, selected?.placeholders]);
+  }, [selected?.backgroundMode, selected?.id, selected?.layoutJson, selected?.placeholders]);
 
   const queueTemplatePatch = useCallback((patch) => {
     const id = selected?.id;

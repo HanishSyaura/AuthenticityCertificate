@@ -497,6 +497,14 @@ async function ensureOrganizationSettingsSchemaCompat() {
     'ALTER TABLE `OrganizationSettings` MODIFY `updatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP'
   );
 
+  await ensureColumn(
+    'OrganizationSettings',
+    'logoUrl',
+    'ALTER TABLE `OrganizationSettings` ADD COLUMN `logoUrl` VARCHAR(512) NULL',
+    null,
+    null
+  );
+
   const idx = 'OrganizationSettings_organizationId_key';
   if (!(await indexExists('OrganizationSettings', idx))) {
     await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX \`${idx}\` ON \`OrganizationSettings\` (\`organizationId\`)`);

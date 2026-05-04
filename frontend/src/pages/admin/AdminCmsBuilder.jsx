@@ -60,7 +60,7 @@ function composeLayouts({ pages, layoutsByPageKey, language }) {
   return out;
 }
 
-export default function AdminCmsBuilder({ kind = 'landing' }) {
+export default function AdminCmsBuilder() {
   const { t } = useT();
   const {
     pages,
@@ -75,7 +75,6 @@ export default function AdminCmsBuilder({ kind = 'landing' }) {
     reorderPages,
     language,
     setLanguage,
-    setKind,
     deletePage,
     error
   } = useCmsStore((s) => ({
@@ -91,7 +90,6 @@ export default function AdminCmsBuilder({ kind = 'landing' }) {
     reorderPages: s.reorderPages,
     language: s.language,
     setLanguage: s.setLanguage,
-    setKind: s.setKind,
     deletePage: s.deletePage,
     error: s.error
   }));
@@ -125,9 +123,8 @@ export default function AdminCmsBuilder({ kind = 'landing' }) {
   );
 
   useEffect(() => {
-    setKind(kind);
     fetchPages();
-  }, [fetchPages, kind, setKind]);
+  }, [fetchPages]);
 
   useEffect(() => {
     if (!selectedPageId && pages[0]?.id) {
@@ -159,11 +156,11 @@ export default function AdminCmsBuilder({ kind = 'landing' }) {
     if (viewMode !== 'preview') return;
     try {
       const toStore = previewLayout?.length ? previewLayout : layout;
-      localStorage.setItem('ac_cms_preview', JSON.stringify({ layout: toStore, kind, language: language || 'en', ts: Date.now() }));
+      localStorage.setItem('ac_cms_preview', JSON.stringify({ layout: toStore, kind: 'landing', language: language || 'en', ts: Date.now() }));
     } catch {
       void 0;
     }
-  }, [kind, language, layout, previewLayout, viewMode]);
+  }, [language, layout, previewLayout, viewMode]);
 
   const setLayout = (next) => {
     if (!selectedPageId) return;
@@ -174,8 +171,8 @@ export default function AdminCmsBuilder({ kind = 'landing' }) {
     <div className="ac-page">
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-base font-semibold text-zinc-900">{kind === 'certificate' ? t('cmsCertificateHeading') : t('cmsHeading')}</h2>
-          <p className="mt-1 text-sm text-zinc-600">{kind === 'certificate' ? t('cmsCertificateSubheading') : t('cmsSubheading')}</p>
+          <h2 className="text-base font-semibold text-zinc-900">{t('cmsHeading')}</h2>
+          <p className="mt-1 text-sm text-zinc-600">{t('cmsSubheading')}</p>
           {error ? <div className="mt-2 text-xs text-amber-700">{error}</div> : null}
         </div>
 
@@ -247,7 +244,7 @@ export default function AdminCmsBuilder({ kind = 'landing' }) {
 
         <CmsCanvasPanel
           viewMode={viewMode}
-          kind={kind}
+          kind="landing"
           selectedPage={selectedPage}
           layout={layout}
           previewLayout={previewLayout}

@@ -97,6 +97,14 @@ export default function AdminEpc() {
   const [itemsOffset, setItemsOffset] = useState(0);
   const itemsLimit = 50;
 
+  const openCertificate = (certificateId) => {
+    const id = String(certificateId || '').trim();
+    if (!id) return;
+    const url = `/verify/${encodeURIComponent(id)}`;
+    const w = window.open(url, '_blank', 'noopener,noreferrer');
+    if (w) w.opener = null;
+  };
+
   useEffect(() => {
     void fetchProducts();
     void fetchTemplates();
@@ -240,17 +248,6 @@ export default function AdminEpc() {
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('corpCode')}</div>
                 <input value={corpPrefix} disabled className="ac-input" />
-                <button
-                  type="button"
-                  className="mt-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-                  disabled={loading || !corpPrefix}
-                  onClick={async () => {
-                    if (!window.confirm('Reset running number ikut data semasa? (Jika semua EPC sudah dipadam, next akan start dari 00000001)')) return;
-                    await recalculateSequence({ corpPrefix });
-                  }}
-                >
-                  Reset running number
-                </button>
               </div>
 
               <div>
@@ -353,20 +350,33 @@ export default function AdminEpc() {
         <div className="rounded-xl border border-zinc-200 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 px-4 py-3">
             <div className="text-xs font-semibold text-zinc-600">{t('epcBatches')}</div>
-            <button
-              type="button"
-              className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
-              disabled={loading}
-              onClick={async () => {
-                if (!window.confirm('Delete semua EPC batch & items sekali gus? (Running number akan reset ikut data yang tinggal)')) return;
-                const res = await deleteAllBatches({ corpPrefix });
-                if (res) {
-                  await fetchBatches({ limit: 50, offset: 0 });
-                }
-              }}
-            >
-              Delete all
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                disabled={loading || !corpPrefix}
+                onClick={async () => {
+                  if (!window.confirm('Reset running number ikut data semasa? (Jika semua EPC sudah dipadam, next akan start dari 00000001)')) return;
+                  await recalculateSequence({ corpPrefix });
+                }}
+              >
+                Reset running number
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                disabled={loading}
+                onClick={async () => {
+                  if (!window.confirm('Delete semua EPC batch & items sekali gus? (Running number akan reset ikut data yang tinggal)')) return;
+                  const res = await deleteAllBatches({ corpPrefix });
+                  if (res) {
+                    await fetchBatches({ limit: 50, offset: 0 });
+                  }
+                }}
+              >
+                Delete all
+              </button>
+            </div>
           </div>
           <div className="divide-y divide-zinc-100">
             {(Array.isArray(batches) ? batches : []).map((b) => (
@@ -383,6 +393,14 @@ export default function AdminEpc() {
                 <div className="flex items-center gap-2">
                   <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openBatchItems(b)}>
                     {t('viewEpc')}
+                  </button>
+                  <button
+                    type="button"
+                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                    disabled={!b.certificateId}
+                    onClick={() => openCertificate(b.certificateId)}
+                  >
+                    {t('viewCertificate')}
                   </button>
                   <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchXlsx(b.id)}>
                     {t('exportXlsx')}
@@ -418,9 +436,19 @@ export default function AdminEpc() {
                   {itemsBatch.product?.name || '-'} • {t('certificateId')}: {itemsBatch.certificateId ? <span className="font-mono">{String(itemsBatch.certificateId)}</span> : '-'}
                 </div>
               </div>
-              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => setItemsOpen(false)}>
-                {t('close')}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                  disabled={!itemsBatch.certificateId}
+                  onClick={() => openCertificate(itemsBatch.certificateId)}
+                >
+                  {t('viewCertificate')}
+                </button>
+                <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => setItemsOpen(false)}>
+                  {t('close')}
+                </button>
+              </div>
             </div>
 
             <div className="p-4">

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useT } from '../../i18n/useT';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
+import useAdminSettingsStore from '../../store/useAdminSettingsStore';
 import { createAdminApi } from '../../utils/adminApi';
 import ProfileSettingsCard from '../../components/admin/settings/ProfileSettingsCard';
 import SystemSettingsCard from '../../components/admin/settings/SystemSettingsCard';
@@ -24,6 +25,7 @@ function isValidEmail(v) {
 export default function AdminSettings() {
   const { t } = useT();
   const { token, user, setUser } = useAdminAuthStore((s) => ({ token: s.token, user: s.user, setUser: s.setUser }));
+  const { setSettingsResponse } = useAdminSettingsStore((s) => ({ setSettingsResponse: s.setSettingsResponse }));
 
   const role = user?.role || 'admin';
   const canEditEmail = role === 'super_admin' || role === 'admin';
@@ -43,18 +45,22 @@ export default function AdminSettings() {
     organizationCode: '',
     defaultLocale: 'en',
     defaultTimezone: 'Asia/Kuala_Lumpur',
-    maintenanceMode: false
+    maintenanceMode: false,
+    logoUrl: ''
   });
   const [systemDraft, setSystemDraft] = useState({
     organizationName: '',
     organizationCode: '',
     defaultLocale: 'en',
     defaultTimezone: 'Asia/Kuala_Lumpur',
-    maintenanceMode: false
+    maintenanceMode: false,
+    logoUrl: ''
   });
   const [systemSaving, setSystemSaving] = useState(false);
   const [systemNotice, setSystemNotice] = useState({ kind: '', text: '' });
   const [systemErrors, setSystemErrors] = useState({});
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoUploadError, setLogoUploadError] = useState('');
 
   const localeOptions = useMemo(
     () => [
@@ -114,10 +120,12 @@ export default function AdminSettings() {
           organizationCode: String(org?.code || ''),
           defaultLocale: String(settings?.defaultLocale || 'en'),
           defaultTimezone: String(settings?.defaultTimezone || 'Asia/Kuala_Lumpur'),
-          maintenanceMode: Boolean(settings?.maintenanceMode)
+          maintenanceMode: Boolean(settings?.maintenanceMode),
+          logoUrl: String(settings?.logoUrl || '')
         };
         setSystemInitial(s0);
         setSystemDraft(s0);
+        setSettingsResponse({ organization: org || null, settings: settings || null });
       } catch (e) {
         if (!mounted) return;
         const msg = e?.response?.data?.message || e?.message || 'Failed to load settings';
@@ -130,7 +138,7 @@ export default function AdminSettings() {
     return () => {
       mounted = false;
     };
-  }, [token]);
+  }, [token, setSettingsResponse]);
 
   function validateProfile(draft) {
     const errs = {};
@@ -176,6 +184,31 @@ export default function AdminSettings() {
 
   const profileInvalid = Object.keys(validateProfile(profileDraft)).length > 0;
   const systemInvalid = Object.keys(validateSystem(systemDraft)).length > 0;
+
+  async function uploadLogo(file) {
+    if (!file) return;
+    setLogoUploadError('');
+    setSystemNotice({ kind: '', text: '' });
+    setLogoUploading(true);
+    try {
+      const api = createAdminApi({ token });
+      const form = new FormData();
+      form.append('file', file);
+      const res = await api.post('/media/upload', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60_000
+      });
+      const created = res?.data?.data;
+      const url = created?.url ? String(created.url) : '';
+      if (!url) throw new Error('Upload response invalid');
+      setSystemDraft((d) => ({ ...d, logoUrl: url }));
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Logo upload failed';
+      setLogoUploadError(String(msg));
+    } finally {
+      setLogoUploading(false);
+    }
+  }
 
   async function saveProfile() {
     const errs = validateProfile(profileDraft);
@@ -244,12 +277,15 @@ export default function AdminSettings() {
         organizationCode: String(org?.code || systemDraft.organizationCode),
         defaultLocale: String(settings?.defaultLocale || systemDraft.defaultLocale),
         defaultTimezone: String(settings?.defaultTimezone || systemDraft.defaultTimezone),
-        maintenanceMode: Boolean(settings?.maintenanceMode)
+        maintenanceMode: Boolean(settings?.maintenanceMode),
+        logoUrl: String(settings?.logoUrl || '')
       };
       setSystemInitial(next);
       setSystemDraft(next);
       setSystemErrors({});
       setSystemNotice({ kind: 'success', text: 'System settings updated' });
+      setLogoUploadError('');
+      setSettingsResponse({ organization: org || null, settings: settings || null });
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || 'Failed to update system settings';
       setSystemNotice({ kind: 'error', text: String(msg) });
@@ -315,9 +351,12 @@ export default function AdminSettings() {
           dirty={systemDirty}
           invalid={systemInvalid}
           saving={systemSaving}
+          logoUploading={logoUploading}
+          logoUploadError={logoUploadError}
           localeOptions={localeOptions}
           timezoneOptions={timezoneOptions}
           onChange={(patch) => setSystemDraft((d) => ({ ...d, ...patch }))}
+          onUploadLogo={uploadLogo}
           onSave={saveSystem}
         />
       </div>
