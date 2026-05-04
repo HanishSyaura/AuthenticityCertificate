@@ -127,49 +127,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
       certificateService.getCertificateDetailsCached(certificateId, { ttlMs: 5000 }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), dbTimeoutMs))
     ]);
-    if (!cert) {
-      try {
-        if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
-        const orgId = typeof req.organization?.id === 'number' ? req.organization.id : null;
-        if (orgId) {
-          const tpl = await Promise.race([
-            prisma.certificateTemplate.findFirst({
-              where: { organizationId: orgId, certificateId: String(certificateId), deletedAt: null }
-            }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
-          ]);
-          if (tpl) {
-            dbGate.markDbSuccess();
-            return res.success(
-              {
-                certificateId: tpl.certificateId,
-                type: 'template',
-                status: 'PREVIEW',
-                statusStored: null,
-                verifiedVia,
-                identity: identity || null,
-                issuedAt: null,
-                expiresAt: null,
-                revokedAt: null,
-                reissuedToId: null,
-                product: null,
-                batch: null,
-                epcItem: null,
-                templateData: null,
-                layout: null,
-                certificateLayout: null,
-                certificateTemplate: tpl,
-                risk: { score: 0, flags: [] }
-              },
-              'Preview loaded'
-            );
-          }
-        }
-      } catch {
-        dbGate.markDbFailure({ cooldownMs: 10_000 });
-      }
-      return res.error('Certificate not found', 404);
-    }
+    if (!cert) return res.error('Certificate not found', 404);
     dbGate.markDbSuccess();
 
     const resolvedOrgId = Number(req.organization?.id || cert.organizationId || 0) || null;
@@ -198,6 +156,8 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     let epcItem = null;
     let epcBatchTemplate = null;
     let templateData = null;
+    let epcBatchName = null;
+    let epcProduct = null;
     if (resolvedOrgId && resolvedEpc) {
       try {
         if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
@@ -208,7 +168,21 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
               netWeight: true,
               productionDate: true,
               caiqNumber: true,
-              batch: { select: { templateData: true, certificateTemplate: true } }
+              batch: {
+                select: {
+                  batchName: true,
+                  templateData: true,
+                  certificateTemplate: true,
+                  product: {
+                    select: {
+                      name: true,
+                      code: true,
+                      cmsPage: { select: { id: true } },
+                      certificateTemplate: true
+                    }
+                  }
+                }
+              }
             }
           }),
           new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
@@ -216,33 +190,49 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         epcItem = row ? { netWeight: row.netWeight, productionDate: row.productionDate, caiqNumber: row.caiqNumber } : null;
         epcBatchTemplate = row?.batch?.certificateTemplate || null;
         templateData = row?.batch?.templateData || null;
+        epcBatchName = row?.batch?.batchName ? String(row.batch.batchName) : null;
+        epcProduct = row?.batch?.product || null;
       } catch {
         dbGate.markDbFailure({ cooldownMs: 10_000 });
       }
     }
 
-    if (resolvedOrgId && !resolvedEpc && (epcBatchTemplate == null || templateData == null)) {
+    if (resolvedOrgId && !resolvedEpc && (epcBatchTemplate == null || templateData == null || epcBatchName == null || epcProduct == null)) {
       try {
         if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
         const row = await Promise.race([
           prisma.epcBatch.findFirst({
             where: { organizationId: resolvedOrgId, certificateId: String(certificateId) },
             orderBy: { createdAt: 'desc' },
-            select: { templateData: true, certificateTemplate: true }
+            select: {
+              batchName: true,
+              templateData: true,
+              certificateTemplate: true,
+              product: {
+                select: {
+                  name: true,
+                  code: true,
+                  cmsPage: { select: { id: true } },
+                  certificateTemplate: true
+                }
+              }
+            }
           }),
           new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
         ]);
         if (row) {
           epcBatchTemplate = epcBatchTemplate || row.certificateTemplate || null;
           templateData = templateData || row.templateData || null;
+          epcBatchName = epcBatchName || (row.batchName ? String(row.batchName) : null);
+          epcProduct = epcProduct || row.product || null;
         }
       } catch {
         dbGate.markDbFailure({ cooldownMs: 10_000 });
       }
     }
 
-    const resolvedProduct = cert.batch?.product || null;
-    let layout = resolvedProduct?.cmsPage?.publishedVersion?.layoutJson || null;
+    const resolvedProduct = epcProduct || cert.batch?.product || null;
+    let layout = null;
     const pageId = resolvedProduct?.cmsPage?.id || null;
     const certificateLayout = null;
     const certificatePageId = null;
@@ -326,7 +316,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
               code: resolvedProduct.code
             }
           : null,
-        batch: cert.batch ? { batchNo: cert.batch.batchNo } : null,
+        batch: epcBatchName ? { batchNo: epcBatchName } : cert.batch ? { batchNo: cert.batch.batchNo } : null,
         epcItem: epcItem
           ? {
               netWeight: epcItem.netWeight || null,

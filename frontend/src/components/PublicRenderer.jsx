@@ -492,7 +492,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
               }));
 
             return (
-              <div key={block.id} style={style} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+              <div key={block.id} style={style} className="overflow-hidden rounded-none border border-zinc-200 bg-white">
                 <div style={{ width: baseW * scale, height: baseH * scale }} className="mx-auto">
                   <div style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }} className="relative overflow-hidden">
                     <div className="absolute inset-0" style={{ backgroundColor: bgColor }} />
@@ -568,7 +568,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
           <div
             key={block.id}
             style={style}
-            className={`flex h-full w-full flex-col justify-between overflow-hidden rounded-2xl border p-4 ${
+            className={`flex h-full w-full flex-col justify-between overflow-hidden rounded-none border p-4 ${
               ok ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50'
             }`}
           >
@@ -578,13 +578,13 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                 <div className="text-sm font-semibold text-zinc-900">{t('certificateStatusSubtitle')}</div>
                 <div className={`rounded-full bg-white/70 px-2 py-1 text-xs font-semibold ${ok ? 'text-emerald-900' : 'text-rose-900'}`}>{status || '-'}</div>
               </div>
-              <div className="mt-3 rounded-xl border border-white/40 bg-white/60 px-3 py-2">
+              <div className="mt-3 rounded-none border border-white/40 bg-white/60 px-3 py-2">
                 <div className="text-[11px] font-semibold text-zinc-600">{t('certificateId')}</div>
                 <div className="mt-1 font-mono text-xs text-zinc-900">{data?.certificateId || '-'}</div>
               </div>
             </div>
 
-            <div className="mt-3 rounded-xl border border-white/40 bg-white/60 px-3 py-2 text-xs text-zinc-800">
+            <div className="mt-3 rounded-none border border-white/40 bg-white/60 px-3 py-2 text-xs text-zinc-800">
               <div className="flex justify-between gap-3">
                 <span className="font-semibold">{t('product')}:</span>
                 <span className="truncate">{productName}</span>

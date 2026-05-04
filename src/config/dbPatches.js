@@ -35,6 +35,18 @@ async function indexExists(tableName, indexName) {
   return c > 0;
 }
 
+async function getColumnInfo(tableName, columnName) {
+  const rows = await prisma.$queryRaw`
+    SELECT COLUMN_TYPE AS columnType, IS_NULLABLE AS isNullable
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = ${tableName}
+      AND COLUMN_NAME = ${columnName}
+    LIMIT 1
+  `;
+  return rows?.[0] || null;
+}
+
 async function resolveProductTableName() {
   const tableName = (await tableExists('Product')) ? 'Product' : (await tableExists('Products')) ? 'Products' : null;
   return tableName;
@@ -694,11 +706,24 @@ async function ensureAccessControlSchemaCompat() {
   }
 }
 
+async function ensureCertificateSchemaCompat() {
+  const tableName = await resolveTableName(['Certificate', 'Certificates']);
+  if (!tableName) return;
+  const hasBatchId = await columnExists(tableName, 'batchId');
+  if (!hasBatchId) return;
+  const info = await getColumnInfo(tableName, 'batchId');
+  if (!info) return;
+  const isNullable = String(info.isNullable || '').toUpperCase() === 'YES';
+  if (isNullable) return;
+  await prisma.$executeRawUnsafe(`ALTER TABLE \`${tableName}\` MODIFY \`batchId\` INT NULL`);
+}
+
 async function applyDbPatches() {
   await ensureProductSchemaCompat();
   await ensureCategorySchemaCompat();
   await ensureCmsPageSchemaCompat();
   await ensureCertificateTemplateSchemaCompat();
+  await ensureCertificateSchemaCompat();
   await ensureEpcSchemaCompat();
   await ensureOrganizationSettingsSchemaCompat();
   await ensureAccessControlSchemaCompat();

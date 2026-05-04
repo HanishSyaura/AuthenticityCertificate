@@ -252,8 +252,8 @@ model Certificate {
   organization   Organization @relation(fields: [organizationId], references: [id])
   type           String // batch | unit
   status         String       @default("PENDING") // PENDING, VALID, SUSPICIOUS, REVOKED, EXPIRED
-  batchId        Int
-  batch          Batch        @relation(fields: [batchId], references: [id])
+  batchId        Int?
+  batch          Batch?       @relation(fields: [batchId], references: [id])
   epcBatches     EpcBatch[]   @relation("EpcBatchCertificate")
   scanLogs       ScanLog[]
   fraudFlags     FraudFlag[]
