@@ -364,13 +364,13 @@ function textAlignClass(align) {
   return 'text-left';
 }
 
-const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed = false, responsive = false, baseWidth = 390 }) => {
+const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed = false, responsive = false, responsiveMode = 'container', baseWidth = 390 }) => {
   const { t, locale } = useT();
   const layoutSafe = Array.isArray(layout) ? layout : null;
 
   const [isMobile, setIsMobile] = useState(false);
   const containerRef = useRef(null);
-  const [containerW, setContainerW] = useState(null);
+  const [targetW, setTargetW] = useState(null);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 640px)');
@@ -382,14 +382,32 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
 
   useEffect(() => {
     if (!responsive) return;
-    const el = containerRef.current;
-    if (!el) return;
-
     const measure = () => {
-      const w = Number(el.clientWidth || 0);
-      setContainerW(Number.isFinite(w) && w > 0 ? w : null);
+      if (responsiveMode === 'viewport') {
+        const vv = window.visualViewport;
+        const w = Number(vv?.width || document.documentElement?.clientWidth || window.innerWidth || 0);
+        setTargetW(Number.isFinite(w) && w > 0 ? w : null);
+        return;
+      }
+      const el = containerRef.current;
+      const w = Number(el?.clientWidth || 0);
+      setTargetW(Number.isFinite(w) && w > 0 ? w : null);
     };
     measure();
+
+    if (responsiveMode === 'viewport') {
+      window.addEventListener('resize', measure);
+      window.visualViewport?.addEventListener?.('resize', measure);
+      window.visualViewport?.addEventListener?.('scroll', measure);
+      return () => {
+        window.removeEventListener('resize', measure);
+        window.visualViewport?.removeEventListener?.('resize', measure);
+        window.visualViewport?.removeEventListener?.('scroll', measure);
+      };
+    }
+
+    const el = containerRef.current;
+    if (!el) return;
 
     if (typeof ResizeObserver !== 'undefined') {
       const ro = new ResizeObserver(() => measure());
@@ -399,7 +417,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
 
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
-  }, [responsive]);
+  }, [responsive, responsiveMode]);
 
   const blocks = useMemo(() => {
     return (layoutSafe || []).map((block) => {
@@ -433,10 +451,10 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
 
   const scale = useMemo(() => {
     if (!responsive) return 1;
-    const w = Number(containerW || 0);
+    const w = Number(targetW || 0);
     if (!Number.isFinite(w) || w <= 0) return 1;
     return Math.max(0.1, Math.min(4, w / baseW));
-  }, [baseW, containerW, responsive]);
+  }, [baseW, responsive, targetW]);
 
   const renderBlock = (block) => {
     const style = {

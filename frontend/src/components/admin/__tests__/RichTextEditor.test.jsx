@@ -13,15 +13,17 @@ const editor = {
 let RichTextEditor;
 
 vi.mock('react-quill', () => {
+  const MockQuill = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({ getEditor: () => editor }));
+    return (
+      <button type="button" data-testid="mock-quill" onClick={() => props.onChange('<p>changed</p>')}>
+        MockQuill
+      </button>
+    );
+  });
+  MockQuill.displayName = 'MockQuill';
   return {
-    default: React.forwardRef((props, ref) => {
-      React.useImperativeHandle(ref, () => ({ getEditor: () => editor }));
-      return (
-        <button type="button" data-testid="mock-quill" onClick={() => props.onChange('<p>changed</p>')}>
-          MockQuill
-        </button>
-      );
-    })
+    default: MockQuill
   };
 });
 
