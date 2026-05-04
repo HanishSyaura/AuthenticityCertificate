@@ -75,7 +75,7 @@ const DEVICE_PRESETS = [
   { id: 'ipad-pro-12-9', label: 'iPad Pro 12.9"', kind: 'phone', w: 1024, h: 1366 }
 ];
 
-export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPage, layout, setLayout, selectedBlockId, setSelectedBlockId }) {
+export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPage, layout, previewLayout, setLayout, selectedBlockId, setSelectedBlockId }) {
   const { t } = useT();
   const layoutRef = useRef(layout);
 
@@ -385,7 +385,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
             <div className="mx-auto" style={{ width: (devicePreset?.w || baseW), height: (devicePreset?.h || baseH) }}>
               <div style={{ width: baseW * scale, height: baseH * scale }} className="mx-auto">
                 <div style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }} className="overflow-auto rounded-xl border border-zinc-200">
-                  <PublicRenderer layout={layout} data={previewData || sampleCert()} />
+                  <PublicRenderer layout={Array.isArray(previewLayout) && previewLayout.length ? previewLayout : layout} data={previewData || sampleCert()} />
                 </div>
               </div>
             </div>

@@ -64,6 +64,13 @@ function interpolateText(text, data, locale) {
   });
 }
 
+function textAlignClass(align) {
+  const a = String(align || '').toLowerCase();
+  if (a === 'center') return 'text-center';
+  if (a === 'right') return 'text-right';
+  return 'text-left';
+}
+
 const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed = false }) => {
   const { t, locale } = useT();
   const layoutSafe = Array.isArray(layout) ? layout : null;
@@ -179,6 +186,82 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                 <div style={{ width: baseW * scale, height: baseH * scale }} className="mx-auto">
                   <div style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
                     <PublicRenderer layout={certLayout} data={data} disableCertificateEmbed />
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          const template = data?.certificateTemplate || null;
+          const templateLayout = Array.isArray(template?.layoutJson) ? template.layoutJson : null;
+          if (template && templateLayout) {
+            const rawW = Number(template?.canvasWidth || block.content?.canvasWidth || 390);
+            const rawH = Number(template?.canvasHeight || block.content?.canvasHeight || 844);
+            const baseW = Number.isFinite(rawW) && rawW > 0 ? rawW : 390;
+            const baseH = Number.isFinite(rawH) && rawH > 0 ? rawH : 844;
+            const scale = Math.max(0.1, Math.min(4, Math.min((block.__rect.w || baseW) / baseW, (block.__rect.h || baseH) / baseH)));
+
+            const placeholderByKey = new Map(
+              (Array.isArray(template?.placeholders) ? template.placeholders : [])
+                .map((p) => {
+                  const k = String(p?.key || '').trim();
+                  if (!k) return null;
+                  return [k, p];
+                })
+                .filter(Boolean)
+            );
+            const bgColor = String(template?.backgroundColor || '#ffffff');
+            const bgUrl = template?.background ? String(template.background) : '';
+
+            const items = templateLayout
+              .filter((it) => it && typeof it === 'object')
+              .map((it) => ({
+                id: String(it.id || ''),
+                x: Number(it.x) || 0,
+                y: Number(it.y) || 0,
+                w: Number(it.w) || 0,
+                h: Number(it.h) || 0,
+                path: String(it.path || ''),
+                label: String(it.label || ''),
+                fontSize: Number(it.fontSize) > 0 ? Number(it.fontSize) : 14,
+                align: String(it.align || 'left')
+              }));
+
+            return (
+              <div key={block.id} style={style} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+                <div style={{ width: baseW * scale, height: baseH * scale }} className="mx-auto">
+                  <div style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }} className="relative overflow-hidden">
+                    <div className="absolute inset-0" style={{ backgroundColor: bgColor }} />
+                    {bgUrl ? <img src={bgUrl} alt="" className="absolute inset-0 h-full w-full object-cover" /> : null}
+                    {items.map((it, idx) => {
+                      const raw = it.path ? getValue(it.path, data) : '';
+                      const path = String(it.path || '');
+                      const key = path.startsWith('templateData.') ? path.slice('templateData.'.length) : '';
+                      const ph = key ? placeholderByKey.get(key) : null;
+                      const val = raw == null ? '' : String(raw);
+                      const source = String(ph?.source || '').trim();
+                      const showPrefix = source !== 'title';
+                      const label = showPrefix ? (key ? String(ph?.label || key) : String(it.label || '')) : '';
+                      const separator = showPrefix ? (key ? String(ph?.separator ?? ': ') : ': ') : '';
+                      const prefix = showPrefix && label ? `${label}${separator}` : '';
+                      const text = `${prefix}${val || ''}`;
+                      return (
+                        <div
+                          key={it.id || `${idx}`}
+                          className="absolute overflow-hidden px-2 text-zinc-900"
+                          style={{
+                            left: `${it.x}px`,
+                            top: `${it.y}px`,
+                            width: `${it.w}px`,
+                            height: `${it.h}px`,
+                            fontSize: `${it.fontSize}px`,
+                            lineHeight: 1.2
+                          }}
+                        >
+                          <div className={`h-full w-full font-semibold ${textAlignClass(it.align)}`}>{text}</div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>

@@ -1,5 +1,7 @@
 import axios from 'axios';
 
+export const ADMIN_UNAUTHORIZED_EVENT = 'ac:admin-unauthorized';
+
 function getApiBaseUrl() {
   const configured = import.meta.env.VITE_API_BASE_URL;
   if (configured !== undefined) {
@@ -37,6 +39,28 @@ export function createAdminApi({ token }) {
     }
     return config;
   });
+
+  api.interceptors.response.use(
+    (res) => res,
+    (error) => {
+      const status = error?.response?.status;
+      const message = error?.response?.data?.message;
+      const shouldLogout =
+        status === 401 || (status === 403 && (message === 'Invalid token' || message === 'Token expired'));
+      if (shouldLogout) {
+        try {
+          window.dispatchEvent(
+            new CustomEvent(ADMIN_UNAUTHORIZED_EVENT, {
+              detail: { status, message: message || null }
+            })
+          );
+        } catch (e) {
+          void e;
+        }
+      }
+      return Promise.reject(error);
+    }
+  );
 
   return api;
 }

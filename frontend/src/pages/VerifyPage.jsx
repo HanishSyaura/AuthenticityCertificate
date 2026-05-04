@@ -91,6 +91,32 @@ const VerifyPage = () => {
             <div className="min-h-screen bg-white">
               <PublicRenderer layout={certificate.layout} data={certificate} />
             </div>
+          ) : Array.isArray(certificate?.certificateTemplate?.layoutJson) ? (
+            (() => {
+              const canvasW = Number(certificate?.certificateTemplate?.canvasWidth || 390);
+              const canvasH = Number(certificate?.certificateTemplate?.canvasHeight || 844);
+              const baseW = Number.isFinite(canvasW) && canvasW > 0 ? canvasW : 390;
+              const baseH = Number.isFinite(canvasH) && canvasH > 0 ? canvasH : 844;
+              const mobileW = Math.max(240, Math.min(baseW, 320));
+              return (
+                <div className="min-h-screen bg-white">
+                  <div className="mx-auto w-full px-2" style={{ maxWidth: `${baseW}px` }}>
+                    <PublicRenderer
+                      layout={[
+                        {
+                          id: '__certificate',
+                          type: 'certificate',
+                          desktop: { x: 0, y: 0, w: baseW, h: baseH },
+                          mobile: { x: 0, y: 0, w: mobileW, h: baseH },
+                          content: { canvasWidth: baseW, canvasHeight: baseH }
+                        }
+                      ]}
+                      data={certificate}
+                    />
+                  </div>
+                </div>
+              );
+            })()
           ) : (
             <div className="ac-card mx-auto max-w-2xl p-6 text-center">
               <h1 className="text-xl font-semibold text-zinc-900">{certificate.product?.name || t('product')}</h1>

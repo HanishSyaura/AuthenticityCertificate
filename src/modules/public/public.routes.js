@@ -25,6 +25,57 @@ function chooseStatus({ effectiveStatus, overrideStatus }) {
   return overrideStatus || effectiveStatus;
 }
 
+function getRect(block, mode) {
+  const src = mode && block && typeof block === 'object' ? block[mode] || block : block;
+  return {
+    x: Number(src?.x ?? 0) || 0,
+    y: Number(src?.y ?? 0) || 0,
+    w: Number(src?.w ?? 0) || 0,
+    h: Number(src?.h ?? 0) || 0
+  };
+}
+
+function getLayoutHeight(layout) {
+  if (!Array.isArray(layout)) return 0;
+  let maxBottom = 0;
+  for (const b of layout) {
+    const rects = [getRect(b, null), getRect(b, 'desktop'), getRect(b, 'mobile')];
+    for (const r of rects) {
+      const bottom = (Number(r.y) || 0) + (Number(r.h) || 0);
+      if (Number.isFinite(bottom)) maxBottom = Math.max(maxBottom, bottom);
+    }
+  }
+  return maxBottom;
+}
+
+function shiftBlock(block, { yOffset, idPrefix }) {
+  const next = { ...(block || {}) };
+  if (next.id) next.id = `${idPrefix}${String(next.id)}`;
+  if (next.x != null || next.y != null || next.w != null || next.h != null) {
+    next.y = (Number(next.y) || 0) + yOffset;
+  }
+  if (next.desktop && typeof next.desktop === 'object') {
+    next.desktop = { ...next.desktop, y: (Number(next.desktop.y) || 0) + yOffset };
+  }
+  if (next.mobile && typeof next.mobile === 'object') {
+    next.mobile = { ...next.mobile, y: (Number(next.mobile.y) || 0) + yOffset };
+  }
+  return next;
+}
+
+function composeLayouts(pages) {
+  const ordered = Array.isArray(pages) ? pages : [];
+  let yOffset = 0;
+  const out = [];
+  for (const p of ordered) {
+    const arr = Array.isArray(p?.effectiveLayout) ? p.effectiveLayout : [];
+    const prefix = `p${String(p.id)}-`;
+    for (const b of arr) out.push(shiftBlock(b, { yOffset, idPrefix: prefix }));
+    yOffset += getLayoutHeight(arr);
+  }
+  return out;
+}
+
 async function respondByCertificateId({ req, res, certificateId, verifiedVia, identity }) {
   const ip = scanlog.normalizeIp(req);
   const userAgent = req.get('user-agent') || '';
@@ -132,24 +183,61 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     const pageId = cert.batch?.product?.cmsPage?.id || null;
     let certificateLayout = cert.batch?.product?.cmsCertificatePage?.publishedVersion?.layoutJson || null;
     const certificatePageId = cert.batch?.product?.cmsCertificatePage?.id || null;
-    if (pageId) {
+
+    const landingOrgId = resolvedOrgId || Number(req.organization?.id || cert.organizationId || 0) || null;
+    if (landingOrgId) {
       try {
         if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
-        const translation = await Promise.race([
-          prisma.cmsTranslation.findFirst({
-            where: {
-              organizationId: resolvedOrgId || Number(req.organization?.id || cert.organizationId || 0),
-              pageId: Number(pageId),
-              language: lang
-            }
+        const pages = await Promise.race([
+          prisma.cmsPage.findMany({
+            where: { organizationId: landingOrgId, kind: 'landing' },
+            orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+            include: { layout: true, publishedVersion: true }
           }),
           new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
         ]);
-        if (translation?.contentJson) layout = translation.contentJson;
+
+        const rootId = pageId != null ? Number(pageId) : null;
+        const sorted = rootId
+          ? [
+              ...pages.filter((p) => Number(p.id) === rootId),
+              ...pages.filter((p) => Number(p.id) !== rootId)
+            ]
+          : pages;
+
+        const ids = sorted.map((p) => Number(p.id)).filter((n) => Number.isFinite(n));
+        const translations = ids.length
+          ? await Promise.race([
+              prisma.cmsTranslation.findMany({ where: { organizationId: landingOrgId, language: lang, pageId: { in: ids } } }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
+            ])
+          : [];
+        const tByPageId = new Map((translations || []).map((r) => [Number(r.pageId), r]));
+
+        const effectivePages = sorted.map((p) => {
+          const tRow = tByPageId.get(Number(p.id));
+          const effectiveLayout = Array.isArray(tRow?.contentJson)
+            ? tRow.contentJson
+            : Array.isArray(p?.publishedVersion?.layoutJson)
+              ? p.publishedVersion.layoutJson
+              : Array.isArray(p?.layout?.layoutJson)
+                ? p.layout.layoutJson
+                : null;
+          return { id: p.id, effectiveLayout };
+        });
+
+        const composed = composeLayouts(effectivePages);
+        if (composed.length) {
+          layout = composed;
+        } else if (pageId) {
+          const tRow = tByPageId.get(Number(pageId));
+          if (Array.isArray(tRow?.contentJson)) layout = tRow.contentJson;
+        }
       } catch {
         dbGate.markDbFailure({ cooldownMs: 10_000 });
       }
     }
+
     if (certificatePageId) {
       try {
         if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
@@ -170,7 +258,10 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     }
     if (!layout) layout = cert.batch?.product?.cmsPage?.layout?.layoutJson || null;
     if (!certificateLayout) certificateLayout = cert.batch?.product?.cmsCertificatePage?.layout?.layoutJson || null;
-    const effectiveStatus = certificateService.computeEffectiveStatus(cert);
+    let effectiveStatus = certificateService.computeEffectiveStatus(cert);
+    if (effectiveStatus === 'PENDING' && (verifiedVia === 'epc' || verifiedVia === 'nfc_uid')) {
+      effectiveStatus = 'VALID';
+    }
     const status = chooseStatus({ effectiveStatus, overrideStatus });
 
     return res.success(

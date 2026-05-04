@@ -5,6 +5,61 @@ import CmsCanvasPanel from '../../components/admin/cms/CmsCanvasPanel';
 import CmsInspectorPanel from '../../components/admin/cms/CmsInspectorPanel';
 import { useT } from '../../i18n/useT';
 
+function getRect(block, mode) {
+  const src = mode && block && typeof block === 'object' ? block[mode] || block : block;
+  return {
+    x: Number(src?.x ?? 0) || 0,
+    y: Number(src?.y ?? 0) || 0,
+    w: Number(src?.w ?? 0) || 0,
+    h: Number(src?.h ?? 0) || 0
+  };
+}
+
+function getLayoutHeight(layout) {
+  if (!Array.isArray(layout)) return 0;
+  let maxBottom = 0;
+  for (const b of layout) {
+    const rects = [getRect(b, null), getRect(b, 'desktop'), getRect(b, 'mobile')];
+    for (const r of rects) {
+      const bottom = (Number(r.y) || 0) + (Number(r.h) || 0);
+      if (Number.isFinite(bottom)) maxBottom = Math.max(maxBottom, bottom);
+    }
+  }
+  return maxBottom;
+}
+
+function shiftBlock(block, { yOffset, idPrefix }) {
+  const next = { ...(block || {}) };
+  if (next.id) next.id = `${idPrefix}${String(next.id)}`;
+  if (next.x != null || next.y != null || next.w != null || next.h != null) {
+    next.y = (Number(next.y) || 0) + yOffset;
+  }
+  if (next.desktop && typeof next.desktop === 'object') {
+    next.desktop = { ...next.desktop, y: (Number(next.desktop.y) || 0) + yOffset };
+  }
+  if (next.mobile && typeof next.mobile === 'object') {
+    next.mobile = { ...next.mobile, y: (Number(next.mobile.y) || 0) + yOffset };
+  }
+  return next;
+}
+
+function composeLayouts({ pages, layoutsByPageKey, language }) {
+  const ordered = Array.isArray(pages) ? pages : [];
+  const byKey = layoutsByPageKey || {};
+  const lang = language || 'en';
+  let yOffset = 0;
+  const out = [];
+  for (const p of ordered) {
+    const key = `${p.id}:${lang}`;
+    const layout = byKey[key] || byKey[String(p.id)] || null;
+    const arr = Array.isArray(layout) ? layout : [];
+    const prefix = `p${String(p.id)}-`;
+    for (const b of arr) out.push(shiftBlock(b, { yOffset, idPrefix: prefix }));
+    yOffset += getLayoutHeight(arr);
+  }
+  return out;
+}
+
 export default function AdminCmsBuilder({ kind = 'landing' }) {
   const { t } = useT();
   const {
@@ -62,6 +117,8 @@ export default function AdminCmsBuilder({ kind = 'landing' }) {
     return layoutsByPageKey[key] || layoutsByPageKey[String(selectedPageId)] || [];
   }, [language, layoutsByPageKey, selectedPageId]);
 
+  const previewLayout = useMemo(() => composeLayouts({ pages, layoutsByPageKey, language }), [language, layoutsByPageKey, pages]);
+
   const selectedBlock = useMemo(
     () => layout.find((b) => b.id === selectedBlockId) || null,
     [layout, selectedBlockId]
@@ -86,12 +143,27 @@ export default function AdminCmsBuilder({ kind = 'landing' }) {
 
   useEffect(() => {
     if (viewMode !== 'preview') return;
+    let cancelled = false;
+    (async () => {
+      for (const p of pages || []) {
+        if (cancelled) return;
+        await loadLayoutForPage({ page: p });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadLayoutForPage, pages, viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== 'preview') return;
     try {
-      localStorage.setItem('ac_cms_preview', JSON.stringify({ layout, kind, language: language || 'en', ts: Date.now() }));
+      const toStore = previewLayout?.length ? previewLayout : layout;
+      localStorage.setItem('ac_cms_preview', JSON.stringify({ layout: toStore, kind, language: language || 'en', ts: Date.now() }));
     } catch {
       void 0;
     }
-  }, [kind, language, layout, viewMode]);
+  }, [kind, language, layout, previewLayout, viewMode]);
 
   const setLayout = (next) => {
     if (!selectedPageId) return;
@@ -178,6 +250,7 @@ export default function AdminCmsBuilder({ kind = 'landing' }) {
           kind={kind}
           selectedPage={selectedPage}
           layout={layout}
+          previewLayout={previewLayout}
           layoutLoaded={layoutLoaded}
           setLayout={setLayout}
           selectedBlockId={selectedBlockId}

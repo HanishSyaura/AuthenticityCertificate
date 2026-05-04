@@ -198,7 +198,8 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, product
             organizationId: orgId,
             type: 'batch',
             batchId: appBatch.id,
-            status: 'PENDING'
+            status: 'VALID',
+            issuedAt: new Date()
           }
         });
       }
@@ -335,7 +336,8 @@ async function importExistingEpc({ organizationId, productId, batchName, base64 
           organizationId: orgId,
           type: 'batch',
           batchId: appBatch.id,
-          status: 'PENDING'
+          status: 'VALID',
+          issuedAt: new Date()
         }
       });
     }
