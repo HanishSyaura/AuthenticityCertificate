@@ -282,6 +282,13 @@ async function ensureCmsPageSchemaCompat() {
     `UPDATE \`${tableName}\` SET \`kind\` = 'landing' WHERE \`kind\` IS NULL OR \`kind\` = ''`,
     `ALTER TABLE \`${tableName}\` MODIFY \`kind\` VARCHAR(32) NOT NULL DEFAULT 'landing'`
   );
+  await ensureColumn(
+    tableName,
+    'sortOrder',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`sortOrder\` INT NULL`,
+    `UPDATE \`${tableName}\` SET \`sortOrder\` = COALESCE(\`sortOrder\`, \`id\`)`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`sortOrder\` INT NOT NULL DEFAULT 0`
+  );
 }
 
 async function ensureCertificateTemplateSchemaCompat() {

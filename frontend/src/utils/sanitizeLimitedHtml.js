@@ -161,26 +161,12 @@ export function sanitizeLimitedHtml(input) {
     return escapeTextToHtml(raw);
   }
   const allowedAttrs = {
-    A: new Set(['href', 'target', 'rel', 'style', 'class']),
-    IMG: new Set(['src', 'alt', 'width', 'height', 'style']),
-    FONT: new Set(['color', 'face', 'size']),
-    IFRAME: new Set(['src', 'width', 'height', 'frameborder', 'allowfullscreen', 'style', 'class']),
-    TABLE: new Set(['style']),
-    THEAD: new Set(['style']),
-    TBODY: new Set(['style']),
-    TR: new Set(['style']),
-    TD: new Set(['colspan', 'rowspan', 'style']),
-    TH: new Set(['colspan', 'rowspan', 'style']),
-    DIV: new Set(['style', 'class', 'dir']),
-    P: new Set(['style', 'class', 'dir']),
-    SPAN: new Set(['style', 'class', 'dir', 'data-value']),
-    H1: new Set(['style', 'class', 'dir']),
-    H2: new Set(['style', 'class', 'dir']),
-    H3: new Set(['style', 'class', 'dir']),
-    BLOCKQUOTE: new Set(['style', 'class', 'dir']),
-    UL: new Set(['style', 'class', 'dir']),
-    OL: new Set(['style', 'class', 'dir']),
-    LI: new Set(['style', 'class', 'dir', 'data-list']),
+    DIV: new Set(['style', 'class']),
+    P: new Set(['style', 'class']),
+    SPAN: new Set(['style', 'class']),
+    UL: new Set(['style', 'class']),
+    OL: new Set(['style', 'class']),
+    LI: new Set(['style', 'class']),
     B: new Set(['style']),
     STRONG: new Set(['style']),
     I: new Set(['style']),
@@ -188,7 +174,6 @@ export function sanitizeLimitedHtml(input) {
     U: new Set(['style']),
     S: new Set(['style']),
     STRIKE: new Set(['style']),
-    SUB: new Set(['style']),
     SUP: new Set(['style']),
     BR: new Set([])
   };
@@ -221,99 +206,11 @@ export function sanitizeLimitedHtml(input) {
             else child.removeAttribute('class');
             continue;
           }
-          if (name === 'dir') {
-            const safe = sanitizeDir(a.value);
-            if (safe) child.setAttribute('dir', safe);
-            else child.removeAttribute('dir');
-            continue;
-          }
-          if (tag === 'LI' && name === 'data-list') {
-            const safe = sanitizeDataList(a.value);
-            if (safe) child.setAttribute('data-list', safe);
-            else child.removeAttribute('data-list');
-            continue;
-          }
-          if (tag === 'SPAN' && name === 'data-value') {
-            const safe = sanitizeDataValue(a.value);
-            if (safe) child.setAttribute('data-value', safe);
-            else child.removeAttribute('data-value');
-            continue;
-          }
           if (name === 'style') {
             const safe = sanitizeStyle(a.value);
             if (safe) child.setAttribute('style', safe);
             else child.removeAttribute('style');
             continue;
-          }
-          if (tag === 'A' && name === 'href') {
-            const safe = sanitizeUrl(a.value);
-            if (safe) child.setAttribute('href', safe);
-            else child.removeAttribute('href');
-            continue;
-          }
-          if (tag === 'A' && name === 'target') {
-            const v = String(a.value || '').toLowerCase();
-            if (v === '_blank' || v === '_self') child.setAttribute('target', v);
-            else child.removeAttribute('target');
-            continue;
-          }
-          if (tag === 'A' && name === 'rel') {
-            const v = String(a.value || '').toLowerCase();
-            const next = v.includes('noopener') ? v : `${v} noopener`.trim();
-            child.setAttribute('rel', next.includes('noreferrer') ? next : `${next} noreferrer`.trim());
-            continue;
-          }
-          if (tag === 'IMG' && name === 'src') {
-            const safe = sanitizeUrl(a.value, { allowDataImage: true });
-            if (safe) child.setAttribute('src', safe);
-            else child.removeAttribute('src');
-            continue;
-          }
-          if (tag === 'IFRAME' && name === 'src') {
-            const safe = sanitizeUrl(a.value, { allowDataImage: false });
-            if (safe) child.setAttribute('src', safe);
-            else child.removeAttribute('src');
-            continue;
-          }
-          if ((tag === 'TD' || tag === 'TH') && (name === 'colspan' || name === 'rowspan')) {
-            const n = Math.max(1, Math.min(50, Number(a.value) || 1));
-            child.setAttribute(name, String(n));
-            continue;
-          }
-          if (tag === 'FONT' && name === 'size') {
-            const n = Math.max(1, Math.min(7, Number(a.value) || 3));
-            child.setAttribute('size', String(n));
-            continue;
-          }
-          if (tag === 'FONT' && name === 'color') {
-            const v = String(a.value || '').trim();
-            if (/^#[0-9a-f]{3,8}$/i.test(v) || /^rgb\(/i.test(v) || /^hsl\(/i.test(v)) child.setAttribute('color', v);
-            else child.removeAttribute('color');
-            continue;
-          }
-          if (tag === 'FONT' && name === 'face') {
-            const v = String(a.value || '').trim();
-            if (v) child.setAttribute('face', v.slice(0, 100));
-            else child.removeAttribute('face');
-            continue;
-          }
-          if (tag === 'IMG' && (name === 'width' || name === 'height')) {
-            const n = Math.max(1, Math.min(2000, Number(a.value) || 0));
-            if (n) child.setAttribute(name, String(n));
-            else child.removeAttribute(name);
-            continue;
-          }
-          if (tag === 'IMG' && name === 'alt') {
-            child.setAttribute('alt', String(a.value || '').slice(0, 200));
-            continue;
-          }
-        }
-        if (tag === 'A') {
-          const target = String(child.getAttribute('target') || '').toLowerCase();
-          if (target === '_blank') {
-            const rel = String(child.getAttribute('rel') || '').toLowerCase();
-            const withNoopener = rel.includes('noopener') ? rel : `${rel} noopener`.trim();
-            child.setAttribute('rel', withNoopener.includes('noreferrer') ? withNoopener : `${withNoopener} noreferrer`.trim());
           }
         }
         walk(child);
