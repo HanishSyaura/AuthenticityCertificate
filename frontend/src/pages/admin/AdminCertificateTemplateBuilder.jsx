@@ -260,6 +260,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     hydratedTemplateIdRef.current = id;
     setDraftPlaceholders(Array.isArray(selected?.placeholders) ? selected.placeholders : []);
     setDraftLayout(Array.isArray(selected?.layoutJson) ? selected.layoutJson : []);
+    setBackgroundMode(String(selected?.backgroundMode || '').trim() || 'background');
     pendingPatchRef.current = null;
     setSaveStatus('idle');
     if (persistTimerRef.current) {
@@ -842,7 +843,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   <label className="block text-xs font-medium text-zinc-700">{t('backgroundMode')}</label>
                   <select
                     value={backgroundMode}
-                    onChange={(e) => setBackgroundMode(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setBackgroundMode(v);
+                      queueTemplatePatch({ backgroundMode: v });
+                    }}
                     className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                   >
                     <option value="background">{t('stretchBackground')}</option>

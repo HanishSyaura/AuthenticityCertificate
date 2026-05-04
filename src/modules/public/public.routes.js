@@ -127,7 +127,49 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
       certificateService.getCertificateDetailsCached(certificateId, { ttlMs: 5000 }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), dbTimeoutMs))
     ]);
-    if (!cert) return res.error('Certificate not found', 404);
+    if (!cert) {
+      try {
+        if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
+        const orgId = typeof req.organization?.id === 'number' ? req.organization.id : null;
+        if (orgId) {
+          const tpl = await Promise.race([
+            prisma.certificateTemplate.findFirst({
+              where: { organizationId: orgId, certificateId: String(certificateId), deletedAt: null }
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
+          ]);
+          if (tpl) {
+            dbGate.markDbSuccess();
+            return res.success(
+              {
+                certificateId: tpl.certificateId,
+                type: 'template',
+                status: 'PREVIEW',
+                statusStored: null,
+                verifiedVia,
+                identity: identity || null,
+                issuedAt: null,
+                expiresAt: null,
+                revokedAt: null,
+                reissuedToId: null,
+                product: null,
+                batch: null,
+                epcItem: null,
+                templateData: null,
+                layout: null,
+                certificateLayout: null,
+                certificateTemplate: tpl,
+                risk: { score: 0, flags: [] }
+              },
+              'Preview loaded'
+            );
+          }
+        }
+      } catch {
+        dbGate.markDbFailure({ cooldownMs: 10_000 });
+      }
+      return res.error('Certificate not found', 404);
+    }
     dbGate.markDbSuccess();
 
     const resolvedOrgId = Number(req.organization?.id || cert.organizationId || 0) || null;

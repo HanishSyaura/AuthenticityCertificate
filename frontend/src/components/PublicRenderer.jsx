@@ -10,6 +10,57 @@ function getValue(path, data) {
   return cur ?? '';
 }
 
+function escapeHtml(input) {
+  return String(input ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function escapeTextToHtml(input) {
+  return escapeHtml(input).replace(/\r?\n/g, '<br/>');
+}
+
+function sanitizeLimitedHtml(input) {
+  const raw = String(input ?? '');
+  if (!raw) return '';
+  if (typeof window === 'undefined' || typeof window.DOMParser !== 'function') return escapeTextToHtml(raw);
+  const allowed = new Set(['BR', 'B', 'STRONG', 'I', 'EM', 'U']);
+  let doc;
+  try {
+    doc = new window.DOMParser().parseFromString(String(raw), 'text/html');
+  } catch {
+    return escapeTextToHtml(raw);
+  }
+  const walk = (node) => {
+    const kids = Array.from(node.childNodes || []);
+    for (const child of kids) {
+      if (child.nodeType === 1) {
+        const tag = String(child.tagName || '').toUpperCase();
+        if (!allowed.has(tag)) {
+          const frag = doc.createDocumentFragment();
+          while (child.firstChild) frag.appendChild(child.firstChild);
+          child.replaceWith(frag);
+          continue;
+        }
+        const attrs = Array.from(child.attributes || []);
+        for (const a of attrs) child.removeAttribute(a.name);
+        walk(child);
+      } else if (child.nodeType === 8) {
+        child.remove();
+      } else if (child.nodeType === 3) {
+        continue;
+      } else {
+        walk(child);
+      }
+    }
+  };
+  walk(doc.body);
+  return String(doc.body.innerHTML || '');
+}
+
 function toDateOrNull(input) {
   if (!input) return null;
   if (input instanceof Date && !Number.isNaN(input.getTime())) return input;
@@ -174,27 +225,10 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
           const netWeight = data?.epcItem?.netWeight || null;
           const caiqNumber = data?.epcItem?.caiqNumber || null;
           const productionDate = data?.epcItem?.productionDate ? new Date(data.epcItem.productionDate) : null;
-          const certLayout = !disableCertificateEmbed && Array.isArray(data?.certificateLayout) ? data.certificateLayout : null;
-          if (certLayout) {
-            const rawW = Number(data?.certificateTemplate?.canvasWidth || block.content?.canvasWidth || 390);
-            const rawH = Number(data?.certificateTemplate?.canvasHeight || block.content?.canvasHeight || 844);
-            const baseW = Number.isFinite(rawW) && rawW > 0 ? rawW : 390;
-            const baseH = Number.isFinite(rawH) && rawH > 0 ? rawH : 844;
-            const scale = Math.max(0.1, Math.min(4, Math.min((block.__rect.w || baseW) / baseW, (block.__rect.h || baseH) / baseH)));
-            return (
-              <div key={block.id} style={style} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
-                <div style={{ width: baseW * scale, height: baseH * scale }} className="mx-auto">
-                  <div style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
-                    <PublicRenderer layout={certLayout} data={data} disableCertificateEmbed />
-                  </div>
-                </div>
-              </div>
-            );
-          }
 
           const template = data?.certificateTemplate || null;
           const templateLayout = Array.isArray(template?.layoutJson) ? template.layoutJson : null;
-          if (template && templateLayout) {
+          if (!disableCertificateEmbed && template && templateLayout) {
             const rawW = Number(template?.canvasWidth || block.content?.canvasWidth || 390);
             const rawH = Number(template?.canvasHeight || block.content?.canvasHeight || 844);
             const baseW = Number.isFinite(rawW) && rawW > 0 ? rawW : 390;
@@ -212,6 +246,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
             );
             const bgColor = String(template?.backgroundColor || '#ffffff');
             const bgUrl = template?.background ? String(template.background) : '';
+            const bgMode = String(template?.backgroundMode || 'background');
 
             const items = templateLayout
               .filter((it) => it && typeof it === 'object')
@@ -232,19 +267,52 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                 <div style={{ width: baseW * scale, height: baseH * scale }} className="mx-auto">
                   <div style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }} className="relative overflow-hidden">
                     <div className="absolute inset-0" style={{ backgroundColor: bgColor }} />
-                    {bgUrl ? <img src={bgUrl} alt="" className="absolute inset-0 h-full w-full object-cover" /> : null}
+                    {bgUrl ? (
+                      bgMode === 'actual' ? (
+                        <img
+                          src={bgUrl}
+                          alt=""
+                          className="absolute left-1/2 top-1/2 max-w-none -translate-x-1/2 -translate-y-1/2 object-center"
+                          draggable={false}
+                        />
+                      ) : bgMode === 'fit' ? (
+                        <img src={bgUrl} alt="" className="absolute inset-0 h-full w-full object-contain object-center" draggable={false} />
+                      ) : (
+                        <img src={bgUrl} alt="" className="absolute inset-0 h-full w-full object-fill object-center" draggable={false} />
+                      )
+                    ) : null}
                     {items.map((it, idx) => {
                       const raw = it.path ? getValue(it.path, data) : '';
                       const path = String(it.path || '');
                       const key = path.startsWith('templateData.') ? path.slice('templateData.'.length) : '';
                       const ph = key ? placeholderByKey.get(key) : null;
-                      const val = raw == null ? '' : String(raw);
-                      const source = String(ph?.source || '').trim();
+                      let val = raw == null ? '' : String(raw);
+                      const source = String(ph?.source || '').trim() || 'manual';
                       const showPrefix = source !== 'title';
                       const label = showPrefix ? (key ? String(ph?.label || key) : String(it.label || '')) : '';
                       const separator = showPrefix ? (key ? String(ph?.separator ?? ': ') : ': ') : '';
                       const prefix = showPrefix && label ? `${label}${separator}` : '';
-                      const text = `${prefix}${val || ''}`;
+                      if (!String(val || '').trim() && ph) {
+                        if (source === 'static' || source === 'title') {
+                          val = String(ph?.staticValue || '');
+                        } else if (source === 'product') {
+                          const bindPath = String(ph?.bindPath || '').trim();
+                          if (bindPath) {
+                            const v = getValue(bindPath, {
+                              product: data?.product || null,
+                              batch: data?.batch || null,
+                              certificate: data || null,
+                              epcItem: data?.epcItem || null
+                            });
+                            val = v == null ? '' : String(v);
+                          }
+                        }
+                      }
+                      const hasValue = String(val || '').trim().length > 0;
+                      if (!hasValue && source !== 'static' && source !== 'title') return null;
+                      const valueHtml = source === 'static' || source === 'manual' || source === 'title' ? sanitizeLimitedHtml(val) : escapeTextToHtml(val);
+                      const html = `${escapeHtml(prefix)}${valueHtml || ''}`;
+                      if (!String(html || '').trim()) return null;
                       return (
                         <div
                           key={it.id || `${idx}`}
@@ -258,10 +326,28 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                             lineHeight: 1.2
                           }}
                         >
-                          <div className={`h-full w-full font-semibold ${textAlignClass(it.align)}`}>{text}</div>
+                          <div className={`h-full w-full font-semibold ${textAlignClass(it.align)}`} dangerouslySetInnerHTML={{ __html: html }} />
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          const certLayout = !disableCertificateEmbed && Array.isArray(data?.certificateLayout) ? data.certificateLayout : null;
+          if (certLayout) {
+            const rawW = Number(data?.certificateTemplate?.canvasWidth || block.content?.canvasWidth || 390);
+            const rawH = Number(data?.certificateTemplate?.canvasHeight || block.content?.canvasHeight || 844);
+            const baseW = Number.isFinite(rawW) && rawW > 0 ? rawW : 390;
+            const baseH = Number.isFinite(rawH) && rawH > 0 ? rawH : 844;
+            const scale = Math.max(0.1, Math.min(4, Math.min((block.__rect.w || baseW) / baseW, (block.__rect.h || baseH) / baseH)));
+            return (
+              <div key={block.id} style={style} className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+                <div style={{ width: baseW * scale, height: baseH * scale }} className="mx-auto">
+                  <div style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+                    <PublicRenderer layout={certLayout} data={data} disableCertificateEmbed />
                   </div>
                 </div>
               </div>

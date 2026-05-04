@@ -1,11 +1,14 @@
 const { z } = require('zod');
 const templatesService = require('./templates.service');
 
+const backgroundModeSchema = z.enum(['background', 'fit', 'actual']);
+
 const createSchema = z.object({
   certificateId: z.string().trim().min(1),
   name: z.string().trim().min(1),
   background: z.string().optional(),
   backgroundColor: z.string().optional(),
+  backgroundMode: backgroundModeSchema.optional(),
   layoutJson: z.any().optional(),
   placeholders: z.any().optional(),
   canvasWidth: z.number().int().optional(),
@@ -17,6 +20,7 @@ const updateSchema = z.object({
   name: z.string().trim().min(1).optional(),
   background: z.string().optional(),
   backgroundColor: z.string().optional(),
+  backgroundMode: backgroundModeSchema.optional(),
   layoutJson: z.any().optional(),
   placeholders: z.any().optional(),
   canvasWidth: z.number().int().optional(),
@@ -41,6 +45,7 @@ async function create(req, res) {
       name: data.name,
       background: data.background,
       backgroundColor: data.backgroundColor,
+      backgroundMode: data.backgroundMode,
       layoutJson: data.layoutJson,
       placeholders: data.placeholders,
       canvasWidth: data.canvasWidth,

@@ -423,6 +423,7 @@ model CertificateTemplate {
   name            String
   background      String // URL to background image
   backgroundColor String       @default("#ffffff")
+  backgroundMode  String       @default("background")
   layoutJson      Json // Overlay field positions
   placeholders    Json?
   canvasWidth     Int          @default(390)

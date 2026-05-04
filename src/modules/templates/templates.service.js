@@ -14,7 +14,7 @@ async function listTemplates({ organizationId }) {
   );
 }
 
-async function createTemplate({ organizationId, certificateId, name, background, backgroundColor, layoutJson, placeholders, canvasWidth, canvasHeight }) {
+async function createTemplate({ organizationId, certificateId, name, background, backgroundColor, backgroundMode, layoutJson, placeholders, canvasWidth, canvasHeight }) {
   try {
     return await withTimeout(
       prisma.certificateTemplate.create({
@@ -24,6 +24,7 @@ async function createTemplate({ organizationId, certificateId, name, background,
           name,
           background: background || '',
           backgroundColor: String(backgroundColor || '').trim() || '#ffffff',
+          backgroundMode: String(backgroundMode || '').trim() || 'background',
           layoutJson: layoutJson || [],
           placeholders: placeholders || null,
           canvasWidth: Number.isFinite(Number(canvasWidth)) && Number(canvasWidth) > 0 ? Number(canvasWidth) : 390,
@@ -44,6 +45,7 @@ async function updateTemplate({ organizationId, id, patch }) {
   if (patch.name !== undefined) data.name = patch.name;
   if (patch.background !== undefined) data.background = patch.background || '';
   if (patch.backgroundColor !== undefined) data.backgroundColor = String(patch.backgroundColor || '').trim() || '#ffffff';
+  if (patch.backgroundMode !== undefined) data.backgroundMode = String(patch.backgroundMode || '').trim() || 'background';
   if (patch.layoutJson !== undefined) data.layoutJson = patch.layoutJson || [];
   if (patch.placeholders !== undefined) data.placeholders = patch.placeholders || null;
   if (patch.canvasWidth !== undefined) data.canvasWidth = patch.canvasWidth;

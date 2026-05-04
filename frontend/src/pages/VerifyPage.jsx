@@ -69,20 +69,25 @@ const VerifyPage = () => {
   }
 
   if (certificate) {
+    const statusUpper = String(certificate.status || '').toUpperCase();
+    const statusOk = statusUpper === 'VALID';
+    const statusPreview = statusUpper === 'PREVIEW' || String(certificate.type || '').toLowerCase() === 'template';
     return (
       <div className="min-h-screen">
         <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 lg:px-8">
           <div
             className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${
-              certificate.status === 'VALID'
+              statusOk
                 ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-                : 'border-rose-200 bg-rose-50 text-rose-900'
+                : statusPreview
+                  ? 'border-zinc-200 bg-zinc-50 text-zinc-900'
+                  : 'border-rose-200 bg-rose-50 text-rose-900'
             }`}
           >
             <div className="flex items-center gap-2">
-              {certificate.status === 'VALID' ? <IconShieldCheck className="h-5 w-5" /> : <IconShieldAlert className="h-5 w-5" />}
+              {statusOk || statusPreview ? <IconShieldCheck className="h-5 w-5" /> : <IconShieldAlert className="h-5 w-5" />}
               <div className="text-sm font-semibold">{t('verification')}</div>
-              <div className="rounded-full bg-white/70 px-2 py-1 text-xs font-semibold">{certificate.status}</div>
+              <div className="rounded-full bg-white/70 px-2 py-1 text-xs font-semibold">{statusUpper || '-'}</div>
             </div>
             <LanguageSwitcher size="xs" />
           </div>

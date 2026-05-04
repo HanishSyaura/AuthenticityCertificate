@@ -293,6 +293,13 @@ async function ensureCertificateTemplateSchemaCompat() {
   );
   await ensureColumn(
     tableName,
+    'backgroundMode',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`backgroundMode\` VARCHAR(32) NULL`,
+    `UPDATE \`${tableName}\` SET \`backgroundMode\` = 'background' WHERE \`backgroundMode\` IS NULL OR \`backgroundMode\` = ''`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`backgroundMode\` VARCHAR(32) NOT NULL DEFAULT 'background'`
+  );
+  await ensureColumn(
+    tableName,
     'canvasWidth',
     `ALTER TABLE \`${tableName}\` ADD COLUMN \`canvasWidth\` INT NULL`,
     `UPDATE \`${tableName}\` SET \`canvasWidth\` = 390 WHERE \`canvasWidth\` IS NULL`,
