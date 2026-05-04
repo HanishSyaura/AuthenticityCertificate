@@ -232,6 +232,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     }
 
     const resolvedProduct = epcProduct || cert.batch?.product || null;
+    let supportingCertificates = [];
     let layout = null;
     const pageId = resolvedProduct?.cmsPage?.id || null;
     const certificateLayout = null;
@@ -291,6 +292,32 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
       }
     }
 
+    if (resolvedOrgId && resolvedProduct?.id) {
+      try {
+        if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
+        const rows = await Promise.race([
+          prisma.productSupportingCertificate.findMany({
+            where: { organizationId: resolvedOrgId, productId: Number(resolvedProduct.id), deletedAt: null },
+            orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+            include: { certificateTemplate: true }
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
+        ]);
+        supportingCertificates = Array.isArray(rows)
+          ? rows.map((r) => ({
+              id: r.id,
+              sortOrder: r.sortOrder,
+              title: r.title || null,
+              mediaUrl: r.mediaUrl || null,
+              templateData: r.templateData || null,
+              certificateTemplate: r.certificateTemplate || null
+            }))
+          : [];
+      } catch {
+        dbGate.markDbFailure({ cooldownMs: 10_000 });
+      }
+    }
+
     void certificatePageId;
     if (!layout) layout = resolvedProduct?.cmsPage?.layout?.layoutJson || null;
     void certificateLayout;
@@ -325,6 +352,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
             }
           : null,
         templateData: templateData || null,
+        supportingCertificates,
         layout,
         certificateLayout: null,
         certificateTemplate: epcBatchTemplate || resolvedProduct?.certificateTemplate || null,

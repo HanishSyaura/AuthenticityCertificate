@@ -94,17 +94,6 @@ function sanitizeStyle(input) {
   return kept.join('; ');
 }
 
-function sanitizeUrl(input, { allowDataImage = false } = {}) {
-  const raw = String(input || '').trim();
-  if (!raw) return '';
-  if (raw.startsWith('#') || raw.startsWith('/') || raw.startsWith('?')) return raw;
-  const lower = raw.toLowerCase();
-  if (lower.startsWith('mailto:') || lower.startsWith('tel:')) return raw;
-  if (lower.startsWith('http://') || lower.startsWith('https://')) return raw;
-  if (allowDataImage && /^data:image\/(png|jpe?g|gif|webp);base64,/i.test(raw)) return raw;
-  return '';
-}
-
 function sanitizeClass(input) {
   const raw = String(input || '').trim();
   if (!raw) return '';
@@ -211,6 +200,17 @@ function sanitizeLimitedHtml(input) {
   return String(doc.body.innerHTML || '');
 }
 
+function inlineizeHtml(input) {
+  let s = String(input || '');
+  if (!s) return '';
+  s = s.replace(/<br\s*\/?>/gi, ' ');
+  s = s.replace(/<(\/?)p(\s[^>]*)?>/gi, (m, close, attrs) => (close ? '</span>' : `<span${attrs || ''}>`));
+  s = s.replace(/<(\/?)div(\s[^>]*)?>/gi, (m, close, attrs) => (close ? '</span>' : `<span${attrs || ''}>`));
+  s = s.replace(/<(\/?)blockquote(\s[^>]*)?>/gi, (m, close, attrs) => (close ? '</span>' : `<span${attrs || ''}>`));
+  s = s.replace(/<(\/?)h[1-6](\s[^>]*)?>/gi, (m, close, attrs) => (close ? '</span>' : `<span${attrs || ''}>`));
+  return s;
+}
+
 function toDateOrNull(input) {
   if (!input) return null;
   if (input instanceof Date && !Number.isNaN(input.getTime())) return input;
@@ -293,12 +293,10 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
     if (!responsive) return;
     const measure = () => {
       if (responsiveMode === 'viewport') {
-        const vv = window.visualViewport;
         const docW = Number(document.documentElement?.clientWidth || 0);
-        const vvW = Number(vv?.width || 0);
         const winW = Number(window.innerWidth || 0);
         const w = Math.min(
-          ...[docW, vvW, winW].filter((n) => Number.isFinite(n) && n > 0)
+          ...[docW, winW].filter((n) => Number.isFinite(n) && n > 0)
         );
         setTargetW(Number.isFinite(w) && w > 0 ? w : null);
         return;
@@ -311,12 +309,8 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
 
     if (responsiveMode === 'viewport') {
       window.addEventListener('resize', measure);
-      window.visualViewport?.addEventListener?.('resize', measure);
-      window.visualViewport?.addEventListener?.('scroll', measure);
       return () => {
         window.removeEventListener('resize', measure);
-        window.visualViewport?.removeEventListener?.('resize', measure);
-        window.visualViewport?.removeEventListener?.('scroll', measure);
       };
     }
 
@@ -430,6 +424,13 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
         }
       case 'certificate':
         {
+          const variant = String(block.content?.variant || 'auth');
+          const supportingIndexRaw = block.content?.supportingIndex;
+          const supportingIndex = Number.isFinite(Number(supportingIndexRaw)) ? Math.max(0, Math.floor(Number(supportingIndexRaw))) : 0;
+          const supporting =
+            variant === 'supporting' && Array.isArray(data?.supportingCertificates) ? data.supportingCertificates[supportingIndex] || null : null;
+          const dataForTemplate = supporting && supporting.templateData != null ? { ...(data || {}), templateData: supporting.templateData } : data;
+
           const status = String(data?.status || '').toUpperCase();
           const ok = status === 'VALID';
           const productName = data?.product?.name || '-';
@@ -439,7 +440,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
           const caiqNumber = data?.epcItem?.caiqNumber || null;
           const productionDate = data?.epcItem?.productionDate ? new Date(data.epcItem.productionDate) : null;
 
-          const template = data?.certificateTemplate || null;
+          const template = supporting?.certificateTemplate || data?.certificateTemplate || null;
           const templateLayout = normalizeJsonArray(template?.layoutJson);
           if (!disableCertificateEmbed && template && templateLayout) {
             const rawW = Number(template?.canvasWidth || block.content?.canvasWidth || 390);
@@ -497,7 +498,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                       )
                     ) : null}
                     {items.map((it, idx) => {
-                      const raw = it.path ? getValue(it.path, data) : '';
+                      const raw = it.path ? getValue(it.path, dataForTemplate) : '';
                       const path = String(it.path || '');
                       const key = path.startsWith('templateData.') ? path.slice('templateData.'.length) : '';
                       const ph = key ? placeholderByKey.get(key) : null;
@@ -512,12 +513,16 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                       const prefixHtml =
                         showPrefix && labelText
                           ? key
-                            ? `${String(ph?.labelHtml || '').trim() ? sanitizeLimitedHtml(ph.labelHtml) : escapeHtml(String(ph?.label || key))}${
+                            ? `${inlineizeHtml(
+                                String(ph?.labelHtml || '').trim() ? sanitizeLimitedHtml(ph.labelHtml) : escapeHtml(String(ph?.label || key))
+                              )}${inlineizeHtml(
                                 String(ph?.separatorHtml || '').trim()
                                   ? sanitizeLimitedHtml(ph.separatorHtml)
                                   : escapeHtml(String(ph?.separator ?? ': '))
-                              }`
-                            : `${String(it.labelHtml || '').trim() ? sanitizeLimitedHtml(it.labelHtml) : escapeHtml(String(it.label || ''))}${escapeHtml(': ')}`
+                              )}`
+                            : `${inlineizeHtml(
+                                String(it.labelHtml || '').trim() ? sanitizeLimitedHtml(it.labelHtml) : escapeHtml(String(it.label || ''))
+                              )}${escapeHtml(': ')}`
                           : '';
                       if (!String(val || '').trim() && ph) {
                         if (source === 'static' || source === 'title') {
@@ -526,10 +531,10 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                           const bindPath = String(ph?.bindPath || '').trim();
                           if (bindPath) {
                             const v = getValue(bindPath, {
-                              product: data?.product || null,
-                              batch: data?.batch || null,
-                              certificate: data || null,
-                              epcItem: data?.epcItem || null
+                              product: dataForTemplate?.product || null,
+                              batch: dataForTemplate?.batch || null,
+                              certificate: dataForTemplate || null,
+                              epcItem: dataForTemplate?.epcItem || null
                             });
                             val = v == null ? '' : String(v);
                           }
@@ -553,7 +558,11 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                             lineHeight: 1.2
                           }}
                         >
-                          <div className={`ql-editor ac-richtext h-full w-full font-semibold ${textAlignClass(it.align)}`} dangerouslySetInnerHTML={{ __html: html }} />
+                          <div
+                            className={`ql-editor ac-richtext h-full w-full font-semibold ${textAlignClass(it.align)}`}
+                            style={{ textAlign: String(it.align || 'left') }}
+                            dangerouslySetInnerHTML={{ __html: html }}
+                          />
                         </div>
                       );
                     })}
@@ -567,14 +576,20 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
             key={block.id}
             style={style}
             className={`flex h-full w-full flex-col justify-between overflow-hidden rounded-none border p-4 ${
-              ok ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50'
+              variant === 'supporting' ? 'border-zinc-200 bg-zinc-50' : ok ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50'
             }`}
           >
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-600">{t('certificateTitle')}</div>
               <div className="mt-1 flex items-center justify-between gap-2">
                 <div className="text-sm font-semibold text-zinc-900">{t('certificateStatusSubtitle')}</div>
-                <div className={`rounded-full bg-white/70 px-2 py-1 text-xs font-semibold ${ok ? 'text-emerald-900' : 'text-rose-900'}`}>{status || '-'}</div>
+                <div
+                  className={`rounded-full bg-white/70 px-2 py-1 text-xs font-semibold ${
+                    variant === 'supporting' ? 'text-zinc-900' : ok ? 'text-emerald-900' : 'text-rose-900'
+                  }`}
+                >
+                  {variant === 'supporting' ? t('supportingCertificate') : status || '-'}
+                </div>
               </div>
               <div className="mt-3 rounded-none border border-white/40 bg-white/60 px-3 py-2">
                 <div className="text-[11px] font-semibold text-zinc-600">{t('certificateId')}</div>

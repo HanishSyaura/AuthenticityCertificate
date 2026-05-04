@@ -21,7 +21,10 @@ export default function CanvasStage({
   selectedId,
   setSelectedId,
   backgroundUrl,
-  grid = 4
+  grid = 4,
+  containerClassName = '',
+  containerStyle,
+  largeUi = false
 }) {
   const stageRef = useRef(null);
   const dragRef = useRef(null);
@@ -145,7 +148,7 @@ export default function CanvasStage({
   };
 
   return (
-    <div className="w-full overflow-auto p-3">
+    <div className={`w-full overflow-auto p-3 ${containerClassName}`} style={containerStyle}>
       <div className="mx-auto" style={{ width: width * scale, height: height * scale }}>
         <div
           ref={stageRef}
@@ -190,6 +193,7 @@ export default function CanvasStage({
 
           {(Array.isArray(items) ? items : []).map((it) => {
             const selected = interactive && it.id === selectedId;
+            const resizeHandleClass = largeUi ? 'absolute -bottom-3 -right-3 h-6 w-6 rounded bg-brand-600' : 'absolute -bottom-2 -right-2 h-4 w-4 rounded bg-brand-600';
             return (
               <div
                 key={it.id}
@@ -206,7 +210,7 @@ export default function CanvasStage({
                 <div
                   role="button"
                   tabIndex={0}
-                  className={`absolute -bottom-2 -right-2 h-4 w-4 rounded bg-brand-600 ${interactive && selected ? '' : 'hidden'}`}
+                  className={`${resizeHandleClass} ${interactive && selected ? '' : 'hidden'}`}
                   onPointerDown={(e) => onItemPointerDown(e, it, 'resize')}
                 />
               </div>

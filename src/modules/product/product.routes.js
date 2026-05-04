@@ -44,4 +44,26 @@ router.get('/', productController.getAllProducts);
 router.post('/batches', auditAction('CREATE_BATCH', { targetType: 'batch' }), productController.createBatch);
 router.get('/:id/batches', productController.getProductBatches);
 
+router.get('/:id/supporting-certificates', productController.getProductSupportingCertificates);
+router.post(
+  '/:id/supporting-certificates',
+  auditAction('CREATE_PRODUCT_SUPPORTING_CERT', { targetType: 'product', getTargetId: (req) => req.params.id }),
+  productController.createProductSupportingCertificate
+);
+router.patch(
+  '/:id/supporting-certificates/order',
+  auditAction('REORDER_PRODUCT_SUPPORTING_CERTS', { targetType: 'product', getTargetId: (req) => req.params.id }),
+  productController.reorderProductSupportingCertificates
+);
+router.patch(
+  '/:id/supporting-certificates/:supportingId',
+  auditAction('UPDATE_PRODUCT_SUPPORTING_CERT', { targetType: 'product', getTargetId: (req) => req.params.id }),
+  productController.updateProductSupportingCertificate
+);
+router.delete(
+  '/:id/supporting-certificates/:supportingId',
+  auditAction('DELETE_PRODUCT_SUPPORTING_CERT', { targetType: 'product', getTargetId: (req) => req.params.id }),
+  productController.deleteProductSupportingCertificate
+);
+
 module.exports = router;

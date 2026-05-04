@@ -15,6 +15,7 @@ import AdminEpc from './pages/admin/AdminEpc';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminCertificateList from './pages/admin/AdminCertificateList';
 import AdminCertificateBuilder from './pages/admin/AdminCertificateBuilder';
+import AdminCertificateDesigner from './pages/admin/AdminCertificateDesigner';
 
 function App() {
   return (
@@ -44,6 +45,7 @@ function App() {
           <Route path="certificates" element={<AdminCertificateList />} />
           <Route path="certificates/new" element={<AdminCertificateBuilder />} />
           <Route path="certificates/:id" element={<AdminCertificateBuilder />} />
+          <Route path="certificates/:id/design" element={<AdminCertificateDesigner />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="settings" element={<AdminSettings />} />
         </Route>

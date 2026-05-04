@@ -139,6 +139,7 @@ model Product {
   batches               Batch[]
 
   epcBatches EpcBatch[]
+  supportingCertificates ProductSupportingCertificate[]
 
   versionNo Int       @default(1)
   createdAt DateTime  @default(now())
@@ -149,6 +150,29 @@ model Product {
   @@unique([organizationId, sku])
   @@index([organizationId, category])
   @@index([organizationId, status])
+}
+
+model ProductSupportingCertificate {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  productId      Int
+  product        Product      @relation(fields: [productId], references: [id])
+
+  sortOrder Int    @default(0)
+  title     String?
+
+  certificateTemplateId Int?
+  certificateTemplate   CertificateTemplate? @relation(fields: [certificateTemplateId], references: [id])
+  templateData          Json?
+  mediaUrl              String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([organizationId, productId, sortOrder])
+  @@index([organizationId, productId])
 }
 
 model Category {

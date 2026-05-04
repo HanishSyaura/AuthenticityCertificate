@@ -149,6 +149,35 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
             </div>
           ) : null}
 
+          {selectedBlock.type === 'certificate' ? (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-zinc-700">{t('certificateBlockType')}</label>
+                <select
+                  value={String(selectedBlock.content?.variant || 'auth')}
+                  onChange={(e) => updateSelectedContent({ variant: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="auth">{t('authCertificate')}</option>
+                  <option value="supporting">{t('supportingCertificate')}</option>
+                </select>
+              </div>
+              {String(selectedBlock.content?.variant || 'auth') === 'supporting' ? (
+                <div>
+                  <label className="block text-xs font-medium text-zinc-700">{t('supportingIndex')}</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={Number.isFinite(Number(selectedBlock.content?.supportingIndex)) ? Number(selectedBlock.content?.supportingIndex) : 0}
+                    onChange={(e) => updateSelectedContent({ supportingIndex: Number(e.target.value) })}
+                    className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                  />
+                  <div className="mt-1 text-[11px] text-zinc-500">{t('supportingIndexHint')}</div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           {selectedBlock.type === 'image' || selectedBlock.type === 'video' ? (
             <div>
               <label className="block text-xs font-medium text-zinc-700">{t('url')}</label>

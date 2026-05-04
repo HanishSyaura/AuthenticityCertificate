@@ -77,7 +77,7 @@ const VerifyPage = () => {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center px-4">
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center px-4">
         <IconLoader className="mb-4 h-10 w-10 animate-spin text-zinc-700" />
         <p className="text-base font-semibold text-zinc-900">{t('verifying')}</p>
       </div>
@@ -87,7 +87,7 @@ const VerifyPage = () => {
   if (certificate) {
     if (Array.isArray(certificate?.layout)) {
       return (
-        <div className="min-h-screen w-full overflow-x-hidden bg-white">
+        <div className="min-h-[100dvh] w-full overflow-x-hidden bg-white">
           <div className="fixed right-3 top-3 z-50">
             <LanguageSwitcher size="xs" />
           </div>
@@ -101,7 +101,7 @@ const VerifyPage = () => {
     const statusOk = statusUpper === 'VALID';
     const statusPreview = statusUpper === 'PREVIEW';
     return (
-      <div className="min-h-screen">
+      <div className="min-h-[100dvh]">
         <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 lg:px-8">
           <div
             className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${
@@ -127,7 +127,7 @@ const VerifyPage = () => {
               const baseW = Number.isFinite(canvasW) && canvasW > 0 ? canvasW : 390;
               const baseH = Number.isFinite(canvasH) && canvasH > 0 ? canvasH : 844;
               return (
-                <div className="min-h-screen overflow-x-hidden bg-white">
+                <div className="min-h-[100dvh] overflow-x-hidden bg-white">
                   <div className="w-full">
                     <PublicRenderer
                       responsive
@@ -173,7 +173,7 @@ const VerifyPage = () => {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-4 py-8">
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center px-4 py-8">
       <div className="mx-auto w-full max-w-md">
         <div className="mb-3 flex justify-end">
           <LanguageSwitcher size="xs" />

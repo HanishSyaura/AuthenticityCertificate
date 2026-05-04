@@ -53,6 +53,24 @@ const bulkDeleteSchema = z.object({
   ids: z.array(z.number().int()).min(1)
 });
 
+const supportingCertCreateSchema = z.object({
+  title: z.string().min(1).max(191).nullable().optional(),
+  certificateTemplateId: z.number().int().nullable().optional(),
+  templateData: z.any().nullable().optional(),
+  mediaUrl: z.string().min(1).max(2048).nullable().optional()
+});
+
+const supportingCertUpdateSchema = z.object({
+  title: z.string().min(1).max(191).nullable().optional(),
+  certificateTemplateId: z.number().int().nullable().optional(),
+  templateData: z.any().nullable().optional(),
+  mediaUrl: z.string().min(1).max(2048).nullable().optional()
+});
+
+const supportingCertReorderSchema = z.object({
+  orderedIds: z.array(z.number().int()).min(1)
+});
+
 async function createProduct(req, res) {
   try {
     const validatedData = productSchema.parse(req.body);
@@ -169,6 +187,76 @@ async function getProductBatches(req, res) {
   }
 }
 
+async function getProductSupportingCertificates(req, res) {
+  try {
+    const { id } = req.params;
+    const rows = await productService.getProductSupportingCertificates({ organizationId: req.organization.id, productId: id });
+    res.success(rows);
+  } catch (error) {
+    sendProductError(res, error);
+  }
+}
+
+async function createProductSupportingCertificate(req, res) {
+  try {
+    const { id } = req.params;
+    const validatedData = supportingCertCreateSchema.parse(req.body);
+    const created = await productService.createProductSupportingCertificate({
+      organizationId: req.organization.id,
+      productId: id,
+      input: validatedData
+    });
+    res.success(created, 'Supporting certificate created successfully');
+  } catch (error) {
+    sendProductError(res, error);
+  }
+}
+
+async function updateProductSupportingCertificate(req, res) {
+  try {
+    const { id, supportingId } = req.params;
+    const validatedData = supportingCertUpdateSchema.parse(req.body);
+    const updated = await productService.updateProductSupportingCertificate({
+      organizationId: req.organization.id,
+      productId: id,
+      supportingId,
+      patch: validatedData
+    });
+    res.success(updated, 'Supporting certificate updated successfully');
+  } catch (error) {
+    sendProductError(res, error);
+  }
+}
+
+async function deleteProductSupportingCertificate(req, res) {
+  try {
+    const { id, supportingId } = req.params;
+    const result = await productService.deleteProductSupportingCertificate({
+      organizationId: req.organization.id,
+      productId: id,
+      supportingId
+    });
+    res.success(result, 'Supporting certificate deleted successfully');
+  } catch (error) {
+    sendProductError(res, error);
+  }
+}
+
+async function reorderProductSupportingCertificates(req, res) {
+  try {
+    const { id } = req.params;
+    const validated = supportingCertReorderSchema.parse(req.body);
+    const result = await productService.reorderProductSupportingCertificates({
+      organizationId: req.organization.id,
+      productId: id,
+      orderedIds: validated.orderedIds
+    });
+    res.success(result, 'Supporting certificates reordered successfully');
+  } catch (error) {
+    sendProductError(res, error);
+  }
+}
+
 module.exports = {
   createProduct,
   updateProduct,
@@ -178,5 +266,10 @@ module.exports = {
   deleteProductsBulk,
   getAllProducts,
   createBatch,
-  getProductBatches
+  getProductBatches,
+  getProductSupportingCertificates,
+  createProductSupportingCertificate,
+  updateProductSupportingCertificate,
+  deleteProductSupportingCertificate,
+  reorderProductSupportingCertificates
 };

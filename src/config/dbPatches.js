@@ -188,6 +188,72 @@ async function ensureProductSchemaCompat() {
   }
 }
 
+async function ensureProductSupportingCertificateSchemaCompat() {
+  const tableName = 'ProductSupportingCertificate';
+  const exists = await tableExists(tableName);
+  if (!exists) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`${tableName}\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`organizationId\` INT NOT NULL,
+        \`productId\` INT NOT NULL,
+        \`sortOrder\` INT NOT NULL DEFAULT 0,
+        \`title\` VARCHAR(191) NULL,
+        \`certificateTemplateId\` INT NULL,
+        \`templateData\` JSON NULL,
+        \`mediaUrl\` VARCHAR(2048) NULL,
+        \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        \`deletedAt\` DATETIME NULL,
+        PRIMARY KEY (\`id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+
+  await ensureColumn(tableName, 'organizationId', `ALTER TABLE \`${tableName}\` ADD COLUMN \`organizationId\` INT NULL`, null, `ALTER TABLE \`${tableName}\` MODIFY \`organizationId\` INT NOT NULL`);
+  await ensureColumn(tableName, 'productId', `ALTER TABLE \`${tableName}\` ADD COLUMN \`productId\` INT NULL`, null, `ALTER TABLE \`${tableName}\` MODIFY \`productId\` INT NOT NULL`);
+  await ensureColumn(
+    tableName,
+    'sortOrder',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`sortOrder\` INT NULL`,
+    `UPDATE \`${tableName}\` SET \`sortOrder\` = 0 WHERE \`sortOrder\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`sortOrder\` INT NOT NULL DEFAULT 0`
+  );
+  await ensureColumn(tableName, 'title', `ALTER TABLE \`${tableName}\` ADD COLUMN \`title\` VARCHAR(191) NULL`, null, null);
+  await ensureColumn(tableName, 'certificateTemplateId', `ALTER TABLE \`${tableName}\` ADD COLUMN \`certificateTemplateId\` INT NULL`, null, null);
+  await ensureColumn(tableName, 'templateData', `ALTER TABLE \`${tableName}\` ADD COLUMN \`templateData\` JSON NULL`, null, null);
+  await ensureColumn(tableName, 'mediaUrl', `ALTER TABLE \`${tableName}\` ADD COLUMN \`mediaUrl\` VARCHAR(2048) NULL`, null, null);
+
+  await ensureColumn(
+    tableName,
+    'createdAt',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`createdAt\` DATETIME NULL`,
+    `UPDATE \`${tableName}\` SET \`createdAt\` = NOW() WHERE \`createdAt\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`
+  );
+  await ensureColumn(
+    tableName,
+    'updatedAt',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`updatedAt\` DATETIME NULL`,
+    `UPDATE \`${tableName}\` SET \`updatedAt\` = NOW() WHERE \`updatedAt\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`
+  );
+  await ensureColumn(tableName, 'deletedAt', `ALTER TABLE \`${tableName}\` ADD COLUMN \`deletedAt\` DATETIME NULL`, null, null);
+
+  const idx1 = 'ProductSupportingCertificate_org_product_sort_idx';
+  if (!(await indexExists(tableName, idx1))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${idx1}\` ON \`${tableName}\` (\`organizationId\`, \`productId\`, \`sortOrder\`)`);
+  }
+  const idx2 = 'ProductSupportingCertificate_org_product_idx';
+  if (!(await indexExists(tableName, idx2))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${idx2}\` ON \`${tableName}\` (\`organizationId\`, \`productId\`)`);
+  }
+  const idx3 = 'ProductSupportingCertificate_org_template_idx';
+  if (!(await indexExists(tableName, idx3))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${idx3}\` ON \`${tableName}\` (\`organizationId\`, \`certificateTemplateId\`)`);
+  }
+}
+
 async function ensureCategorySchemaCompat() {
   let tableName = await resolveCategoryTableName();
 
@@ -727,6 +793,7 @@ async function ensureCertificateSchemaCompat() {
 
 async function applyDbPatches() {
   await ensureProductSchemaCompat();
+  await ensureProductSupportingCertificateSchemaCompat();
   await ensureCategorySchemaCompat();
   await ensureCmsPageSchemaCompat();
   await ensureCertificateTemplateSchemaCompat();

@@ -58,6 +58,33 @@ function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
+function useElementSize(ref) {
+  const [size, setSize] = useState({ w: 0, h: 0 });
+
+  useEffect(() => {
+    const el = ref?.current;
+    if (!el) return undefined;
+
+    const update = () => {
+      const r = el.getBoundingClientRect();
+      setSize({ w: r.width || 0, h: r.height || 0 });
+    };
+
+    update();
+
+    if (typeof window !== 'undefined' && typeof window.ResizeObserver === 'function') {
+      const ro = new window.ResizeObserver(() => update());
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
+
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, [ref]);
+
+  return size;
+}
+
 const DEVICE_PRESETS = [
   { id: 'fit', label: 'Fit', kind: 'scale' },
   { id: 'scale-1-2', label: '1:2', kind: 'scale', scale: 0.5 },
@@ -84,7 +111,7 @@ const DEVICE_PRESETS = [
   { id: 'ipad-pro-12-9', label: 'iPad Pro 12.9"', kind: 'phone', w: 1024, h: 1366 }
 ];
 
-export default function AdminCertificateTemplateBuilder({ initialSelectedId = null }) {
+export default function AdminCertificateTemplateBuilder({ initialSelectedId = null, uiMode = 'builder' }) {
   const { t } = useT();
   const { templates, error, fetchTemplates, updateTemplate, deleteTemplate } = useCertTemplatesStore((s) => ({
     templates: s.templates,
@@ -100,12 +127,13 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     updateBatch: s.updateBatch
   }));
 
+  const isDesigner = String(uiMode || 'builder') === 'designer';
   const [selectedId, setSelectedId] = useState(initialSelectedId);
   const [selectedFieldId, setSelectedFieldId] = useState(null);
   const [bgUploading, setBgUploading] = useState(false);
   const [bgError, setBgError] = useState(null);
   const [bgFileKey, setBgFileKey] = useState(0);
-  const [wizardStep, setWizardStep] = useState('fields');
+  const [wizardStep, setWizardStep] = useState(isDesigner ? 'canvas' : 'fields');
   const [addOverlayKey, setAddOverlayKey] = useState('');
   const [expandedPlaceholderKey, setExpandedPlaceholderKey] = useState(null);
   const [devicePresetId, setDevicePresetId] = useState('fit');
@@ -114,6 +142,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const [draftPlaceholders, setDraftPlaceholders] = useState([]);
   const [draftLayout, setDraftLayout] = useState([]);
   const [saveStatus, setSaveStatus] = useState('idle');
+  const [designerRightTab, setDesignerRightTab] = useState('preview');
+  const [designerZoomMode, setDesignerZoomMode] = useState('fit');
+  const [designerZoomPct, setDesignerZoomPct] = useState(125);
+  const [largeUi, setLargeUi] = useState(true);
+  const designerCanvasViewportRef = useRef(null);
   const persistTimerRef = useRef(null);
   const pendingPatchRef = useRef(null);
   const previewNowRef = useRef(new Date().toISOString());
@@ -127,12 +160,28 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const canvasH = Number(selected?.canvasHeight) > 0 ? Number(selected.canvasHeight) : 844;
   const canvasBgColor = String(selected?.backgroundColor || '#ffffff');
   const devicePreset = useMemo(() => DEVICE_PRESETS.find((d) => d.id === devicePresetId) || DEVICE_PRESETS[0], [devicePresetId]);
-  const scale = useMemo(() => {
+  const builderScale = useMemo(() => {
     if (!devicePreset) return 1;
     if (Number(devicePreset.scale) > 0) return Math.max(0.1, Math.min(2, Number(devicePreset.scale)));
     if (!devicePreset.w) return 1;
     return Math.max(0.1, Math.min(2, Number(devicePreset.w) / canvasW));
   }, [canvasW, devicePreset]);
+  const designerViewportSize = useElementSize(designerCanvasViewportRef);
+  const fitDesignerScale = useMemo(() => {
+    const w = Number(designerViewportSize?.w) || 0;
+    const h = Number(designerViewportSize?.h) || 0;
+    if (!w || !h) return 1;
+    const pad = 16;
+    const availW = Math.max(1, w - pad);
+    const availH = Math.max(1, h - pad);
+    const s = Math.min(availW / Math.max(1, canvasW), availH / Math.max(1, canvasH));
+    return clamp(s, 0.1, 6);
+  }, [canvasH, canvasW, designerViewportSize?.h, designerViewportSize?.w]);
+  const designerScale = useMemo(() => {
+    if (String(designerZoomMode || '') === 'fit') return fitDesignerScale;
+    return clamp((Number(designerZoomPct) || 100) / 100, 0.1, 6);
+  }, [designerZoomMode, designerZoomPct, fitDesignerScale]);
+  const canvasScale = isDesigner ? designerScale : builderScale;
 
   const placeholders = useMemo(() => (Array.isArray(draftPlaceholders) ? draftPlaceholders : []), [draftPlaceholders]);
 
@@ -227,7 +276,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
             const align = textAlignClass(it.align);
             return (
-              <div className={`ql-editor ac-richtext font-semibold text-zinc-900 ${align}`} style={{ fontSize: fs }} dangerouslySetInnerHTML={{ __html: html }} />
+              <div
+                className={`ql-editor ac-richtext font-semibold text-zinc-900 ${align}`}
+                style={{ fontSize: fs, textAlign: String(it.align || 'left') }}
+                dangerouslySetInnerHTML={{ __html: html }}
+              />
             );
           })()}
         </div>
@@ -255,7 +308,13 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         const html = sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`);
         const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
         const align = textAlignClass(it.align);
-        return <div className={`ql-editor ac-richtext h-full w-full ${align}`} style={{ fontSize: fs }} dangerouslySetInnerHTML={{ __html: html }} />;
+        return (
+          <div
+            className={`ql-editor ac-richtext h-full w-full ${align}`}
+            style={{ fontSize: fs, textAlign: String(it.align || 'left') }}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        );
       }
     }));
   }, [draftLayout, placeholderByKey, safePreview]);
@@ -441,12 +500,12 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     if (!id) return;
     if (prevSelectedIdRef.current === id) return;
     prevSelectedIdRef.current = id;
-    setWizardStep('fields');
+    setWizardStep(isDesigner ? 'canvas' : 'fields');
     setSelectedFieldId(null);
     const firstKey = String((Array.isArray(selectedPlaceholdersRef.current) ? selectedPlaceholdersRef.current : [])?.[0]?.key || '').trim();
     setAddOverlayKey(firstKey);
     setExpandedPlaceholderKey(firstKey || null);
-  }, [selected?.id]);
+  }, [selected?.id, isDesigner]);
 
   useEffect(() => {
     const keys = (Array.isArray(placeholders) ? placeholders : [])
@@ -480,6 +539,482 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     }
     setAssignedBatchIds(next);
   }, [batches, selected?.id]);
+
+  useEffect(() => {
+    if (!isDesigner) return;
+    if (!selectedFieldId) return;
+    setDesignerRightTab('inspector');
+  }, [isDesigner, selectedFieldId]);
+
+  if (isDesigner) {
+    return (
+      <div className="ac-page">
+        <div className="mb-4">
+          <h2 className="text-base font-semibold text-zinc-900">{t('canvasDesignerHeading')}</h2>
+          <p className="mt-1 text-sm text-zinc-600">{t('canvasDesignerSubheading')}</p>
+        </div>
+
+        {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
+
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
+          <div className="ac-card flex min-h-[70vh] flex-col p-3">
+            {!selected ? (
+              <div className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{t('selectTemplate')}</div>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-semibold text-zinc-500">{t('certificateId')}</div>
+                    <div className="text-sm font-semibold text-zinc-900">{String(selected?.certificateId || '').trim() || `#${selected.id}`}</div>
+                    {String(selected?.name || '').trim() ? <div className="mt-0.5 text-[11px] text-zinc-500">{selected.name}</div> : null}
+                    {saveStatus === 'saving' ? <div className="mt-0.5 text-[11px] font-semibold text-zinc-500">{t('saving')}</div> : null}
+                    {saveStatus === 'saved' ? <div className="mt-0.5 text-[11px] font-semibold text-emerald-700">{t('saved')}</div> : null}
+                    {saveStatus === 'error' ? <div className="mt-0.5 text-[11px] font-semibold text-rose-700">{t('saveFailed')}</div> : null}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select value={addOverlayKey} onChange={(e) => setAddOverlayKey(e.target.value)} className="ac-input w-60 rounded-lg px-3 py-2 text-xs">
+                      <option value="">{t('selectDataField')}</option>
+                      {placeholders
+                        .map((p) => ({ key: String(p?.key || '').trim(), label: String(stripHtmlToText(p?.labelHtml ?? p?.label ?? '') || '').trim() }))
+                        .filter((p) => p.key)
+                        .map((p) => (
+                          <option key={p.key} value={p.key}>
+                            {p.label || p.key}
+                          </option>
+                        ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => addCanvasItemForKey(addOverlayKey)}
+                      className="ac-btn ac-btn-soft rounded-lg px-3 py-2 text-xs"
+                      disabled={!validatePlaceholders.ok || !String(addOverlayKey || '').trim()}
+                    >
+                      {t('addToCanvas')}
+                    </button>
+                  </div>
+                </div>
+
+                {!validatePlaceholders.ok && validatePlaceholders.errors.length > 0 ? (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">{validatePlaceholders.errors[0]}</div>
+                ) : null}
+
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDesignerZoomMode('fit')}
+                      className={`rounded-lg border px-3 py-2 text-xs font-semibold ${designerZoomMode === 'fit' ? 'border-brand-300 bg-brand-50 text-brand-800' : 'border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'}`}
+                    >
+                      Fit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDesignerZoomMode('custom');
+                        setDesignerZoomPct(100);
+                      }}
+                      className={`rounded-lg border px-3 py-2 text-xs font-semibold ${designerZoomMode !== 'fit' && Number(designerZoomPct) === 100 ? 'border-brand-300 bg-brand-50 text-brand-800' : 'border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'}`}
+                    >
+                      100%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDesignerZoomMode('custom');
+                        setDesignerZoomPct((v) => clamp((Number(v) || 100) - 10, 25, 600));
+                      }}
+                      className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                    >
+                      −
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDesignerZoomMode('custom');
+                        setDesignerZoomPct((v) => clamp((Number(v) || 100) + 10, 25, 600));
+                      }}
+                      className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                    >
+                      +
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="range"
+                        min={25}
+                        max={600}
+                        step={5}
+                        value={Number(designerZoomPct) || 100}
+                        onChange={(e) => {
+                          setDesignerZoomMode('custom');
+                          setDesignerZoomPct(Number(e.target.value) || 100);
+                        }}
+                        className="w-40"
+                        disabled={designerZoomMode === 'fit'}
+                      />
+                      <div className="text-xs font-semibold text-zinc-700">{Math.round((Number(canvasScale) || 1) * 100)}%</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDesignerRightTab('preview')}
+                      className={`rounded-lg border px-3 py-2 text-xs font-semibold ${designerRightTab === 'preview' ? 'border-brand-300 bg-brand-50 text-brand-800' : 'border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'}`}
+                    >
+                      {t('preview')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDesignerRightTab('inspector')}
+                      className={`rounded-lg border px-3 py-2 text-xs font-semibold ${designerRightTab === 'inspector' ? 'border-brand-300 bg-brand-50 text-brand-800' : 'border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'}`}
+                    >
+                      {t('inspector')}
+                    </button>
+                  </div>
+                </div>
+
+                <div ref={designerCanvasViewportRef} className="mt-3 min-h-0 flex-1 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
+                  <CanvasStage
+                    width={canvasW}
+                    height={canvasH}
+                    scale={canvasScale}
+                    backgroundMode={backgroundMode}
+                    backgroundColor={canvasBgColor}
+                    backgroundUrl={selected.background || ''}
+                    items={canvasItems}
+                    setItems={setCanvasItems}
+                    selectedId={selectedFieldId}
+                    setSelectedId={setSelectedFieldId}
+                    grid={4}
+                    largeUi={largeUi}
+                    containerClassName="p-2"
+                    containerStyle={{ height: '100%' }}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-zinc-200 bg-white p-3">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="inline-flex overflow-hidden rounded-lg border border-zinc-200 bg-white">
+                <button
+                  type="button"
+                  onClick={() => setDesignerRightTab('preview')}
+                  className={`px-3 py-2 text-xs font-semibold ${designerRightTab === 'preview' ? 'bg-brand-50 text-brand-800' : 'text-zinc-700 hover:bg-zinc-50'}`}
+                >
+                  {t('preview')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDesignerRightTab('inspector')}
+                  className={`px-3 py-2 text-xs font-semibold ${designerRightTab === 'inspector' ? 'bg-brand-50 text-brand-800' : 'text-zinc-700 hover:bg-zinc-50'}`}
+                >
+                  {t('inspector')}
+                </button>
+              </div>
+              <label className="flex items-center gap-2 text-xs font-semibold text-zinc-700">
+                <input type="checkbox" checked={largeUi} onChange={(e) => setLargeUi(Boolean(e.target.checked))} />
+                {t('largeUi')}
+              </label>
+            </div>
+
+            <div className="max-h-[calc(100vh-20rem)] overflow-auto pr-1">
+              {designerRightTab === 'preview' ? (
+                <>
+                  <div className="mb-3 text-xs font-semibold text-zinc-500">{t('preview')}</div>
+                  {!selected ? null : (
+                    <div className="space-y-3">
+                      <CanvasStage
+                        mode="preview"
+                        width={canvasW}
+                        height={canvasH}
+                        scale={Math.max(0.1, Math.min(2, 380 / canvasW))}
+                        backgroundMode={backgroundMode}
+                        backgroundColor={canvasBgColor}
+                        backgroundUrl={selected.background || ''}
+                        items={previewItems}
+                      />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="mb-3 text-xs font-semibold text-zinc-500">{t('inspector')}</div>
+                  {!selected ? null : (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-700">{t('certificateId')}</label>
+                        <input
+                          value={selected.certificateId || ''}
+                          onChange={(e) => queueTemplatePatch({ certificateId: e.target.value })}
+                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-700">{t('certificateName')}</label>
+                        <input
+                          value={selected.name || ''}
+                          onChange={(e) => queueTemplatePatch({ name: e.target.value })}
+                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-700">{t('backgroundUrl')}</label>
+                        <input
+                          value={selected.background || ''}
+                          onChange={(e) => queueTemplatePatch({ background: e.target.value })}
+                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                        />
+                        <div className="mt-2 flex items-center gap-2">
+                          <input
+                            key={bgFileKey}
+                            type="file"
+                            accept="image/*,video/*"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              setBgError(null);
+                              setBgUploading(true);
+                              try {
+                                const res = await uploadMedia({ file });
+                                queueTemplatePatch({ background: res?.url || '' });
+                                setBgFileKey((k) => k + 1);
+                              } catch (err) {
+                                setBgError(err?.message || String(err));
+                              } finally {
+                                setBgUploading(false);
+                              }
+                            }}
+                            className="text-xs"
+                          />
+                          {bgUploading ? <div className="text-xs font-semibold text-zinc-500">{t('saving')}</div> : null}
+                        </div>
+                        {bgError ? <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">{bgError}</div> : null}
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-700">{t('backgroundColor')}</label>
+                        <input
+                          value={selected.backgroundColor || ''}
+                          onChange={(e) => queueTemplatePatch({ backgroundColor: e.target.value })}
+                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-700">{t('backgroundMode')}</label>
+                        <select
+                          value={backgroundMode}
+                          onChange={(e) => {
+                            const v = String(e.target.value || 'background');
+                            setBackgroundMode(v);
+                            queueTemplatePatch({ backgroundMode: v });
+                          }}
+                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                        >
+                          <option value="background">{t('stretchBackground')}</option>
+                          <option value="fit">{t('fitBackground')}</option>
+                          <option value="actual">{t('actualSize')}</option>
+                        </select>
+                        <div className="mt-1 text-[11px] text-zinc-500">{t('backgroundSizeAdvice')}</div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-zinc-700">{t('canvasWidth')}</label>
+                          <input
+                            type="number"
+                            value={canvasW}
+                            onChange={(e) => queueTemplatePatch({ canvasWidth: Number(e.target.value) || 390 })}
+                            className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-zinc-700">{t('canvasHeight')}</label>
+                          <input
+                            type="number"
+                            value={canvasH}
+                            onChange={(e) => queueTemplatePatch({ canvasHeight: Number(e.target.value) || 844 })}
+                            className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      {Array.isArray(batches) ? (
+                        <div>
+                          <div className="mb-2 text-xs font-semibold text-zinc-500">{t('assignEpcBatches')}</div>
+                          <div className="space-y-1">
+                            {batches.map((b) => {
+                              const bid = String(b?.id || '');
+                              const checked = assignedBatchIds.has(bid);
+                              return (
+                                <label key={bid} className="flex items-center gap-2 text-sm">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={async (e) => {
+                                      const next = new Set(Array.from(assignedBatchIds));
+                                      if (e.target.checked) next.add(bid);
+                                      else next.delete(bid);
+                                      setAssignedBatchIds(next);
+                                      await updateBatch({ id: b.id, certificateTemplateId: e.target.checked ? selected.id : null });
+                                      void fetchBatches({ limit: 200, offset: 0 });
+                                    }}
+                                  />
+                                  <div className="min-w-0 flex-1 truncate">
+                                    {String(b?.batchNo || b?.code || `#${b?.id}`)} {b?.product?.code ? `(${b.product.code})` : ''}
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div>
+                        <div className="mb-2 text-xs font-semibold text-zinc-500">{t('selectField')}</div>
+                        {!selectedField ? (
+                          <div className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{t('selectField')}</div>
+                        ) : (
+                          <>
+                            <div className="grid grid-cols-4 gap-2">
+                              <div>
+                                <label className="block text-[11px] font-semibold text-zinc-600">x</label>
+                                <input
+                                  type="number"
+                                  value={Number(selectedField.x) || 0}
+                                  onChange={(e) => updateField({ x: Number(e.target.value) || 0 })}
+                                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[11px] font-semibold text-zinc-600">y</label>
+                                <input
+                                  type="number"
+                                  value={Number(selectedField.y) || 0}
+                                  onChange={(e) => updateField({ y: Number(e.target.value) || 0 })}
+                                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[11px] font-semibold text-zinc-600">w</label>
+                                <input
+                                  type="number"
+                                  value={Number(selectedField.w) || 0}
+                                  onChange={(e) => updateField({ w: Number(e.target.value) || 0 })}
+                                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[11px] font-semibold text-zinc-600">h</label>
+                                <input
+                                  type="number"
+                                  value={Number(selectedField.h) || 0}
+                                  onChange={(e) => updateField({ h: Number(e.target.value) || 0 })}
+                                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="mt-3">
+                              <label className="block text-xs font-medium text-zinc-700">{t('fieldLabel')}</label>
+                              <div className="mt-1">
+                                <RichTextEditor
+                                  value={String(selectedField.labelHtml ?? toQuillHtml(selectedField.label || ''))}
+                                  onChange={(html) => {
+                                    const nextHtml = String(html || '');
+                                    const nextText = String(stripHtmlToText(nextHtml) || '').trim();
+                                    updateField({ label: nextText, labelHtml: nextHtml });
+                                  }}
+                                  minHeight="2.5rem"
+                                  maxHeight="6rem"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="mt-3">
+                              <label className="block text-xs font-medium text-zinc-700">{t('dataPath')}</label>
+                              <select
+                                value={selectedField.path}
+                                onChange={(e) => updateField({ path: e.target.value })}
+                                className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                              >
+                                <option value="certificateId">certificateId</option>
+                                <option value="product.name">product.name</option>
+                                <option value="batch.batchNo">batch.batchNo</option>
+                                <option value="epcItem.netWeight">epcItem.netWeight</option>
+                                <option value="epcItem.caiqNumber">epcItem.caiqNumber</option>
+                                <option value="epcItem.productionDate">epcItem.productionDate</option>
+                                <option value="issuedAt">issuedAt</option>
+                                <option value="status">status</option>
+                                {placeholders
+                                  .map((p) => String(p?.key || '').trim())
+                                  .filter(Boolean)
+                                  .map((k) => (
+                                    <option key={k} value={`templateData.${k}`}>
+                                      templateData.{k}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+
+                            <div className="mt-3 grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="block text-xs font-medium text-zinc-700">{t('fontSize')}</label>
+                                <input
+                                  type="number"
+                                  min={8}
+                                  max={96}
+                                  value={Number(selectedField.fontSize) > 0 ? Number(selectedField.fontSize) : 14}
+                                  onChange={(e) => updateField({ fontSize: Number(e.target.value) || 14 })}
+                                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-zinc-700">{t('align')}</label>
+                                <select
+                                  value={String(selectedField.align || 'left')}
+                                  onChange={(e) => updateField({ align: e.target.value })}
+                                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                                >
+                                  <option value="left">{t('alignLeft')}</option>
+                                  <option value="center">{t('alignCenter')}</option>
+                                  <option value="right">{t('alignRight')}</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const next = (Array.isArray(draftLayout) ? draftLayout : []).filter((f) => f.id !== selectedField.id);
+                                  setSelectedFieldId(null);
+                                  setDraftLayout(next);
+                                  queueTemplatePatch({ layoutJson: next });
+                                }}
+                                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                              >
+                                {t('delete')}
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="ac-page">
@@ -606,7 +1141,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                 <CanvasStage
                   width={canvasW}
                   height={canvasH}
-                  scale={scale}
+                  scale={canvasScale}
                   backgroundMode={backgroundMode}
                   backgroundColor={canvasBgColor}
                   backgroundUrl={selected.background || ''}
@@ -673,70 +1208,73 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           </div>
                           {isOpen ? (
                             <div className="mt-2 grid grid-cols-1 gap-2" onFocusCapture={() => setExpandedPlaceholderKey(cardKey)}>
-                              <div className="flex flex-nowrap items-start gap-2 overflow-x-hidden">
-                                <div className="min-w-0 flex-1">
-                                  <input
-                                    value={String(p?.label || stripHtmlToText(p?.labelHtml ?? '') || '')}
-                                    onChange={(e) => {
-                                      const nextLabel = String(e.target.value || '');
-                                      const nextLabelHtml = toQuillHtml(nextLabel);
-                                      const next = placeholders.slice();
-                                      const cur = next[idx] || {};
-                                      const curKey = String(cur.key || '').trim();
-                                      if (!curKey) {
-                                        const used = new Set(
-                                          next
-                                            .map((it, i) => (i === idx ? '' : String(it?.key || '').trim().toLowerCase()))
-                                            .filter(Boolean)
-                                        );
-                                        const gen = makeUniqueKey(nextLabel.trim() || `field_${idx + 1}`, used);
-                                        next[idx] = { ...cur, label: nextLabel, labelHtml: nextLabelHtml, key: gen };
-                                      } else {
-                                        next[idx] = { ...cur, label: nextLabel, labelHtml: nextLabelHtml };
-                                      }
-                                      replacePlaceholders(next);
-                                      const nextKey = String(next[idx]?.key || '').trim();
-                                      if (nextKey && String(expandedPlaceholderKey || '') === cardKey) setExpandedPlaceholderKey(nextKey);
-                                    }}
-                                    placeholder={t('fieldLabel')}
-                                    className="w-full min-w-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                                  />
+                              <div className="flex flex-col items-start gap-2 overflow-x-hidden sm:flex-row sm:flex-nowrap">
+                                <div className="flex min-w-0 flex-1 items-start gap-2">
+                                  <div className="min-w-0 flex-1">
+                                    <input
+                                      value={String(p?.label || stripHtmlToText(p?.labelHtml ?? '') || '')}
+                                      onChange={(e) => {
+                                        const nextLabel = String(e.target.value || '');
+                                        const nextLabelHtml = toQuillHtml(nextLabel);
+                                        const next = placeholders.slice();
+                                        const cur = next[idx] || {};
+                                        const curKey = String(cur.key || '').trim();
+                                        if (!curKey) {
+                                          const used = new Set(
+                                            next
+                                              .map((it, i) => (i === idx ? '' : String(it?.key || '').trim().toLowerCase()))
+                                              .filter(Boolean)
+                                          );
+                                          const gen = makeUniqueKey(nextLabel.trim() || `field_${idx + 1}`, used);
+                                          next[idx] = { ...cur, label: nextLabel, labelHtml: nextLabelHtml, key: gen };
+                                        } else {
+                                          next[idx] = { ...cur, label: nextLabel, labelHtml: nextLabelHtml };
+                                        }
+                                        replacePlaceholders(next);
+                                        const nextKey = String(next[idx]?.key || '').trim();
+                                        if (nextKey && String(expandedPlaceholderKey || '') === cardKey) setExpandedPlaceholderKey(nextKey);
+                                      }}
+                                      placeholder={t('fieldLabel')}
+                                      className="w-full min-w-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                                    />
+                                  </div>
+                                  <div className="w-32 shrink-0">
+                                    <input
+                                      value={String((p?.separator ?? stripHtmlToText(p?.separatorHtml ?? '')) || ': ')}
+                                      onChange={(e) => {
+                                        const nextSep = String(e.target.value || '');
+                                        const nextSepHtml = toQuillHtml(nextSep);
+                                        const next = placeholders.slice();
+                                        next[idx] = { ...(next[idx] || {}), separator: nextSep, separatorHtml: nextSepHtml };
+                                        replacePlaceholders(next);
+                                      }}
+                                      placeholder={t('separator')}
+                                      readOnly={isTitle}
+                                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                                    />
+                                  </div>
                                 </div>
-                                <div className="w-32 shrink-0">
-                                  <input
-                                    value={String((p?.separator ?? stripHtmlToText(p?.separatorHtml ?? '')) || ': ')}
-                                    onChange={(e) => {
-                                      const nextSep = String(e.target.value || '');
-                                      const nextSepHtml = toQuillHtml(nextSep);
-                                      const next = placeholders.slice();
-                                      next[idx] = { ...(next[idx] || {}), separator: nextSep, separatorHtml: nextSepHtml };
-                                      replacePlaceholders(next);
-                                    }}
-                                    placeholder={t('separator')}
-                                    readOnly={isTitle}
-                                    className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                                  />
-                                </div>
-                                <div className="w-44 shrink-0">
-                                  <select
-                                    value={uiSource}
-                                    onChange={(e) => {
-                                      const nextSource = e.target.value;
-                                      const next = placeholders.slice();
-                                      const cur = next[idx] || {};
-                                      next[idx] = { ...cur, source: nextSource };
-                                      replacePlaceholders(next);
-                                    }}
-                                    className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                                  >
-                                    <option value="static">{t('sourceManual')}</option>
-                                    <option value="title">{t('sourceTitle')}</option>
-                                    <option value="product">{t('bindTo')}</option>
-                                  </select>
-                                </div>
-                                <div className="min-w-0 flex-1">
+
+                                <div className={`flex min-w-0 items-start gap-2 ${uiSource === 'product' ? 'flex-1' : ''}`}>
+                                  <div className="w-44 shrink-0">
+                                    <select
+                                      value={uiSource}
+                                      onChange={(e) => {
+                                        const nextSource = e.target.value;
+                                        const next = placeholders.slice();
+                                        const cur = next[idx] || {};
+                                        next[idx] = { ...cur, source: nextSource };
+                                        replacePlaceholders(next);
+                                      }}
+                                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                                    >
+                                      <option value="static">{t('sourceManual')}</option>
+                                      <option value="title">{t('sourceTitle')}</option>
+                                      <option value="product">{t('bindTo')}</option>
+                                    </select>
+                                  </div>
                                   {uiSource === 'product' ? (
-                                    <div>
+                                    <div className="min-w-0 flex-1">
                                       <input
                                         value={String(p?.bindPath || '')}
                                         onChange={(e) => {

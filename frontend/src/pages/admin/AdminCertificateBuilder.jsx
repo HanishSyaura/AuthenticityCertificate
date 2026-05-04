@@ -22,6 +22,9 @@ export default function AdminCertificateBuilder() {
         <button type="button" className="text-xs font-semibold underline" onClick={() => navigate('/admin/certificates')}>
           {t('backToList')}
         </button>
+        <button type="button" className="text-xs font-semibold underline" onClick={() => navigate(`/admin/certificates/${id}/design`)}>
+          {t('openDesigner')}
+        </button>
       </div>
       <AdminCertificateTemplateBuilder initialSelectedId={id ? String(id) : null} />
     </div>

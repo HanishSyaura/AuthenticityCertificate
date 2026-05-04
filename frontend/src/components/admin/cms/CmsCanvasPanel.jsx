@@ -120,7 +120,14 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
     setLayout(next);
   };
 
-  const hasCertificateBlock = useMemo(() => (Array.isArray(layout) ? layout.some((b) => b?.type === 'certificate') : false), [layout]);
+  const hasAuthCertificateBlock = useMemo(() => {
+    if (!Array.isArray(layout)) return false;
+    return layout.some((b) => {
+      if (b?.type !== 'certificate') return false;
+      const variant = String(b?.content?.variant || 'auth');
+      return variant === 'auth';
+    });
+  }, [layout]);
 
   const blocks = useMemo(() => {
     return layout.map((b) => ({
@@ -174,11 +181,14 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
           );
         }
         if (it.type === 'certificate') {
+          const variant = String(it.content?.variant || 'auth');
           return (
             <div className="flex h-full w-full items-center justify-center p-2">
               <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-center">
                 <div className="text-xs font-semibold text-zinc-800">{t('certificateTitle')}</div>
-                <div className="mt-0.5 text-[11px] font-semibold text-zinc-600">Embedded certificate output</div>
+                <div className="mt-0.5 text-[11px] font-semibold text-zinc-600">
+                  {variant === 'supporting' ? t('supportingCertificate') : t('authCertificate')}
+                </div>
               </div>
             </div>
           );
@@ -282,16 +292,31 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
           >
             {t('addVideo')}
           </button>
-          {kind === 'landing' && !hasCertificateBlock ? (
+          {kind === 'landing' && !hasAuthCertificateBlock ? (
             <button
               type="button"
               onClick={() => {
-                const next = [...layout, { id: makeId('cert'), type: 'certificate', x: 0, y: 0, w: baseW, h: baseH }];
+                const next = [...layout, { id: makeId('cert'), type: 'certificate', x: 0, y: 0, w: baseW, h: baseH, content: { variant: 'auth' } }];
                 setLayout(next);
               }}
               className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
             >
-              {t('addCertificate')}
+              {t('addAuthCertificate')}
+            </button>
+          ) : null}
+          {kind === 'landing' ? (
+            <button
+              type="button"
+              onClick={() => {
+                const next = [
+                  ...layout,
+                  { id: makeId('supporting-cert'), type: 'certificate', x: 20, y: 20, w: baseW - 40, h: 260, content: { variant: 'supporting', supportingIndex: 0 } }
+                ];
+                setLayout(next);
+              }}
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+            >
+              {t('addSupportingCertificate')}
             </button>
           ) : null}
         </div>

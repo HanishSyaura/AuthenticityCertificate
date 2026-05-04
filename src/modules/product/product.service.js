@@ -452,6 +452,142 @@ async function getBatchesByProduct({ organizationId, productId }) {
   );
 }
 
+// Supporting Certificate Services
+async function getProductSupportingCertificates({ organizationId, productId }) {
+  const pid = Number(productId);
+  if (!Number.isFinite(pid) || pid <= 0) throw new Error('Product not found');
+  return await withTimeout(
+    prisma.productSupportingCertificate.findMany({
+      where: { organizationId: Number(organizationId), productId: pid, deletedAt: null },
+      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+      include: {
+        certificateTemplate: { select: { id: true, name: true, certificateId: true } }
+      }
+    }),
+    1200
+  );
+}
+
+async function createProductSupportingCertificate({ organizationId, productId, input }) {
+  const pid = Number(productId);
+  if (!Number.isFinite(pid) || pid <= 0) throw new Error('Product not found');
+  const orgId = Number(organizationId);
+
+  const product = await withTimeout(prisma.product.findFirst({ where: { id: pid, organizationId: orgId }, select: { id: true } }), 1200);
+  if (!product) throw new Error('Product not found');
+
+  const maxRow = await withTimeout(
+    prisma.productSupportingCertificate.findFirst({
+      where: { organizationId: orgId, productId: pid, deletedAt: null },
+      orderBy: [{ sortOrder: 'desc' }, { id: 'desc' }],
+      select: { sortOrder: true }
+    }),
+    1200
+  );
+  const nextSort = Number.isFinite(Number(maxRow?.sortOrder)) ? Number(maxRow.sortOrder) + 10 : 10;
+
+  const created = await withTimeout(
+    prisma.productSupportingCertificate.create({
+      data: {
+        organizationId: orgId,
+        productId: pid,
+        sortOrder: nextSort,
+        title: input?.title == null ? null : String(input.title).trim() || null,
+        certificateTemplateId: input?.certificateTemplateId == null ? null : Number(input.certificateTemplateId),
+        templateData: input?.templateData === undefined ? null : input.templateData,
+        mediaUrl: input?.mediaUrl == null ? null : String(input.mediaUrl).trim() || null
+      },
+      include: {
+        certificateTemplate: { select: { id: true, name: true, certificateId: true } }
+      }
+    }),
+    1500
+  );
+  return created;
+}
+
+async function updateProductSupportingCertificate({ organizationId, productId, supportingId, patch }) {
+  const pid = Number(productId);
+  const sid = Number(supportingId);
+  if (!Number.isFinite(pid) || pid <= 0) throw new Error('Product not found');
+  if (!Number.isFinite(sid) || sid <= 0) throw new Error('Supporting certificate not found');
+
+  const data = {};
+  if (patch.title !== undefined) data.title = patch.title == null ? null : String(patch.title).trim() || null;
+  if (patch.certificateTemplateId !== undefined) data.certificateTemplateId = patch.certificateTemplateId == null ? null : Number(patch.certificateTemplateId);
+  if (patch.templateData !== undefined) data.templateData = patch.templateData;
+  if (patch.mediaUrl !== undefined) data.mediaUrl = patch.mediaUrl == null ? null : String(patch.mediaUrl).trim() || null;
+
+  const res = await withTimeout(
+    prisma.productSupportingCertificate.updateMany({
+      where: { id: sid, organizationId: Number(organizationId), productId: pid, deletedAt: null },
+      data
+    }),
+    1500
+  );
+  if (!res.count) throw new Error('Supporting certificate not found');
+
+  return await withTimeout(
+    prisma.productSupportingCertificate.findFirst({
+      where: { id: sid, organizationId: Number(organizationId), productId: pid, deletedAt: null },
+      include: { certificateTemplate: { select: { id: true, name: true, certificateId: true } } }
+    }),
+    1200
+  );
+}
+
+async function deleteProductSupportingCertificate({ organizationId, productId, supportingId }) {
+  const pid = Number(productId);
+  const sid = Number(supportingId);
+  if (!Number.isFinite(pid) || pid <= 0) throw new Error('Product not found');
+  if (!Number.isFinite(sid) || sid <= 0) throw new Error('Supporting certificate not found');
+
+  const res = await withTimeout(
+    prisma.productSupportingCertificate.updateMany({
+      where: { id: sid, organizationId: Number(organizationId), productId: pid, deletedAt: null },
+      data: { deletedAt: new Date() }
+    }),
+    1500
+  );
+  if (!res.count) throw new Error('Supporting certificate not found');
+  return { deleted: true, id: sid };
+}
+
+async function reorderProductSupportingCertificates({ organizationId, productId, orderedIds }) {
+  const pid = Number(productId);
+  if (!Number.isFinite(pid) || pid <= 0) throw new Error('Product not found');
+  const orgId = Number(organizationId);
+
+  const ids = Array.from(new Set((Array.isArray(orderedIds) ? orderedIds : []).map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0)));
+  if (!ids.length) throw new Error('orderedIds: Invalid value');
+
+  const existing = await withTimeout(
+    prisma.productSupportingCertificate.findMany({
+      where: { organizationId: orgId, productId: pid, deletedAt: null },
+      select: { id: true }
+    }),
+    1200
+  );
+  const existingIds = new Set(existing.map((r) => Number(r.id)));
+  for (const id of ids) {
+    if (!existingIds.has(id)) throw new Error('Supporting certificate not found');
+  }
+
+  await withTimeout(
+    prisma.$transaction(async (tx) => {
+      for (let i = 0; i < ids.length; i += 1) {
+        await tx.productSupportingCertificate.updateMany({
+          where: { id: ids[i], organizationId: orgId, productId: pid, deletedAt: null },
+          data: { sortOrder: (i + 1) * 10 }
+        });
+      }
+    }),
+    2000
+  );
+
+  return await getProductSupportingCertificates({ organizationId: orgId, productId: pid });
+}
+
 module.exports = {
   createProduct,
   getAllProducts,
@@ -462,5 +598,10 @@ module.exports = {
   deleteProduct,
   deleteProductsBulk,
   createBatch,
-  getBatchesByProduct
+  getBatchesByProduct,
+  getProductSupportingCertificates,
+  createProductSupportingCertificate,
+  updateProductSupportingCertificate,
+  deleteProductSupportingCertificate,
+  reorderProductSupportingCertificates
 };
