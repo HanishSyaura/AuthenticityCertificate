@@ -313,15 +313,16 @@ export default function AdminCmsBuilder() {
           setLayout={setLayout}
           selectedBlockId={selectedBlockId}
           setSelectedBlockId={setSelectedBlockId}
-          <CmsInspectorPanel
-            selectedBlock={selectedBlock}
-            layout={layout}
-            setLayout={setLayout}
-            clearSelection={() => setSelectedBlockId(null)}
-            templates={templates}
-          />
+        />
 
         <CmsInspectorPanel
           selectedBlock={selectedBlock}
           layout={layout}
           setLayout={setLayout}
+          clearSelection={() => setSelectedBlockId(null)}
+          templates={templates}
+        />
+      </div>
+    </div>
+  );
+}
