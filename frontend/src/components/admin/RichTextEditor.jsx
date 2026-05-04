@@ -1,7 +1,7 @@
 import React, { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
 import ReactQuill from 'react-quill';
 
-const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, placeholder }, ref) {
+const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, placeholder, minHeight = '6rem', maxHeight = '14rem' }, ref) {
   const quillRef = useRef(null);
 
   useImperativeHandle(
@@ -30,6 +30,7 @@ const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, pla
       toolbar: [
         [{ header: [1, 2, 3, false] }],
         ['bold', 'italic', 'underline', 'strike'],
+        [{ align: [] }],
         [{ list: 'ordered' }, { list: 'bullet' }],
         ['blockquote', 'code-block'],
         ['link'],
@@ -40,12 +41,12 @@ const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, pla
   );
 
   const formats = useMemo(
-    () => ['header', 'bold', 'italic', 'underline', 'strike', 'list', 'bullet', 'blockquote', 'code-block', 'link'],
+    () => ['header', 'bold', 'italic', 'underline', 'strike', 'align', 'list', 'bullet', 'blockquote', 'code-block', 'link'],
     []
   );
 
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+    <div className="ac-rt rounded-xl border border-zinc-200 bg-white" style={{ '--ac-rt-min-h': minHeight, '--ac-rt-max-h': maxHeight }}>
       <ReactQuill
         ref={quillRef}
         theme="snow"

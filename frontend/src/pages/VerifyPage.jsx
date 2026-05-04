@@ -91,7 +91,9 @@ const VerifyPage = () => {
           <div className="fixed right-3 top-3 z-50">
             <LanguageSwitcher size="xs" />
           </div>
-          <PublicRenderer layout={certificate.layout} data={certificate} />
+          <div className="mx-auto w-full max-w-[520px] px-2">
+            <PublicRenderer layout={certificate.layout} data={certificate} responsive baseWidth={390} />
+          </div>
         </div>
       );
     }
@@ -124,17 +126,20 @@ const VerifyPage = () => {
               const canvasH = Number(certificate?.certificateTemplate?.canvasHeight || 844);
               const baseW = Number.isFinite(canvasW) && canvasW > 0 ? canvasW : 390;
               const baseH = Number.isFinite(canvasH) && canvasH > 0 ? canvasH : 844;
-              const mobileW = Math.max(240, Math.min(baseW, 320));
               return (
                 <div className="min-h-screen bg-white">
-                  <div className="mx-auto w-full px-2" style={{ maxWidth: `${baseW}px` }}>
+                  <div className="mx-auto w-full px-2" style={{ maxWidth: `${Math.max(baseW, 520)}px` }}>
                     <PublicRenderer
+                      responsive
+                      baseWidth={baseW}
                       layout={[
                         {
                           id: '__certificate',
                           type: 'certificate',
-                          desktop: { x: 0, y: 0, w: baseW, h: baseH },
-                          mobile: { x: 0, y: 0, w: mobileW, h: baseH },
+                          x: 0,
+                          y: 0,
+                          w: baseW,
+                          h: baseH,
                           content: { canvasWidth: baseW, canvasHeight: baseH }
                         }
                       ]}

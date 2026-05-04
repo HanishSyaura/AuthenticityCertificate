@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n/useT';
 
 function getValue(path, data) {
@@ -104,6 +104,18 @@ function sanitizeUrl(input, { allowDataImage = false } = {}) {
   return '';
 }
 
+function sanitizeClass(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return '';
+  const allowed = new Set(['ql-align-left', 'ql-align-center', 'ql-align-right', 'ql-align-justify']);
+  const kept = raw
+    .split(/\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .filter((c) => allowed.has(c));
+  return kept.join(' ');
+}
+
 function sanitizeLimitedHtml(input) {
   const raw = String(input ?? '');
   if (!raw) return '';
@@ -146,7 +158,7 @@ function sanitizeLimitedHtml(input) {
     return escapeTextToHtml(raw);
   }
   const allowedAttrs = {
-    A: new Set(['href', 'target', 'rel', 'style']),
+    A: new Set(['href', 'target', 'rel', 'style', 'class']),
     IMG: new Set(['src', 'alt', 'width', 'height', 'style']),
     FONT: new Set(['color', 'face', 'size']),
     TABLE: new Set(['style']),
@@ -155,16 +167,16 @@ function sanitizeLimitedHtml(input) {
     TR: new Set(['style']),
     TD: new Set(['colspan', 'rowspan', 'style']),
     TH: new Set(['colspan', 'rowspan', 'style']),
-    DIV: new Set(['style']),
-    P: new Set(['style']),
-    SPAN: new Set(['style']),
-    H1: new Set(['style']),
-    H2: new Set(['style']),
-    H3: new Set(['style']),
-    BLOCKQUOTE: new Set(['style']),
-    UL: new Set(['style']),
-    OL: new Set(['style']),
-    LI: new Set(['style']),
+    DIV: new Set(['style', 'class']),
+    P: new Set(['style', 'class']),
+    SPAN: new Set(['style', 'class']),
+    H1: new Set(['style', 'class']),
+    H2: new Set(['style', 'class']),
+    H3: new Set(['style', 'class']),
+    BLOCKQUOTE: new Set(['style', 'class']),
+    UL: new Set(['style', 'class']),
+    OL: new Set(['style', 'class']),
+    LI: new Set(['style', 'class']),
     B: new Set(['style']),
     STRONG: new Set(['style']),
     I: new Set(['style']),
@@ -197,6 +209,12 @@ function sanitizeLimitedHtml(input) {
           const name = String(a.name || '').toLowerCase();
           if (!keep.has(name)) {
             child.removeAttribute(a.name);
+            continue;
+          }
+          if (name === 'class') {
+            const safe = sanitizeClass(a.value);
+            if (safe) child.setAttribute('class', safe);
+            else child.removeAttribute('class');
             continue;
           }
           if (name === 'style') {
@@ -346,11 +364,13 @@ function textAlignClass(align) {
   return 'text-left';
 }
 
-const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed = false }) => {
+const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed = false, responsive = false, baseWidth = 390 }) => {
   const { t, locale } = useT();
   const layoutSafe = Array.isArray(layout) ? layout : null;
 
   const [isMobile, setIsMobile] = useState(false);
+  const containerRef = useRef(null);
+  const [containerW, setContainerW] = useState(null);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 640px)');
@@ -359,6 +379,27 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
     mq.addEventListener?.('change', onChange);
     return () => mq.removeEventListener?.('change', onChange);
   }, []);
+
+  useEffect(() => {
+    if (!responsive) return;
+    const el = containerRef.current;
+    if (!el) return;
+
+    const measure = () => {
+      const w = Number(el.clientWidth || 0);
+      setContainerW(Number.isFinite(w) && w > 0 ? w : null);
+    };
+    measure();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => measure());
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
+
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [responsive]);
 
   const blocks = useMemo(() => {
     return (layoutSafe || []).map((block) => {
@@ -384,6 +425,18 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
     }
     return maxBottom > 0 ? maxBottom : null;
   }, [blocks, layoutSafe]);
+
+  const baseW = useMemo(() => {
+    const raw = Number(baseWidth);
+    return Number.isFinite(raw) && raw > 0 ? raw : 390;
+  }, [baseWidth]);
+
+  const scale = useMemo(() => {
+    if (!responsive) return 1;
+    const w = Number(containerW || 0);
+    if (!Number.isFinite(w) || w <= 0) return 1;
+    return Math.max(0.1, Math.min(4, w / baseW));
+  }, [baseW, containerW, responsive]);
 
   const renderBlock = (block) => {
     const style = {
@@ -640,8 +693,27 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
     }
   };
 
+  if (responsive && layoutSafe && containerHeight) {
+    return (
+      <div
+        ref={containerRef}
+        className={`w-full bg-white ${className || ''}`}
+        style={{ minHeight: `${containerHeight * scale}px` }}
+      >
+        <div className="mx-auto" style={{ width: `${baseW * scale}px`, height: `${containerHeight * scale}px` }}>
+          <div
+            className="relative"
+            style={{ width: `${baseW}px`, height: `${containerHeight}px`, transform: `scale(${scale})`, transformOrigin: 'top left' }}
+          >
+            {blocks.map(renderBlock)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={`relative w-full bg-white ${className || ''}`} style={containerHeight ? { minHeight: `${containerHeight}px` } : undefined}>
+    <div ref={containerRef} className={`relative w-full bg-white ${className || ''}`} style={containerHeight ? { minHeight: `${containerHeight}px` } : undefined}>
       {layoutSafe ? blocks.map(renderBlock) : null}
     </div>
   );
