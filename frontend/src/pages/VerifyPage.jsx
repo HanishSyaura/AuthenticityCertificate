@@ -85,6 +85,16 @@ const VerifyPage = () => {
   }
 
   if (certificate) {
+    if (Array.isArray(certificate?.layout)) {
+      return (
+        <div className="min-h-screen w-full bg-white">
+          <div className="fixed right-3 top-3 z-50">
+            <LanguageSwitcher size="xs" />
+          </div>
+          <PublicRenderer layout={certificate.layout} data={certificate} />
+        </div>
+      );
+    }
     const statusUpper = String(certificate.status || '').toUpperCase();
     const statusOk = statusUpper === 'VALID';
     const statusPreview = statusUpper === 'PREVIEW';
@@ -108,11 +118,7 @@ const VerifyPage = () => {
             <LanguageSwitcher size="xs" />
           </div>
 
-          {Array.isArray(certificate?.layout) ? (
-            <div className="min-h-screen bg-white">
-              <PublicRenderer layout={certificate.layout} data={certificate} />
-            </div>
-          ) : hasTemplate ? (
+          {hasTemplate ? (
             (() => {
               const canvasW = Number(certificate?.certificateTemplate?.canvasWidth || 390);
               const canvasH = Number(certificate?.certificateTemplate?.canvasHeight || 844);

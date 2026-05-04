@@ -150,7 +150,7 @@ async function deleteAllBatches({ organizationId, corpPrefix }) {
   };
 }
 
-async function generateEpcBatch({ organizationId, corpPrefix, productId, productionDate, batchName, batchQty, remark, certificateTemplateId, templateData }) {
+async function generateEpcBatch({ organizationId, corpPrefix, productId, productionDate, batchName, batchQty, remark, certificateId, certificateTemplateId, templateData }) {
   const allowed = getAllowedCorpPrefixes();
   if (!allowed.includes(corpPrefix)) throw new Error('Corp code tidak dibenarkan');
 
@@ -182,27 +182,30 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, product
         create: { organizationId: orgId, corpPrefix, lastNo: 0n }
       });
 
-      let templateCode = null;
-      if (typeof certificateTemplateId === 'number') {
-        const tpl = await tx.certificateTemplate.findFirst({
-          where: { organizationId: orgId, id: Number(certificateTemplateId), deletedAt: null },
-          select: { certificateId: true }
-        });
-        const code = String(tpl?.certificateId || '').trim();
-        if (code) templateCode = code;
-      }
+      const desiredCertIdRaw = String(certificateId || '').trim();
+      const desiredCertId = desiredCertIdRaw ? desiredCertIdRaw.toUpperCase() : '';
 
       let batchCertId = null;
-      if (!templateCode) {
-        const existingBatchCert = await tx.certificate.findFirst({
-          where: { organizationId: orgId, batchId: appBatch.id, type: 'batch', deletedAt: null },
-          orderBy: { createdAt: 'desc' },
-          select: { certificateId: true }
+      const existingBatchCert = await tx.certificate.findFirst({
+        where: { organizationId: orgId, batchId: appBatch.id, type: 'batch', deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        select: { certificateId: true }
+      });
+      if (existingBatchCert?.certificateId) {
+        batchCertId = String(existingBatchCert.certificateId);
+        if (desiredCertId && desiredCertId !== batchCertId) throw new Error(`Batch already has a different certificateId (${batchCertId})`);
+      } else if (desiredCertId) {
+        const existing = await tx.certificate.findUnique({
+          where: { certificateId: desiredCertId },
+          select: { certificateId: true, organizationId: true, batchId: true, type: true, deletedAt: true }
         });
-        if (existingBatchCert?.certificateId) {
-          batchCertId = String(existingBatchCert.certificateId);
+        if (existing && existing.deletedAt == null) {
+          if (Number(existing.organizationId) !== orgId) throw new Error('Certificate ID belongs to a different organization');
+          if (String(existing.type || '') !== 'batch') throw new Error('Certificate ID already used for non-batch certificate');
+          if (Number(existing.batchId) !== Number(appBatch.id)) throw new Error('Certificate ID already used for a different batch');
+          batchCertId = desiredCertId;
         } else {
-          batchCertId = generateCertificateId();
+          batchCertId = desiredCertId;
           await tx.certificate.create({
             data: {
               certificateId: batchCertId,
@@ -214,6 +217,18 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, product
             }
           });
         }
+      } else {
+        batchCertId = generateCertificateId();
+        await tx.certificate.create({
+          data: {
+            certificateId: batchCertId,
+            organizationId: orgId,
+            type: 'batch',
+            batchId: appBatch.id,
+            status: 'VALID',
+            issuedAt: new Date()
+          }
+        });
       }
 
       const rows = await tx.$queryRaw`
@@ -439,7 +454,7 @@ async function exportBatchXlsx({ organizationId, batchId }) {
     { key: 'batchQty', value: batch.batchQty },
     { key: 'product', value: batch.product?.name || '' },
     { key: 'sku', value: batch.sku || batch.product?.sku || '' },
-    { key: 'certificateId', value: String(batch.certificateTemplate?.certificateId || batch.certificateId || '') }
+    { key: 'certificateId', value: String(batch.certificateId || '') }
   ];
 
   const wsInfo = XLSX.utils.json_to_sheet(header, { header: ['key', 'value'] });

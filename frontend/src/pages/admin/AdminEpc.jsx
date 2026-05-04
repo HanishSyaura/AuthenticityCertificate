@@ -90,6 +90,7 @@ export default function AdminEpc() {
   const [batchName, setBatchName] = useState('');
   const [batchQty, setBatchQty] = useState(1);
   const [remark, setRemark] = useState('');
+  const [certificateId, setCertificateId] = useState('');
   const [certificateTemplateId, setCertificateTemplateId] = useState('');
   const [templateData, setTemplateData] = useState({});
   const [importProductId, setImportProductId] = useState('');
@@ -107,7 +108,7 @@ export default function AdminEpc() {
   };
 
   const openCertificate = async (b) => {
-    const templateCode = String(b?.certificateTemplate?.certificateId || b?.certificateId || '').trim();
+    const certId = String(b?.certificateId || '').trim();
     const batchId = b?.id != null ? Number(b.id) : null;
     if (Number.isFinite(batchId)) {
       const data = await fetchItems({ batchId, limit: 1, offset: 0 });
@@ -117,8 +118,8 @@ export default function AdminEpc() {
         return;
       }
     }
-    if (!templateCode) return;
-    openVerifyUrl(`/verify/${encodeURIComponent(templateCode)}`);
+    if (!certId) return;
+    openVerifyUrl(`/verify/${encodeURIComponent(certId)}`);
   };
 
   useEffect(() => {
@@ -287,6 +288,16 @@ export default function AdminEpc() {
               </div>
 
               <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('certificateId')}</div>
+                <input
+                  value={certificateId}
+                  onChange={(e) => setCertificateId(e.target.value)}
+                  className="ac-input font-mono uppercase"
+                  placeholder="BN-XXXXXXXXXX"
+                />
+              </div>
+
+              <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('certTemplate')}</div>
                 <select value={certificateTemplateId} onChange={(e) => setCertificateTemplateId(e.target.value)} className="ac-input">
                   <option value="">{t('none')}</option>
@@ -322,6 +333,7 @@ export default function AdminEpc() {
                     setBatchQty(1);
                     setRemark('');
                     setProductionDate('');
+                    setCertificateId('');
                     setTemplateData({});
                     clearLastGenerated();
                   }}
@@ -340,6 +352,7 @@ export default function AdminEpc() {
                       batchName: String(batchName).trim(),
                       batchQty,
                       remark: isRichTextEmpty(remark) ? undefined : String(remark || ''),
+                      certificateId: String(certificateId || '').trim() || undefined,
                       certificateTemplateId: certificateTemplateId ? Number(certificateTemplateId) : null,
                       templateData
                     });
@@ -403,11 +416,7 @@ export default function AdminEpc() {
                   </div>
                   <div className="mt-1 text-[11px] text-zinc-500">
                     {b.product?.name || '-'} • {b.batchQty} • {formatDateTime(b.createdAt)} • {t('certificateId')}:{' '}
-                    {b.certificateTemplate?.certificateId || b.certificateId ? (
-                      <span className="font-mono">{String(b.certificateTemplate?.certificateId || b.certificateId)}</span>
-                    ) : (
-                      '-'
-                    )}
+                    {b.certificateId ? <span className="font-mono">{String(b.certificateId)}</span> : '-'}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -453,11 +462,7 @@ export default function AdminEpc() {
                   {t('epcItems')}: {itemsBatch.batchName} <span className="text-xs text-zinc-500">#{itemsBatch.id}</span>
                 </div>
                 <div className="mt-1 text-[11px] text-zinc-500">
-                  {itemsBatch.product?.name || '-'} • {t('certificateId')}: {itemsBatch.certificateTemplate?.certificateId || itemsBatch.certificateId ? (
-                    <span className="font-mono">{String(itemsBatch.certificateTemplate?.certificateId || itemsBatch.certificateId)}</span>
-                  ) : (
-                    '-'
-                  )}
+                  {itemsBatch.product?.name || '-'} • {t('certificateId')}: {itemsBatch.certificateId ? <span className="font-mono">{String(itemsBatch.certificateId)}</span> : '-'}
                 </div>
               </div>
               <div className="flex items-center gap-2">

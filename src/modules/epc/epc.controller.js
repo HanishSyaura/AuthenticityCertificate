@@ -11,6 +11,7 @@ const generateSchema = z.object({
   batchName: z.string().min(1),
   batchQty: z.number().int().positive().max(5000),
   remark: z.string().optional(),
+  certificateId: z.string().trim().min(1).optional(),
   certificateTemplateId: z.number().int().nullable().optional(),
   templateData: z.record(z.string(), z.unknown()).optional()
 });
@@ -63,6 +64,7 @@ async function generateBatch(req, res) {
       batchName: validated.batchName,
       batchQty: validated.batchQty,
       remark: validated.remark,
+      certificateId: validated.certificateId,
       certificateTemplateId: validated.certificateTemplateId,
       templateData: validated.templateData
     });

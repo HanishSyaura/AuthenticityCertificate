@@ -35,30 +35,31 @@ async function resolveCertificateId({ organizationId, nfcUid, epc }) {
   if (!uid && !e) return null;
 
   try {
-    const resolveFromEpc = async (epcCode) => {
-      const row = await withTimeout(
+    const found = await withTimeout(
+      prisma.tagIdentity.findFirst({
+        where: {
+          organizationId: orgId,
+          unassignedAt: null,
+          OR: [uid ? { nfcUid: uid } : undefined, e ? { epc: e } : undefined].filter(Boolean)
+        },
+        select: { certificateId: true }
+      }),
+      80
+    );
+    if (found?.certificateId) return found.certificateId;
+
+    if (e) {
+      const epcItem = await withTimeout(
         prisma.epcItem.findUnique({
-          where: { organizationId_epcCode: { organizationId: orgId, epcCode: epcCode } },
-          select: {
-            batch: {
-              select: {
-                certificateId: true,
-                batchName: true,
-                productId: true,
-                certificateTemplate: { select: { certificateId: true } }
-              }
-            }
-          }
+          where: { organizationId_epcCode: { organizationId: orgId, epcCode: e } },
+          select: { batch: { select: { certificateId: true, batchName: true, productId: true } } }
         }),
         80
       );
+      if (epcItem?.batch?.certificateId) return epcItem.batch.certificateId;
 
-      const templateCode = String(row?.batch?.certificateTemplate?.certificateId || '').trim();
-      if (templateCode) return templateCode;
-      if (row?.batch?.certificateId) return row.batch.certificateId;
-
-      const batchName = row?.batch?.batchName ? String(row.batch.batchName) : null;
-      const productId = row?.batch?.productId != null ? Number(row.batch.productId) : null;
+      const batchName = epcItem?.batch?.batchName ? String(epcItem.batch.batchName) : null;
+      const productId = epcItem?.batch?.productId != null ? Number(epcItem.batch.productId) : null;
       if (batchName && Number.isFinite(productId)) {
         const appBatch = await withTimeout(
           prisma.batch.findFirst({
@@ -79,44 +80,7 @@ async function resolveCertificateId({ organizationId, nfcUid, epc }) {
           if (cert?.certificateId) return cert.certificateId;
         }
       }
-
-      return null;
-    };
-
-    if (e) {
-      const byEpc = await resolveFromEpc(e);
-      if (byEpc) return byEpc;
     }
-
-    if (uid && !e) {
-      const found = await withTimeout(
-        prisma.tagIdentity.findFirst({
-          where: { organizationId: orgId, unassignedAt: null, nfcUid: uid },
-          select: { certificateId: true, epc: true }
-        }),
-        80
-      );
-      const mappedEpc = norm(found?.epc);
-      if (mappedEpc) {
-        const byMappedEpc = await resolveFromEpc(mappedEpc);
-        if (byMappedEpc) return byMappedEpc;
-      }
-      if (found?.certificateId) return found.certificateId;
-      return null;
-    }
-
-    const found = await withTimeout(
-      prisma.tagIdentity.findFirst({
-        where: {
-          organizationId: orgId,
-          unassignedAt: null,
-          OR: [uid ? { nfcUid: uid } : undefined, e ? { epc: e } : undefined].filter(Boolean)
-        },
-        select: { certificateId: true }
-      }),
-      80
-    );
-    if (found?.certificateId) return found.certificateId;
 
     return null;
   } catch {
