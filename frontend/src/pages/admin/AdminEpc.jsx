@@ -3,8 +3,6 @@ import useRecordsStore from '../../store/useRecordsStore';
 import useEpcStore from '../../store/useEpcStore';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import { useT } from '../../i18n/useT';
-import RichTextEditor from '../../components/admin/RichTextEditor';
-import { isRichTextEmpty, stripHtmlToText } from '../../utils/richText';
 
 function formatDateTime(input) {
   if (!input) return '';
@@ -153,7 +151,7 @@ export default function AdminEpc() {
       const next = {};
       const ctx = {
         product: selectedProduct,
-        batch: { batchName, batchQty, productionDate, remark: stripHtmlToText(remark) },
+        batch: { batchName, batchQty, productionDate, remark },
         corpPrefix
       };
       for (const p of placeholders) {
@@ -321,7 +319,7 @@ export default function AdminEpc() {
 
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
-                <RichTextEditor value={remark} onChange={setRemark} />
+                <textarea value={remark} onChange={(e) => setRemark(e.target.value)} className="h-20 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-400" />
               </div>
 
               <div className="flex justify-end gap-2">
@@ -351,7 +349,7 @@ export default function AdminEpc() {
                       productionDate: String(productionDate || '').trim() || undefined,
                       batchName: String(batchName).trim(),
                       batchQty,
-                      remark: isRichTextEmpty(remark) ? undefined : String(remark || ''),
+                      remark: String(remark || '').trim() || undefined,
                       certificateId: String(certificateId || '').trim() || undefined,
                       certificateTemplateId: certificateTemplateId ? Number(certificateTemplateId) : null,
                       templateData

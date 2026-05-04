@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n/useT';
+import { stripHtmlToText } from '../utils/richText';
 
 function getValue(path, data) {
   const parts = String(path || '').split('.').filter(Boolean);
@@ -107,13 +108,45 @@ function sanitizeUrl(input, { allowDataImage = false } = {}) {
 function sanitizeClass(input) {
   const raw = String(input || '').trim();
   if (!raw) return '';
-  const allowed = new Set(['ql-align-left', 'ql-align-center', 'ql-align-right', 'ql-align-justify']);
+  const allowed = new Set([
+    'ql-ui',
+    'ql-formula',
+    'ql-video',
+    'ql-align-left',
+    'ql-align-center',
+    'ql-align-right',
+    'ql-align-justify',
+    'ql-direction-rtl',
+    'ql-size-small',
+    'ql-size-large',
+    'ql-size-huge',
+    'ql-font-serif',
+    'ql-font-monospace'
+  ]);
   const kept = raw
     .split(/\s+/)
     .map((s) => s.trim())
     .filter(Boolean)
-    .filter((c) => allowed.has(c));
+    .filter((c) => allowed.has(c) || /^ql-indent-[1-8]$/.test(c) || /^ql-font-[a-z0-9-]{1,30}$/i.test(c));
   return kept.join(' ');
+}
+
+function sanitizeDir(input) {
+  const raw = String(input || '').trim().toLowerCase();
+  if (raw === 'rtl' || raw === 'ltr') return raw;
+  return '';
+}
+
+function sanitizeDataList(input) {
+  const raw = String(input || '').trim().toLowerCase();
+  if (raw === 'checked' || raw === 'unchecked' || raw === 'ordered' || raw === 'bullet') return raw;
+  return '';
+}
+
+function sanitizeDataValue(input) {
+  const raw = String(input || '');
+  if (!raw) return '';
+  return raw.length > 5000 ? raw.slice(0, 5000) : raw;
 }
 
 function sanitizeLimitedHtml(input) {
@@ -149,7 +182,8 @@ function sanitizeLimitedHtml(input) {
     'TR',
     'TD',
     'TH',
-    'IMG'
+    'IMG',
+    'IFRAME'
   ]);
   let doc;
   try {
@@ -161,22 +195,23 @@ function sanitizeLimitedHtml(input) {
     A: new Set(['href', 'target', 'rel', 'style', 'class']),
     IMG: new Set(['src', 'alt', 'width', 'height', 'style']),
     FONT: new Set(['color', 'face', 'size']),
+    IFRAME: new Set(['src', 'width', 'height', 'frameborder', 'allowfullscreen', 'style', 'class']),
     TABLE: new Set(['style']),
     THEAD: new Set(['style']),
     TBODY: new Set(['style']),
     TR: new Set(['style']),
     TD: new Set(['colspan', 'rowspan', 'style']),
     TH: new Set(['colspan', 'rowspan', 'style']),
-    DIV: new Set(['style', 'class']),
-    P: new Set(['style', 'class']),
-    SPAN: new Set(['style', 'class']),
-    H1: new Set(['style', 'class']),
-    H2: new Set(['style', 'class']),
-    H3: new Set(['style', 'class']),
-    BLOCKQUOTE: new Set(['style', 'class']),
-    UL: new Set(['style', 'class']),
-    OL: new Set(['style', 'class']),
-    LI: new Set(['style', 'class']),
+    DIV: new Set(['style', 'class', 'dir']),
+    P: new Set(['style', 'class', 'dir']),
+    SPAN: new Set(['style', 'class', 'dir', 'data-value']),
+    H1: new Set(['style', 'class', 'dir']),
+    H2: new Set(['style', 'class', 'dir']),
+    H3: new Set(['style', 'class', 'dir']),
+    BLOCKQUOTE: new Set(['style', 'class', 'dir']),
+    UL: new Set(['style', 'class', 'dir']),
+    OL: new Set(['style', 'class', 'dir']),
+    LI: new Set(['style', 'class', 'dir', 'data-list']),
     B: new Set(['style']),
     STRONG: new Set(['style']),
     I: new Set(['style']),
@@ -217,6 +252,24 @@ function sanitizeLimitedHtml(input) {
             else child.removeAttribute('class');
             continue;
           }
+          if (name === 'dir') {
+            const safe = sanitizeDir(a.value);
+            if (safe) child.setAttribute('dir', safe);
+            else child.removeAttribute('dir');
+            continue;
+          }
+          if (tag === 'LI' && name === 'data-list') {
+            const safe = sanitizeDataList(a.value);
+            if (safe) child.setAttribute('data-list', safe);
+            else child.removeAttribute('data-list');
+            continue;
+          }
+          if (tag === 'SPAN' && name === 'data-value') {
+            const safe = sanitizeDataValue(a.value);
+            if (safe) child.setAttribute('data-value', safe);
+            else child.removeAttribute('data-value');
+            continue;
+          }
           if (name === 'style') {
             const safe = sanitizeStyle(a.value);
             if (safe) child.setAttribute('style', safe);
@@ -243,6 +296,12 @@ function sanitizeLimitedHtml(input) {
           }
           if (tag === 'IMG' && name === 'src') {
             const safe = sanitizeUrl(a.value, { allowDataImage: true });
+            if (safe) child.setAttribute('src', safe);
+            else child.removeAttribute('src');
+            continue;
+          }
+          if (tag === 'IFRAME' && name === 'src') {
+            const safe = sanitizeUrl(a.value, { allowDataImage: false });
             if (safe) child.setAttribute('src', safe);
             else child.removeAttribute('src');
             continue;
@@ -385,7 +444,12 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
     const measure = () => {
       if (responsiveMode === 'viewport') {
         const vv = window.visualViewport;
-        const w = Number(vv?.width || document.documentElement?.clientWidth || window.innerWidth || 0);
+        const docW = Number(document.documentElement?.clientWidth || 0);
+        const vvW = Number(vv?.width || 0);
+        const winW = Number(window.innerWidth || 0);
+        const w = Math.min(
+          ...[docW, vvW, winW].filter((n) => Number.isFinite(n) && n > 0)
+        );
         setTargetW(Number.isFinite(w) && w > 0 ? w : null);
         return;
       }
@@ -494,7 +558,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
           const html = sanitizeLimitedHtml(interpolated);
           return (
             <div key={block.id} style={style} className="overflow-hidden">
-              <div className="ac-richtext text-sm text-zinc-900" dangerouslySetInnerHTML={{ __html: html }} />
+              <div className="ql-editor ac-richtext text-sm text-zinc-900" dangerouslySetInnerHTML={{ __html: html }} />
             </div>
           );
         }
@@ -558,6 +622,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                 h: Number(it.h) || 0,
                 path: String(it.path || ''),
                 label: String(it.label || ''),
+                labelHtml: String(it.labelHtml || ''),
                 fontSize: Number(it.fontSize) > 0 ? Number(it.fontSize) : 14,
                 align: String(it.align || 'left')
               }));
@@ -589,9 +654,21 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                       let val = raw == null ? '' : String(raw);
                       const source = String(ph?.source || '').trim() || 'manual';
                       const showPrefix = source !== 'title';
-                      const label = showPrefix ? (key ? String(ph?.label || key) : String(it.label || '')) : '';
-                      const separator = showPrefix ? (key ? String(ph?.separator ?? ': ') : ': ') : '';
-                      const prefix = showPrefix && label ? `${label}${separator}` : '';
+                      const labelText = showPrefix
+                        ? key
+                          ? String(stripHtmlToText(ph?.labelHtml ?? ph?.label ?? key) || '').trim()
+                          : String(stripHtmlToText(it.labelHtml ?? it.label ?? '') || '').trim()
+                        : '';
+                      const prefixHtml =
+                        showPrefix && labelText
+                          ? key
+                            ? `${String(ph?.labelHtml || '').trim() ? sanitizeLimitedHtml(ph.labelHtml) : escapeHtml(String(ph?.label || key))}${
+                                String(ph?.separatorHtml || '').trim()
+                                  ? sanitizeLimitedHtml(ph.separatorHtml)
+                                  : escapeHtml(String(ph?.separator ?? ': '))
+                              }`
+                            : `${String(it.labelHtml || '').trim() ? sanitizeLimitedHtml(it.labelHtml) : escapeHtml(String(it.label || ''))}${escapeHtml(': ')}`
+                          : '';
                       if (!String(val || '').trim() && ph) {
                         if (source === 'static' || source === 'title') {
                           val = String(ph?.staticValue || '');
@@ -611,7 +688,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                       const hasValue = String(val || '').trim().length > 0;
                       if (!hasValue && source !== 'static' && source !== 'title') return null;
                       const valueHtml = source === 'static' || source === 'manual' || source === 'title' ? sanitizeLimitedHtml(val) : escapeTextToHtml(val);
-                      const html = `${escapeHtml(prefix)}${valueHtml || ''}`;
+                      const html = `${prefixHtml}${valueHtml || ''}`;
                       if (!String(html || '').trim()) return null;
                       return (
                         <div
@@ -626,7 +703,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                             lineHeight: 1.2
                           }}
                         >
-                          <div className={`ac-richtext h-full w-full font-semibold ${textAlignClass(it.align)}`} dangerouslySetInnerHTML={{ __html: html }} />
+                          <div className={`ql-editor ac-richtext h-full w-full font-semibold ${textAlignClass(it.align)}`} dangerouslySetInnerHTML={{ __html: html }} />
                         </div>
                       );
                     })}

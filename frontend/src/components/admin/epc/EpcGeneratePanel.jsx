@@ -1,6 +1,4 @@
 import React, { useEffect, useMemo } from 'react';
-import RichTextEditor from '../RichTextEditor';
-import { toQuillHtml } from '../../../utils/richText';
 
 export default function EpcGeneratePanel({
   t,
@@ -79,7 +77,11 @@ export default function EpcGeneratePanel({
 
         <div>
           <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
-          <RichTextEditor value={toQuillHtml(remark)} onChange={setRemark} />
+          <textarea
+            value={remark}
+            onChange={(e) => setRemark(e.target.value)}
+            className="h-24 w-full resize-none rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none focus:border-zinc-400"
+          />
         </div>
       </div>
 

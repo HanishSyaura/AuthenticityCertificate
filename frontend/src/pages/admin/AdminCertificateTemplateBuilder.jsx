@@ -5,6 +5,8 @@ import { useT } from '../../i18n/useT';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import useMediaStore from '../../store/useMediaStore';
 import useEpcStore from '../../store/useEpcStore';
+import { stripHtmlToText, toQuillHtml } from '../../utils/richText';
+import { sanitizeLimitedHtml } from '../../utils/sanitizeLimitedHtml';
 
 function makeId(prefix) {
   return `${prefix}-${Math.random().toString(16).slice(2)}-${Date.now()}`;
@@ -171,6 +173,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       },
       batch: {
         batchNo: 'BATCH-001'
+      },
+      epcItem: {
+        netWeight: '3g',
+        caiqNumber: 'CAIQ-000000',
+        productionDate: '2026-01-01'
       }
     };
     const base = fallback;
@@ -211,15 +218,16 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             const val = raw == null ? '' : String(raw);
             const source = String(ph?.source || '').trim();
             const showPrefix = source !== 'title';
-            const label = showPrefix ? (key ? String(ph?.label || key) : String(it.label || '')) : '';
-            const separator = showPrefix ? (key ? String(ph?.separator ?? ': ') : ': ') : '';
-            const prefix = showPrefix && label ? `${label}${separator}` : '';
+            const labelHtmlRaw = showPrefix ? (key ? String(ph?.labelHtml ?? toQuillHtml(ph?.label || key)) : String(it.labelHtml ?? toQuillHtml(it.label || ''))) : '';
+            const labelText = showPrefix ? String(stripHtmlToText(labelHtmlRaw) || '').trim() : '';
+            const sepHtmlRaw = showPrefix ? (key ? String(ph?.separatorHtml ?? toQuillHtml(ph?.separator ?? ': ')) : toQuillHtml(': ')) : '';
+            const prefixRaw = showPrefix && labelText ? `${labelHtmlRaw}${sepHtmlRaw}` : '';
             const valueHtml = source === 'static' || source === 'manual' || source === 'title' ? val : escapeTextToHtml(val);
-            const html = `${escapeHtml(prefix)}${valueHtml || ''}`;
+            const html = sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`);
             const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
             const align = textAlignClass(it.align);
             return (
-              <div className={`font-semibold text-zinc-900 ${align}`} style={{ fontSize: fs }} dangerouslySetInnerHTML={{ __html: html }} />
+              <div className={`ql-editor ac-richtext font-semibold text-zinc-900 ${align}`} style={{ fontSize: fs }} dangerouslySetInnerHTML={{ __html: html }} />
             );
           })()}
         </div>
@@ -239,14 +247,15 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         const val = raw == null ? '' : String(raw);
         const source = String(ph?.source || '').trim();
         const showPrefix = source !== 'title';
-        const label = showPrefix ? (key ? String(ph?.label || key) : String(it.label || '')) : '';
-        const separator = showPrefix ? (key ? String(ph?.separator ?? ': ') : ': ') : '';
-        const prefix = showPrefix && label ? `${label}${separator}` : '';
+        const labelHtmlRaw = showPrefix ? (key ? String(ph?.labelHtml ?? toQuillHtml(ph?.label || key)) : String(it.labelHtml ?? toQuillHtml(it.label || ''))) : '';
+        const labelText = showPrefix ? String(stripHtmlToText(labelHtmlRaw) || '').trim() : '';
+        const sepHtmlRaw = showPrefix ? (key ? String(ph?.separatorHtml ?? toQuillHtml(ph?.separator ?? ': ')) : toQuillHtml(': ')) : '';
+        const prefixRaw = showPrefix && labelText ? `${labelHtmlRaw}${sepHtmlRaw}` : '';
         const valueHtml = source === 'static' || source === 'manual' || source === 'title' ? val : escapeTextToHtml(val);
-        const html = `${escapeHtml(prefix)}${valueHtml || ''}`;
+        const html = sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`);
         const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
         const align = textAlignClass(it.align);
-        return <div className={`h-full w-full ${align}`} style={{ fontSize: fs }} dangerouslySetInnerHTML={{ __html: html }} />;
+        return <div className={`ql-editor ac-richtext h-full w-full ${align}`} style={{ fontSize: fs }} dangerouslySetInnerHTML={{ __html: html }} />;
       }
     }));
   }, [draftLayout, placeholderByKey, safePreview]);
@@ -312,8 +321,9 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     const k = String(key || '').trim();
     if (!k) return;
     const ph = placeholders.find((p) => String(p?.key || '').trim() === k) || null;
-    const label = String(ph?.label || k).trim() || k;
-    const item = { id: makeId('field'), path: `templateData.${k}`, label, x: 20, y: 40, w: 240, h: 56, fontSize: 14, align: 'left' };
+    const labelText = String(stripHtmlToText(ph?.labelHtml ?? ph?.label ?? k) || '').trim() || k;
+    const labelHtml = String(ph?.labelHtml || '') ? String(ph.labelHtml) : toQuillHtml(labelText);
+    const item = { id: makeId('field'), path: `templateData.${k}`, label: labelText, labelHtml, x: 20, y: 40, w: 240, h: 56, fontSize: 14, align: 'left' };
     const nextLayout = [...(Array.isArray(draftLayout) ? draftLayout : []), item];
     setDraftLayout(nextLayout);
     queueTemplatePatch({ layoutJson: nextLayout });
@@ -369,7 +379,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         used.add(curKey.toLowerCase());
         return p;
       }
-      const label = String(p?.label || '').trim();
+      const label = String(stripHtmlToText(p?.labelHtml ?? p?.label ?? '') || '').trim();
       const base = label || `field_${i + 1}`;
       const key = makeUniqueKey(base, used);
       used.add(key.toLowerCase());
@@ -393,7 +403,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     for (let i = 0; i < list.length; i += 1) {
       const p = list[i] || {};
       const key = String(p.key || '').trim();
-      const label = String(p.label || '').trim();
+      const label = String(stripHtmlToText(p?.labelHtml ?? p?.label ?? '') || '').trim();
       const source = String(p.source || 'static');
       const bindPath = String(p.bindPath || '').trim();
       if (!key) errors.push(`${t('key')} #${i + 1}: required`);
@@ -537,7 +547,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                       <select value={addOverlayKey} onChange={(e) => setAddOverlayKey(e.target.value)} className="ac-input w-52 rounded-lg px-3 py-2 text-xs">
                         <option value="">{t('selectDataField')}</option>
                         {placeholders
-                          .map((p) => ({ key: String(p?.key || '').trim(), label: String(p?.label || '').trim() }))
+                          .map((p) => ({ key: String(p?.key || '').trim(), label: String(stripHtmlToText(p?.labelHtml ?? p?.label ?? '') || '').trim() }))
                           .filter((p) => p.key)
                           .map((p) => (
                             <option key={p.key} value={p.key}>
@@ -620,7 +630,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                       const isTitle = uiSource === 'title';
                       const cardKey = String(p?.key || '').trim() || `idx-${idx}`;
                       const isOpen = String(expandedPlaceholderKey || '') === cardKey;
-                      const title = String(p?.label || '').trim() || String(p?.key || '').trim() || `#${idx + 1}`;
+                      const title = String(stripHtmlToText(p?.labelHtml ?? p?.label ?? '') || '').trim() || String(p?.key || '').trim() || `#${idx + 1}`;
                       return (
                         <div key={`${p?.key || ''}-${idx}`} className="rounded-lg border border-zinc-200 bg-white p-2">
                           <div className="flex items-center gap-2">
@@ -664,42 +674,51 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           {isOpen ? (
                             <div className="mt-2 grid grid-cols-1 gap-2" onFocusCapture={() => setExpandedPlaceholderKey(cardKey)}>
                               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                <input
-                                  value={String(p?.label || '')}
-                                  onChange={(e) => {
-                                    const nextLabel = e.target.value;
-                                    const next = placeholders.slice();
-                                    const cur = next[idx] || {};
-                                    const curKey = String(cur.key || '').trim();
-                                    if (!curKey) {
-                                      const used = new Set(
-                                        next
-                                          .map((it, i) => (i === idx ? '' : String(it?.key || '').trim().toLowerCase()))
-                                          .filter(Boolean)
-                                      );
-                                      const gen = makeUniqueKey(nextLabel, used);
-                                      next[idx] = { ...cur, label: nextLabel, key: gen };
-                                    } else {
-                                      next[idx] = { ...cur, label: nextLabel };
-                                    }
-                                    replacePlaceholders(next);
-                                    const nextKey = String(next[idx]?.key || '').trim();
-                                    if (nextKey && String(expandedPlaceholderKey || '') === cardKey) setExpandedPlaceholderKey(nextKey);
-                                  }}
-                                  placeholder={t('fieldLabel')}
-                                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                                />
-                                <input
-                                  value={String(p?.separator ?? ': ')}
-                                  onChange={(e) => {
-                                    const next = placeholders.slice();
-                                    next[idx] = { ...(next[idx] || {}), separator: e.target.value };
-                                    replacePlaceholders(next);
-                                  }}
-                                  placeholder={t('separator')}
-                                  disabled={isTitle}
-                                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                                />
+                                <div className="w-full">
+                                  <RichTextEditor
+                                    value={String(p?.labelHtml ?? toQuillHtml(p?.label || ''))}
+                                    onChange={(html) => {
+                                      const nextLabelHtml = String(html || '');
+                                      const nextLabel = String(stripHtmlToText(nextLabelHtml) || '').trim();
+                                      const next = placeholders.slice();
+                                      const cur = next[idx] || {};
+                                      const curKey = String(cur.key || '').trim();
+                                      if (!curKey) {
+                                        const used = new Set(
+                                          next
+                                            .map((it, i) => (i === idx ? '' : String(it?.key || '').trim().toLowerCase()))
+                                            .filter(Boolean)
+                                        );
+                                        const gen = makeUniqueKey(nextLabel || `field_${idx + 1}`, used);
+                                        next[idx] = { ...cur, label: nextLabel, labelHtml: nextLabelHtml, key: gen };
+                                      } else {
+                                        next[idx] = { ...cur, label: nextLabel, labelHtml: nextLabelHtml };
+                                      }
+                                      replacePlaceholders(next);
+                                      const nextKey = String(next[idx]?.key || '').trim();
+                                      if (nextKey && String(expandedPlaceholderKey || '') === cardKey) setExpandedPlaceholderKey(nextKey);
+                                    }}
+                                    placeholder={t('fieldLabel')}
+                                    minHeight="2.5rem"
+                                    maxHeight="6rem"
+                                  />
+                                </div>
+                                <div className="w-full">
+                                  <RichTextEditor
+                                    value={String(p?.separatorHtml ?? toQuillHtml(p?.separator ?? ': '))}
+                                    onChange={(html) => {
+                                      const nextSepHtml = String(html || '');
+                                      const nextSep = String(stripHtmlToText(nextSepHtml) || '');
+                                      const next = placeholders.slice();
+                                      next[idx] = { ...(next[idx] || {}), separator: nextSep, separatorHtml: nextSepHtml };
+                                      replacePlaceholders(next);
+                                    }}
+                                    placeholder={t('separator')}
+                                    minHeight="2.5rem"
+                                    maxHeight="6rem"
+                                    readOnly={isTitle}
+                                  />
+                                </div>
                               </div>
                               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                 <select
@@ -741,6 +760,9 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                       <option value="product.origin" />
                                       <option value="product.description" />
                                       <option value="batch.batchNo" />
+                                      <option value="epcItem.netWeight" />
+                                      <option value="epcItem.caiqNumber" />
+                                      <option value="epcItem.productionDate" />
                                     </datalist>
                                   </div>
                                 ) : (
@@ -1002,11 +1024,18 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
 
                   <div>
                     <label className="block text-xs font-medium text-zinc-700">{t('fieldLabel')}</label>
-                    <input
-                      value={selectedField.label || ''}
-                      onChange={(e) => updateField({ label: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                    />
+                    <div className="mt-1">
+                      <RichTextEditor
+                        value={String(selectedField.labelHtml ?? toQuillHtml(selectedField.label || ''))}
+                        onChange={(html) => {
+                          const nextHtml = String(html || '');
+                          const nextText = String(stripHtmlToText(nextHtml) || '').trim();
+                          updateField({ label: nextText, labelHtml: nextHtml });
+                        }}
+                        minHeight="2.5rem"
+                        maxHeight="6rem"
+                      />
+                    </div>
                   </div>
 
                   <div>
@@ -1019,6 +1048,9 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                       <option value="certificateId">certificateId</option>
                       <option value="product.name">product.name</option>
                       <option value="batch.batchNo">batch.batchNo</option>
+                      <option value="epcItem.netWeight">epcItem.netWeight</option>
+                      <option value="epcItem.caiqNumber">epcItem.caiqNumber</option>
+                      <option value="epcItem.productionDate">epcItem.productionDate</option>
                       <option value="issuedAt">issuedAt</option>
                       <option value="status">status</option>
                       {placeholders

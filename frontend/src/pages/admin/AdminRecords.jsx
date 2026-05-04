@@ -2,8 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import useRecordsStore from '../../store/useRecordsStore';
 import { useT } from '../../i18n/useT';
-import RichTextEditor from '../../components/admin/RichTextEditor';
-import { isRichTextEmpty, stripHtmlToText, toQuillHtml } from '../../utils/richText';
+import { stripHtmlToText } from '../../utils/richText';
 
 function formatDate(input) {
   if (!input) return '';
@@ -419,7 +418,7 @@ export default function AdminRecords() {
                               setProductCode(p.code || '');
                               setCategory(p.category || '');
                               setStatus(String(p.status || '').toLowerCase() === 'inactive' ? 'inactive' : 'active');
-                              setRemark(toQuillHtml(p.remark || ''));
+                              setRemark(stripHtmlToText(p.remark || ''));
                               setShowEdit(true);
                             }}
                           >
@@ -596,7 +595,7 @@ export default function AdminRecords() {
               </div>
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
-                <RichTextEditor value={remark} onChange={setRemark} />
+                <textarea value={remark} onChange={(e) => setRemark(e.target.value)} className="ac-input h-24 resize-none" />
               </div>
             </div>
             <div className="mt-5 flex justify-end gap-2">
@@ -632,7 +631,7 @@ export default function AdminRecords() {
                       product_code: trimmedProductCode,
                       category: trimmedCategory,
                       status: trimmedStatus,
-                      remark: isRichTextEmpty(remark) ? undefined : String(remark || '')
+                      remark: String(remark || '').trim() || undefined
                     });
                     setShowCreate(false);
                     setSku('');
@@ -716,7 +715,7 @@ export default function AdminRecords() {
               </div>
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
-                <RichTextEditor value={remark} onChange={setRemark} />
+                <textarea value={remark} onChange={(e) => setRemark(e.target.value)} className="ac-input h-24 resize-none" />
               </div>
             </div>
             <div className="mt-5 flex justify-end gap-2">
@@ -744,7 +743,7 @@ export default function AdminRecords() {
                       product_code: String(productCode || '').trim(),
                       category: String(category || '').trim(),
                       status: String(status || '').trim() || 'active',
-                      remark: isRichTextEmpty(remark) ? null : String(remark || '')
+                      remark: String(remark || '').trim() || null
                     }
                   });
                   setShowEdit(false);

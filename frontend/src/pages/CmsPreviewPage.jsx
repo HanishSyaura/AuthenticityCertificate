@@ -108,7 +108,7 @@ export default function CmsPreviewPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen overflow-x-hidden bg-white">
       <div className="w-full">
         <PublicRenderer layout={storedLayout} data={data || sampleCert()} responsive responsiveMode="viewport" baseWidth={390} />
       </div>

@@ -1,6 +1,23 @@
 const cmsService = require('./cms.service');
 const { z } = require('zod');
 
+function resolveStatus(error, fallback = 400) {
+  const msg = String(error?.message || '');
+  const code = error?.code;
+  const lower = msg.toLowerCase();
+  if (msg === 'db_timeout') return 503;
+  if (code === 'P2021') return 503;
+  if (code === 'P1001' || code === 'P1002' || code === 'P1003') return 503;
+  if (lower.includes('database') && (lower.includes('timeout') || lower.includes('unavailable') || lower.includes('connect'))) return 503;
+  return fallback;
+}
+
+function resolveMessage(error) {
+  const msg = String(error?.message || 'Unknown error');
+  if (msg === 'db_timeout') return 'Database tidak dapat diakses (timeout). Sila cuba lagi.';
+  return msg;
+}
+
 const pageSchema = z.object({
   name: z.string().min(1),
   slug: z.string().min(1),
@@ -40,7 +57,7 @@ async function createPage(req, res) {
     });
     res.success(page, 'CMS Page created successfully');
   } catch (error) {
-    res.error(error.message, 400);
+    res.error(resolveMessage(error), resolveStatus(error, 400));
   }
 }
 
@@ -55,7 +72,7 @@ async function saveLayout(req, res) {
     });
     res.success(layout, 'CMS Layout saved successfully');
   } catch (error) {
-    res.error(error.message, 400);
+    res.error(resolveMessage(error), resolveStatus(error, 400));
   }
 }
 
@@ -68,7 +85,7 @@ async function publish(req, res) {
     });
     res.success(result, 'CMS Page published successfully');
   } catch (error) {
-    res.error(error.message, 400);
+    res.error(resolveMessage(error), resolveStatus(error, 400));
   }
 }
 
@@ -83,7 +100,7 @@ async function updateMeta(req, res) {
     });
     res.success(updated, 'CMS metadata updated successfully');
   } catch (error) {
-    res.error(error.message, 400);
+    res.error(resolveMessage(error), resolveStatus(error, 400));
   }
 }
 
@@ -95,7 +112,7 @@ async function getPage(req, res) {
     if (!page) return res.error('Page not found', 404);
     res.success(page);
   } catch (error) {
-    res.error(error.message);
+    res.error(resolveMessage(error), resolveStatus(error, 500));
   }
 }
 
@@ -105,7 +122,7 @@ async function listPages(req, res) {
     const pages = await cmsService.getAllPages({ organizationId: req.organization.id, kind });
     res.success(pages);
   } catch (error) {
-    res.error(error.message);
+    res.error(resolveMessage(error), resolveStatus(error, 500));
   }
 }
 
@@ -115,7 +132,7 @@ async function removePage(req, res) {
     const result = await cmsService.deletePage({ organizationId: req.organization.id, pageId: Number(id) });
     res.success(result, 'CMS Page deleted successfully');
   } catch (error) {
-    res.error(error.message, 400);
+    res.error(resolveMessage(error), resolveStatus(error, 400));
   }
 }
 
@@ -129,7 +146,7 @@ async function reorderPages(req, res) {
     });
     res.success(result, 'CMS Pages reordered successfully');
   } catch (error) {
-    res.error(error.message, 400);
+    res.error(resolveMessage(error), resolveStatus(error, 400));
   }
 }
 

@@ -1,8 +1,13 @@
 import React, { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
 import ReactQuill from 'react-quill';
+import katex from 'katex';
 
-const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, placeholder, minHeight = '6rem', maxHeight = '14rem' }, ref) {
+const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, placeholder, minHeight = '6rem', maxHeight = '14rem', readOnly = false }, ref) {
   const quillRef = useRef(null);
+
+  if (typeof window !== 'undefined' && !window.katex) {
+    window.katex = katex;
+  }
 
   useImperativeHandle(
     ref,
@@ -25,23 +30,51 @@ const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, pla
     []
   );
 
-  const modules = useMemo(
-    () => ({
+  const modules = useMemo(() => {
+    if (readOnly) return { toolbar: false };
+    return {
       toolbar: [
-        [{ header: [1, 2, 3, false] }],
         ['bold', 'italic', 'underline', 'strike'],
-        [{ align: [] }],
-        [{ list: 'ordered' }, { list: 'bullet' }],
         ['blockquote', 'code-block'],
-        ['link'],
+        ['link', 'image', 'video', 'formula'],
+        [{ header: 1 }, { header: 2 }],
+        [{ list: 'ordered' }, { list: 'bullet' }, { list: 'check' }],
+        [{ script: 'sub' }, { script: 'super' }],
+        [{ indent: '-1' }, { indent: '+1' }],
+        [{ direction: 'rtl' }],
+        [{ size: ['small', false, 'large', 'huge'] }],
+        [{ header: [1, 2, 3, 4, 5, 6, false] }],
+        [{ color: [] }, { background: [] }],
+        [{ font: [] }],
+        [{ align: [] }],
         ['clean']
       ]
-    }),
-    []
-  );
+    };
+  }, [readOnly]);
 
   const formats = useMemo(
-    () => ['header', 'bold', 'italic', 'underline', 'strike', 'align', 'list', 'bullet', 'blockquote', 'code-block', 'link'],
+    () => [
+      'bold',
+      'italic',
+      'underline',
+      'strike',
+      'blockquote',
+      'code-block',
+      'link',
+      'image',
+      'video',
+      'formula',
+      'header',
+      'list',
+      'script',
+      'indent',
+      'direction',
+      'size',
+      'color',
+      'background',
+      'font',
+      'align'
+    ],
     []
   );
 
@@ -55,6 +88,7 @@ const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, pla
         placeholder={placeholder}
         modules={modules}
         formats={formats}
+        readOnly={readOnly}
       />
     </div>
   );

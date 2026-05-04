@@ -87,7 +87,7 @@ const VerifyPage = () => {
   if (certificate) {
     if (Array.isArray(certificate?.layout)) {
       return (
-        <div className="min-h-screen w-full bg-white">
+        <div className="min-h-screen w-full overflow-x-hidden bg-white">
           <div className="fixed right-3 top-3 z-50">
             <LanguageSwitcher size="xs" />
           </div>
@@ -127,7 +127,7 @@ const VerifyPage = () => {
               const baseW = Number.isFinite(canvasW) && canvasW > 0 ? canvasW : 390;
               const baseH = Number.isFinite(canvasH) && canvasH > 0 ? canvasH : 844;
               return (
-                <div className="min-h-screen bg-white">
+                <div className="min-h-screen overflow-x-hidden bg-white">
                   <div className="w-full">
                     <PublicRenderer
                       responsive

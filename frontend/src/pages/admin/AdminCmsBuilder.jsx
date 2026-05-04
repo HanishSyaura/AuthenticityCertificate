@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import useCmsStore from '../../store/useCmsStore';
 import CmsPagePanel from '../../components/admin/cms/CmsPagePanel';
 import CmsCanvasPanel from '../../components/admin/cms/CmsCanvasPanel';
@@ -96,6 +96,10 @@ export default function AdminCmsBuilder() {
 
   const [selectedBlockId, setSelectedBlockId] = useState(null);
   const [viewMode, setViewMode] = useState('edit');
+  const [saveStatus, setSaveStatus] = useState('idle');
+  const [saveError, setSaveError] = useState(null);
+  const [lastSavedAt, setLastSavedAt] = useState(null);
+  const saveSeqRef = useRef(0);
 
   const selectedPage = useMemo(
     () => pages.find((p) => String(p.id) === String(selectedPageId)) || null,
@@ -139,6 +143,12 @@ export default function AdminCmsBuilder() {
   }, [language, loadLayoutForPage, selectedPage]);
 
   useEffect(() => {
+    setSaveStatus('idle');
+    setSaveError(null);
+    setLastSavedAt(null);
+  }, [selectedPageId]);
+
+  useEffect(() => {
     if (viewMode !== 'preview') return;
     let cancelled = false;
     (async () => {
@@ -164,7 +174,20 @@ export default function AdminCmsBuilder() {
 
   const setLayout = (next) => {
     if (!selectedPageId) return;
-    saveLayout({ pageId: selectedPageId, layoutJson: next, language });
+    const seq = (saveSeqRef.current += 1);
+    setSaveStatus('saving');
+    setSaveError(null);
+    Promise.resolve(saveLayout({ pageId: selectedPageId, layoutJson: next, language }))
+      .then(() => {
+        if (saveSeqRef.current !== seq) return;
+        setSaveStatus('saved');
+        setLastSavedAt(Date.now());
+      })
+      .catch((e) => {
+        if (saveSeqRef.current !== seq) return;
+        setSaveStatus('error');
+        setSaveError(e?.message || 'Failed to save');
+      });
   };
 
   return (
@@ -177,6 +200,9 @@ export default function AdminCmsBuilder() {
         </div>
 
         <div className="flex items-center gap-2">
+          {saveStatus === 'saving' ? <div className="text-xs font-semibold text-zinc-500">{t('saving')}</div> : null}
+          {saveStatus === 'saved' ? <div className="text-xs font-semibold text-emerald-700">{t('saved')}</div> : null}
+          {saveStatus === 'error' ? <div className="text-xs font-semibold text-rose-700">{t('saveFailed')}</div> : null}
           <select
             className="ac-input rounded-lg px-3 py-2 text-xs font-semibold"
             value={language || 'en'}
@@ -186,6 +212,29 @@ export default function AdminCmsBuilder() {
             <option value="ms">BM</option>
             <option value="zh">中文</option>
           </select>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!selectedPageId) return;
+              const seq = (saveSeqRef.current += 1);
+              setSaveStatus('saving');
+              setSaveError(null);
+              try {
+                await saveLayout({ pageId: selectedPageId, layoutJson: layout, language });
+                if (saveSeqRef.current !== seq) return;
+                setSaveStatus('saved');
+                setLastSavedAt(Date.now());
+              } catch (e) {
+                if (saveSeqRef.current !== seq) return;
+                setSaveStatus('error');
+                setSaveError(e?.message || 'Failed to save');
+              }
+            }}
+            className="ac-btn rounded-lg px-3 py-2 text-xs"
+            disabled={!selectedPageId || saveStatus === 'saving'}
+          >
+            {t('save')}
+          </button>
           <button
             type="button"
             onClick={async () => {
@@ -241,6 +290,8 @@ export default function AdminCmsBuilder() {
             setSelectedBlockId(null);
           }}
         />
+
+        {saveError ? <div className="lg:col-span-3 -mt-2 text-xs text-rose-700">{saveError}</div> : null}
 
         <CmsCanvasPanel
           viewMode={viewMode}

@@ -137,6 +137,10 @@
     padding-left: 1.25rem;
   }
 
+  .ac-richtext.ql-editor {
+    padding: 0;
+  }
+
   .ac-richtext a {
     color: rgb(67 56 202);
     text-decoration: underline;

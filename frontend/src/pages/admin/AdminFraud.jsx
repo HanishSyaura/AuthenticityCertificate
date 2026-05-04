@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import useFraudStore from '../../store/useFraudStore';
 import { useT } from '../../i18n/useT';
-import RichTextEditor from '../../components/admin/RichTextEditor';
-import { isRichTextEmpty, stripHtmlToText, toQuillHtml } from '../../utils/richText';
+import { stripHtmlToText } from '../../utils/richText';
 
 function formatDate(input) {
   if (!input) return '';
@@ -142,7 +141,7 @@ export default function AdminFraud() {
             </div>
             <div>
               <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('reason')}</div>
-              <RichTextEditor value={toQuillHtml(reason)} onChange={setReason} />
+              <textarea value={reason} onChange={(e) => setReason(e.target.value)} className="h-20 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs" />
             </div>
             <div>
               <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('severity')}</div>
@@ -155,9 +154,9 @@ export default function AdminFraud() {
             <button
               type="button"
               className="ac-btn w-full px-3 py-2 text-xs"
-              disabled={!certId.trim() || isRichTextEmpty(reason) || loading}
+              disabled={!certId.trim() || !reason.trim() || loading}
               onClick={async () => {
-                await createFlag({ certificateId: certId.trim(), reason: String(reason || ''), severity });
+                await createFlag({ certificateId: certId.trim(), reason: String(reason || '').trim(), severity });
                 setReason('');
                 if (status !== 'open') setStatus('open');
                 await fetchFlags({ status: 'open' });
