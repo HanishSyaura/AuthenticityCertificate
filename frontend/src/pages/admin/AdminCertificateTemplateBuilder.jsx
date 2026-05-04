@@ -258,7 +258,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     return layout.map((f) => ({
       ...(f || {}),
       render: (it) => (
-        <div className="h-full w-full p-2">
+        <div className="h-full w-full p-1">
           {(() => {
             const raw = safePreview ? getValue(it.path, safePreview) : '';
             const path = String(it.path || '');
@@ -382,7 +382,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     const ph = placeholders.find((p) => String(p?.key || '').trim() === k) || null;
     const labelText = String(stripHtmlToText(ph?.labelHtml ?? ph?.label ?? k) || '').trim() || k;
     const labelHtml = String(ph?.labelHtml || '') ? String(ph.labelHtml) : toQuillHtml(labelText);
-    const item = { id: makeId('field'), path: `templateData.${k}`, label: labelText, labelHtml, x: 20, y: 40, w: 240, h: 56, fontSize: 14, align: 'left' };
+    const item = { id: makeId('field'), path: `templateData.${k}`, label: labelText, labelHtml, x: 20, y: 40, w: 200, h: 44, fontSize: 14, align: 'left' };
     const nextLayout = [...(Array.isArray(draftLayout) ? draftLayout : []), item];
     setDraftLayout(nextLayout);
     queueTemplatePatch({ layoutJson: nextLayout });
@@ -1208,7 +1208,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           </div>
                           {isOpen ? (
                             <div className="mt-2 grid grid-cols-1 gap-2" onFocusCapture={() => setExpandedPlaceholderKey(cardKey)}>
-                              <div className="flex flex-col items-start gap-2 overflow-x-hidden sm:flex-row sm:flex-nowrap">
+                              <div className="flex flex-wrap items-start gap-2 lg:flex-nowrap">
                                 <div className="flex min-w-0 flex-1 items-start gap-2">
                                   <div className="min-w-0 flex-1">
                                     <input
@@ -1238,7 +1238,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                       className="w-full min-w-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                                     />
                                   </div>
-                                  <div className="w-32 shrink-0">
+                                  <div className="w-28 shrink-0 sm:w-32">
                                     <input
                                       value={String((p?.separator ?? stripHtmlToText(p?.separatorHtml ?? '')) || ': ')}
                                       onChange={(e) => {
@@ -1256,7 +1256,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                 </div>
 
                                 <div className={`flex min-w-0 items-start gap-2 ${uiSource === 'product' ? 'flex-1' : ''}`}>
-                                  <div className="w-44 shrink-0">
+                                  <div className="w-32 shrink-0 sm:w-44">
                                     <select
                                       value={uiSource}
                                       onChange={(e) => {
