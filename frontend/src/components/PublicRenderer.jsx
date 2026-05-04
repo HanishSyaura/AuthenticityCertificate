@@ -715,7 +715,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
     return (
       <div
         ref={containerRef}
-        className={`w-full bg-white ${className || ''}`}
+        className={`w-full overflow-x-hidden bg-white ${className || ''}`}
         style={{ minHeight: `${containerHeight * scale}px` }}
       >
         <div className="mx-auto" style={{ width: `${baseW * scale}px`, height: `${containerHeight * scale}px` }}>
@@ -731,7 +731,11 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
   }
 
   return (
-    <div ref={containerRef} className={`relative w-full bg-white ${className || ''}`} style={containerHeight ? { minHeight: `${containerHeight}px` } : undefined}>
+    <div
+      ref={containerRef}
+      className={`relative w-full overflow-x-hidden bg-white ${className || ''}`}
+      style={containerHeight ? { minHeight: `${containerHeight}px` } : undefined}
+    >
       {layoutSafe ? blocks.map(renderBlock) : null}
     </div>
   );
