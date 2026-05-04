@@ -1,12 +1,20 @@
 import React, { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
 import ReactQuill from 'react-quill';
-import katex from 'katex';
 
 const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, placeholder, minHeight = '6rem', maxHeight = '14rem', readOnly = false }, ref) {
   const quillRef = useRef(null);
 
-  if (typeof window !== 'undefined' && !window.katex) {
-    window.katex = katex;
+  const Quill = ReactQuill?.Quill;
+  if (Quill && !Quill.__acConfigured) {
+    const Font = Quill.import('formats/font');
+    Font.whitelist = ['sans-serif', 'serif', 'monospace', 'arial', 'times-new-roman', 'georgia', 'courier-new'];
+    Quill.register(Font, true);
+
+    const SizeStyle = Quill.import('attributors/style/size');
+    SizeStyle.whitelist = ['8pt', '9pt', '10pt', '11pt', '12pt', '14pt', '16pt', '18pt', '24pt', '36pt', '48pt'];
+    Quill.register(SizeStyle, true);
+
+    Quill.__acConfigured = true;
   }
 
   useImperativeHandle(
@@ -35,20 +43,44 @@ const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, pla
     return {
       toolbar: [
         ['bold', 'italic', 'underline', 'strike'],
-        ['blockquote', 'code-block'],
-        ['link', 'image', 'video', 'formula'],
-        [{ header: 1 }, { header: 2 }],
-        [{ list: 'ordered' }, { list: 'bullet' }, { list: 'check' }],
-        [{ script: 'sub' }, { script: 'super' }],
-        [{ indent: '-1' }, { indent: '+1' }],
-        [{ direction: 'rtl' }],
-        [{ size: ['small', false, 'large', 'huge'] }],
-        [{ header: [1, 2, 3, 4, 5, 6, false] }],
-        [{ color: [] }, { background: [] }],
-        [{ font: [] }],
-        [{ align: [] }],
-        ['clean']
-      ]
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        [{ script: 'super' }, { align: [] }],
+        [
+          { size: ['8pt', '9pt', '10pt', '11pt', '12pt', '14pt', '16pt', '18pt', '24pt', '36pt', '48pt'] },
+          { font: ['sans-serif', 'serif', 'monospace', 'arial', 'times-new-roman', 'georgia', 'courier-new'] }
+        ]
+      ],
+      keyboard: {
+        bindings: {
+          tab: {
+            key: 9,
+            handler: (range, context) => {
+              const editor = quillRef.current?.getEditor?.();
+              if (!editor) return true;
+              if (context?.format?.list) {
+                editor.format('indent', '+1', 'user');
+                return false;
+              }
+              editor.insertText(range.index, '    ', 'user');
+              editor.setSelection(range.index + 4, 0, 'user');
+              return false;
+            }
+          },
+          shiftTab: {
+            key: 9,
+            shiftKey: true,
+            handler: (range, context) => {
+              const editor = quillRef.current?.getEditor?.();
+              if (!editor) return true;
+              if (context?.format?.list) {
+                editor.format('indent', '-1', 'user');
+                return false;
+              }
+              return true;
+            }
+          }
+        }
+      }
     };
   }, [readOnly]);
 
@@ -58,20 +90,10 @@ const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, pla
       'italic',
       'underline',
       'strike',
-      'blockquote',
-      'code-block',
-      'link',
-      'image',
-      'video',
-      'formula',
-      'header',
       'list',
       'script',
       'indent',
-      'direction',
       'size',
-      'color',
-      'background',
       'font',
       'align'
     ],

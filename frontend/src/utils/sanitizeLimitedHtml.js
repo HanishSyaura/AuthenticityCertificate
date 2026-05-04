@@ -16,34 +16,13 @@ function sanitizeStyle(input) {
   if (!raw) return '';
   if (/url\s*\(|expression\s*\(|javascript:/i.test(raw)) return '';
   const allowed = new Set([
-    'color',
-    'background-color',
     'font-weight',
     'font-style',
     'text-decoration',
     'text-align',
     'font-size',
     'font-family',
-    'line-height',
-    'border',
-    'border-color',
-    'border-width',
-    'border-style',
-    'border-collapse',
-    'padding',
-    'padding-left',
-    'padding-right',
-    'padding-top',
-    'padding-bottom',
-    'margin',
-    'margin-left',
-    'margin-right',
-    'margin-top',
-    'margin-bottom',
-    'width',
-    'height',
-    'max-width',
-    'min-width'
+    'line-height'
   ]);
   const parts = raw
     .split(';')
@@ -63,59 +42,16 @@ function sanitizeStyle(input) {
   return kept.join('; ');
 }
 
-function sanitizeUrl(input, { allowDataImage = false } = {}) {
-  const raw = String(input || '').trim();
-  if (!raw) return '';
-  if (raw.startsWith('#') || raw.startsWith('/') || raw.startsWith('?')) return raw;
-  const lower = raw.toLowerCase();
-  if (lower.startsWith('mailto:') || lower.startsWith('tel:')) return raw;
-  if (lower.startsWith('http://') || lower.startsWith('https://')) return raw;
-  if (allowDataImage && /^data:image\/(png|jpe?g|gif|webp);base64,/i.test(raw)) return raw;
-  return '';
-}
-
 function sanitizeClass(input) {
   const raw = String(input || '').trim();
   if (!raw) return '';
-  const allowed = new Set([
-    'ql-ui',
-    'ql-formula',
-    'ql-video',
-    'ql-align-left',
-    'ql-align-center',
-    'ql-align-right',
-    'ql-align-justify',
-    'ql-direction-rtl',
-    'ql-size-small',
-    'ql-size-large',
-    'ql-size-huge',
-    'ql-font-serif',
-    'ql-font-monospace'
-  ]);
+  const allowed = new Set(['ql-align-left', 'ql-align-center', 'ql-align-right', 'ql-align-justify']);
   const kept = raw
     .split(/\s+/)
     .map((s) => s.trim())
     .filter(Boolean)
     .filter((c) => allowed.has(c) || /^ql-indent-[1-8]$/.test(c) || /^ql-font-[a-z0-9-]{1,30}$/i.test(c));
   return kept.join(' ');
-}
-
-function sanitizeDir(input) {
-  const raw = String(input || '').trim().toLowerCase();
-  if (raw === 'rtl' || raw === 'ltr') return raw;
-  return '';
-}
-
-function sanitizeDataList(input) {
-  const raw = String(input || '').trim().toLowerCase();
-  if (raw === 'checked' || raw === 'unchecked' || raw === 'ordered' || raw === 'bullet') return raw;
-  return '';
-}
-
-function sanitizeDataValue(input) {
-  const raw = String(input || '');
-  if (!raw) return '';
-  return raw.length > 5000 ? raw.slice(0, 5000) : raw;
 }
 
 export function sanitizeLimitedHtml(input) {
@@ -131,28 +67,13 @@ export function sanitizeLimitedHtml(input) {
     'U',
     'S',
     'STRIKE',
-    'SUB',
     'SUP',
     'DIV',
     'P',
     'SPAN',
-    'H1',
-    'H2',
-    'H3',
-    'BLOCKQUOTE',
     'UL',
     'OL',
-    'LI',
-    'A',
-    'FONT',
-    'TABLE',
-    'THEAD',
-    'TBODY',
-    'TR',
-    'TD',
-    'TH',
-    'IMG',
-    'IFRAME'
+    'LI'
   ]);
   let doc;
   try {

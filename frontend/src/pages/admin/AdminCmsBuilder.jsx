@@ -98,7 +98,7 @@ export default function AdminCmsBuilder() {
   const [viewMode, setViewMode] = useState('edit');
   const [saveStatus, setSaveStatus] = useState('idle');
   const [saveError, setSaveError] = useState(null);
-  const [lastSavedAt, setLastSavedAt] = useState(null);
+  const [, setLastSavedAt] = useState(null);
   const saveSeqRef = useRef(0);
 
   const selectedPage = useMemo(

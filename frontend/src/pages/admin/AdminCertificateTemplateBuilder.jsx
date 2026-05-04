@@ -220,8 +220,8 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             const showPrefix = source !== 'title';
             const labelHtmlRaw = showPrefix ? (key ? String(ph?.labelHtml ?? toQuillHtml(ph?.label || key)) : String(it.labelHtml ?? toQuillHtml(it.label || ''))) : '';
             const labelText = showPrefix ? String(stripHtmlToText(labelHtmlRaw) || '').trim() : '';
-            const sepHtmlRaw = showPrefix ? (key ? String(ph?.separatorHtml ?? toQuillHtml(ph?.separator ?? ': ')) : toQuillHtml(': ')) : '';
-            const prefixRaw = showPrefix && labelText ? `${labelHtmlRaw}${sepHtmlRaw}` : '';
+            const sepText = showPrefix ? (key ? String(ph?.separator ?? ': ') : ': ') : '';
+            const prefixRaw = showPrefix && labelText ? `${escapeHtml(labelText)}${escapeHtml(sepText)}` : '';
             const valueHtml = source === 'static' || source === 'manual' || source === 'title' ? val : escapeTextToHtml(val);
             const html = sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`);
             const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
@@ -249,8 +249,8 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         const showPrefix = source !== 'title';
         const labelHtmlRaw = showPrefix ? (key ? String(ph?.labelHtml ?? toQuillHtml(ph?.label || key)) : String(it.labelHtml ?? toQuillHtml(it.label || ''))) : '';
         const labelText = showPrefix ? String(stripHtmlToText(labelHtmlRaw) || '').trim() : '';
-        const sepHtmlRaw = showPrefix ? (key ? String(ph?.separatorHtml ?? toQuillHtml(ph?.separator ?? ': ')) : toQuillHtml(': ')) : '';
-        const prefixRaw = showPrefix && labelText ? `${labelHtmlRaw}${sepHtmlRaw}` : '';
+        const sepText = showPrefix ? (key ? String(ph?.separator ?? ': ') : ': ') : '';
+        const prefixRaw = showPrefix && labelText ? `${escapeHtml(labelText)}${escapeHtml(sepText)}` : '';
         const valueHtml = source === 'static' || source === 'manual' || source === 'title' ? val : escapeTextToHtml(val);
         const html = sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`);
         const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
@@ -673,13 +673,13 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           </div>
                           {isOpen ? (
                             <div className="mt-2 grid grid-cols-1 gap-2" onFocusCapture={() => setExpandedPlaceholderKey(cardKey)}>
-                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                <div className="w-full">
-                                  <RichTextEditor
-                                    value={String(p?.labelHtml ?? toQuillHtml(p?.label || ''))}
-                                    onChange={(html) => {
-                                      const nextLabelHtml = String(html || '');
-                                      const nextLabel = String(stripHtmlToText(nextLabelHtml) || '').trim();
+                              <div className="flex flex-nowrap items-start gap-2 overflow-x-hidden">
+                                <div className="min-w-0 flex-1">
+                                  <input
+                                    value={String(p?.label || stripHtmlToText(p?.labelHtml ?? '') || '')}
+                                    onChange={(e) => {
+                                      const nextLabel = String(e.target.value || '');
+                                      const nextLabelHtml = toQuillHtml(nextLabel);
                                       const next = placeholders.slice();
                                       const cur = next[idx] || {};
                                       const curKey = String(cur.key || '').trim();
@@ -689,7 +689,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                             .map((it, i) => (i === idx ? '' : String(it?.key || '').trim().toLowerCase()))
                                             .filter(Boolean)
                                         );
-                                        const gen = makeUniqueKey(nextLabel || `field_${idx + 1}`, used);
+                                        const gen = makeUniqueKey(nextLabel.trim() || `field_${idx + 1}`, used);
                                         next[idx] = { ...cur, label: nextLabel, labelHtml: nextLabelHtml, key: gen };
                                       } else {
                                         next[idx] = { ...cur, label: nextLabel, labelHtml: nextLabelHtml };
@@ -699,75 +699,73 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                       if (nextKey && String(expandedPlaceholderKey || '') === cardKey) setExpandedPlaceholderKey(nextKey);
                                     }}
                                     placeholder={t('fieldLabel')}
-                                    minHeight="2.5rem"
-                                    maxHeight="6rem"
+                                    className="w-full min-w-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                                   />
                                 </div>
-                                <div className="w-full">
-                                  <RichTextEditor
-                                    value={String(p?.separatorHtml ?? toQuillHtml(p?.separator ?? ': '))}
-                                    onChange={(html) => {
-                                      const nextSepHtml = String(html || '');
-                                      const nextSep = String(stripHtmlToText(nextSepHtml) || '');
+                                <div className="w-32 shrink-0">
+                                  <input
+                                    value={String((p?.separator ?? stripHtmlToText(p?.separatorHtml ?? '')) || ': ')}
+                                    onChange={(e) => {
+                                      const nextSep = String(e.target.value || '');
+                                      const nextSepHtml = toQuillHtml(nextSep);
                                       const next = placeholders.slice();
                                       next[idx] = { ...(next[idx] || {}), separator: nextSep, separatorHtml: nextSepHtml };
                                       replacePlaceholders(next);
                                     }}
                                     placeholder={t('separator')}
-                                    minHeight="2.5rem"
-                                    maxHeight="6rem"
                                     readOnly={isTitle}
+                                    className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                                   />
                                 </div>
-                              </div>
-                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                <select
-                                  value={uiSource}
-                                  onChange={(e) => {
-                                    const nextSource = e.target.value;
-                                    const next = placeholders.slice();
-                                    const cur = next[idx] || {};
-                                    next[idx] = { ...cur, source: nextSource };
-                                    replacePlaceholders(next);
-                                  }}
-                                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                                >
-                                  <option value="static">{t('sourceManual')}</option>
-                                  <option value="title">{t('sourceTitle')}</option>
-                                  <option value="product">{t('bindTo')}</option>
-                                </select>
-                                {uiSource === 'product' ? (
-                                  <div>
-                                    <input
-                                      value={String(p?.bindPath || '')}
-                                      onChange={(e) => {
-                                        const next = placeholders.slice();
-                                        next[idx] = { ...(next[idx] || {}), bindPath: e.target.value };
-                                        replacePlaceholders(next);
-                                      }}
-                                      placeholder={t('bindTo')}
-                                      list="certTplBindPaths"
-                                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                                    />
-                                    <datalist id="certTplBindPaths">
-                                      <option value="certificateId" />
-                                      <option value="status" />
-                                      <option value="issuedAt" />
-                                      <option value="product.name" />
-                                      <option value="product.sku" />
-                                      <option value="product.code" />
-                                      <option value="product.category" />
-                                      <option value="product.origin" />
-                                      <option value="product.description" />
-                                      <option value="batch.batchNo" />
-                                      <option value="epcItem.netWeight" />
-                                      <option value="epcItem.caiqNumber" />
-                                      <option value="epcItem.productionDate" />
-                                    </datalist>
-                                  </div>
-                                ) : (
-                                  <div />
-                                )}
+                                <div className="w-44 shrink-0">
+                                  <select
+                                    value={uiSource}
+                                    onChange={(e) => {
+                                      const nextSource = e.target.value;
+                                      const next = placeholders.slice();
+                                      const cur = next[idx] || {};
+                                      next[idx] = { ...cur, source: nextSource };
+                                      replacePlaceholders(next);
+                                    }}
+                                    className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                                  >
+                                    <option value="static">{t('sourceManual')}</option>
+                                    <option value="title">{t('sourceTitle')}</option>
+                                    <option value="product">{t('bindTo')}</option>
+                                  </select>
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  {uiSource === 'product' ? (
+                                    <div>
+                                      <input
+                                        value={String(p?.bindPath || '')}
+                                        onChange={(e) => {
+                                          const next = placeholders.slice();
+                                          next[idx] = { ...(next[idx] || {}), bindPath: e.target.value };
+                                          replacePlaceholders(next);
+                                        }}
+                                        placeholder={t('bindTo')}
+                                        list="certTplBindPaths"
+                                        className="w-full min-w-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                                      />
+                                      <datalist id="certTplBindPaths">
+                                        <option value="certificateId" />
+                                        <option value="status" />
+                                        <option value="issuedAt" />
+                                        <option value="product.name" />
+                                        <option value="product.sku" />
+                                        <option value="product.code" />
+                                        <option value="product.category" />
+                                        <option value="product.origin" />
+                                        <option value="product.description" />
+                                        <option value="batch.batchNo" />
+                                        <option value="epcItem.netWeight" />
+                                        <option value="epcItem.caiqNumber" />
+                                        <option value="epcItem.productionDate" />
+                                      </datalist>
+                                    </div>
+                                  ) : null}
+                                </div>
                               </div>
                               {uiSource === 'static' || uiSource === 'title' ? (
                                 <div>
@@ -779,6 +777,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                       next[idx] = { ...(next[idx] || {}), staticValue: v };
                                       replacePlaceholders(next);
                                     }}
+                                    maxHeight="none"
                                   />
                                 </div>
                               ) : null}
