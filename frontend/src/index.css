@@ -203,3 +203,178 @@
     word-break: break-word;
   }
 }
+
+@layer utilities {
+  @keyframes ac-verify-float {
+    0% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    50% {
+      transform: translate3d(0, -18px, 0) scale(1.03);
+    }
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+
+  @keyframes ac-verify-drift {
+    0% {
+      transform: translate3d(0, 0, 0);
+    }
+    50% {
+      transform: translate3d(14px, -10px, 0);
+    }
+    100% {
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  @keyframes ac-verify-scan {
+    0% {
+      transform: translate3d(-100%, -40%, 0);
+      opacity: 0;
+    }
+    15% {
+      opacity: 0.65;
+    }
+    70% {
+      opacity: 0.5;
+    }
+    100% {
+      transform: translate3d(100%, 120%, 0);
+      opacity: 0;
+    }
+  }
+
+  @keyframes ac-verify-bounce {
+    0%,
+    80%,
+    100% {
+      transform: translate3d(0, 0, 0);
+      opacity: 0.45;
+    }
+    40% {
+      transform: translate3d(0, -4px, 0);
+      opacity: 0.9;
+    }
+  }
+
+  @keyframes ac-verify-fill {
+    0% {
+      filter: saturate(0.9);
+    }
+    50% {
+      filter: saturate(1.15);
+    }
+    100% {
+      filter: saturate(0.9);
+    }
+  }
+
+  .ac-verify-loading {
+    @apply fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-white;
+    background:
+      radial-gradient(900px circle at 12% 12%, rgba(99, 102, 241, 0.18), transparent 55%),
+      radial-gradient(750px circle at 92% 18%, rgba(20, 184, 166, 0.16), transparent 55%),
+      radial-gradient(900px circle at 50% 95%, rgba(244, 63, 94, 0.12), transparent 60%),
+      linear-gradient(180deg, #ffffff 0%, #f6f7ff 100%);
+  }
+
+  .ac-verify-blob {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(28px);
+    opacity: 0.6;
+    animation: ac-verify-float 6.2s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  .ac-verify-blob--1 {
+    width: 320px;
+    height: 320px;
+    left: -120px;
+    top: -120px;
+    background: radial-gradient(circle at 30% 30%, rgba(99, 102, 241, 0.65), rgba(99, 102, 241, 0));
+    animation-duration: 7.1s;
+  }
+
+  .ac-verify-blob--2 {
+    width: 360px;
+    height: 360px;
+    right: -160px;
+    top: -80px;
+    background: radial-gradient(circle at 30% 30%, rgba(20, 184, 166, 0.6), rgba(20, 184, 166, 0));
+    animation-duration: 6.4s;
+    animation-name: ac-verify-drift;
+  }
+
+  .ac-verify-blob--3 {
+    width: 420px;
+    height: 420px;
+    left: 15%;
+    bottom: -220px;
+    background: radial-gradient(circle at 30% 30%, rgba(244, 63, 94, 0.38), rgba(244, 63, 94, 0));
+    animation-duration: 8.3s;
+  }
+
+  .ac-verify-card {
+    @apply relative overflow-hidden rounded-3xl border border-zinc-200/70 bg-white/75 shadow-xl shadow-zinc-900/10 backdrop-blur;
+  }
+
+  .ac-verify-card-inner {
+    @apply relative p-6;
+  }
+
+  .ac-verify-icon {
+    @apply mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white ring-1 ring-zinc-900/5;
+    box-shadow: 0 14px 34px rgba(24, 24, 27, 0.08);
+  }
+
+  .ac-verify-scan {
+    position: absolute;
+    inset: -40%;
+    background: linear-gradient(45deg, transparent 35%, rgba(99, 102, 241, 0.2) 50%, transparent 65%);
+    animation: ac-verify-scan 2.2s ease-in-out infinite;
+    transform: translate3d(-100%, -40%, 0);
+    pointer-events: none;
+  }
+
+  .ac-verify-dots {
+    display: inline-flex;
+    gap: 0.25rem;
+    margin-right: 0.5rem;
+    vertical-align: middle;
+  }
+
+  .ac-verify-dots > span {
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: rgb(63 63 70);
+    animation: ac-verify-bounce 1s infinite;
+  }
+
+  .ac-verify-dots > span:nth-child(2) {
+    animation-delay: 0.12s;
+  }
+
+  .ac-verify-dots > span:nth-child(3) {
+    animation-delay: 0.24s;
+  }
+
+  .ac-verify-progress {
+    height: 100%;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, rgb(79 70 229) 0%, rgb(20 184 166) 65%, rgb(244 63 94) 100%);
+    animation: ac-verify-fill 1.6s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ac-verify-blob,
+    .ac-verify-scan,
+    .ac-verify-dots > span,
+    .ac-verify-progress {
+      animation: none !important;
+    }
+  }
+}

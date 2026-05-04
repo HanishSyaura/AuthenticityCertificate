@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import PublicRenderer from '../components/PublicRenderer';
+import VerifyLoadingScreen from '../components/VerifyLoadingScreen';
 import { useT } from '../i18n/useT';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 
@@ -24,24 +25,21 @@ function IconShieldAlert(props) {
   );
 }
 
-function IconLoader(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-      <path d="M21 12a9 9 0 1 1-9-9" />
-    </svg>
-  );
-}
-
 const VerifyPage = () => {
   const { id } = useParams();
   const location = useLocation();
   const { certificate, loading, error, verifyCertificate, resolveCertificate } = useAuthStore();
   const [certId, setCertId] = useState(id || '');
+  const [loadingMeta, setLoadingMeta] = useState(null);
+  const [loadingMode, setLoadingMode] = useState('auto');
+  const [showLoader, setShowLoader] = useState(false);
   const { t, lang, locale } = useT();
   const hasTemplate = Boolean(Array.isArray(certificate?.certificateTemplate?.layoutJson));
 
   useEffect(() => {
     if (id) {
+      setLoadingMode('verify');
+      setLoadingMeta({ label: t('certificateId'), value: id });
       verifyCertificate(id, { lang });
       setCertId(id);
       return;
@@ -50,9 +48,22 @@ const VerifyPage = () => {
     const epc = sp.get('epc');
     const nfcUid = sp.get('nfcUid');
     if (epc || nfcUid) {
+      setLoadingMode('resolve');
+      if (epc) setLoadingMeta({ label: t('epc'), value: epc });
+      else setLoadingMeta({ label: 'NFC UID', value: nfcUid });
       resolveCertificate({ epc: epc || null, nfcUid: nfcUid || null }, { lang });
     }
-  }, [id, lang, location.search, resolveCertificate, verifyCertificate]);
+  }, [id, lang, location.search, resolveCertificate, t, verifyCertificate]);
+
+  useEffect(() => {
+    if (loading) {
+      setShowLoader(true);
+      return;
+    }
+    const timer = setTimeout(() => setShowLoader(false), 180);
+    return () => clearTimeout(timer);
+  }, [loading]);
+
   const handleManualVerify = (e) => {
     e.preventDefault();
     const raw = String(certId || '').trim();
@@ -62,24 +73,32 @@ const VerifyPage = () => {
 
     const looksLikeCertId = /^BN-[A-Z0-9]+$/.test(value);
     if (looksLikeCertId) {
+      setLoadingMode('verify');
+      setLoadingMeta({ label: t('certificateId'), value });
       verifyCertificate(value, { lang });
       return;
     }
 
     const looksLikeHex = /^[0-9A-F]+$/.test(value);
     if (looksLikeHex && value.length >= 8 && value.length <= 32) {
+      setLoadingMode('resolve');
+      setLoadingMeta({ label: 'NFC UID', value });
       resolveCertificate({ epc: null, nfcUid: value }, { lang });
       return;
     }
 
+    setLoadingMode('resolve');
+    setLoadingMeta({ label: t('epc'), value });
     resolveCertificate({ epc: value, nfcUid: null }, { lang });
   };
 
-  if (loading) {
+  if (showLoader) {
     return (
-      <div className="flex min-h-[100dvh] flex-col items-center justify-center px-4">
-        <IconLoader className="mb-4 h-10 w-10 animate-spin text-zinc-700" />
-        <p className="text-base font-semibold text-zinc-900">{t('verifying')}</p>
+      <div className="min-h-[100dvh]">
+        <div className="fixed right-3 top-3 z-[60]">
+          <LanguageSwitcher size="xs" />
+        </div>
+        <VerifyLoadingScreen meta={loadingMeta} mode={loadingMode} />
       </div>
     );
   }

@@ -2,6 +2,42 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n/useT';
 import { stripHtmlToText } from '../utils/richText';
 
+const ImageLightbox = ({ src, onClose }) => {
+  useEffect(() => {
+    const prevOverflow = document?.body?.style?.overflow ?? '';
+    if (document?.body?.style) document.body.style.overflow = 'hidden';
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') onClose?.();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      if (document?.body?.style) document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  if (!src) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" onClick={onClose}>
+      <button
+        type="button"
+        className="absolute right-4 top-4 rounded bg-black/50 px-3 py-1 text-sm text-white"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose?.();
+        }}
+      >
+        ×
+      </button>
+      <div className="max-h-full max-w-full" onClick={(e) => e.stopPropagation()}>
+        <img src={src} alt="" className="max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] object-contain" draggable={false} />
+      </div>
+    </div>
+  );
+};
+
 function getValue(path, data) {
   const parts = String(path || '').split('.').filter(Boolean);
   let cur = data;
@@ -280,6 +316,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
   const [isMobile, setIsMobile] = useState(false);
   const containerRef = useRef(null);
   const [targetW, setTargetW] = useState(null);
+  const [lightboxSrc, setLightboxSrc] = useState(null);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 640px)');
@@ -413,7 +450,13 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
           return (
             <div key={block.id} style={style} className="overflow-hidden">
               {block.content?.url ? (
-                <img src={block.content.url} alt="" className={isStretch ? 'h-full w-full object-fill' : 'h-full w-full object-contain'} />
+                <img
+                  src={block.content.url}
+                  alt=""
+                  className={`${isStretch ? 'h-full w-full object-fill' : 'h-full w-full object-contain'} cursor-zoom-in`}
+                  draggable={false}
+                  onClick={() => setLightboxSrc(block.content.url)}
+                />
               ) : (
                 <div className="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 text-xs text-zinc-500">
                   {t('image')}
@@ -425,11 +468,13 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
       case 'certificate':
         {
           const variant = String(block.content?.variant || 'auth');
-          const supportingIndexRaw = block.content?.supportingIndex;
-          const supportingIndex = Number.isFinite(Number(supportingIndexRaw)) ? Math.max(0, Math.floor(Number(supportingIndexRaw))) : 0;
-          const supporting =
-            variant === 'supporting' && Array.isArray(data?.supportingCertificates) ? data.supportingCertificates[supportingIndex] || null : null;
-          const dataForTemplate = supporting && supporting.templateData != null ? { ...(data || {}), templateData: supporting.templateData } : data;
+          const supportingTemplateId = block.content?.certificateTemplateId != null ? Number(block.content.certificateTemplateId) : null;
+          const supportingTemplatesArr = Array.isArray(data?.supportingTemplates) ? data.supportingTemplates : [];
+          const supportingTemplate =
+            variant === 'supporting' && supportingTemplateId != null
+              ? supportingTemplatesArr.find((t) => Number(t?.id) === supportingTemplateId) || null
+              : null;
+          const dataForTemplate = data;
 
           const status = String(data?.status || '').toUpperCase();
           const ok = status === 'VALID';
@@ -440,7 +485,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
           const caiqNumber = data?.epcItem?.caiqNumber || null;
           const productionDate = data?.epcItem?.productionDate ? new Date(data.epcItem.productionDate) : null;
 
-          const template = supporting?.certificateTemplate || data?.certificateTemplate || null;
+          const template = variant === 'supporting' ? supportingTemplate : data?.certificateTemplate || null;
           const templateLayout = normalizeJsonArray(template?.layoutJson);
           if (!disableCertificateEmbed && template && templateLayout) {
             const rawW = Number(template?.canvasWidth || block.content?.canvasWidth || 390);
@@ -654,7 +699,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
   };
 
   if (responsive && layoutSafe && containerHeight) {
-    return (
+    const content = (
       <div
         ref={containerRef}
         className={`w-full overflow-x-hidden bg-white ${className || ''}`}
@@ -670,9 +715,15 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
         </div>
       </div>
     );
+    return (
+      <>
+        {content}
+        {lightboxSrc ? <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} /> : null}
+      </>
+    );
   }
 
-  return (
+  const content = (
     <div
       ref={containerRef}
       className={`relative w-full overflow-x-hidden bg-white ${className || ''}`}
@@ -680,6 +731,13 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
     >
       {layoutSafe ? blocks.map(renderBlock) : null}
     </div>
+  );
+
+  return (
+    <>
+      {content}
+      {lightboxSrc ? <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} /> : null}
+    </>
   );
 };
 

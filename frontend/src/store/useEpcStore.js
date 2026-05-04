@@ -130,6 +130,27 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
+  exportBatchVerifyUrlXlsx: async (batchId) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const id = Number(batchId);
+      const res = await api.get(`/epc/batches/${id}/export-verify-url-xlsx`, { responseType: 'arraybuffer' });
+      const contentType = res?.headers?.['content-type'] || 'application/octet-stream';
+      const disposition = res?.headers?.['content-disposition'] || '';
+      const match = /filename="([^"]+)"/i.exec(disposition);
+      const filename = match?.[1] || `epc_urls_${id}.xlsx`;
+      const blob = new Blob([res.data], { type: contentType });
+      downloadBlob(blob, filename);
+      set({ loading: false });
+      return true;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Export failed';
+      set({ loading: false, error: msg });
+      return false;
+    }
+  },
+
   clearLastGenerated: () => set({ lastGenerated: null }),
 
   importProductionXlsx: async ({ batchId, base64 }) => {

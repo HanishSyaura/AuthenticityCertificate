@@ -76,6 +76,21 @@ function composeLayouts(pages) {
   return out;
 }
 
+function getSupportingTemplateIdsFromLayout(layout) {
+  const out = new Set();
+  if (!Array.isArray(layout)) return [];
+  for (const b of layout) {
+    if (!b || typeof b !== 'object') continue;
+    if (b.type !== 'certificate') continue;
+    const variant = String(b?.content?.variant || 'auth');
+    if (variant !== 'supporting') continue;
+    const tid = b?.content?.certificateTemplateId;
+    const id = tid != null ? Number(tid) : NaN;
+    if (Number.isFinite(id) && id > 0) out.add(id);
+  }
+  return Array.from(out);
+}
+
 async function respondByCertificateId({ req, res, certificateId, verifiedVia, identity }) {
   const ip = scanlog.normalizeIp(req);
   const userAgent = req.get('user-agent') || '';
@@ -232,7 +247,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     }
 
     const resolvedProduct = epcProduct || cert.batch?.product || null;
-    let supportingCertificates = [];
+    let supportingTemplates = [];
     let layout = null;
     const pageId = resolvedProduct?.cmsPage?.id || null;
     const certificateLayout = null;
@@ -292,35 +307,26 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
       }
     }
 
-    if (resolvedOrgId && resolvedProduct?.id) {
+    void certificatePageId;
+    if (!layout) layout = resolvedProduct?.cmsPage?.layout?.layoutJson || null;
+    void certificateLayout;
+
+    const supportingTemplateIds = getSupportingTemplateIdsFromLayout(layout);
+    if (resolvedOrgId && supportingTemplateIds.length) {
       try {
         if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
         const rows = await Promise.race([
-          prisma.productSupportingCertificate.findMany({
-            where: { organizationId: resolvedOrgId, productId: Number(resolvedProduct.id), deletedAt: null },
-            orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
-            include: { certificateTemplate: true }
+          prisma.certificateTemplate.findMany({
+            where: { organizationId: resolvedOrgId, id: { in: supportingTemplateIds }, deletedAt: null }
           }),
           new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
         ]);
-        supportingCertificates = Array.isArray(rows)
-          ? rows.map((r) => ({
-              id: r.id,
-              sortOrder: r.sortOrder,
-              title: r.title || null,
-              mediaUrl: r.mediaUrl || null,
-              templateData: r.templateData || null,
-              certificateTemplate: r.certificateTemplate || null
-            }))
-          : [];
+        supportingTemplates = Array.isArray(rows) ? rows : [];
       } catch {
         dbGate.markDbFailure({ cooldownMs: 10_000 });
       }
     }
 
-    void certificatePageId;
-    if (!layout) layout = resolvedProduct?.cmsPage?.layout?.layoutJson || null;
-    void certificateLayout;
     let effectiveStatus = certificateService.computeEffectiveStatus(cert);
     if (effectiveStatus === 'PENDING' && (verifiedVia === 'epc' || verifiedVia === 'nfc_uid')) effectiveStatus = 'VALID';
     const status = chooseStatus({ effectiveStatus, overrideStatus });
@@ -352,7 +358,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
             }
           : null,
         templateData: templateData || null,
-        supportingCertificates,
+        supportingTemplates,
         layout,
         certificateLayout: null,
         certificateTemplate: epcBatchTemplate || resolvedProduct?.certificateTemplate || null,

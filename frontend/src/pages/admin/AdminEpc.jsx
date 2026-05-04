@@ -52,6 +52,7 @@ export default function AdminEpc() {
     fetchItems,
     generateBatch,
     exportBatchXlsx,
+    exportBatchVerifyUrlXlsx,
     importProductionXlsx,
     markProductionDone,
     deleteBatch,
@@ -71,6 +72,7 @@ export default function AdminEpc() {
     fetchItems: s.fetchItems,
     generateBatch: s.generateBatch,
     exportBatchXlsx: s.exportBatchXlsx,
+    exportBatchVerifyUrlXlsx: s.exportBatchVerifyUrlXlsx,
     importProductionXlsx: s.importProductionXlsx,
     markProductionDone: s.markProductionDone,
     deleteBatch: s.deleteBatch,
@@ -432,6 +434,9 @@ export default function AdminEpc() {
                   <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchXlsx(b.id)}>
                     {t('exportXlsx')}
                   </button>
+                  <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchVerifyUrlXlsx(b.id)}>
+                    {t('exportVerifyUrlXlsx')}
+                  </button>
                   <button
                     type="button"
                     className="ac-btn ac-btn-soft px-3 py-2 text-xs"
@@ -471,6 +476,9 @@ export default function AdminEpc() {
                   onClick={() => void openCertificate(itemsBatch)}
                 >
                   {t('viewCertificate')}
+                </button>
+                <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchVerifyUrlXlsx(itemsBatch.id)}>
+                  {t('exportVerifyUrlXlsx')}
                 </button>
                 <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => setItemsOpen(false)}>
                   {t('close')}

@@ -120,6 +120,23 @@ async function exportBatch(req, res) {
   }
 }
 
+async function exportBatchVerifyUrls(req, res) {
+  try {
+    const batchId = Number(req.params.id);
+    const verifyUrlPrefix = (process.env.PUBLIC_VERIFY_URL_PREFIX || '').trim() || 'https://wmscertauth.clbgroups.com/verify?epc=';
+    const { buffer, filename } = await epcService.exportBatchVerifyUrlXlsx({
+      organizationId: req.organization.id,
+      batchId,
+      verifyUrlPrefix
+    });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.status(200).send(buffer);
+  } catch (e) {
+    res.error(e.message, 400);
+  }
+}
+
 async function importProductionXlsx(req, res) {
   try {
     const batchId = Number(req.params.id);
@@ -207,6 +224,7 @@ module.exports = {
   listItems,
   listBatchItems,
   exportBatch,
+  exportBatchVerifyUrls,
   importProductionXlsx,
   markProductionDone,
   updateBatch,

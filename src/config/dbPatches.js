@@ -414,20 +414,43 @@ async function ensureEpcSchemaCompat() {
         \`id\` INT NOT NULL AUTO_INCREMENT,
         \`organizationId\` INT NOT NULL,
         \`corpPrefix\` VARCHAR(191) NOT NULL,
+        \`skuCode\` VARCHAR(191) NOT NULL DEFAULT '',
         \`lastNo\` BIGINT NOT NULL DEFAULT 0,
         \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (\`id\`)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
-    const idxUnique = `CorpSequence_organizationId_corpPrefix_key`;
+    const idxUnique = `CorpSequence_organizationId_corpPrefix_skuCode_key`;
     const hasIdxUnique = await indexExists('CorpSequence', idxUnique);
     if (!hasIdxUnique)
-      await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX \`${idxUnique}\` ON \`CorpSequence\` (\`organizationId\`, \`corpPrefix\`)`);
+      await prisma.$executeRawUnsafe(
+        `CREATE UNIQUE INDEX \`${idxUnique}\` ON \`CorpSequence\` (\`organizationId\`, \`corpPrefix\`, \`skuCode\`)`
+      );
 
     const idxOrg = `CorpSequence_organizationId_idx`;
     const hasIdxOrg = await indexExists('CorpSequence', idxOrg);
     if (!hasIdxOrg) await prisma.$executeRawUnsafe(`CREATE INDEX \`${idxOrg}\` ON \`CorpSequence\` (\`organizationId\`)`);
+  }
+  await ensureColumn(
+    'CorpSequence',
+    'skuCode',
+    'ALTER TABLE `CorpSequence` ADD COLUMN `skuCode` VARCHAR(191) NULL',
+    "UPDATE `CorpSequence` SET `skuCode` = '' WHERE `skuCode` IS NULL",
+    "ALTER TABLE `CorpSequence` MODIFY `skuCode` VARCHAR(191) NOT NULL DEFAULT ''"
+  );
+  const oldUnique = `CorpSequence_organizationId_corpPrefix_key`;
+  const newUnique = `CorpSequence_organizationId_corpPrefix_skuCode_key`;
+  if (!(await indexExists('CorpSequence', newUnique))) {
+    if (await indexExists('CorpSequence', oldUnique)) {
+      try {
+        await prisma.$executeRawUnsafe(`DROP INDEX \`${oldUnique}\` ON \`CorpSequence\``);
+      } catch {
+      }
+    }
+    await prisma.$executeRawUnsafe(
+      `CREATE UNIQUE INDEX \`${newUnique}\` ON \`CorpSequence\` (\`organizationId\`, \`corpPrefix\`, \`skuCode\`)`
+    );
   }
 
   const hasEpcBatch = await tableExists('EpcBatch');

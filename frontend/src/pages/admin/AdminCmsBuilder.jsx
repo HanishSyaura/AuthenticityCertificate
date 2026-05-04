@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import useCmsStore from '../../store/useCmsStore';
+import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import CmsPagePanel from '../../components/admin/cms/CmsPagePanel';
 import CmsCanvasPanel from '../../components/admin/cms/CmsCanvasPanel';
 import CmsInspectorPanel from '../../components/admin/cms/CmsInspectorPanel';
@@ -94,6 +95,11 @@ export default function AdminCmsBuilder() {
     error: s.error
   }));
 
+  const { templates, fetchTemplates } = useCertTemplatesStore((s) => ({
+    templates: s.templates,
+    fetchTemplates: s.fetchTemplates
+  }));
+
   const [selectedBlockId, setSelectedBlockId] = useState(null);
   const [viewMode, setViewMode] = useState('edit');
   const [saveStatus, setSaveStatus] = useState('idle');
@@ -129,6 +135,10 @@ export default function AdminCmsBuilder() {
   useEffect(() => {
     fetchPages();
   }, [fetchPages]);
+
+  useEffect(() => {
+    void fetchTemplates();
+  }, [fetchTemplates]);
 
   useEffect(() => {
     if (!selectedPageId && pages[0]?.id) {
@@ -303,15 +313,15 @@ export default function AdminCmsBuilder() {
           setLayout={setLayout}
           selectedBlockId={selectedBlockId}
           setSelectedBlockId={setSelectedBlockId}
-        />
+          <CmsInspectorPanel
+            selectedBlock={selectedBlock}
+            layout={layout}
+            setLayout={setLayout}
+            clearSelection={() => setSelectedBlockId(null)}
+            templates={templates}
+          />
 
         <CmsInspectorPanel
           selectedBlock={selectedBlock}
           layout={layout}
           setLayout={setLayout}
-          clearSelection={() => setSelectedBlockId(null)}
-        />
-      </div>
-    </div>
-  );
-}

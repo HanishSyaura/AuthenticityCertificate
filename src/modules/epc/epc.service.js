@@ -72,7 +72,8 @@ function parseRunningNoFromEpcCode({ epcCode, corpPrefix }) {
   if (!code.startsWith(prefix)) throw new Error(`EPC code does not start with ${prefix}`);
 
   const padLen = getRunningPadLen();
-  const expectedMinLen = prefix.length + 4 + padLen;
+  const skuLen = getSkuLen();
+  const expectedMinLen = prefix.length + skuLen + 4 + padLen;
   if (code.length < expectedMinLen) throw new Error('EPC code too short');
 
   const run = code.slice(code.length - padLen);
@@ -84,6 +85,22 @@ function parseRunningNoFromEpcCode({ epcCode, corpPrefix }) {
   if (!Number.isFinite(mm) || mm < 1 || mm > 12) throw new Error('Invalid month in EPC code');
 
   return BigInt(run);
+}
+
+function parseSkuCodeFromEpcCode({ epcCode, corpPrefix }) {
+  const code = String(epcCode || '').trim();
+  const prefix = String(corpPrefix || '').trim();
+  if (!code || !prefix) throw new Error('Invalid EPC code');
+  if (!code.startsWith(prefix)) throw new Error(`EPC code does not start with ${prefix}`);
+
+  const padLen = getRunningPadLen();
+  const skuLen = getSkuLen();
+  const expectedMinLen = prefix.length + skuLen + 4 + padLen;
+  if (code.length < expectedMinLen) throw new Error('EPC code too short');
+
+  const skuCode = code.slice(prefix.length, prefix.length + skuLen);
+  if (!/^[a-z0-9]+$/i.test(skuCode)) throw new Error('Invalid SKU code in EPC code');
+  return skuCode.toUpperCase();
 }
 
 function chunkArray(arr, size) {
@@ -122,21 +139,9 @@ async function deleteAllBatches({ organizationId, corpPrefix }) {
       deletedBatches += Number(res.count) || 0;
     }
 
-    for (const p of prefixes) {
-      await tx.corpSequence.upsert({
-        where: { organizationId_corpPrefix: { organizationId: orgId, corpPrefix: p } },
-        update: {},
-        create: { organizationId: orgId, corpPrefix: p, lastNo: 0n }
-      });
-      const maxExisting = await tx.epcItem.findFirst({
-        where: { organizationId: orgId, batch: { corpPrefix: p } },
-        orderBy: { runningNo: 'desc' },
-        select: { runningNo: true }
-      });
-      const nextLastNo = maxExisting?.runningNo != null ? BigInt(maxExisting.runningNo) : 0n;
-      await tx.corpSequence.update({
-        where: { organizationId_corpPrefix: { organizationId: orgId, corpPrefix: p } },
-        data: { lastNo: nextLastNo }
+    if (prefixes.length) {
+      await tx.corpSequence.deleteMany({
+        where: { organizationId: orgId, corpPrefix: { in: prefixes } }
       });
     }
 
@@ -177,9 +182,9 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, product
       });
 
       await tx.corpSequence.upsert({
-        where: { organizationId_corpPrefix: { organizationId: orgId, corpPrefix } },
+        where: { organizationId_corpPrefix_skuCode: { organizationId: orgId, corpPrefix, skuCode } },
         update: {},
-        create: { organizationId: orgId, corpPrefix, lastNo: 0n }
+        create: { organizationId: orgId, corpPrefix, skuCode, lastNo: 0n }
       });
 
       const desiredCertIdRaw = String(certificateId || '').trim();
@@ -207,13 +212,13 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, product
 
       const rows = await tx.$queryRaw`
         SELECT lastNo FROM \`CorpSequence\`
-        WHERE organizationId = ${orgId} AND corpPrefix = ${corpPrefix}
+        WHERE organizationId = ${orgId} AND corpPrefix = ${corpPrefix} AND skuCode = ${skuCode}
         FOR UPDATE
       `;
 
       const current = rows && rows[0] && rows[0].lastNo !== undefined ? BigInt(rows[0].lastNo) : 0n;
       const maxExisting = await tx.epcItem.findFirst({
-        where: { organizationId: orgId, batch: { corpPrefix } },
+        where: { organizationId: orgId, epcCode: { startsWith: `${corpPrefix}${skuCode}` } },
         orderBy: { runningNo: 'desc' },
         select: { runningNo: true }
       });
@@ -222,7 +227,7 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, product
       const startNo = baseNo + 1n;
       const endNo = baseNo + BigInt(batchQty);
       await tx.corpSequence.update({
-        where: { organizationId_corpPrefix: { organizationId: orgId, corpPrefix } },
+        where: { organizationId_corpPrefix_skuCode: { organizationId: orgId, corpPrefix, skuCode } },
         data: { lastNo: endNo }
       });
 
@@ -292,27 +297,30 @@ async function importExistingEpc({ organizationId, productId, batchName, base64 
   if (!Array.isArray(rows) || rows.length === 0) throw new Error('Excel kosong');
 
   const items = [];
-  let maxRun = 0n;
+  let fileSkuCode = null;
   for (const r of rows) {
     const n = normalizeRowKeys(r);
     const epcCode = String(n.epccode || n.epc || n.code || '').trim();
     if (!epcCode) continue;
     const runningNo = parseRunningNoFromEpcCode({ epcCode, corpPrefix });
-    if (runningNo > maxRun) maxRun = runningNo;
+    const skuCode = parseSkuCodeFromEpcCode({ epcCode, corpPrefix });
+    if (fileSkuCode == null) fileSkuCode = skuCode;
+    if (fileSkuCode !== skuCode) throw new Error('Excel mengandungi SKU code berbeza; import perlu satu SKU sahaja');
     items.push({
       epcCode,
       runningNo
     });
   }
   if (items.length === 0) throw new Error('Tiada EPC code dalam Excel');
+  if (!fileSkuCode) throw new Error('Tidak dapat baca SKU code dari EPC code');
 
   const name = String(batchName || '').trim() || `import_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '')}`;
 
   const result = await prisma.$transaction(async (tx) => {
     await tx.corpSequence.upsert({
-      where: { organizationId_corpPrefix: { organizationId: orgId, corpPrefix } },
+      where: { organizationId_corpPrefix_skuCode: { organizationId: orgId, corpPrefix, skuCode: fileSkuCode } },
       update: {},
-      create: { organizationId: orgId, corpPrefix, lastNo: 0n }
+      create: { organizationId: orgId, corpPrefix, skuCode: fileSkuCode, lastNo: 0n }
     });
 
     const appBatch = await tx.batch.upsert({
@@ -370,17 +378,21 @@ async function importExistingEpc({ organizationId, productId, batchName, base64 
 
     const rows2 = await tx.$queryRaw`
       SELECT lastNo FROM \`CorpSequence\`
-      WHERE organizationId = ${orgId} AND corpPrefix = ${corpPrefix}
+      WHERE organizationId = ${orgId} AND corpPrefix = ${corpPrefix} AND skuCode = ${fileSkuCode}
       FOR UPDATE
     `;
     const current = rows2 && rows2[0] && rows2[0].lastNo !== undefined ? BigInt(rows2[0].lastNo) : 0n;
-    const nextLast = current > maxRun ? current : maxRun;
-    if (nextLast !== current) {
-      await tx.corpSequence.update({
-        where: { organizationId_corpPrefix: { organizationId: orgId, corpPrefix } },
-        data: { lastNo: nextLast }
-      });
-    }
+    const maxExisting = await tx.epcItem.findFirst({
+      where: { organizationId: orgId, epcCode: { startsWith: `${corpPrefix}${fileSkuCode}` } },
+      orderBy: { runningNo: 'desc' },
+      select: { runningNo: true }
+    });
+    const maxExistingNo = maxExisting?.runningNo != null ? BigInt(maxExisting.runningNo) : 0n;
+    const nextLast = current > maxExistingNo ? current : maxExistingNo;
+    await tx.corpSequence.update({
+      where: { organizationId_corpPrefix_skuCode: { organizationId: orgId, corpPrefix, skuCode: fileSkuCode } },
+      data: { lastNo: nextLast }
+    });
 
     const inserted = await tx.epcItem.count({ where: { organizationId: orgId, batchId: batch.id } });
     return { batch, rows: items.length, inserted, lastNo: nextLast.toString() };
@@ -441,6 +453,60 @@ async function exportBatchXlsx({ organizationId, batchId }) {
   const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
   const safeBatch = String(batch.batchName || 'batch').replace(/[^\w.-]+/g, '_').slice(0, 64);
   const filename = `epc_${safeBatch}_${batch.id}.xlsx`;
+  return { buffer, filename };
+}
+
+async function exportBatchVerifyUrlXlsx({ organizationId, batchId, verifyUrlPrefix }) {
+  const orgId = Number(organizationId);
+  const id = Number(batchId);
+  if (!Number.isFinite(id)) throw new Error('Invalid batch id');
+
+  const batch = await withTimeout(
+    prisma.epcBatch.findFirst({
+      where: { id, organizationId: orgId },
+      include: {
+        product: { select: { id: true, sku: true, name: true, code: true } },
+        certificateTemplate: { select: { id: true, certificateId: true, name: true } }
+      }
+    }),
+    2500
+  );
+  if (!batch) throw new Error('Batch tidak dijumpai');
+
+  const items = await withTimeout(
+    prisma.epcItem.findMany({
+      where: { organizationId: orgId, batchId: id },
+      orderBy: { runningNo: 'asc' },
+      select: { epcCode: true }
+    }),
+    12_000
+  );
+
+  const header = [
+    { key: 'corpPrefix', value: batch.corpPrefix },
+    { key: 'batchName', value: batch.batchName },
+    { key: 'batchQty', value: batch.batchQty },
+    { key: 'product', value: batch.product?.name || '' },
+    { key: 'sku', value: batch.sku || batch.product?.sku || '' },
+    { key: 'certificateId', value: String(batch.certificateId || '') }
+  ];
+
+  const wsInfo = XLSX.utils.json_to_sheet(header, { header: ['key', 'value'] });
+  const prefix = String(verifyUrlPrefix || '').trim();
+  const wsItems = XLSX.utils.json_to_sheet(
+    items.map((it) => ({
+      url: `${prefix}${encodeURIComponent(it.epcCode)}`
+    })),
+    { header: ['url'] }
+  );
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, wsInfo, 'batch');
+  XLSX.utils.book_append_sheet(wb, wsItems, 'epc');
+
+  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const safeBatch = String(batch.batchName || 'batch').replace(/[^\w.-]+/g, '_').slice(0, 64);
+  const filename = `epc_urls_${safeBatch}_${batch.id}.xlsx`;
   return { buffer, filename };
 }
 
@@ -623,22 +689,23 @@ async function deleteBatch({ organizationId, batchId }) {
     const batch = await tx.epcBatch.findFirst({ where: { id, organizationId: orgId } });
     if (!batch) throw new Error('Batch tidak dijumpai');
     const corpPrefix = String(batch.corpPrefix || '').trim();
+    const skuCode = normalizeSkuCode({ sku: batch.sku || '' });
     await tx.epcItem.deleteMany({ where: { organizationId: orgId, batchId: id } });
     await tx.epcBatch.delete({ where: { id } });
-    if (corpPrefix) {
+    if (corpPrefix && skuCode) {
       await tx.corpSequence.upsert({
-        where: { organizationId_corpPrefix: { organizationId: orgId, corpPrefix } },
+        where: { organizationId_corpPrefix_skuCode: { organizationId: orgId, corpPrefix, skuCode } },
         update: {},
-        create: { organizationId: orgId, corpPrefix, lastNo: 0n }
+        create: { organizationId: orgId, corpPrefix, skuCode, lastNo: 0n }
       });
       const maxExisting = await tx.epcItem.findFirst({
-        where: { organizationId: orgId, batch: { corpPrefix } },
+        where: { organizationId: orgId, epcCode: { startsWith: `${corpPrefix}${skuCode}` } },
         orderBy: { runningNo: 'desc' },
         select: { runningNo: true }
       });
       const nextLastNo = maxExisting?.runningNo != null ? BigInt(maxExisting.runningNo) : 0n;
       await tx.corpSequence.update({
-        where: { organizationId_corpPrefix: { organizationId: orgId, corpPrefix } },
+        where: { organizationId_corpPrefix_skuCode: { organizationId: orgId, corpPrefix, skuCode } },
         data: { lastNo: nextLastNo }
       });
     }
@@ -655,24 +722,40 @@ async function recalculateCorpSequence({ organizationId, corpPrefix }) {
   if (!allowed.includes(prefix)) throw new Error('Corp code tidak dibenarkan');
 
   const result = await prisma.$transaction(async (tx) => {
-    await tx.corpSequence.upsert({
-      where: { organizationId_corpPrefix: { organizationId: orgId, corpPrefix: prefix } },
-      update: {},
-      create: { organizationId: orgId, corpPrefix: prefix, lastNo: 0n }
-    });
-    const maxExisting = await tx.epcItem.findFirst({
-      where: { organizationId: orgId, batch: { corpPrefix: prefix } },
-      orderBy: { runningNo: 'desc' },
-      select: { runningNo: true }
-    });
-    const nextLastNo = maxExisting?.runningNo != null ? BigInt(maxExisting.runningNo) : 0n;
-    const updated = await tx.corpSequence.update({
-      where: { organizationId_corpPrefix: { organizationId: orgId, corpPrefix: prefix } },
-      data: { lastNo: nextLastNo }
-    });
-    return { corpPrefix: prefix, lastNo: updated.lastNo };
+    await tx.corpSequence.deleteMany({ where: { organizationId: orgId, corpPrefix: prefix } });
+
+    const skuLen = getSkuLen();
+    const prefixLen = prefix.length;
+    const bySku = await tx.$queryRaw`
+      SELECT
+        UPPER(SUBSTRING(epcCode, ${prefixLen + 1}, ${skuLen})) AS skuCode,
+        MAX(runningNo) AS maxNo
+      FROM \`EpcItem\`
+      WHERE organizationId = ${orgId}
+        AND epcCode LIKE ${`${prefix}%`}
+      GROUP BY UPPER(SUBSTRING(epcCode, ${prefixLen + 1}, ${skuLen}))
+    `;
+
+    let overallMax = 0n;
+    for (const r of Array.isArray(bySku) ? bySku : []) {
+      const skuCode = String(r.skuCode || '').trim().toUpperCase();
+      const maxNo = r.maxNo != null ? BigInt(r.maxNo) : 0n;
+      if (!skuCode) continue;
+      if (maxNo > overallMax) overallMax = maxNo;
+      await tx.corpSequence.upsert({
+        where: { organizationId_corpPrefix_skuCode: { organizationId: orgId, corpPrefix: prefix, skuCode } },
+        update: { lastNo: maxNo },
+        create: { organizationId: orgId, corpPrefix: prefix, skuCode, lastNo: maxNo }
+      });
+    }
+
+    return { corpPrefix: prefix, lastNo: overallMax, updatedSkus: Array.isArray(bySku) ? bySku.length : 0 };
   });
-  return { corpPrefix: result.corpPrefix, lastNo: result.lastNo != null ? result.lastNo.toString() : '0' };
+  return {
+    corpPrefix: result.corpPrefix,
+    lastNo: result.lastNo != null ? result.lastNo.toString() : '0',
+    updatedSkus: Number(result.updatedSkus) || 0
+  };
 }
 
 async function updateBatch({ organizationId, batchId, patch }) {
@@ -696,6 +779,7 @@ module.exports = {
   getAllowedCorpPrefixes,
   generateEpcBatch,
   exportBatchXlsx,
+  exportBatchVerifyUrlXlsx,
   listBatches,
   listItems,
   importProductionXlsx,

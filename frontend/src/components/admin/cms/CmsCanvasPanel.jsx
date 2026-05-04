@@ -310,7 +310,15 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
               onClick={() => {
                 const next = [
                   ...layout,
-                  { id: makeId('supporting-cert'), type: 'certificate', x: 20, y: 20, w: baseW - 40, h: 260, content: { variant: 'supporting', supportingIndex: 0 } }
+                  {
+                    id: makeId('supporting-cert'),
+                    type: 'certificate',
+                    x: 20,
+                    y: 20,
+                    w: baseW - 40,
+                    h: 260,
+                    content: { variant: 'supporting', certificateTemplateId: null }
+                  }
                 ];
                 setLayout(next);
               }}

@@ -30,6 +30,7 @@ model Organization {
   corpSequences   CorpSequence[]
   epcBatches      EpcBatch[]
   epcItems        EpcItem[]
+  productSupportingCertificates ProductSupportingCertificate[]
   certificates    Certificate[]
   scanLogs        ScanLog[]
   fraudFlags      FraudFlag[]
@@ -212,10 +213,11 @@ model CorpSequence {
   organizationId Int
   organization   Organization @relation(fields: [organizationId], references: [id])
   corpPrefix     String
+  skuCode        String
   lastNo         BigInt       @default(0)
   updatedAt      DateTime     @updatedAt
 
-  @@unique([organizationId, corpPrefix])
+  @@unique([organizationId, corpPrefix, skuCode])
   @@index([organizationId])
 }
 
@@ -455,6 +457,7 @@ model CertificateTemplate {
 
   products   Product[]
   epcBatches EpcBatch[] @relation("EpcBatchTemplate")
+  productSupportingCertificates ProductSupportingCertificate[]
 
   versionNo Int       @default(1)
   createdAt DateTime  @default(now())

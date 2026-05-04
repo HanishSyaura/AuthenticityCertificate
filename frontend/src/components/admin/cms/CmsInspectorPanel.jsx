@@ -3,7 +3,7 @@ import { useT } from '../../../i18n/useT';
 import useMediaStore from '../../../store/useMediaStore';
 import RichTextEditor from '../RichTextEditor';
 
-export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, clearSelection }) {
+export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, clearSelection, templates }) {
   const { t } = useT();
   const { uploadMedia } = useMediaStore((s) => ({ uploadMedia: s.uploadMedia }));
   const [uploading, setUploading] = useState(false);
@@ -164,15 +164,19 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
               </div>
               {String(selectedBlock.content?.variant || 'auth') === 'supporting' ? (
                 <div>
-                  <label className="block text-xs font-medium text-zinc-700">{t('supportingIndex')}</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={Number.isFinite(Number(selectedBlock.content?.supportingIndex)) ? Number(selectedBlock.content?.supportingIndex) : 0}
-                    onChange={(e) => updateSelectedContent({ supportingIndex: Number(e.target.value) })}
+                  <label className="block text-xs font-medium text-zinc-700">{t('certTemplate')}</label>
+                  <select
+                    value={selectedBlock.content?.certificateTemplateId != null ? String(selectedBlock.content.certificateTemplateId) : ''}
+                    onChange={(e) => updateSelectedContent({ certificateTemplateId: e.target.value ? Number(e.target.value) : null })}
                     className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                  />
-                  <div className="mt-1 text-[11px] text-zinc-500">{t('supportingIndexHint')}</div>
+                  >
+                    <option value="">{t('none')}</option>
+                    {(Array.isArray(templates) ? templates : []).map((tpl) => (
+                      <option key={tpl.id} value={String(tpl.id)}>
+                        {String(tpl?.certificateId || '').trim() ? `${tpl.certificateId} — ${tpl.name}` : tpl.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               ) : null}
             </div>
