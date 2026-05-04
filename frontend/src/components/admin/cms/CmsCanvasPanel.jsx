@@ -3,6 +3,7 @@ import CanvasStage from '../CanvasStage';
 import PublicRenderer from '../../PublicRenderer';
 import { useT } from '../../../i18n/useT';
 import axios from 'axios';
+import { getPublicApiBaseUrl } from '../../../utils/apiBase';
 
 function makeId(prefix) {
   return `${prefix}-${Math.random().toString(16).slice(2)}-${Date.now()}`;
@@ -20,25 +21,6 @@ function stripHtmlToText(input) {
     }
   }
   return raw.replace(/<[^>]*>/g, '');
-}
-
-function getApiBaseUrl() {
-  const configured = import.meta.env.VITE_API_BASE_URL;
-  if (configured !== undefined) {
-    const trimmed = String(configured).trim();
-    if (trimmed) return trimmed.replace(/\/+$/, '');
-    return '';
-  }
-  if (import.meta.env.DEV) return 'http://localhost:5000';
-  return '';
-}
-
-function getPublicApiBaseUrl() {
-  const rawBase = getApiBaseUrl();
-  const baseURL = rawBase ? rawBase.replace(/\/+$/, '') : '';
-  if (!baseURL) return '/public';
-  const baseHasApi = baseURL === '/api' || baseURL.endsWith('/api');
-  return baseHasApi ? `${baseURL}/public` : `${baseURL}/public`;
 }
 
 function sampleCertificateLayout() {
