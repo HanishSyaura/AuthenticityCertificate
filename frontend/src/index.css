@@ -274,10 +274,10 @@
   .ac-verify-loading {
     @apply fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-white;
     background:
-      radial-gradient(900px circle at 12% 12%, rgba(99, 102, 241, 0.18), transparent 55%),
-      radial-gradient(750px circle at 92% 18%, rgba(20, 184, 166, 0.16), transparent 55%),
-      radial-gradient(900px circle at 50% 95%, rgba(244, 63, 94, 0.12), transparent 60%),
-      linear-gradient(180deg, #ffffff 0%, #f6f7ff 100%);
+      radial-gradient(900px circle at 12% 10%, rgba(249, 144, 29, 0.24), transparent 60%),
+      radial-gradient(820px circle at 92% 18%, rgba(193, 110, 22, 0.16), transparent 58%),
+      radial-gradient(980px circle at 50% 98%, rgba(249, 144, 29, 0.16), transparent 62%),
+      linear-gradient(180deg, #fff7ec 0%, #ffffff 55%, #fff2dd 100%);
   }
 
   .ac-verify-blob {
@@ -294,7 +294,7 @@
     height: 320px;
     left: -120px;
     top: -120px;
-    background: radial-gradient(circle at 30% 30%, rgba(99, 102, 241, 0.65), rgba(99, 102, 241, 0));
+    background: radial-gradient(circle at 30% 30%, rgba(249, 144, 29, 0.62), rgba(249, 144, 29, 0));
     animation-duration: 7.1s;
   }
 
@@ -303,7 +303,7 @@
     height: 360px;
     right: -160px;
     top: -80px;
-    background: radial-gradient(circle at 30% 30%, rgba(20, 184, 166, 0.6), rgba(20, 184, 166, 0));
+    background: radial-gradient(circle at 30% 30%, rgba(249, 144, 29, 0.42), rgba(249, 144, 29, 0));
     animation-duration: 6.4s;
     animation-name: ac-verify-drift;
   }
@@ -313,7 +313,7 @@
     height: 420px;
     left: 15%;
     bottom: -220px;
-    background: radial-gradient(circle at 30% 30%, rgba(244, 63, 94, 0.38), rgba(244, 63, 94, 0));
+    background: radial-gradient(circle at 30% 30%, rgba(193, 110, 22, 0.32), rgba(193, 110, 22, 0));
     animation-duration: 8.3s;
   }
 
@@ -326,14 +326,22 @@
   }
 
   .ac-verify-icon {
-    @apply mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white ring-1 ring-zinc-900/5;
+    @apply relative mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-white ring-1 ring-zinc-900/5;
     box-shadow: 0 14px 34px rgba(24, 24, 27, 0.08);
+  }
+
+  .ac-verify-nest {
+    position: absolute;
+    inset: -18px;
+    color: rgba(142, 86, 36, 0.55);
+    filter: drop-shadow(0 10px 18px rgba(142, 86, 36, 0.14));
+    pointer-events: none;
   }
 
   .ac-verify-scan {
     position: absolute;
     inset: -40%;
-    background: linear-gradient(45deg, transparent 35%, rgba(99, 102, 241, 0.2) 50%, transparent 65%);
+    background: linear-gradient(45deg, transparent 35%, rgba(249, 144, 29, 0.22) 50%, transparent 65%);
     animation: ac-verify-scan 2.2s ease-in-out infinite;
     transform: translate3d(-100%, -40%, 0);
     pointer-events: none;
@@ -350,7 +358,7 @@
     width: 6px;
     height: 6px;
     border-radius: 9999px;
-    background: rgb(63 63 70);
+    background: rgb(249 144 29);
     animation: ac-verify-bounce 1s infinite;
   }
 
@@ -365,7 +373,7 @@
   .ac-verify-progress {
     height: 100%;
     border-radius: 9999px;
-    background: linear-gradient(90deg, rgb(79 70 229) 0%, rgb(20 184 166) 65%, rgb(244 63 94) 100%);
+    background: linear-gradient(90deg, rgb(249 144 29) 0%, rgb(253 186 116) 55%, rgb(249 144 29) 100%);
     animation: ac-verify-fill 1.6s ease-in-out infinite;
   }
 

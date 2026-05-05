@@ -223,13 +223,6 @@ export default function AdminEpc() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => navigate('/admin/epc/scan')}
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-          >
-            {t('scanInput')}
-          </button>
-          <button
-            type="button"
             onClick={() => setTab('create')}
             className={`rounded-lg px-3 py-2 text-xs font-semibold ${
               tab === 'create' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import PublicRenderer from '../components/PublicRenderer';
@@ -33,6 +33,8 @@ const VerifyPage = () => {
   const [loadingMeta, setLoadingMeta] = useState(null);
   const [loadingMode, setLoadingMode] = useState('auto');
   const [showLoader, setShowLoader] = useState(false);
+  const loaderStartAtRef = useRef(0);
+  const loaderHideTimerRef = useRef(null);
   const { t, lang, locale } = useT();
   const hasTemplate = Boolean(Array.isArray(certificate?.certificateTemplate?.layoutJson));
 
@@ -56,12 +58,30 @@ const VerifyPage = () => {
   }, [id, lang, location.search, resolveCertificate, t, verifyCertificate]);
 
   useEffect(() => {
+    const minDurationMs = 4000;
+    const minHideDelayMs = 180;
+    if (loaderHideTimerRef.current) {
+      clearTimeout(loaderHideTimerRef.current);
+      loaderHideTimerRef.current = null;
+    }
     if (loading) {
+      loaderStartAtRef.current = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
       setShowLoader(true);
       return;
     }
-    const timer = setTimeout(() => setShowLoader(false), 180);
-    return () => clearTimeout(timer);
+    const now = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+    const elapsed = Math.max(0, now - (loaderStartAtRef.current || now));
+    const remaining = Math.max(minHideDelayMs, minDurationMs - elapsed);
+    loaderHideTimerRef.current = setTimeout(() => {
+      loaderHideTimerRef.current = null;
+      setShowLoader(false);
+    }, remaining);
+    return () => {
+      if (loaderHideTimerRef.current) {
+        clearTimeout(loaderHideTimerRef.current);
+        loaderHideTimerRef.current = null;
+      }
+    };
   }, [loading]);
 
   const handleManualVerify = (e) => {

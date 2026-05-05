@@ -36,6 +36,7 @@ export default function AdminEpcScan() {
   const inputRef = useRef(null);
   const scannedRef = useRef(new Set());
   const scanIdleTimerRef = useRef(null);
+  const handleScanRef = useRef(null);
   const scanLastInputAtRef = useRef(0);
   const scanBurstStartAtRef = useRef(0);
   const scanPrevLenRef = useRef(0);
@@ -71,6 +72,8 @@ export default function AdminEpcScan() {
   const [batchQuery, setBatchQuery] = useState('');
   const [pendingOnly, setPendingOnly] = useState(true);
   const [batchLoading, setBatchLoading] = useState(false);
+
+  const selectedRow = rows.find((r) => String(r.id) === String(selectedId)) || null;
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -375,6 +378,8 @@ export default function AdminEpcScan() {
     }
   };
 
+  handleScanRef.current = handleScan;
+
   useEffect(() => {
     clearScanIdleTimer();
     const now = Date.now();
@@ -403,14 +408,12 @@ export default function AdminEpcScan() {
     if (!scanAutoModeRef.current) return;
     scanIdleTimerRef.current = window.setTimeout(() => {
       scanIdleTimerRef.current = null;
-      void handleScan(raw);
+      void handleScanRef.current?.(raw);
     }, 120);
     return () => {
       clearScanIdleTimer();
     };
   }, [scanValue, step]);
-
-  const selectedRow = rows.find((r) => String(r.id) === String(selectedId)) || null;
 
   const saveAmend = async ({ focusScanInput = true } = {}) => {
     if (!selectedRow?.id) return false;

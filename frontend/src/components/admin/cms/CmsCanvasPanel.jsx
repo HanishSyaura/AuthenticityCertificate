@@ -126,8 +126,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
         setPreviewData(null);
         setPreviewError(msg);
       } finally {
-        if (!alive) return;
-        setPreviewLoading(false);
+        if (alive) setPreviewLoading(false);
       }
     };
     run();
@@ -237,7 +236,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
             className="relative rounded-xl border border-zinc-200 shadow-sm"
             style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }}
           >
-            <div className="h-full w-full overflow-hidden">
+            <div className="h-full w-full overflow-x-hidden overflow-y-auto">
               <PublicRenderer layout={effectivePreviewLayout} data={previewData || sampleCert()} />
             </div>
             {previewLoading ? (

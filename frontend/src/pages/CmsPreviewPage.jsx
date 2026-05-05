@@ -105,8 +105,7 @@ export default function CmsPreviewPage() {
           setData(null);
           setError(e?.message || 'Failed to load');
         } finally {
-          if (!alive) return;
-          setLoading(false);
+          if (alive) setLoading(false);
         }
       };
       run();
@@ -132,8 +131,7 @@ export default function CmsPreviewPage() {
         setError(e?.message || 'Failed to load');
       })
       .finally(() => {
-        if (!alive) return;
-        setLoading(false);
+        if (alive) setLoading(false);
       });
     return () => {
       alive = false;
@@ -174,7 +172,7 @@ export default function CmsPreviewPage() {
             className="relative rounded-xl border border-zinc-200 bg-white shadow-sm"
             style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }}
           >
-            <div className="h-full w-full overflow-hidden">
+            <div className="h-full w-full overflow-x-hidden overflow-y-auto">
               <PublicRenderer layout={storedLayout} data={data || sampleCert()} />
             </div>
           </div>
