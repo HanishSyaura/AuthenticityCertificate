@@ -34,6 +34,18 @@ function escapeTextToHtml(input) {
   return escapeHtml(input).replaceAll('\n', '<br/>');
 }
 
+function inlineizeHtml(input) {
+  let s = String(input || '');
+  if (!s) return '';
+  s = s.replace(/\r?\n/g, ' ');
+  s = s.replace(/<br\s*\/?>/gi, ' ');
+  s = s.replace(/<(\/?)p(\s[^>]*)?>/gi, (m, close, attrs) => (close ? '</span>' : `<span${attrs || ''}>`));
+  s = s.replace(/<(\/?)div(\s[^>]*)?>/gi, (m, close, attrs) => (close ? '</span>' : `<span${attrs || ''}>`));
+  s = s.replace(/<(\/?)blockquote(\s[^>]*)?>/gi, (m, close, attrs) => (close ? '</span>' : `<span${attrs || ''}>`));
+  s = s.replace(/<(\/?)h[1-6](\s[^>]*)?>/gi, (m, close, attrs) => (close ? '</span>' : `<span${attrs || ''}>`));
+  return s;
+}
+
 function normalizeKeyCandidate(input) {
   return String(input || '')
     .trim()
@@ -293,13 +305,15 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             const labelText = showPrefix ? String(stripHtmlToText(labelHtmlRaw) || '').trim() : '';
             const sepText = showPrefix ? (key ? String(ph?.separator ?? ': ') : ': ') : '';
             const prefixRaw = showPrefix && labelText ? `${escapeHtml(labelText)}${escapeHtml(sepText)}` : '';
-            const valueHtml = source === 'static' || source === 'manual' || source === 'batch' || source === 'title' ? val : escapeTextToHtml(val);
+            const singleLine = source === 'manual' || source === 'batch';
+            const valueHtmlRaw = source === 'static' || source === 'manual' || source === 'batch' || source === 'title' ? val : escapeTextToHtml(val);
+            const valueHtml = singleLine ? inlineizeHtml(String(valueHtmlRaw || '')) : valueHtmlRaw;
             const html = sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`);
             const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
             const align = textAlignClass(it.align);
             return (
               <div
-                className={`ql-editor ac-richtext font-semibold text-zinc-900 ${align}`}
+                className={`ql-editor ac-richtext font-semibold text-zinc-900 ${align} ${singleLine ? 'whitespace-nowrap' : ''}`}
                 style={{ fontSize: fs, textAlign: String(it.align || 'left') }}
                 dangerouslySetInnerHTML={{ __html: html }}
               />
@@ -326,13 +340,15 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         const labelText = showPrefix ? String(stripHtmlToText(labelHtmlRaw) || '').trim() : '';
         const sepText = showPrefix ? (key ? String(ph?.separator ?? ': ') : ': ') : '';
         const prefixRaw = showPrefix && labelText ? `${escapeHtml(labelText)}${escapeHtml(sepText)}` : '';
-        const valueHtml = source === 'static' || source === 'manual' || source === 'batch' || source === 'title' ? val : escapeTextToHtml(val);
+        const singleLine = source === 'manual' || source === 'batch';
+        const valueHtmlRaw = source === 'static' || source === 'manual' || source === 'batch' || source === 'title' ? val : escapeTextToHtml(val);
+        const valueHtml = singleLine ? inlineizeHtml(String(valueHtmlRaw || '')) : valueHtmlRaw;
         const html = sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`);
         const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
         const align = textAlignClass(it.align);
         return (
           <div
-            className={`ql-editor ac-richtext h-full w-full ${align}`}
+            className={`ql-editor ac-richtext h-full w-full ${align} ${singleLine ? 'whitespace-nowrap' : ''}`}
             style={{ fontSize: fs, textAlign: String(it.align || 'left') }}
             dangerouslySetInnerHTML={{ __html: html }}
           />
@@ -503,6 +519,16 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     setDraftPlaceholders(arr);
     queueTemplatePatch({ placeholders: arr });
   }, [markLocalEdit, queueTemplatePatch]);
+
+  const updatePlaceholder = useCallback((key, patch) => {
+    const k = String(key || '').trim();
+    if (!k) return;
+    const idx = (Array.isArray(placeholders) ? placeholders : []).findIndex((p) => String(p?.key || '').trim() === k);
+    if (idx < 0) return;
+    const next = placeholders.slice();
+    next[idx] = { ...(next[idx] || {}), ...(patch || {}) };
+    replacePlaceholders(next);
+  }, [placeholders, replacePlaceholders]);
 
   useEffect(() => {
     const list = Array.isArray(placeholders) ? placeholders : [];
@@ -774,7 +800,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             )}
           </div>
 
-          <div className="rounded-xl border border-zinc-200 bg-white p-3">
+          <div className="flex min-h-[70vh] flex-col rounded-xl border border-zinc-200 bg-white p-3">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div className="inline-flex overflow-hidden rounded-lg border border-zinc-200 bg-white">
                 <button
@@ -798,7 +824,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
               </label>
             </div>
 
-            <div className="max-h-[calc(100vh-20rem)] overflow-auto pr-1">
+            <div className="min-h-0 flex-1 overflow-auto pr-1">
               {designerRightTab === 'preview' ? (
                 <>
                   <div className="mb-3 text-xs font-semibold text-zinc-500">{t('preview')}</div>
@@ -868,45 +894,34 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                             </div>
 
                             <div className="mt-3">
-                              <label className="block text-xs font-medium text-zinc-700">{t('fieldLabel')}</label>
+                              <label className="block text-xs font-medium text-zinc-700">{t('content')}</label>
                               <div className="mt-1">
-                                <RichTextEditor
-                                  value={String(selectedField.labelHtml ?? toQuillHtml(selectedField.label || ''))}
-                                  onChange={(html) => {
-                                    const nextHtml = String(html || '');
-                                    const nextText = String(stripHtmlToText(nextHtml) || '').trim();
-                                    updateField({ label: nextText, labelHtml: nextHtml });
-                                  }}
-                                  minHeight="2.5rem"
-                                  maxHeight="6rem"
-                                />
+                                {(() => {
+                                  const path = String(selectedField.path || '');
+                                  const key = path.startsWith('templateData.') ? path.slice('templateData.'.length) : '';
+                                  const ph = key ? placeholderByKey.get(key) : null;
+                                  const source = String(ph?.source || '').trim();
+                                  const isStaticLike = source === 'title' || source === 'static';
+                                  const value = ph && isStaticLike ? String(ph?.staticValue || '') : String(selectedField.labelHtml ?? toQuillHtml(selectedField.label || ''));
+                                  return (
+                                    <RichTextEditor
+                                      value={value}
+                                      onChange={(html) => {
+                                        const nextHtml = String(html || '');
+                                        const nextText = String(stripHtmlToText(nextHtml) || '').trim();
+                                        if (ph && isStaticLike) {
+                                          updatePlaceholder(key, { staticValue: nextHtml });
+                                          return;
+                                        }
+                                        if (ph && key) updatePlaceholder(key, { label: nextText, labelHtml: nextHtml });
+                                        updateField({ label: nextText, labelHtml: nextHtml });
+                                      }}
+                                      minHeight="2.5rem"
+                                      maxHeight={ph && isStaticLike ? '12rem' : '6rem'}
+                                    />
+                                  );
+                                })()}
                               </div>
-                            </div>
-
-                            <div className="mt-3">
-                              <label className="block text-xs font-medium text-zinc-700">{t('dataPath')}</label>
-                              <select
-                                value={selectedField.path}
-                                onChange={(e) => updateField({ path: e.target.value })}
-                                className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                              >
-                                <option value="certificateId">certificateId</option>
-                                <option value="product.name">product.name</option>
-                                <option value="batch.batchNo">batch.batchNo</option>
-                                <option value="epcItem.netWeight">epcItem.netWeight</option>
-                                <option value="epcItem.caiqNumber">epcItem.caiqNumber</option>
-                                <option value="epcItem.productionDate">epcItem.productionDate</option>
-                                <option value="issuedAt">issuedAt</option>
-                                <option value="status">status</option>
-                                {placeholders
-                                  .map((p) => String(p?.key || '').trim())
-                                  .filter(Boolean)
-                                  .map((k) => (
-                                    <option key={k} value={`templateData.${k}`}>
-                                      templateData.{k}
-                                    </option>
-                                  ))}
-                              </select>
                             </div>
 
                             <div className="mt-3 grid grid-cols-2 gap-2">
@@ -1647,45 +1662,34 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-zinc-700">{t('fieldLabel')}</label>
+                    <label className="block text-xs font-medium text-zinc-700">{t('content')}</label>
                     <div className="mt-1">
-                      <RichTextEditor
-                        value={String(selectedField.labelHtml ?? toQuillHtml(selectedField.label || ''))}
-                        onChange={(html) => {
-                          const nextHtml = String(html || '');
-                          const nextText = String(stripHtmlToText(nextHtml) || '').trim();
-                          updateField({ label: nextText, labelHtml: nextHtml });
-                        }}
-                        minHeight="2.5rem"
-                        maxHeight="6rem"
-                      />
+                      {(() => {
+                        const path = String(selectedField.path || '');
+                        const key = path.startsWith('templateData.') ? path.slice('templateData.'.length) : '';
+                        const ph = key ? placeholderByKey.get(key) : null;
+                        const source = String(ph?.source || '').trim();
+                        const isStaticLike = source === 'title' || source === 'static';
+                        const value = ph && isStaticLike ? String(ph?.staticValue || '') : String(selectedField.labelHtml ?? toQuillHtml(selectedField.label || ''));
+                        return (
+                          <RichTextEditor
+                            value={value}
+                            onChange={(html) => {
+                              const nextHtml = String(html || '');
+                              const nextText = String(stripHtmlToText(nextHtml) || '').trim();
+                              if (ph && isStaticLike) {
+                                updatePlaceholder(key, { staticValue: nextHtml });
+                                return;
+                              }
+                              if (ph && key) updatePlaceholder(key, { label: nextText, labelHtml: nextHtml });
+                              updateField({ label: nextText, labelHtml: nextHtml });
+                            }}
+                            minHeight="2.5rem"
+                            maxHeight={ph && isStaticLike ? '12rem' : '6rem'}
+                          />
+                        );
+                      })()}
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-700">{t('dataPath')}</label>
-                    <select
-                      value={selectedField.path}
-                      onChange={(e) => updateField({ path: e.target.value })}
-                      className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                    >
-                      <option value="certificateId">certificateId</option>
-                      <option value="product.name">product.name</option>
-                      <option value="batch.batchNo">batch.batchNo</option>
-                      <option value="epcItem.netWeight">epcItem.netWeight</option>
-                      <option value="epcItem.caiqNumber">epcItem.caiqNumber</option>
-                      <option value="epcItem.productionDate">epcItem.productionDate</option>
-                      <option value="issuedAt">issuedAt</option>
-                      <option value="status">status</option>
-                      {placeholders
-                        .map((p) => String(p?.key || '').trim())
-                        .filter(Boolean)
-                        .map((k) => (
-                          <option key={k} value={`templateData.${k}`}>
-                            templateData.{k}
-                          </option>
-                        ))}
-                    </select>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">

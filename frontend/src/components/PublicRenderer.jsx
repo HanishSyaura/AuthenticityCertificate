@@ -587,9 +587,12 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                       }
                       const hasValue = String(val || '').trim().length > 0;
                       if (!hasValue && source !== 'static' && source !== 'title') return null;
+                      const singleLine = source === 'manual' || source === 'batch';
                       const valueHtml =
                         source === 'static' || source === 'manual' || source === 'batch' || source === 'title'
-                          ? sanitizeLimitedHtml(val)
+                          ? singleLine
+                            ? inlineizeHtml(sanitizeLimitedHtml(val))
+                            : sanitizeLimitedHtml(val)
                           : escapeTextToHtml(val);
                       const html = `${prefixHtml}${valueHtml || ''}`;
                       if (!String(html || '').trim()) return null;
@@ -607,7 +610,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                           }}
                         >
                           <div
-                            className={`ql-editor ac-richtext h-full w-full font-semibold ${textAlignClass(it.align)}`}
+                            className={`ql-editor ac-richtext h-full w-full font-semibold ${textAlignClass(it.align)} ${singleLine ? 'whitespace-nowrap' : ''}`}
                             style={{ textAlign: String(it.align || 'left') }}
                             dangerouslySetInnerHTML={{ __html: html }}
                           />
