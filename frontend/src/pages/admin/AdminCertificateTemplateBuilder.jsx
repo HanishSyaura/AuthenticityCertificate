@@ -749,137 +749,6 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   {!selected ? null : (
                     <div className="space-y-3">
                       <div>
-                        <label className="block text-xs font-medium text-zinc-700">{t('certificateId')}</label>
-                        <input
-                          value={selected.certificateId || ''}
-                          onChange={(e) => queueTemplatePatch({ certificateId: e.target.value })}
-                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-zinc-700">{t('certificateName')}</label>
-                        <input
-                          value={selected.name || ''}
-                          onChange={(e) => queueTemplatePatch({ name: e.target.value })}
-                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-zinc-700">{t('backgroundUrl')}</label>
-                        <input
-                          value={selected.background || ''}
-                          onChange={(e) => queueTemplatePatch({ background: e.target.value })}
-                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                        />
-                        <div className="mt-2 flex items-center gap-2">
-                          <input
-                            key={bgFileKey}
-                            type="file"
-                            accept="image/*,video/*"
-                            onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              setBgError(null);
-                              setBgUploading(true);
-                              try {
-                                const res = await uploadMedia({ file });
-                                queueTemplatePatch({ background: res?.url || '' });
-                                setBgFileKey((k) => k + 1);
-                              } catch (err) {
-                                setBgError(err?.message || String(err));
-                              } finally {
-                                setBgUploading(false);
-                              }
-                            }}
-                            className="text-xs"
-                          />
-                          {bgUploading ? <div className="text-xs font-semibold text-zinc-500">{t('saving')}</div> : null}
-                        </div>
-                        {bgError ? <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">{bgError}</div> : null}
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-zinc-700">{t('backgroundColor')}</label>
-                        <input
-                          value={selected.backgroundColor || ''}
-                          onChange={(e) => queueTemplatePatch({ backgroundColor: e.target.value })}
-                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-zinc-700">{t('backgroundMode')}</label>
-                        <select
-                          value={backgroundMode}
-                          onChange={(e) => {
-                            const v = String(e.target.value || 'background');
-                            setBackgroundMode(v);
-                            queueTemplatePatch({ backgroundMode: v });
-                          }}
-                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                        >
-                          <option value="background">{t('stretchBackground')}</option>
-                          <option value="fit">{t('fitBackground')}</option>
-                          <option value="actual">{t('actualSize')}</option>
-                        </select>
-                        <div className="mt-1 text-[11px] text-zinc-500">{t('backgroundSizeAdvice')}</div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-xs font-medium text-zinc-700">{t('canvasWidth')}</label>
-                          <input
-                            type="number"
-                            value={canvasW}
-                            onChange={(e) => queueTemplatePatch({ canvasWidth: Number(e.target.value) || 390 })}
-                            className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-zinc-700">{t('canvasHeight')}</label>
-                          <input
-                            type="number"
-                            value={canvasH}
-                            onChange={(e) => queueTemplatePatch({ canvasHeight: Number(e.target.value) || 844 })}
-                            className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                          />
-                        </div>
-                      </div>
-
-                      {Array.isArray(batches) ? (
-                        <div>
-                          <div className="mb-2 text-xs font-semibold text-zinc-500">{t('assignEpcBatches')}</div>
-                          <div className="space-y-1">
-                            {batches.map((b) => {
-                              const bid = String(b?.id || '');
-                              const checked = assignedBatchIds.has(bid);
-                              return (
-                                <label key={bid} className="flex items-center gap-2 text-sm">
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={async (e) => {
-                                      const next = new Set(Array.from(assignedBatchIds));
-                                      if (e.target.checked) next.add(bid);
-                                      else next.delete(bid);
-                                      setAssignedBatchIds(next);
-                                      await updateBatch({ id: b.id, certificateTemplateId: e.target.checked ? selected.id : null });
-                                      void fetchBatches({ limit: 200, offset: 0 });
-                                    }}
-                                  />
-                                  <div className="min-w-0 flex-1 truncate">
-                                    {String(b?.batchNo || b?.code || `#${b?.id}`)} {b?.product?.code ? `(${b.product.code})` : ''}
-                                  </div>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      <div>
                         <div className="mb-2 text-xs font-semibold text-zinc-500">{t('selectField')}</div>
                         {!selectedField ? (
                           <div className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{t('selectField')}</div>
@@ -1009,6 +878,137 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           </>
                         )}
                       </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-700">{t('certificateId')}</label>
+                        <input
+                          value={selected.certificateId || ''}
+                          onChange={(e) => queueTemplatePatch({ certificateId: e.target.value })}
+                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-700">{t('certificateName')}</label>
+                        <input
+                          value={selected.name || ''}
+                          onChange={(e) => queueTemplatePatch({ name: e.target.value })}
+                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-700">{t('backgroundUrl')}</label>
+                        <input
+                          value={selected.background || ''}
+                          onChange={(e) => queueTemplatePatch({ background: e.target.value })}
+                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                        />
+                        <div className="mt-2 flex items-center gap-2">
+                          <input
+                            key={bgFileKey}
+                            type="file"
+                            accept="image/*,video/*"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              setBgError(null);
+                              setBgUploading(true);
+                              try {
+                                const res = await uploadMedia({ file });
+                                queueTemplatePatch({ background: res?.url || '' });
+                                setBgFileKey((k) => k + 1);
+                              } catch (err) {
+                                setBgError(err?.message || String(err));
+                              } finally {
+                                setBgUploading(false);
+                              }
+                            }}
+                            className="text-xs"
+                          />
+                          {bgUploading ? <div className="text-xs font-semibold text-zinc-500">{t('saving')}</div> : null}
+                        </div>
+                        {bgError ? <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">{bgError}</div> : null}
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-700">{t('backgroundColor')}</label>
+                        <input
+                          value={selected.backgroundColor || ''}
+                          onChange={(e) => queueTemplatePatch({ backgroundColor: e.target.value })}
+                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-700">{t('backgroundMode')}</label>
+                        <select
+                          value={backgroundMode}
+                          onChange={(e) => {
+                            const v = String(e.target.value || 'background');
+                            setBackgroundMode(v);
+                            queueTemplatePatch({ backgroundMode: v });
+                          }}
+                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                        >
+                          <option value="background">{t('stretchBackground')}</option>
+                          <option value="fit">{t('fitBackground')}</option>
+                          <option value="actual">{t('actualSize')}</option>
+                        </select>
+                        <div className="mt-1 text-[11px] text-zinc-500">{t('backgroundSizeAdvice')}</div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-zinc-700">{t('canvasWidth')}</label>
+                          <input
+                            type="number"
+                            value={canvasW}
+                            onChange={(e) => queueTemplatePatch({ canvasWidth: Number(e.target.value) || 390 })}
+                            className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-zinc-700">{t('canvasHeight')}</label>
+                          <input
+                            type="number"
+                            value={canvasH}
+                            onChange={(e) => queueTemplatePatch({ canvasHeight: Number(e.target.value) || 844 })}
+                            className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      {Array.isArray(batches) ? (
+                        <div>
+                          <div className="mb-2 text-xs font-semibold text-zinc-500">{t('assignEpcBatches')}</div>
+                          <div className="space-y-1">
+                            {batches.map((b) => {
+                              const bid = String(b?.id || '');
+                              const checked = assignedBatchIds.has(bid);
+                              return (
+                                <label key={bid} className="flex items-center gap-2 text-sm">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={async (e) => {
+                                      const next = new Set(Array.from(assignedBatchIds));
+                                      if (e.target.checked) next.add(bid);
+                                      else next.delete(bid);
+                                      setAssignedBatchIds(next);
+                                      await updateBatch({ id: b.id, certificateTemplateId: e.target.checked ? selected.id : null });
+                                      void fetchBatches({ limit: 200, offset: 0 });
+                                    }}
+                                  />
+                                  <div className="min-w-0 flex-1 truncate">
+                                    {String(b?.batchNo || b?.code || `#${b?.id}`)} {b?.product?.code ? `(${b.product.code})` : ''}
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   )}
                 </>
@@ -1156,13 +1156,13 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   grid={4}
                 />
               ) : (
-                <div className="rounded-lg border border-zinc-200 bg-white p-4">
+                <div className="flex max-h-[calc(100vh-20rem)] min-h-0 flex-col rounded-lg border border-zinc-200 bg-white p-4">
                   <div className="text-xs font-semibold text-zinc-700">{t('step1DefineFields')}</div>
                   <div className="mt-2 text-sm text-zinc-600">{t('wizardFieldsHint')}</div>
                   <div className="mt-1 text-xs text-zinc-500">
                     {t('dataFields')}: {placeholders.length}
                   </div>
-                  <div className="mt-3 space-y-2">
+                  <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-auto pr-1">
                     {placeholders.map((p, idx) => {
                       const source = String(p?.source || 'static');
                       const uiSource = source === 'manual' ? 'static' : source;
@@ -1218,74 +1218,68 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           </div>
                           {isOpen ? (
                             <div className="mt-2 grid grid-cols-1 gap-2" onFocusCapture={() => setExpandedPlaceholderKey(cardKey)}>
-                              <div className="flex flex-wrap items-start gap-2 lg:flex-nowrap">
-                                <div className="flex min-w-0 flex-1 items-start gap-2">
-                                  <div className="min-w-0 flex-1">
-                                    <input
-                                      value={String(p?.label || stripHtmlToText(p?.labelHtml ?? '') || '')}
-                                      onChange={(e) => {
-                                        const nextLabel = String(e.target.value || '');
-                                        const nextLabelHtml = toQuillHtml(nextLabel);
-                                        const next = placeholders.slice();
-                                        const cur = next[idx] || {};
-                                        const curKey = String(cur.key || '').trim();
-                                        if (!curKey) {
-                                          const used = new Set(
-                                            next
-                                              .map((it, i) => (i === idx ? '' : String(it?.key || '').trim().toLowerCase()))
-                                              .filter(Boolean)
-                                          );
-                                          const gen = makeUniqueKey(nextLabel.trim() || `field_${idx + 1}`, used);
-                                          next[idx] = { ...cur, label: nextLabel, labelHtml: nextLabelHtml, key: gen };
-                                        } else {
-                                          next[idx] = { ...cur, label: nextLabel, labelHtml: nextLabelHtml };
-                                        }
-                                        replacePlaceholders(next);
-                                        const nextKey = String(next[idx]?.key || '').trim();
-                                        if (nextKey && String(expandedPlaceholderKey || '') === cardKey) setExpandedPlaceholderKey(nextKey);
-                                      }}
-                                      placeholder={t('fieldLabel')}
-                                      className="w-full min-w-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                                    />
-                                  </div>
-                                  <div className="w-28 shrink-0 sm:w-32">
-                                    <input
-                                      value={String((p?.separator ?? stripHtmlToText(p?.separatorHtml ?? '')) || ': ')}
-                                      onChange={(e) => {
-                                        const nextSep = String(e.target.value || '');
-                                        const nextSepHtml = toQuillHtml(nextSep);
-                                        const next = placeholders.slice();
-                                        next[idx] = { ...(next[idx] || {}), separator: nextSep, separatorHtml: nextSepHtml };
-                                        replacePlaceholders(next);
-                                      }}
-                                      placeholder={t('separator')}
-                                      readOnly={isTitle}
-                                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                                    />
-                                  </div>
+                              <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_120px]">
+                                  <input
+                                    value={String(p?.label || stripHtmlToText(p?.labelHtml ?? '') || '')}
+                                    onChange={(e) => {
+                                      const nextLabel = String(e.target.value || '');
+                                      const nextLabelHtml = toQuillHtml(nextLabel);
+                                      const next = placeholders.slice();
+                                      const cur = next[idx] || {};
+                                      const curKey = String(cur.key || '').trim();
+                                      if (!curKey) {
+                                        const used = new Set(
+                                          next
+                                            .map((it, i) => (i === idx ? '' : String(it?.key || '').trim().toLowerCase()))
+                                            .filter(Boolean)
+                                        );
+                                        const gen = makeUniqueKey(nextLabel.trim() || `field_${idx + 1}`, used);
+                                        next[idx] = { ...cur, label: nextLabel, labelHtml: nextLabelHtml, key: gen };
+                                      } else {
+                                        next[idx] = { ...cur, label: nextLabel, labelHtml: nextLabelHtml };
+                                      }
+                                      replacePlaceholders(next);
+                                      const nextKey = String(next[idx]?.key || '').trim();
+                                      if (nextKey && String(expandedPlaceholderKey || '') === cardKey) setExpandedPlaceholderKey(nextKey);
+                                    }}
+                                    placeholder={t('fieldLabel')}
+                                    className="w-full min-w-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                                  />
+                                  <input
+                                    value={String((p?.separator ?? stripHtmlToText(p?.separatorHtml ?? '')) || ': ')}
+                                    onChange={(e) => {
+                                      const nextSep = String(e.target.value || '');
+                                      const nextSepHtml = toQuillHtml(nextSep);
+                                      const next = placeholders.slice();
+                                      next[idx] = { ...(next[idx] || {}), separator: nextSep, separatorHtml: nextSepHtml };
+                                      replacePlaceholders(next);
+                                    }}
+                                    placeholder={t('separator')}
+                                    readOnly={isTitle}
+                                    className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                                  />
                                 </div>
 
-                                <div className={`flex min-w-0 items-start gap-2 ${uiSource === 'product' ? 'flex-1' : ''}`}>
-                                  <div className="w-32 shrink-0 sm:w-44">
-                                    <select
-                                      value={uiSource}
-                                      onChange={(e) => {
-                                        const nextSource = e.target.value;
-                                        const next = placeholders.slice();
-                                        const cur = next[idx] || {};
-                                        next[idx] = { ...cur, source: nextSource };
-                                        replacePlaceholders(next);
-                                      }}
-                                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                                    >
-                                      <option value="static">{t('sourceManual')}</option>
-                                      <option value="batch">{t('sourceBatch')}</option>
-                                      <option value="title">{t('sourceTitle')}</option>
-                                      <option value="product">{t('bindTo')}</option>
-                                    </select>
-                                  </div>
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[180px_minmax(0,1fr)]">
+                                  <select
+                                    value={uiSource}
+                                    onChange={(e) => {
+                                      const nextSource = e.target.value;
+                                      const next = placeholders.slice();
+                                      const cur = next[idx] || {};
+                                      next[idx] = { ...cur, source: nextSource };
+                                      replacePlaceholders(next);
+                                    }}
+                                    className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                                  >
+                                    <option value="static">{t('sourceManual')}</option>
+                                    <option value="batch">{t('sourceBatch')}</option>
+                                    <option value="title">{t('sourceTitle')}</option>
+                                    <option value="product">{t('bindTo')}</option>
+                                  </select>
                                   {uiSource === 'product' ? (
-                                    <div className="min-w-0 flex-1">
+                                    <div className="min-w-0">
                                       <input
                                         value={String(p?.bindPath || '')}
                                         onChange={(e) => {
@@ -1313,7 +1307,9 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                         <option value="epcItem.productionDate" />
                                       </datalist>
                                     </div>
-                                  ) : null}
+                                  ) : (
+                                    <div className="hidden sm:block" />
+                                  )}
                                 </div>
                               </div>
                               {uiSource === 'static' || uiSource === 'title' ? (
@@ -1326,7 +1322,8 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                       next[idx] = { ...(next[idx] || {}), staticValue: v };
                                       replacePlaceholders(next);
                                     }}
-                                    maxHeight="none"
+                                    minHeight="7rem"
+                                    maxHeight="12rem"
                                   />
                                 </div>
                               ) : null}

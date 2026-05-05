@@ -32,10 +32,6 @@ export default function CanvasStage({
   const [activePointer, setActivePointer] = useState(false);
   const interactive = mode === 'edit';
 
-  useEffect(() => {
-    itemsRef.current = items;
-  }, [items]);
-
   const applyUpdate = useCallback((updater) => {
     if (!interactive) return;
     if (!setItems) return;
@@ -43,6 +39,31 @@ export default function CanvasStage({
     const next = typeof updater === 'function' ? updater(current) : updater;
     setItems(next);
   }, [interactive, setItems]);
+
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
+  useEffect(() => {
+    if (!interactive) return;
+    if (!setItems) return;
+    applyUpdate((prev) => {
+      if (!Array.isArray(prev)) return prev;
+      const minW = 24;
+      const minH = 20;
+      let changed = false;
+      const next = prev.map((it) => {
+        if (!it) return it;
+        const nx = clamp(snap(Number(it.x) || 0, grid), 0, Math.max(0, width - minW));
+        const ny = clamp(snap(Number(it.y) || 0, grid), 0, Math.max(0, height - minH));
+        const nw = clamp(snap(Number(it.w) || minW, grid), minW, Math.max(minW, width - nx));
+        const nh = clamp(snap(Number(it.h) || minH, grid), minH, Math.max(minH, height - ny));
+        if (nx !== it.x || ny !== it.y || nw !== it.w || nh !== it.h) changed = true;
+        return nx === it.x && ny === it.y && nw === it.w && nh === it.h ? it : { ...it, x: nx, y: ny, w: nw, h: nh };
+      });
+      return changed ? next : prev;
+    });
+  }, [applyUpdate, grid, height, interactive, setItems, width]);
 
   useEffect(() => {
     if (!interactive) return undefined;
@@ -85,15 +106,15 @@ export default function CanvasStage({
           if (it.id !== d.id) return it;
 
           if (d.kind === 'drag') {
-            const nx = snap(clamp(x - d.offsetX, 0, width - it.w), grid);
-            const ny = snap(clamp(y - d.offsetY, 0, height - it.h), grid);
+            const nx = clamp(snap(x - d.offsetX, grid), 0, width - it.w);
+            const ny = clamp(snap(y - d.offsetY, grid), 0, height - it.h);
             return { ...it, x: nx, y: ny };
           }
 
           const minW = 24;
           const minH = 20;
-          const nw = snap(clamp(d.startW + (x - d.startX), minW, width - it.x), grid);
-          const nh = snap(clamp(d.startH + (y - d.startY), minH, height - it.y), grid);
+          const nw = clamp(snap(d.startW + (x - d.startX), grid), minW, width - it.x);
+          const nh = clamp(snap(d.startH + (y - d.startY), grid), minH, height - it.y);
           return { ...it, w: nw, h: nh };
         })
       );
