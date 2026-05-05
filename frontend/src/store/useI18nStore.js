@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 const KEY = 'ac_lang';
+const KEY_SET = 'ac_lang_set';
 
 function normalize(lang) {
   if (lang === 'ms') return 'ms';
@@ -11,19 +12,8 @@ function normalize(lang) {
 function readLang() {
   try {
     const stored = localStorage.getItem(KEY);
-    if (stored) return normalize(stored);
-
-    const candidates = [];
-    if (typeof navigator !== 'undefined') {
-      if (Array.isArray(navigator.languages)) candidates.push(...navigator.languages);
-      if (navigator.language) candidates.push(navigator.language);
-    }
-
-    for (const c of candidates) {
-      const v = String(c || '').toLowerCase();
-      if (v.startsWith('ms')) return 'ms';
-    }
-
+    const setByUser = localStorage.getItem(KEY_SET);
+    if (stored && setByUser === '1') return normalize(stored);
     return 'en';
   } catch (e) {
     void e;
@@ -34,6 +24,7 @@ function readLang() {
 function writeLang(lang) {
   try {
     localStorage.setItem(KEY, lang);
+    localStorage.setItem(KEY_SET, '1');
   } catch (e) {
     void e;
   }

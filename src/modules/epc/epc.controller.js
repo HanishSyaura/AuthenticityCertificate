@@ -100,7 +100,8 @@ async function listItems(req, res) {
     const { limit, offset } = parseLimitOffset(req.query);
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     const batchId = req.query.batchId ? Number(req.query.batchId) : null;
-    const data = await epcService.listItems({ organizationId: req.organization.id, q, batchId, limit, offset });
+    const pendingOnly = String(req.query.pending || '').trim() === '1';
+    const data = await epcService.listItems({ organizationId: req.organization.id, q, batchId, pendingOnly, limit, offset });
     res.success(data);
   } catch (e) {
     res.error(e.message, 400);
@@ -111,7 +112,8 @@ async function listBatchItems(req, res) {
   try {
     const { limit, offset } = parseLimitOffset(req.query);
     const batchId = Number(req.params.id);
-    const data = await epcService.listItems({ organizationId: req.organization.id, q: '', batchId, limit, offset });
+    const pendingOnly = String(req.query.pending || '').trim() === '1';
+    const data = await epcService.listItems({ organizationId: req.organization.id, q: '', batchId, pendingOnly, limit, offset });
     res.success(data);
   } catch (e) {
     res.error(e.message, 400);

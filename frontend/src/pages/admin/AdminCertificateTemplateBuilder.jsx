@@ -305,16 +305,15 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             const labelText = showPrefix ? String(stripHtmlToText(labelHtmlRaw) || '').trim() : '';
             const sepText = showPrefix ? (key ? String(ph?.separator ?? ': ') : ': ') : '';
             const prefixRaw = showPrefix && labelText ? `${escapeHtml(labelText)}${escapeHtml(sepText)}` : '';
-            const singleLine = source === 'manual' || source === 'batch';
             const valueHtmlRaw = source === 'static' || source === 'manual' || source === 'batch' || source === 'title' ? val : escapeTextToHtml(val);
-            const valueHtml = singleLine ? inlineizeHtml(String(valueHtmlRaw || '')) : valueHtmlRaw;
-            const html = sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`);
+            const valueHtml = inlineizeHtml(String(valueHtmlRaw || ''));
+            const html = inlineizeHtml(sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`));
             const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
             const align = textAlignClass(it.align);
             return (
               <div
-                className={`ql-editor ac-richtext font-semibold text-zinc-900 ${align} ${singleLine ? 'whitespace-nowrap' : ''}`}
-                style={{ fontSize: fs, textAlign: String(it.align || 'left') }}
+                className={`ql-editor ac-richtext font-semibold text-zinc-900 ${align} whitespace-nowrap`}
+                style={{ fontSize: fs, textAlign: String(it.align || 'left'), whiteSpace: 'nowrap' }}
                 dangerouslySetInnerHTML={{ __html: html }}
               />
             );
@@ -340,16 +339,15 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         const labelText = showPrefix ? String(stripHtmlToText(labelHtmlRaw) || '').trim() : '';
         const sepText = showPrefix ? (key ? String(ph?.separator ?? ': ') : ': ') : '';
         const prefixRaw = showPrefix && labelText ? `${escapeHtml(labelText)}${escapeHtml(sepText)}` : '';
-        const singleLine = source === 'manual' || source === 'batch';
         const valueHtmlRaw = source === 'static' || source === 'manual' || source === 'batch' || source === 'title' ? val : escapeTextToHtml(val);
-        const valueHtml = singleLine ? inlineizeHtml(String(valueHtmlRaw || '')) : valueHtmlRaw;
-        const html = sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`);
+        const valueHtml = inlineizeHtml(String(valueHtmlRaw || ''));
+        const html = inlineizeHtml(sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`));
         const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
         const align = textAlignClass(it.align);
         return (
           <div
-            className={`ql-editor ac-richtext h-full w-full ${align} ${singleLine ? 'whitespace-nowrap' : ''}`}
-            style={{ fontSize: fs, textAlign: String(it.align || 'left') }}
+            className={`ql-editor ac-richtext h-full w-full ${align} whitespace-nowrap`}
+            style={{ fontSize: fs, textAlign: String(it.align || 'left'), whiteSpace: 'nowrap' }}
             dangerouslySetInnerHTML={{ __html: html }}
           />
         );

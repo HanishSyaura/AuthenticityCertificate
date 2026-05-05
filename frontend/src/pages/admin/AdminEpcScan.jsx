@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useT } from '../../i18n/useT';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
@@ -25,6 +25,11 @@ function hasAnyDigit(s) {
   return /\d/.test(String(s || ''));
 }
 
+function isSkipToken(raw) {
+  const s = String(raw || '').trim().toUpperCase();
+  return s === 'SKIP' || s === 'NEXT' || s === 'NA' || s === 'N/A';
+}
+
 export default function AdminEpcScan() {
   const { t } = useT();
   const inputRef = useRef(null);
@@ -37,6 +42,7 @@ export default function AdminEpcScan() {
 
   const api = useMemo(() => createAdminApi({ token }), [token]);
 
+  const [viewTab, setViewTab] = useState('batch');
   const [step, setStep] = useState('epc');
   const [scanValue, setScanValue] = useState('');
   const [current, setCurrent] = useState(null);
@@ -46,6 +52,16 @@ export default function AdminEpcScan() {
   const [editCaiq, setEditCaiq] = useState('');
   const [topError, setTopError] = useState('');
   const [topHint, setTopHint] = useState('');
+
+  const [batches, setBatches] = useState([]);
+  const [selectedBatchId, setSelectedBatchId] = useState('');
+  const [batchItems, setBatchItems] = useState([]);
+  const [batchTotal, setBatchTotal] = useState(0);
+  const [batchOffset, setBatchOffset] = useState(0);
+  const batchLimit = 50;
+  const [batchQuery, setBatchQuery] = useState('');
+  const [pendingOnly, setPendingOnly] = useState(true);
+  const [batchLoading, setBatchLoading] = useState(false);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -87,10 +103,96 @@ export default function AdminEpcScan() {
     return res?.data?.data || null;
   };
 
+  const fetchBatches = useCallback(async () => {
+    const res = await api.get('/epc/batches', { params: { limit: 50, offset: 0 } });
+    const data = res?.data?.data || {};
+    const list = Array.isArray(data.items) ? data.items : [];
+    setBatches(list);
+    setSelectedBatchId((prev) => {
+      if (prev) return prev;
+      return list[0]?.id ? String(list[0].id) : '';
+    });
+  }, [api]);
+
+  const fetchBatchItems = useCallback(
+    async ({ batchId, q, pending, limit, offset }) => {
+      const res = await api.get('/epc/items', {
+        params: {
+          batchId: batchId ? Number(batchId) : undefined,
+          q: q || undefined,
+          pending: pending ? 1 : undefined,
+          limit,
+          offset
+        }
+      });
+      return res?.data?.data || null;
+    },
+    [api]
+  );
+
   const patchItem = async (itemId, patch) => {
     const res = await api.patch(`/epc/items/${Number(itemId)}/production`, patch || {});
     return res?.data?.data || null;
   };
+
+  const skipCaiq = () => {
+    setCurrent(null);
+    setSelectedId(null);
+    setStep('epc');
+    setTopError('');
+    setTopHint(t('scanCaiqSkipped'));
+    inputRef.current?.focus();
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    const run = async () => {
+      try {
+        setBatchLoading(true);
+        await fetchBatches();
+      } catch (e) {
+        if (!mounted) return;
+        void e;
+      } finally {
+        if (mounted) setBatchLoading(false);
+      }
+    };
+    void run();
+    return () => {
+      mounted = false;
+    };
+  }, [fetchBatches]);
+
+  useEffect(() => {
+    let mounted = true;
+    const run = async () => {
+      if (!selectedBatchId) return;
+      try {
+        setBatchLoading(true);
+        const data = await fetchBatchItems({
+          batchId: selectedBatchId,
+          q: batchQuery,
+          pending: pendingOnly,
+          limit: batchLimit,
+          offset: batchOffset
+        });
+        if (!mounted) return;
+        setBatchItems(Array.isArray(data?.items) ? data.items : []);
+        setBatchTotal(Number(data?.total) || 0);
+      } catch (e) {
+        if (!mounted) return;
+        void e;
+        setBatchItems([]);
+        setBatchTotal(0);
+      } finally {
+        if (mounted) setBatchLoading(false);
+      }
+    };
+    void run();
+    return () => {
+      mounted = false;
+    };
+  }, [selectedBatchId, batchQuery, pendingOnly, batchOffset, fetchBatchItems]);
 
   const handleScan = async () => {
     const raw = String(scanValue || '').trim();
@@ -112,6 +214,9 @@ export default function AdminEpcScan() {
 
         const item = await lookupEpc(epcCode);
         if (!item) throw new Error(t('scanEpcNotFound'));
+        if (selectedBatchId && String(item?.batchId) !== String(selectedBatchId)) {
+          setTopHint(t('scanBatchMismatch'));
+        }
         scannedRef.current.add(epcCode);
         upsertRow(item, { rowError: '' });
         selectRow(item);
@@ -150,6 +255,51 @@ export default function AdminEpcScan() {
       }
 
       if (step === 'caiqNumber') {
+        if (isSkipToken(raw)) {
+          skipCaiq();
+          return;
+        }
+
+        let maybeNextItem = null;
+        try {
+          maybeNextItem = await lookupEpc(raw);
+        } catch {
+          maybeNextItem = null;
+        }
+
+        if (maybeNextItem?.epcCode) {
+          const epcCode = String(maybeNextItem.epcCode || '').trim();
+          skipCaiq();
+
+          if (scannedRef.current.has(epcCode)) {
+            const ok = window.confirm(t('scanDuplicateConfirm', { epc: epcCode }));
+            if (!ok) return;
+            const existing = rows.find((r) => String(r.epcCode) === String(epcCode));
+            if (existing) selectRow(existing);
+            return;
+          }
+
+          if (selectedBatchId && String(maybeNextItem?.batchId) !== String(selectedBatchId)) {
+            setTopHint(t('scanBatchMismatch'));
+          } else {
+            setTopHint(t('scanAutoSkipCaiq'));
+          }
+
+          scannedRef.current.add(epcCode);
+          upsertRow(maybeNextItem, { rowError: '' });
+          selectRow(maybeNextItem);
+
+          const nxt = nextMissingStep(maybeNextItem);
+          if (nxt === 'epc') {
+            setTopHint(t('scanEpcComplete'));
+          } else if (nxt === 'netWeight') {
+            setTopHint(t('scanPromptNetWeight'));
+          } else {
+            setTopHint(t('scanPromptCaiq'));
+          }
+          return;
+        }
+
         const value = stripPrefix(raw, ['CAIQ', 'CAIQNO', 'CAIQ NO', 'CAIQNUMBER', 'CAIQ NUMBER']);
         if (!value) {
           setTopError(t('scanInvalidCaiq'));
@@ -225,23 +375,50 @@ export default function AdminEpcScan() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_420px]">
         <div className="rounded-xl border border-zinc-200 bg-white p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+                  viewTab === 'batch' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
+                }`}
+                onClick={() => setViewTab('batch')}
+              >
+                {t('scanTabBatch')}
+              </button>
+              <button
+                type="button"
+                className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+                  viewTab === 'scanned' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
+                }`}
+                onClick={() => setViewTab('scanned')}
+              >
+                {t('scanTabScanned')}
+              </button>
+            </div>
             <div className="text-xs font-semibold text-zinc-600">
               {t('scanCurrentStep')}: <span className="text-zinc-900">{stepLabel}</span>
             </div>
-            <button
-              type="button"
-              className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-              onClick={() => {
-                setCurrent(null);
-                setSelectedId(null);
-                setStep('epc');
-                setTopHint(t('scanPromptEpc'));
-                setTopError('');
-                inputRef.current?.focus();
-              }}
-            >
-              {t('scanReset')}
-            </button>
+            <div className="flex items-center gap-2">
+              {step === 'caiqNumber' && current?.id ? (
+                <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={skipCaiq}>
+                  {t('scanSkipCaiq')}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                onClick={() => {
+                  setCurrent(null);
+                  setSelectedId(null);
+                  setStep('epc');
+                  setTopHint(t('scanPromptEpc'));
+                  setTopError('');
+                  inputRef.current?.focus();
+                }}
+              >
+                {t('scanReset')}
+              </button>
+            </div>
           </div>
 
           <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_auto]">
@@ -284,37 +461,131 @@ export default function AdminEpcScan() {
             </div>
           </div>
 
-          <DataTable
-            minWidth={980}
-            rows={rows}
-            rowKey={(it) => it.id}
-            emptyContent={t('scanNoRows')}
-            columns={[
-              {
-                id: 'select',
-                header: '',
-                cell: (it) => (
-                  <button type="button" className="ac-btn ac-btn-soft px-2 py-1 text-[11px]" onClick={() => selectRow(it)}>
-                    {t('select')}
-                  </button>
-                )
-              },
-              { id: 'epcCode', header: t('epcCode'), cell: (it) => <span className="font-mono text-xs">{it.epcCode}</span> },
-              { id: 'batchName', header: t('batchName'), cell: (it) => <span className="text-sm">{it.batch?.batchName || '-'}</span> },
-              { id: 'netWeight', header: t('netWeight'), cell: (it) => <span className="text-sm">{it.netWeight || '-'}</span> },
-              { id: 'caiqNumber', header: t('caiqNo'), cell: (it) => <span className="text-sm">{it.caiqNumber || '-'}</span> },
-              {
-                id: 'status',
-                header: t('status'),
-                cell: (it) => (
-                  <div className="text-xs">
-                    {it.saving ? <span className="text-amber-700">{t('saving')}</span> : <span className="text-emerald-700">{t('saved')}</span>}
-                    {it.rowError ? <div className="mt-1 text-[11px] text-rose-700">{String(it.rowError)}</div> : null}
-                  </div>
-                )
-              }
-            ]}
-          />
+          {viewTab === 'batch' ? (
+            <div>
+              <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_1fr_auto]">
+                <select
+                  value={selectedBatchId}
+                  onChange={(e) => {
+                    setSelectedBatchId(e.target.value);
+                    setBatchOffset(0);
+                  }}
+                  className="ac-input"
+                >
+                  <option value="">{t('selectBatch')}</option>
+                  {batches.map((b) => (
+                    <option key={b.id} value={String(b.id)}>
+                      {b.batchName} ({b.corpPrefix})
+                    </option>
+                  ))}
+                </select>
+                <input
+                  value={batchQuery}
+                  onChange={(e) => {
+                    setBatchQuery(e.target.value);
+                    setBatchOffset(0);
+                  }}
+                  placeholder={t('searchEpc')}
+                  className="ac-input"
+                />
+                <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => void fetchBatches()}>
+                  {t('refresh')}
+                </button>
+              </div>
+
+              <label className="mb-3 flex items-center gap-2 text-xs text-zinc-700">
+                <input type="checkbox" checked={pendingOnly} onChange={(e) => setPendingOnly(e.target.checked)} />
+                {t('scanPendingOnly')}
+              </label>
+
+              <div className="mb-2 text-[11px] text-zinc-500">
+                {t('total', { value: Number(batchTotal) || 0 })}{' '}
+                <span className="text-zinc-400">
+                  • Page {Math.floor(batchOffset / batchLimit) + 1} / {Math.max(1, Math.ceil((Number(batchTotal) || 0) / batchLimit))}
+                </span>
+              </div>
+
+              <DataTable
+                minWidth={980}
+                rows={batchItems}
+                rowKey={(it) => it.id}
+                loading={batchLoading}
+                loadingContent={t('loading')}
+                emptyContent={t('scanNoBatchItems')}
+                columns={[
+                  {
+                    id: 'use',
+                    header: '',
+                    cell: (it) => (
+                      <button type="button" className="ac-btn ac-btn-soft px-2 py-1 text-[11px]" onClick={() => selectRow(it)}>
+                        {t('scanUse')}
+                      </button>
+                    )
+                  },
+                  { id: 'epcCode', header: t('epcCode'), cell: (it) => <span className="font-mono text-xs">{it.epcCode}</span> },
+                  { id: 'netWeight', header: t('netWeight'), cell: (it) => <span className="text-sm">{it.netWeight || '-'}</span> },
+                  { id: 'caiqNumber', header: t('caiqNo'), cell: (it) => <span className="text-sm">{it.caiqNumber || '-'}</span> },
+                  {
+                    id: 'fillStatus',
+                    header: t('status'),
+                    cell: (it) =>
+                      it.netWeight ? <span className="text-xs text-emerald-700">{t('scanComplete')}</span> : <span className="text-xs text-amber-700">{t('scanPending')}</span>
+                  }
+                ]}
+              />
+
+              <div className="mt-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                  disabled={batchOffset <= 0 || batchLoading}
+                  onClick={() => setBatchOffset((v) => Math.max(0, v - batchLimit))}
+                >
+                  {t('prev')}
+                </button>
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                  disabled={batchLoading || batchOffset + batchLimit >= (Number(batchTotal) || 0)}
+                  onClick={() => setBatchOffset((v) => v + batchLimit)}
+                >
+                  {t('next')}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <DataTable
+              minWidth={980}
+              rows={rows}
+              rowKey={(it) => it.id}
+              emptyContent={t('scanNoRows')}
+              columns={[
+                {
+                  id: 'select',
+                  header: '',
+                  cell: (it) => (
+                    <button type="button" className="ac-btn ac-btn-soft px-2 py-1 text-[11px]" onClick={() => selectRow(it)}>
+                      {t('select')}
+                    </button>
+                  )
+                },
+                { id: 'epcCode', header: t('epcCode'), cell: (it) => <span className="font-mono text-xs">{it.epcCode}</span> },
+                { id: 'batchName', header: t('batchName'), cell: (it) => <span className="text-sm">{it.batch?.batchName || '-'}</span> },
+                { id: 'netWeight', header: t('netWeight'), cell: (it) => <span className="text-sm">{it.netWeight || '-'}</span> },
+                { id: 'caiqNumber', header: t('caiqNo'), cell: (it) => <span className="text-sm">{it.caiqNumber || '-'}</span> },
+                {
+                  id: 'status',
+                  header: t('status'),
+                  cell: (it) => (
+                    <div className="text-xs">
+                      {it.saving ? <span className="text-amber-700">{t('saving')}</span> : <span className="text-emerald-700">{t('saved')}</span>}
+                      {it.rowError ? <div className="mt-1 text-[11px] text-rose-700">{String(it.rowError)}</div> : null}
+                    </div>
+                  )
+                }
+              ]}
+            />
+          )}
         </div>
 
         <div className="rounded-xl border border-zinc-200 bg-white p-4">
@@ -362,4 +633,3 @@ export default function AdminEpcScan() {
     </div>
   );
 }
-

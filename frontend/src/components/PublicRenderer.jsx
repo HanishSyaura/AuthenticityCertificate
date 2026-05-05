@@ -587,13 +587,9 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                       }
                       const hasValue = String(val || '').trim().length > 0;
                       if (!hasValue && source !== 'static' && source !== 'title') return null;
-                      const singleLine = source === 'manual' || source === 'batch';
-                      const valueHtml =
-                        source === 'static' || source === 'manual' || source === 'batch' || source === 'title'
-                          ? singleLine
-                            ? inlineizeHtml(sanitizeLimitedHtml(val))
-                            : sanitizeLimitedHtml(val)
-                          : escapeTextToHtml(val);
+                      const valueHtmlRaw =
+                        source === 'static' || source === 'manual' || source === 'batch' || source === 'title' ? sanitizeLimitedHtml(val) : escapeTextToHtml(val);
+                      const valueHtml = inlineizeHtml(valueHtmlRaw);
                       const html = `${prefixHtml}${valueHtml || ''}`;
                       if (!String(html || '').trim()) return null;
                       return (
@@ -610,8 +606,8 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                           }}
                         >
                           <div
-                            className={`ql-editor ac-richtext h-full w-full font-semibold ${textAlignClass(it.align)} ${singleLine ? 'whitespace-nowrap' : ''}`}
-                            style={{ textAlign: String(it.align || 'left') }}
+                            className={`ql-editor ac-richtext h-full w-full font-semibold ${textAlignClass(it.align)} whitespace-nowrap`}
+                            style={{ textAlign: String(it.align || 'left'), whiteSpace: 'nowrap' }}
                             dangerouslySetInnerHTML={{ __html: html }}
                           />
                         </div>

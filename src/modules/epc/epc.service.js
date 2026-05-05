@@ -561,11 +561,16 @@ async function listBatches({ organizationId, q, limit, offset }) {
   return { items, total, limit, offset };
 }
 
-async function listItems({ organizationId, q, batchId, limit, offset }) {
+async function listItems({ organizationId, q, batchId, pendingOnly, limit, offset }) {
   const orgId = Number(organizationId);
   const where = {
     organizationId: orgId,
     ...(batchId ? { batchId: Number(batchId) } : {}),
+    ...(pendingOnly
+      ? {
+          OR: [{ netWeight: null }, { netWeight: '' }]
+        }
+      : {}),
     ...(q
       ? {
           OR: [{ epcCode: { contains: q } }, { batch: { batchName: { contains: q } } }]
