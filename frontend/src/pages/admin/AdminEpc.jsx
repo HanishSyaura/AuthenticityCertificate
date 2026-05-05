@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import useRecordsStore from '../../store/useRecordsStore';
 import useEpcStore from '../../store/useEpcStore';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
@@ -31,6 +32,7 @@ function getValue(path, data) {
 
 export default function AdminEpc() {
   const { t } = useT();
+  const navigate = useNavigate();
 
   const { products, fetchProducts } = useRecordsStore((s) => ({
     products: s.products,
@@ -219,6 +221,13 @@ export default function AdminEpc() {
           <div className="mt-1 text-sm text-zinc-600">{t('guideStepBatchesBody')}</div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate('/admin/epc/scan')}
+            className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+          >
+            {t('scanInput')}
+          </button>
           <button
             type="button"
             onClick={() => setTab('create')}

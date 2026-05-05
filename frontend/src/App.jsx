@@ -12,6 +12,7 @@ import AdminRecordDetail from './pages/admin/AdminRecordDetail';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminGuide from './pages/admin/AdminGuide';
 import AdminEpc from './pages/admin/AdminEpc';
+import AdminEpcScan from './pages/admin/AdminEpcScan';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminCertificateList from './pages/admin/AdminCertificateList';
 import AdminCertificateBuilder from './pages/admin/AdminCertificateBuilder';
@@ -41,6 +42,7 @@ function App() {
           <Route path="guide" element={<AdminGuide />} />
           <Route path="records" element={<AdminRecords />} />
           <Route path="epc" element={<AdminEpc />} />
+          <Route path="epc/scan" element={<AdminEpcScan />} />
           <Route path="records/:id" element={<AdminRecordDetail />} />
           <Route path="cms" element={<AdminCmsBuilder />} />
           <Route path="certificates" element={<AdminCertificateList />} />

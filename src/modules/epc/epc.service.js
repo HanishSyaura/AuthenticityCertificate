@@ -1,6 +1,7 @@
 const prisma = require('../../config/prisma');
 const XLSX = require('xlsx');
 const { generateCertificateId } = require('../../utils/id-generator');
+const { matchPermission } = require('../../middleware/access.middleware');
 
 async function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), ms))]);
@@ -602,6 +603,140 @@ async function listItems({ organizationId, q, batchId, limit, offset }) {
   return { items, total, limit, offset };
 }
 
+const EPC_ITEM_INCLUDE = {
+  batch: {
+    select: {
+      id: true,
+      corpPrefix: true,
+      batchName: true,
+      batchQty: true,
+      certificateId: true,
+      sku: true,
+      createdAt: true,
+      product: { select: { id: true, sku: true, name: true, code: true } }
+    }
+  }
+};
+
+async function getItemByEpc({ organizationId, epcCode }) {
+  const orgId = Number(organizationId);
+  const code = String(epcCode || '').trim();
+  if (!code) throw new Error('EPC code required');
+
+  const item = await withTimeout(
+    prisma.epcItem.findUnique({
+      where: { organizationId_epcCode: { organizationId: orgId, epcCode: code } },
+      include: EPC_ITEM_INCLUDE
+    }),
+    1500
+  );
+  if (!item) {
+    const err = new Error('EPC tidak dijumpai');
+    err.status = 404;
+    throw err;
+  }
+  return item;
+}
+
+function normalizeMaybeString(v) {
+  if (v == null) return null;
+  const s = String(v).trim();
+  return s ? s : null;
+}
+
+function canOverrideItem({ actor }) {
+  const role = String(actor?.role || '').trim();
+  if (role === 'super_admin' || role === 'admin') return true;
+  const perms = Array.isArray(actor?.permissions) ? actor.permissions : [];
+  return matchPermission(perms, 'epc.override');
+}
+
+async function updateItemProduction({ organizationId, itemId, patch, actor }) {
+  const orgId = Number(organizationId);
+  const id = Number(itemId);
+  if (!Number.isFinite(id) || id <= 0) throw new Error('Invalid item id');
+  const overrideAllowed = canOverrideItem({ actor });
+
+  const existing = await withTimeout(
+    prisma.epcItem.findFirst({ where: { id, organizationId: orgId }, include: EPC_ITEM_INCLUDE }),
+    1500
+  );
+  if (!existing) {
+    const err = new Error('EPC item tidak dijumpai');
+    err.status = 404;
+    throw err;
+  }
+
+  const data = {};
+  if (Object.prototype.hasOwnProperty.call(patch || {}, 'netWeight')) {
+    const incoming = normalizeMaybeString(patch.netWeight);
+    const prev = normalizeMaybeString(existing.netWeight);
+    if (incoming == null) {
+      if (prev != null && !overrideAllowed) {
+        const err = new Error('Net weight sudah diisi. Perlukan kebenaran admin untuk ubah.');
+        err.status = 409;
+        throw err;
+      }
+      data.netWeight = null;
+    } else if (prev == null || prev === incoming) {
+      data.netWeight = incoming;
+    } else if (!overrideAllowed) {
+      const err = new Error('Net weight sudah diisi. Perlukan kebenaran admin untuk ubah.');
+      err.status = 409;
+      throw err;
+    } else {
+      data.netWeight = incoming;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch || {}, 'caiqNumber')) {
+    const incoming = normalizeMaybeString(patch.caiqNumber);
+    const prev = normalizeMaybeString(existing.caiqNumber);
+    if (incoming == null) {
+      if (prev != null && !overrideAllowed) {
+        const err = new Error('CAIQ sudah diisi. Perlukan kebenaran admin untuk ubah.');
+        err.status = 409;
+        throw err;
+      }
+      data.caiqNumber = null;
+    } else if (prev == null || prev === incoming) {
+      data.caiqNumber = incoming;
+    } else if (!overrideAllowed) {
+      const err = new Error('CAIQ sudah diisi. Perlukan kebenaran admin untuk ubah.');
+      err.status = 409;
+      throw err;
+    } else {
+      data.caiqNumber = incoming;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch || {}, 'productionDate')) {
+    const incoming = patch.productionDate == null ? null : patch.productionDate;
+    const prev = existing.productionDate || null;
+    if (incoming == null) {
+      if (prev != null && !overrideAllowed) {
+        const err = new Error('Production date sudah diisi. Perlukan kebenaran admin untuk ubah.');
+        err.status = 409;
+        throw err;
+      }
+      data.productionDate = null;
+    } else if (prev == null || (incoming instanceof Date && prev.getTime() === incoming.getTime())) {
+      data.productionDate = incoming;
+    } else if (!overrideAllowed) {
+      const err = new Error('Production date sudah diisi. Perlukan kebenaran admin untuk ubah.');
+      err.status = 409;
+      throw err;
+    } else {
+      data.productionDate = incoming;
+    }
+  }
+
+  if (Object.keys(data).length === 0) return existing;
+
+  const updated = await withTimeout(prisma.epcItem.update({ where: { id }, data, include: EPC_ITEM_INCLUDE }), 1500);
+  return updated;
+}
+
 function parseXlsxBase64(base64) {
   const raw = String(base64 || '');
   const commaIdx = raw.indexOf(',');
@@ -808,6 +943,8 @@ module.exports = {
   exportBatchVerifyUrlXlsx,
   listBatches,
   listItems,
+  getItemByEpc,
+  updateItemProduction,
   importProductionXlsx,
   markProductionDone,
   updateBatch,

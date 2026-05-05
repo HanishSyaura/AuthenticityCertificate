@@ -38,6 +38,16 @@ const deleteAllSchema = z.object({
   corpPrefix: z.string().min(1).optional()
 });
 
+const getItemByEpcSchema = z.object({
+  epc: z.string().trim().min(1)
+});
+
+const updateItemProductionSchema = z.object({
+  netWeight: z.union([z.string(), z.number()]).optional(),
+  caiqNumber: z.union([z.string(), z.number()]).optional(),
+  productionDate: z.string().optional()
+});
+
 function parseLimitOffset(q) {
   const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 200);
   const offset = Math.max(Number(q.offset) || 0, 0);
@@ -105,6 +115,53 @@ async function listBatchItems(req, res) {
     res.success(data);
   } catch (e) {
     res.error(e.message, 400);
+  }
+}
+
+async function getItemByEpc(req, res) {
+  try {
+    const data = getItemByEpcSchema.parse({ epc: req.query?.epc });
+    const item = await epcService.getItemByEpc({ organizationId: req.organization.id, epcCode: data.epc });
+    res.success(item);
+  } catch (e) {
+    const status = Number(e.status) || 400;
+    res.error(e.message, status);
+  }
+}
+
+async function updateItemProduction(req, res) {
+  try {
+    const itemId = Number(req.params.id);
+    if (!Number.isFinite(itemId) || itemId <= 0) return res.error('Invalid item id', 400);
+
+    const parsed = updateItemProductionSchema.parse(req.body || {});
+    const patch = {};
+    if (Object.prototype.hasOwnProperty.call(parsed, 'netWeight')) {
+      const v = parsed.netWeight;
+      patch.netWeight = v == null ? null : String(v).trim() || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(parsed, 'caiqNumber')) {
+      const v = parsed.caiqNumber;
+      patch.caiqNumber = v == null ? null : String(v).trim() || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(parsed, 'productionDate')) {
+      const v = parsed.productionDate;
+      patch.productionDate = v ? new Date(String(v)) : null;
+      if (patch.productionDate && Number.isNaN(patch.productionDate.getTime())) return res.error('Invalid productionDate', 400);
+    }
+
+    if (Object.keys(patch).length === 0) return res.error('No fields to update', 400);
+
+    const updated = await epcService.updateItemProduction({
+      organizationId: req.organization.id,
+      itemId,
+      patch,
+      actor: req.user
+    });
+    res.success(updated, 'Item updated');
+  } catch (e) {
+    const status = Number(e.status) || 400;
+    res.error(e.message, status);
   }
 }
 
@@ -222,6 +279,8 @@ module.exports = {
   generateBatch,
   listBatches,
   listItems,
+  getItemByEpc,
+  updateItemProduction,
   listBatchItems,
   exportBatch,
   exportBatchVerifyUrls,
