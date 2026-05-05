@@ -48,6 +48,10 @@ const updateItemProductionSchema = z.object({
   productionDate: z.string().optional()
 });
 
+const resetItemsProductionSchema = z.object({
+  itemIds: z.array(z.number().int().positive()).min(1).max(500)
+});
+
 function parseLimitOffset(q) {
   const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 200);
   const offset = Math.max(Number(q.offset) || 0, 0);
@@ -162,6 +166,22 @@ async function updateItemProduction(req, res) {
     });
     res.success(updated, 'Item updated');
   } catch (e) {
+    const status = Number(e.status) || 400;
+    res.error(e.message, status);
+  }
+}
+
+async function resetItemsProduction(req, res) {
+  try {
+    const data = resetItemsProductionSchema.parse(req.body || {});
+    const result = await epcService.resetItemsProduction({
+      organizationId: req.organization.id,
+      itemIds: data.itemIds,
+      actor: req.user
+    });
+    res.success(result, 'Production fields cleared');
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
     const status = Number(e.status) || 400;
     res.error(e.message, status);
   }
@@ -282,6 +302,7 @@ module.exports = {
   listBatches,
   listItems,
   getItemByEpc,
+  resetItemsProduction,
   updateItemProduction,
   listBatchItems,
   exportBatch,

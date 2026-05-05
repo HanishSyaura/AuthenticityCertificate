@@ -546,7 +546,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                 labelHtml: String(it.labelHtml || ''),
                 fontSize: Number(it.fontSize) > 0 ? Number(it.fontSize) : 14,
                 align: String(it.align || 'left'),
-                wrap: Boolean(it.wrap)
+                wrap: typeof it.wrap === 'boolean' ? it.wrap : true
               }));
 
             return (
@@ -632,7 +632,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                       const valueHtml = inlineizeHtml(valueHtmlRaw);
                       const html = `${prefixHtml}${valueHtml || ''}`;
                       if (!String(html || '').trim()) return null;
-                      const wrap = Boolean(it.wrap);
+                      const wrap = typeof it.wrap === 'boolean' ? it.wrap : true;
                       return (
                         <div
                           key={it.id || `${idx}`}

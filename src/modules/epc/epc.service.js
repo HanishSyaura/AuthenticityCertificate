@@ -720,6 +720,26 @@ async function updateItemProduction({ organizationId, itemId, patch, actor }) {
   return updated;
 }
 
+async function resetItemsProduction({ organizationId, itemIds, actor }) {
+  const orgId = Number(organizationId);
+  const ids = Array.isArray(itemIds) ? itemIds.map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0) : [];
+  if (ids.length === 0) throw new Error('No item ids');
+  if (!canOverrideItem({ actor })) {
+    const err = new Error('Tiada kebenaran untuk reset data produksi.');
+    err.status = 403;
+    throw err;
+  }
+
+  const res = await withTimeout(
+    prisma.epcItem.updateMany({
+      where: { organizationId: orgId, id: { in: ids } },
+      data: { netWeight: null, caiqNumber: null, productionDate: null }
+    }),
+    1500
+  );
+  return { updatedCount: Number(res?.count) || 0 };
+}
+
 function parseXlsxBase64(base64) {
   const raw = String(base64 || '');
   const commaIdx = raw.indexOf(',');
@@ -927,6 +947,7 @@ module.exports = {
   listBatches,
   listItems,
   getItemByEpc,
+  resetItemsProduction,
   updateItemProduction,
   importProductionXlsx,
   markProductionDone,

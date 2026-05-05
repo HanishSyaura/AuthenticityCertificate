@@ -3,6 +3,9 @@ import { useLocation } from 'react-router-dom';
 import PublicRenderer from '../components/PublicRenderer';
 import { useT } from '../i18n/useT';
 import { getPublicApiBaseUrl } from '../utils/apiBase';
+import { ADMIN_KEYS } from '../utils/adminKeys';
+import { readJson } from '../utils/storage';
+import { createAdminApi } from '../utils/adminApi';
 
 function sampleCertificateLayout() {
   return [
@@ -32,6 +35,15 @@ export default function CmsPreviewPage() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [targetW, setTargetW] = useState(null);
+
+  const baseW = 390;
+  const baseH = 844;
+  const scale = useMemo(() => {
+    const w = Number(targetW || 0);
+    if (!Number.isFinite(w) || w <= 0) return 1;
+    return Math.max(0.1, Math.min(1, w / baseW));
+  }, [baseW, targetW]);
 
   const storedLayout = useMemo(() => {
     try {
@@ -45,15 +57,62 @@ export default function CmsPreviewPage() {
   }, []);
 
   useEffect(() => {
+    const measure = () => {
+      const docW = Number(document.documentElement?.clientWidth || 0);
+      const winW = Number(window.innerWidth || 0);
+      const w = Math.min(...[docW, winW].filter((n) => Number.isFinite(n) && n > 0));
+      const padded = Number.isFinite(w) && w > 0 ? Math.max(0, w - 32) : null;
+      setTargetW(padded && padded > 0 ? padded : null);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+
+  useEffect(() => {
     const sp = new URLSearchParams(location.search || '');
     const certId = sp.get('certId');
     const epc = sp.get('epc');
     const nfcUid = sp.get('nfcUid');
     if (!certId && !epc && !nfcUid) {
-      setData(sampleCert());
+      let alive = true;
+      setLoading(true);
       setError(null);
-      setLoading(false);
-      return;
+      const run = async () => {
+        try {
+          const token = readJson(ADMIN_KEYS.token, null);
+          if (!token) {
+            if (!alive) return;
+            setData(sampleCert());
+            return;
+          }
+          const api = createAdminApi({ token });
+          const res = await api.get('/epc/items', { params: { limit: 1, offset: 0 } });
+          const latestEpc = res?.data?.data?.items?.[0]?.epcCode ? String(res.data.data.items[0].epcCode) : '';
+          if (!latestEpc) {
+            if (!alive) return;
+            setData(sampleCert());
+            return;
+          }
+          const base = getPublicApiBaseUrl();
+          const url = `${base}/resolve?${new URLSearchParams({ epc: latestEpc, ...(lang ? { lang } : {}) }).toString()}`;
+          const out = await fetch(url).then((r) => r.json());
+          if (!out?.success) throw new Error(out?.message || 'Failed to load');
+          if (!alive) return;
+          setData(out.data || null);
+        } catch (e) {
+          if (!alive) return;
+          setData(null);
+          setError(e?.message || 'Failed to load');
+        } finally {
+          if (!alive) return;
+          setLoading(false);
+        }
+      };
+      run();
+      return () => {
+        alive = false;
+      };
     }
     let alive = true;
     setLoading(true);
@@ -108,9 +167,18 @@ export default function CmsPreviewPage() {
   }
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-white">
-      <div className="w-full">
-        <PublicRenderer layout={storedLayout} data={data || sampleCert()} responsive responsiveMode="viewport" baseWidth={390} />
+    <div className="min-h-screen overflow-x-hidden bg-zinc-50">
+      <div className="w-full overflow-auto p-4">
+        <div className="mx-auto" style={{ width: baseW * scale, height: baseH * scale }}>
+          <div
+            className="relative rounded-xl border border-zinc-200 bg-white shadow-sm"
+            style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }}
+          >
+            <div className="h-full w-full overflow-hidden">
+              <PublicRenderer layout={storedLayout} data={data || sampleCert()} />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

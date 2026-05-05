@@ -310,7 +310,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             const html = inlineizeHtml(sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`));
             const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
             const align = textAlignClass(it.align);
-            const wrap = Boolean(it.wrap);
+            const wrap = typeof it.wrap === 'boolean' ? it.wrap : true;
             return (
               <div
                 className={`ql-editor ac-richtext font-semibold text-zinc-900 ${align} ${wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-nowrap'}`}
@@ -351,7 +351,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         const html = inlineizeHtml(sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`));
         const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
         const align = textAlignClass(it.align);
-        const wrap = Boolean(it.wrap);
+        const wrap = typeof it.wrap === 'boolean' ? it.wrap : true;
         return (
           <div
             className={`ql-editor ac-richtext h-full w-full ${align} ${wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-nowrap'}`}
@@ -483,7 +483,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     const ph = placeholders.find((p) => String(p?.key || '').trim() === k) || null;
     const labelText = String(stripHtmlToText(ph?.labelHtml ?? ph?.label ?? k) || '').trim() || k;
     const labelHtml = String(ph?.labelHtml || '') ? String(ph.labelHtml) : toQuillHtml(labelText);
-    const item = { id: makeId('field'), path: `templateData.${k}`, label: labelText, labelHtml, x: 20, y: 40, w: 200, h: 44, fontSize: 14, align: 'left' };
+    const item = { id: makeId('field'), path: `templateData.${k}`, label: labelText, labelHtml, x: 20, y: 40, w: 200, h: 44, fontSize: 14, align: 'left', wrap: true };
     const nextLayout = [...(Array.isArray(draftLayout) ? draftLayout : []), item];
     markLocalEdit();
     setDraftLayout(nextLayout);
@@ -963,7 +963,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                             </div>
 
                             <label className="mt-3 flex items-center gap-2 text-sm">
-                              <input type="checkbox" checked={Boolean(selectedField.wrap)} onChange={(e) => updateField({ wrap: e.target.checked })} />
+                              <input type="checkbox" checked={typeof selectedField.wrap === 'boolean' ? selectedField.wrap : true} onChange={(e) => updateField({ wrap: e.target.checked })} />
                               <span className="text-xs font-medium text-zinc-700">{t('wrapText')}</span>
                             </label>
 
@@ -1736,7 +1736,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   </div>
 
                 <label className="mt-3 flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={Boolean(selectedField.wrap)} onChange={(e) => updateField({ wrap: e.target.checked })} />
+                  <input type="checkbox" checked={typeof selectedField.wrap === 'boolean' ? selectedField.wrap : true} onChange={(e) => updateField({ wrap: e.target.checked })} />
                   <span className="text-xs font-medium text-zinc-700">{t('wrapText')}</span>
                 </label>
 

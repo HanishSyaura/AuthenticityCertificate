@@ -25,6 +25,11 @@ router.delete('/batches/:id', auditAction('DELETE_EPC_BATCH', { targetType: 'epc
 router.post('/batches/delete-all', auditAction('DELETE_EPC_BATCH_ALL', { targetType: 'epc_batch' }), epcController.deleteAll);
 router.get('/items', epcController.listItems);
 router.get('/items/by-epc', epcController.getItemByEpc);
+router.post(
+  '/items/production/reset',
+  auditAction('RESET_EPC_ITEM_PRODUCTION', { targetType: 'epc_item' }),
+  epcController.resetItemsProduction
+);
 router.patch(
   '/items/:id/production',
   auditAction('UPDATE_EPC_ITEM_PRODUCTION', { targetType: 'epc_item', getTargetId: (req) => String(req.params?.id || '') }),

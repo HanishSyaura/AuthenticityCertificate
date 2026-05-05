@@ -471,6 +471,14 @@ export default function AdminEpc() {
                     type="button"
                     className="ac-btn ac-btn-soft px-3 py-2 text-xs"
                     disabled={!b?.id}
+                    onClick={() => navigate(`/admin/epc/scan?batchId=${encodeURIComponent(String(b.id))}`)}
+                  >
+                    {t('scanInput')}
+                  </button>
+                  <button
+                    type="button"
+                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                    disabled={!b?.id}
                     onClick={() => void openCertificate(b)}
                   >
                     {t('viewCertificate')}

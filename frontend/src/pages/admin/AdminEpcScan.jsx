@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useT } from '../../i18n/useT';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
 import { createAdminApi } from '../../utils/adminApi';
@@ -32,6 +32,7 @@ function isSkipToken(raw) {
 
 export default function AdminEpcScan() {
   const { t } = useT();
+  const location = useLocation();
   const inputRef = useRef(null);
   const scannedRef = useRef(new Set());
   const scanIdleTimerRef = useRef(null);
@@ -39,6 +40,8 @@ export default function AdminEpcScan() {
   const scanBurstStartAtRef = useRef(0);
   const scanPrevLenRef = useRef(0);
   const scanAutoModeRef = useRef(false);
+  const amendNetWeightRef = useRef(null);
+  const amendCaiqRef = useRef(null);
 
   const { token, user } = useAdminAuthStore((s) => ({ token: s.token, user: s.user }));
   const role = user?.role || 'admin';
@@ -57,6 +60,7 @@ export default function AdminEpcScan() {
   const [editCaiq, setEditCaiq] = useState('');
   const [topError, setTopError] = useState('');
   const [topHint, setTopHint] = useState('');
+  const [amendOpen, setAmendOpen] = useState(false);
 
   const [batches, setBatches] = useState([]);
   const [selectedBatchId, setSelectedBatchId] = useState('');
@@ -72,6 +76,37 @@ export default function AdminEpcScan() {
     inputRef.current?.focus();
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search || '');
+    const batchId = String(params.get('batchId') || '').trim();
+    if (!batchId) return;
+    setSelectedBatchId(batchId);
+    setBatchOffset(0);
+  }, [location.search]);
+
+  useEffect(() => {
+    if (!amendOpen) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setAmendOpen(false);
+        inputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [amendOpen]);
+
+  useEffect(() => {
+    if (!amendOpen) return;
+    window.setTimeout(() => {
+      if (!selectedRow?.id) return;
+      const focusEl = amendNetWeightRef.current || amendCaiqRef.current;
+      focusEl?.focus?.();
+    }, 0);
+  }, [amendOpen, selectedRow?.id]);
+
   const clearScanIdleTimer = () => {
     if (scanIdleTimerRef.current) {
       window.clearTimeout(scanIdleTimerRef.current);
@@ -83,11 +118,11 @@ export default function AdminEpcScan() {
     setRows((prev) => {
       const idx = prev.findIndex((r) => String(r.id) === String(item.id));
       const nextRow = {
+        ...(idx >= 0 ? prev[idx] : {}),
         ...item,
         saving: false,
         rowError: '',
         lastSavedAt: Date.now(),
-        ...(idx >= 0 ? prev[idx] : {}),
         ...(extra || {})
       };
       if (idx >= 0) {
@@ -377,11 +412,11 @@ export default function AdminEpcScan() {
 
   const selectedRow = rows.find((r) => String(r.id) === String(selectedId)) || null;
 
-  const saveAmend = async () => {
-    if (!selectedRow?.id) return;
+  const saveAmend = async ({ focusScanInput = true } = {}) => {
+    if (!selectedRow?.id) return false;
     if (!canOverride) {
       setTopError(t('scanOverrideDenied'));
-      return;
+      return false;
     }
     setTopError('');
     setTopHint('');
@@ -395,12 +430,14 @@ export default function AdminEpcScan() {
       upsertRow(updated, { saving: false, rowError: '' });
       selectRow(updated);
       setTopHint(t('saved'));
+      return true;
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || t('saveFailed');
       upsertRow(selectedRow, { saving: false, rowError: msg });
       setTopError(msg);
+      return false;
     } finally {
-      inputRef.current?.focus();
+      if (focusScanInput) inputRef.current?.focus();
     }
   };
 
@@ -424,7 +461,7 @@ export default function AdminEpcScan() {
       {topError ? <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{topError}</div> : null}
       {topHint ? <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">{topHint}</div> : null}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_420px]">
+      <div className="grid grid-cols-1 gap-4">
         <div className="rounded-xl border border-zinc-200 bg-white p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -456,6 +493,50 @@ export default function AdminEpcScan() {
                   {t('scanSkipCaiq')}
                 </button>
               ) : null}
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                onClick={async () => {
+                  const ok = window.confirm(t('scanResetScannedConfirm'));
+                  if (!ok) return;
+                  const ids = (Array.isArray(rows) ? rows : [])
+                    .map((r) => Number(r?.id))
+                    .filter((n) => Number.isFinite(n) && n > 0);
+
+                  setTopError('');
+                  setTopHint(t('saving'));
+                  try {
+                    if (ids.length) await api.post('/epc/items/production/reset', { itemIds: ids });
+                    scannedRef.current = new Set();
+                    setRows([]);
+                    setCurrent(null);
+                    setSelectedId(null);
+                    setEditNetWeight('');
+                    setEditCaiq('');
+                    setStep('epc');
+                    setTopError('');
+                    setTopHint(t('scanResetScannedDone'));
+                    inputRef.current?.focus();
+                  } catch (e) {
+                    const msg = e?.response?.data?.message || e?.message || t('saveFailed');
+                    setTopError(msg);
+                    setTopHint('');
+                  }
+                }}
+              >
+                {t('scanResetScanned')}
+              </button>
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                onClick={() => {
+                  setTopError('');
+                  setTopHint('');
+                  setAmendOpen(true);
+                }}
+              >
+                {t('scanAmend')}
+              </button>
               <button
                 type="button"
                 className="ac-btn ac-btn-soft px-3 py-2 text-xs"
@@ -658,49 +739,115 @@ export default function AdminEpcScan() {
             />
           )}
         </div>
+      </div>
 
-        <div className="rounded-xl border border-zinc-200 bg-white p-4">
-          <div className="mb-3 text-xs font-semibold text-zinc-600">{t('scanAmend')}</div>
-          {!selectedRow ? (
-            <div className="text-xs text-zinc-500">{t('scanSelectRow')}</div>
-          ) : (
-            <div className="space-y-3">
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                <div className="text-[11px] text-zinc-500">{t('epcCode')}</div>
-                <div className="truncate font-mono text-xs text-zinc-900">{String(selectedRow.epcCode || '')}</div>
-              </div>
-
-              <div>
-                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('netWeight')}</div>
-                <input
-                  value={editNetWeight}
-                  onChange={(e) => setEditNetWeight(e.target.value)}
-                  className="ac-input"
-                  placeholder={t('netWeight')}
-                  disabled={!canOverride}
-                />
-              </div>
-
-              <div>
-                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('caiqNo')}</div>
-                <input
-                  value={editCaiq}
-                  onChange={(e) => setEditCaiq(e.target.value)}
-                  className="ac-input"
-                  placeholder={t('caiqNo')}
-                  disabled={!canOverride}
-                />
-              </div>
-
-              {!canOverride ? <div className="text-xs text-rose-700">{t('scanOverrideDenied')}</div> : null}
-
-              <button type="button" className="ac-btn ac-btn-primary w-full px-3 py-2 text-xs" onClick={() => void saveAmend()} disabled={!canOverride}>
-                {t('save')}
+      {amendOpen ? (
+        <div
+          className="ac-modal-backdrop"
+          onMouseDown={(e) => {
+            if (e.target !== e.currentTarget) return;
+            setAmendOpen(false);
+            inputRef.current?.focus();
+          }}
+        >
+          <div className="ac-modal">
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <div className="text-sm font-semibold text-zinc-900">{t('scanAmend')}</div>
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                onClick={() => {
+                  setAmendOpen(false);
+                  inputRef.current?.focus();
+                }}
+              >
+                {t('cancel')}
               </button>
             </div>
-          )}
+
+            {topError ? <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{topError}</div> : null}
+            {topHint ? <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">{topHint}</div> : null}
+
+            {!selectedRow ? (
+              <div className="text-xs text-zinc-600">{t('scanSelectRow')}</div>
+            ) : (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                  <div className="text-[11px] text-zinc-500">{t('epcCode')}</div>
+                  <div className="truncate font-mono text-xs text-zinc-900">{String(selectedRow.epcCode || '')}</div>
+                </div>
+
+                <div>
+                  <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('netWeight')}</div>
+                  <input
+                    ref={amendNetWeightRef}
+                    value={editNetWeight}
+                    onChange={(e) => setEditNetWeight(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return;
+                      e.preventDefault();
+                      amendCaiqRef.current?.focus();
+                    }}
+                    className="ac-input"
+                    placeholder={t('netWeight')}
+                    disabled={!canOverride}
+                  />
+                </div>
+
+                <div>
+                  <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('caiqNo')}</div>
+                  <input
+                    ref={amendCaiqRef}
+                    value={editCaiq}
+                    onChange={(e) => setEditCaiq(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key !== 'Enter') return;
+                      e.preventDefault();
+                      const ok = await saveAmend({ focusScanInput: false });
+                      if (ok) {
+                        setAmendOpen(false);
+                        inputRef.current?.focus();
+                      }
+                    }}
+                    className="ac-input"
+                    placeholder={t('caiqNo')}
+                    disabled={!canOverride}
+                  />
+                </div>
+
+                {!canOverride ? <div className="text-xs text-rose-700">{t('scanOverrideDenied')}</div> : null}
+
+                <div className="mt-5 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                    onClick={() => {
+                      setAmendOpen(false);
+                      inputRef.current?.focus();
+                    }}
+                  >
+                    {t('cancel')}
+                  </button>
+                  <button
+                    type="button"
+                    className="ac-btn ac-btn-primary px-3 py-2 text-xs"
+                    onClick={async () => {
+                      const ok = await saveAmend({ focusScanInput: false });
+                      if (ok) {
+                        setAmendOpen(false);
+                        inputRef.current?.focus();
+                      }
+                    }}
+                    disabled={!canOverride}
+                  >
+                    {t('save')}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }

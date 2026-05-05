@@ -4,6 +4,8 @@ import PublicRenderer from '../../PublicRenderer';
 import { useT } from '../../../i18n/useT';
 import axios from 'axios';
 import { getPublicApiBaseUrl } from '../../../utils/apiBase';
+import useAdminAuthStore from '../../../store/useAdminAuthStore';
+import { createAdminApi } from '../../../utils/adminApi';
 
 function makeId(prefix) {
   return `${prefix}-${Math.random().toString(16).slice(2)}-${Date.now()}`;
@@ -76,30 +78,12 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
   const safeLayout = useMemo(() => (Array.isArray(layout) ? layout.filter((b) => b && typeof b === 'object') : []), [layout]);
   const layoutRef = useRef(safeLayout);
 
-  const [previewCertId, setPreviewCertId] = useState('');
   const [previewEpc, setPreviewEpc] = useState('');
   const [previewData, setPreviewData] = useState(null);
   const [previewError, setPreviewError] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [devicePresetId, setDevicePresetId] = useState('fit');
-
-  const previewLinks = useMemo(() => {
-    const id = String(previewCertId || '').trim();
-    const epc = String(previewEpc || '').trim();
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const toFullUrl = (path) => {
-      if (!origin) return path;
-      try {
-        return new URL(path, origin).toString();
-      } catch {
-        return path;
-      }
-    };
-
-    const links = [];
-    if (id) links.push({ key: 'cert', label: 'Preview URL (Certificate ID)', url: toFullUrl(`/preview/cms?certId=${encodeURIComponent(id)}`) });
-    if (epc) links.push({ key: 'epc', label: 'Preview URL (EPC)', url: toFullUrl(`/preview/cms?epc=${encodeURIComponent(epc)}`) });
-    return links;
-  }, [previewCertId, previewEpc]);
+  const token = useAdminAuthStore((s) => s.token);
 
   const baseW = 390;
   const baseH = 844;
@@ -114,6 +98,43 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
   const effectivePreviewLayout = useMemo(() => {
     return Array.isArray(previewLayout) && previewLayout.length ? previewLayout : layout;
   }, [layout, previewLayout]);
+
+  useEffect(() => {
+    if (viewMode !== 'preview' && viewMode !== 'split') return;
+    if (!token) return;
+    let alive = true;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    const run = async () => {
+      try {
+        const api = createAdminApi({ token });
+        const res = await api.get('/epc/items', { params: { limit: 1, offset: 0 } });
+        const epc = res?.data?.data?.items?.[0]?.epcCode ? String(res.data.data.items[0].epcCode) : '';
+        if (!alive) return;
+        setPreviewEpc(epc);
+        if (!epc) {
+          setPreviewData(null);
+          return;
+        }
+        const base = getPublicApiBaseUrl();
+        const out = await axios.get(`${base}/resolve`, { params: { epc } });
+        if (!alive) return;
+        setPreviewData(out?.data?.data || null);
+      } catch (e) {
+        if (!alive) return;
+        const msg = e?.response?.data?.message || e?.message || 'Failed to load certificate';
+        setPreviewData(null);
+        setPreviewError(msg);
+      } finally {
+        if (!alive) return;
+        setPreviewLoading(false);
+      }
+    };
+    run();
+    return () => {
+      alive = false;
+    };
+  }, [token, viewMode]);
 
   useEffect(() => {
     layoutRef.current = safeLayout;
@@ -208,94 +229,30 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
     }));
   }, [safeLayout, t]);
 
-  const PreviewPane = ({ compact = false }) => {
+  const PreviewStage = ({ compact = false }) => {
     return (
-      <div className="overflow-hidden rounded-xl border border-zinc-200">
-        <div className={`border-b border-zinc-200 bg-zinc-50 ${compact ? 'p-2' : 'p-3'}`}>
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto] md:items-end">
-            <div>
-              <div className="text-[11px] font-semibold text-zinc-600">{t('previewCertificateId')}</div>
-              <input
-                value={previewCertId}
-                onChange={(e) => setPreviewCertId(e.target.value)}
-                placeholder="CERTIFICATE_ID"
-                className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-mono outline-none focus:border-zinc-400"
-              />
-              <div className="mt-1 text-[11px] text-zinc-500">{t('previewCertificateHint')}</div>
-              <div className="mt-3 text-[11px] font-semibold text-zinc-600">EPC</div>
-              <input
-                value={previewEpc}
-                onChange={(e) => setPreviewEpc(e.target.value)}
-                placeholder="EPC_CODE"
-                className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-mono outline-none focus:border-zinc-400"
-              />
+      <div className={`w-full overflow-auto ${compact ? 'p-2' : 'p-3'}`}>
+        <div className="mx-auto" style={{ width: baseW * scale, height: baseH * scale }}>
+          <div
+            className="relative rounded-xl border border-zinc-200 shadow-sm"
+            style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }}
+          >
+            <div className="h-full w-full overflow-hidden">
+              <PublicRenderer layout={effectivePreviewLayout} data={previewData || sampleCert()} />
             </div>
-            <button
-              type="button"
-              className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-              onClick={async () => {
-                setPreviewError(null);
-                const id = String(previewCertId || '').trim();
-                const epc = String(previewEpc || '').trim();
-                if (!id && !epc) {
-                  setPreviewData(null);
-                  return;
-                }
-                try {
-                  const base = getPublicApiBaseUrl();
-                  const url = id ? `${base}/cert/${encodeURIComponent(id)}` : `${base}/resolve`;
-                  const res = await axios.get(url, { params: id ? undefined : { epc } });
-                  setPreviewData(res?.data?.data || null);
-                } catch (e) {
-                  const msg = e?.response?.data?.message || e?.message || 'Failed to load certificate';
-                  setPreviewData(null);
-                  setPreviewError(msg);
-                }
-              }}
-            >
-              {t('load')}
-            </button>
-          </div>
-          {previewLinks.length ? (
-            <div className={`mt-3 rounded-xl border border-zinc-200 bg-white ${compact ? 'px-2 py-2' : 'px-3 py-2'}`}>
-              <div className="text-[11px] font-semibold text-zinc-600">{t('previewUrl')}</div>
-              <div className="mt-1 space-y-2">
-                {previewLinks.map((l) => (
-                  <div key={l.key} className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="text-[11px] text-zinc-500">{l.label}</div>
-                      <a href={l.url} target="_blank" rel="noreferrer" className="mt-0.5 block truncate font-mono text-xs text-brand-700 hover:underline">
-                        {l.url}
-                      </a>
-                    </div>
-                    <button
-                      type="button"
-                      className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard.writeText(l.url);
-                        } catch {
-                          void 0;
-                        }
-                      }}
-                    >
-                      {t('copy')}
-                    </button>
-                  </div>
-                ))}
+            {previewLoading ? (
+              <div className="absolute inset-0 flex items-center justify-center bg-white/60 text-xs font-semibold text-zinc-700">{t('loading')}</div>
+            ) : null}
+            {previewError ? (
+              <div className="absolute left-2 right-2 top-2 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">
+                {previewError}
               </div>
-              <div className="mt-2 text-[11px] text-zinc-500">{t('previewUrlHint')}</div>
-            </div>
-          ) : null}
-          {previewError ? <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{previewError}</div> : null}
-        </div>
-        <div className="overflow-auto bg-white">
-          <div className="mx-auto" style={{ width: devicePreset?.w || baseW, height: devicePreset?.h || baseH }}>
-            <div style={{ width: baseW * scale, height: baseH * scale }} className="mx-auto">
-              <div style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }} className="overflow-auto rounded-xl border border-zinc-200">
-                <PublicRenderer layout={effectivePreviewLayout} data={previewData || sampleCert()} />
+            ) : null}
+            {!previewLoading && !previewError && previewEpc ? (
+              <div className="absolute bottom-2 left-2 rounded-lg border border-zinc-200 bg-white/80 px-2 py-1 text-[11px] font-mono text-zinc-700">
+                {previewEpc}
               </div>
-            </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -433,7 +390,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
       </div>
 
       {viewMode === 'preview' ? (
-        <PreviewPane />
+        <PreviewStage />
       ) : viewMode === 'split' ? (
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
           <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
@@ -447,7 +404,9 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
               setSelectedId={setSelectedBlockId}
             />
           </div>
-          <PreviewPane compact />
+          <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+            <PreviewStage compact />
+          </div>
         </div>
       ) : (
         <CanvasStage
