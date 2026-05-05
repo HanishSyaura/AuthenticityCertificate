@@ -37,6 +37,7 @@ export default function CanvasStage({
     if (!setItems) return;
     const current = itemsRef.current || [];
     const next = typeof updater === 'function' ? updater(current) : updater;
+    if (Object.is(next, current)) return;
     setItems(next);
   }, [interactive, setItems]);
 
