@@ -12,6 +12,20 @@ function sortPages(list) {
   });
 }
 
+function sanitizePagesList(list) {
+  const pages = Array.isArray(list) ? list : [];
+  return pages
+    .filter((p) => p && typeof p === 'object')
+    .filter((p) => p.id != null && String(p.id).trim())
+    .map((p) => ({
+      ...p,
+      id: p.id,
+      name: String(p.name || '').trim() || `Page ${String(p.id)}`,
+      slug: String(p.slug || '').trim()
+    }))
+    .filter((p) => p.slug);
+}
+
 function safeSlugify(input) {
   return String(input || '')
     .trim()
@@ -63,7 +77,7 @@ const useCmsStore = create((set, get) => ({
     try {
       const api = createAdminApi({ token });
       const res = await api.get('/cms/pages', { params: { kind } });
-      const pages = sortPages(res?.data?.data || []);
+      const pages = sortPages(sanitizePagesList(res?.data?.data || []));
       set({ pages, loading: false });
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || 'Failed to load pages';
@@ -83,7 +97,7 @@ const useCmsStore = create((set, get) => ({
       const api = createAdminApi({ token });
       const res = await api.post('/cms/page', { name, slug: safeSlug, kind });
       const created = res?.data?.data;
-      const updated = sortPages([...(pages || []), created].filter(Boolean));
+      const updated = sortPages(sanitizePagesList([...(pages || []), created].filter(Boolean)));
       set({ pages: updated });
       return created;
     } catch (e) {
@@ -164,14 +178,14 @@ const useCmsStore = create((set, get) => ({
     const api = createAdminApi({ token });
     await api.delete(`/cms/page/${encodeURIComponent(pageId)}`);
     const pages = (get().pages || []).filter((p) => String(p.id) !== String(pageId));
-    set({ pages: sortPages(pages) });
+    set({ pages: sortPages(sanitizePagesList(pages)) });
   },
 
   reorderPages: async ({ orderedIds }) => {
     const { token } = useAdminAuthStore.getState();
     if (!token) throw new Error('Not authenticated');
 
-    const prevPages = get().pages || [];
+    const prevPages = sanitizePagesList(get().pages || []);
     const kind = 'landing';
     const ids = Array.from(new Set((orderedIds || []).map((v) => Number(v)).filter((n) => Number.isFinite(n))));
     if (!ids.length) return;

@@ -28,7 +28,7 @@ export default function CmsPagePanel({ pages, selectedPageId, onSelectPage, onCr
     <div className="ac-card p-3">
       <div className="mb-3 text-xs font-semibold text-zinc-500">{t('pages')}</div>
       <div className="space-y-1">
-        {(Array.isArray(pages) ? pages : []).map((p, idx) => (
+        {(Array.isArray(pages) ? pages : []).filter((p) => p && typeof p === 'object').map((p, idx) => (
           <div
             key={p.id}
             className={`flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm ${

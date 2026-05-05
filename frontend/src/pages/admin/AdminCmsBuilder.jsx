@@ -45,7 +45,7 @@ function shiftBlock(block, { yOffset, idPrefix }) {
 }
 
 function composeLayouts({ pages, layoutsByPageKey, language }) {
-  const ordered = Array.isArray(pages) ? pages : [];
+  const ordered = (Array.isArray(pages) ? pages : []).filter((p) => p && typeof p === 'object' && p.id != null);
   const byKey = layoutsByPageKey || {};
   const lang = language || 'en';
   let yOffset = 0;
@@ -108,7 +108,10 @@ export default function AdminCmsBuilder() {
   const saveSeqRef = useRef(0);
 
   const selectedPage = useMemo(
-    () => (Array.isArray(pages) ? pages : []).find((p) => String(p.id) === String(selectedPageId)) || null,
+    () =>
+      (Array.isArray(pages) ? pages : [])
+        .filter((p) => p && typeof p === 'object' && p.id != null)
+        .find((p) => String(p.id) === String(selectedPageId)) || null,
     [pages, selectedPageId]
   );
 
