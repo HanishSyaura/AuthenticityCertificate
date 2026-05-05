@@ -30,6 +30,26 @@ function isSkipToken(raw) {
   return s === 'SKIP' || s === 'NEXT' || s === 'NA' || s === 'N/A';
 }
 
+function normalizeScanToken(raw) {
+  return String(raw || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '');
+}
+
+function looksLikeEpcCode(raw) {
+  const s = normalizeScanToken(raw);
+  if (!s) return false;
+  if (!/[A-Z]/.test(s)) return false;
+  if (s.length < 16) return false;
+  if (!/\d{12}$/.test(s)) return false;
+  const mmyy = s.slice(-12, -8);
+  if (!/^\d{4}$/.test(mmyy)) return false;
+  const mm = Number(mmyy.slice(0, 2));
+  if (!Number.isFinite(mm) || mm < 1 || mm > 12) return false;
+  return true;
+}
+
 export default function AdminEpcScan() {
   const { t } = useT();
   const location = useLocation();
@@ -294,6 +314,10 @@ export default function AdminEpcScan() {
       }
 
       if (step === 'netWeight') {
+        if (looksLikeEpcCode(raw)) {
+          setTopError(t('scanEpcScannedButExpected', { expected: t('netWeight') }));
+          return;
+        }
         const value = stripPrefix(raw, ['NW', 'NETWEIGHT', 'NET WEIGHT']);
         if (!value || !hasAnyDigit(value)) {
           setTopError(t('scanInvalidNetWeight'));
@@ -355,6 +379,10 @@ export default function AdminEpcScan() {
           return;
         }
 
+        if (looksLikeEpcCode(raw)) {
+          setTopError(t('scanEpcScannedButExpected', { expected: t('caiqNo') }));
+          return;
+        }
         const value = stripPrefix(raw, ['CAIQ', 'CAIQNO', 'CAIQ NO', 'CAIQNUMBER', 'CAIQ NUMBER']);
         if (!value) {
           setTopError(t('scanInvalidCaiq'));
@@ -429,6 +457,16 @@ export default function AdminEpcScan() {
         netWeight: editNetWeight ? String(editNetWeight).trim() : null,
         caiqNumber: editCaiq ? String(editCaiq).trim() : null
       };
+      if (patch.netWeight && looksLikeEpcCode(patch.netWeight)) {
+        upsertRow(selectedRow, { saving: false, rowError: '' });
+        setTopError(t('scanEpcScannedButExpected', { expected: t('netWeight') }));
+        return false;
+      }
+      if (patch.caiqNumber && looksLikeEpcCode(patch.caiqNumber)) {
+        upsertRow(selectedRow, { saving: false, rowError: '' });
+        setTopError(t('scanEpcScannedButExpected', { expected: t('caiqNo') }));
+        return false;
+      }
       const updated = await patchItem(selectedRow.id, patch);
       upsertRow(updated, { saving: false, rowError: '' });
       selectRow(updated);

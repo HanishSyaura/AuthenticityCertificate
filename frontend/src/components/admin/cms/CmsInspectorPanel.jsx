@@ -1,7 +1,8 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useT } from '../../../i18n/useT';
 import useUploadsStore from '../../../store/useUploadsStore';
 import RichTextEditor from '../RichTextEditor';
+import ImageCropModal from './ImageCropModal';
 
 export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, clearSelection, templates }) {
   const { t } = useT();
@@ -9,6 +10,10 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
   const [fileKey, setFileKey] = useState(0);
+  const [cropOpen, setCropOpen] = useState(false);
+  const [cropFile, setCropFile] = useState(null);
+  const [cropBlockId, setCropBlockId] = useState(null);
+  const [cropLoading, setCropLoading] = useState(false);
   const editorRef = useRef(null);
 
   const textPlaceholders = useMemo(() => {
@@ -30,12 +35,41 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
     setLayout(next);
   };
 
+  const updateBlockContentById = useCallback(
+    (blockId, contentPatch) => {
+      if (!blockId) return;
+      const next = layout.map((b) => (b.id === blockId ? { ...b, content: { ...(b.content || {}), ...contentPatch } } : b));
+      setLayout(next);
+    },
+    [layout, setLayout]
+  );
+
   const updateSelectedContent = (contentPatch) => {
     if (!selectedBlock) return;
-    updateSelected({ content: { ...(selectedBlock.content || {}), ...contentPatch } });
+    updateBlockContentById(selectedBlock.id, contentPatch);
   };
 
   const accept = selectedBlock?.type === 'video' ? 'video/*' : selectedBlock?.type === 'image' ? 'image/*' : undefined;
+
+  const doUpload = useCallback(
+    async (file, blockId) => {
+      setUploadError(null);
+      setUploading(true);
+      try {
+        const created = await uploadMedia({ file });
+        if (created?.url) updateBlockContentById(blockId, { url: created.url });
+        setFileKey((k) => k + 1);
+        return created;
+      } catch (err) {
+        const msg = err?.response?.data?.message || err?.message || 'Upload failed';
+        setUploadError(msg);
+        throw new Error(msg);
+      } finally {
+        setUploading(false);
+      }
+    },
+    [updateBlockContentById, uploadMedia]
+  );
 
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-3">
@@ -236,22 +270,49 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    setUploadError(null);
-                    setUploading(true);
-                    try {
-                      const created = await uploadMedia({ file });
-                      if (created?.url) updateSelectedContent({ url: created.url });
-                      setFileKey((k) => k + 1);
-                    } catch (err) {
-                      const msg = err?.response?.data?.message || err?.message || 'Upload failed';
-                      setUploadError(msg);
-                    } finally {
-                      setUploading(false);
+                    setFileKey((k) => k + 1);
+                    if (selectedBlock.type === 'image') {
+                      setCropFile(file);
+                      setCropBlockId(selectedBlock.id);
+                      setCropOpen(true);
+                      return;
                     }
+                    await doUpload(file, selectedBlock.id);
                   }}
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
                 {uploadError ? <div className="mt-2 text-xs text-rose-700">{uploadError}</div> : null}
+                {selectedBlock.type === 'image' && String(selectedBlock.content?.url || '').trim() ? (
+                  <button
+                    type="button"
+                    disabled={uploading || cropLoading}
+                    onClick={async () => {
+                      const rawUrl = String(selectedBlock.content?.url || '').trim();
+                      if (!rawUrl) return;
+                      setUploadError(null);
+                      setCropLoading(true);
+                      try {
+                        const abs = new URL(rawUrl, window.location.origin).toString();
+                        const res = await fetch(abs, { credentials: 'include' });
+                        if (!res.ok) throw new Error(`Failed to load image (${res.status})`);
+                        const blob = await res.blob();
+                        const name = decodeURIComponent(abs.split('/').pop() || 'image');
+                        const f = new File([blob], name, { type: blob.type || 'image/jpeg', lastModified: Date.now() });
+                        setCropFile(f);
+                        setCropBlockId(selectedBlock.id);
+                        setCropOpen(true);
+                      } catch (err) {
+                        const msg = err?.message || 'Failed to load image';
+                        setUploadError(msg);
+                      } finally {
+                        setCropLoading(false);
+                      }
+                    }}
+                    className="mt-2 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
+                  >
+                    {cropLoading ? t('loading') : t('cropImage')}
+                  </button>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -281,6 +342,29 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
           </div>
         </div>
       )}
+      <ImageCropModal
+        open={cropOpen}
+        file={cropFile}
+        onClose={() => {
+          setCropOpen(false);
+          setCropFile(null);
+          setCropBlockId(null);
+        }}
+        onUseOriginal={async (file) => {
+          if (!cropBlockId) return;
+          await doUpload(file, cropBlockId);
+          setCropOpen(false);
+          setCropFile(null);
+          setCropBlockId(null);
+        }}
+        onConfirm={async (file) => {
+          if (!cropBlockId) return;
+          await doUpload(file, cropBlockId);
+          setCropOpen(false);
+          setCropFile(null);
+          setCropBlockId(null);
+        }}
+      />
     </div>
   );
 }

@@ -104,6 +104,30 @@ function parseSkuCodeFromEpcCode({ epcCode, corpPrefix }) {
   return skuCode.toUpperCase();
 }
 
+function looksLikeEpcCodeFormat(raw) {
+  const code = String(raw || '').trim().toUpperCase();
+  if (!code) return false;
+  if (!/^[A-Z0-9]+$/.test(code)) return false;
+  const padLen = getRunningPadLen();
+  const skuLen = getSkuLen();
+  const prefixes = getAllowedCorpPrefixes();
+  for (const p of prefixes) {
+    const prefix = String(p || '').trim().toUpperCase();
+    if (!prefix) continue;
+    const expectedLen = prefix.length + skuLen + 4 + padLen;
+    if (code.length !== expectedLen) continue;
+    if (!code.startsWith(prefix)) continue;
+    try {
+      parseSkuCodeFromEpcCode({ epcCode: code, corpPrefix: prefix });
+      parseRunningNoFromEpcCode({ epcCode: code, corpPrefix: prefix });
+      return true;
+    } catch {
+      continue;
+    }
+  }
+  return false;
+}
+
 function chunkArray(arr, size) {
   const out = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
@@ -653,6 +677,11 @@ async function updateItemProduction({ organizationId, itemId, patch, actor }) {
   const data = {};
   if (Object.prototype.hasOwnProperty.call(patch || {}, 'netWeight')) {
     const incoming = normalizeMaybeString(patch.netWeight);
+    if (incoming != null && looksLikeEpcCodeFormat(incoming)) {
+      const err = new Error('Scanned value looks like an EPC code. Please scan Net Weight instead of EPC.');
+      err.status = 400;
+      throw err;
+    }
     const prev = normalizeMaybeString(existing.netWeight);
     if (incoming == null) {
       if (prev != null && !overrideAllowed) {
@@ -674,6 +703,11 @@ async function updateItemProduction({ organizationId, itemId, patch, actor }) {
 
   if (Object.prototype.hasOwnProperty.call(patch || {}, 'caiqNumber')) {
     const incoming = normalizeMaybeString(patch.caiqNumber);
+    if (incoming != null && looksLikeEpcCodeFormat(incoming)) {
+      const err = new Error('Scanned value looks like an EPC code. Please scan CAIQ instead of EPC.');
+      err.status = 400;
+      throw err;
+    }
     const prev = normalizeMaybeString(existing.caiqNumber);
     if (incoming == null) {
       if (prev != null && !overrideAllowed) {

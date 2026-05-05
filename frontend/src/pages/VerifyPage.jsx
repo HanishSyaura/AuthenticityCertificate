@@ -276,7 +276,7 @@ const VerifyPage = () => {
           ) : null}
         </div>
 
-        <p className="mt-6 text-center text-[11px] text-zinc-500">© 2026 Product Authenticity Verification System</p>
+        <p className="mt-6 text-center text-xs text-zinc-500 sm:text-sm">© 2026 Product Authenticity Verification System</p>
       </div>
     </div>
   );
