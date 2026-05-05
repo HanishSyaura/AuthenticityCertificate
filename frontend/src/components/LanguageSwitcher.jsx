@@ -3,7 +3,12 @@ import useI18nStore from '../store/useI18nStore';
 
 export default function LanguageSwitcher({ size = 'sm' }) {
   const { lang, setLang } = useI18nStore((s) => ({ lang: s.lang, setLang: s.setLang }));
-  const cls = size === 'xs' ? 'min-h-[36px] px-3 py-2 text-xs sm:min-h-0 sm:px-2 sm:py-1 sm:text-[11px]' : 'text-xs px-3 py-2';
+  const cls =
+    size === 'xs'
+      ? 'min-h-[36px] px-3 py-2 text-xs sm:min-h-0 sm:px-2 sm:py-1 sm:text-[11px]'
+      : size === 'md'
+        ? 'min-h-[40px] px-3.5 py-2.5 text-sm sm:min-h-0 sm:px-3 sm:py-2 sm:text-sm'
+        : 'min-h-[38px] px-3 py-2 text-sm';
 
   return (
     <div className="inline-flex flex-nowrap whitespace-nowrap rounded-xl border border-zinc-200/80 bg-white p-1 shadow-sm shadow-zinc-900/5">

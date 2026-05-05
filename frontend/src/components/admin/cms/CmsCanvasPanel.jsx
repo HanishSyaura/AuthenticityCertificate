@@ -209,7 +209,12 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
       ...(b || {}),
       render: (it) => {
         if (it.type === 'container') {
+          const fill = String(it.content?.backgroundFill || 'solid');
           const bg = String(it.content?.backgroundColor || '#ffffff');
+          const from = String(it.content?.gradientFrom || bg || '#ffffff');
+          const to = String(it.content?.gradientTo || '#ffffff');
+          const angleRaw = Number(it.content?.gradientAngle ?? 180);
+          const angle = Number.isFinite(angleRaw) ? Math.max(0, Math.min(360, angleRaw)) : 180;
           const borderColor = String(it.content?.borderColor || '#e4e4e7');
           const borderWidth = Number(it.content?.borderWidth ?? 1);
           const radius = Number(it.content?.borderRadius ?? 12);
@@ -219,7 +224,8 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
               <div
                 className="flex h-full w-full items-center justify-center"
                 style={{
-                  backgroundColor: bg,
+                  backgroundColor: fill === 'gradient' ? undefined : bg,
+                  backgroundImage: fill === 'gradient' ? `linear-gradient(${angle}deg, ${from}, ${to})` : undefined,
                   borderColor,
                   borderWidth: Number.isFinite(borderWidth) ? borderWidth : 1,
                   borderStyle: 'solid',

@@ -169,9 +169,9 @@ const VerifyLoadingScreen = ({ meta, mode = 'auto' }) => {
               </motion.div>
             </motion.div>
             <div className="mt-3 text-center">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 sm:text-sm">{t('verification')}</div>
-              <div className="mt-1 text-xl font-semibold tracking-tight text-zinc-900 sm:text-2xl">{t('verifying')}</div>
-              <div className="mt-2 text-base text-zinc-700 sm:text-lg">
+              <div className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-500 sm:text-base">{t('verification')}</div>
+              <div className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900 sm:text-3xl">{t('verifying')}</div>
+              <div className="mt-2 text-lg text-zinc-700 sm:text-xl">
                 <span className="ac-verify-dots" aria-hidden="true">
                   <span />
                   <span />
@@ -193,7 +193,7 @@ const VerifyLoadingScreen = ({ meta, mode = 'auto' }) => {
               </div>
               {metaText ? (
                 <motion.div
-                  className="mt-3 font-mono text-xs text-zinc-600 sm:text-sm"
+                  className="mt-3 font-mono text-sm text-zinc-600 sm:text-base"
                   initial={reduceMotion ? false : { opacity: 0, y: 6 }}
                   animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
                   transition={reduceMotion ? undefined : { duration: 0.25, delay: 0.12, ease: 'easeOut' }}
@@ -204,7 +204,7 @@ const VerifyLoadingScreen = ({ meta, mode = 'auto' }) => {
             </div>
 
             <div className="mt-5">
-              <div className="flex items-center justify-between text-xs font-semibold text-zinc-500 sm:text-sm">
+              <div className="flex items-center justify-between text-sm font-semibold text-zinc-500 sm:text-base">
                 <span>{t('verifyChecking')}</span>
                 <span>{progress}%</span>
               </div>
@@ -216,12 +216,12 @@ const VerifyLoadingScreen = ({ meta, mode = 'auto' }) => {
                   transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 120, damping: 20, mass: 0.6 }}
                 />
               </div>
-              <div className="mt-3 text-center text-xs text-zinc-500 sm:text-sm">{t('verifyKeepOpen')}</div>
+              <div className="mt-3 text-center text-sm text-zinc-500 sm:text-base">{t('verifyKeepOpen')}</div>
             </div>
           </div>
         </motion.div>
 
-        <div className="mt-6 text-center text-xs text-zinc-500 sm:text-sm">© 2026 Product Authenticity Verification System</div>
+        <div className="mt-6 text-center text-sm text-zinc-500 sm:text-base">{t('publicFooter')}</div>
       </div>
     </motion.div>
   );

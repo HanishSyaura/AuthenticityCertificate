@@ -428,7 +428,12 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
     switch (block.type) {
       case 'container':
         {
+          const fill = String(block.content?.backgroundFill || 'solid');
           const bg = String(block.content?.backgroundColor || '#ffffff');
+          const from = String(block.content?.gradientFrom || bg || '#ffffff');
+          const to = String(block.content?.gradientTo || '#ffffff');
+          const angleRaw = Number(block.content?.gradientAngle ?? 180);
+          const angle = Number.isFinite(angleRaw) ? Math.max(0, Math.min(360, angleRaw)) : 180;
           const borderColor = String(block.content?.borderColor || '#e4e4e7');
           const borderWidth = Number(block.content?.borderWidth ?? 1);
           const radius = Number(block.content?.borderRadius ?? 12);
@@ -438,7 +443,8 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
               key={block.id}
               style={{
                 ...style,
-                backgroundColor: bg,
+                backgroundColor: fill === 'gradient' ? undefined : bg,
+                backgroundImage: fill === 'gradient' ? `linear-gradient(${angle}deg, ${from}, ${to})` : undefined,
                 borderColor,
                 borderWidth: Number.isFinite(borderWidth) ? borderWidth : 1,
                 borderStyle: 'solid',
@@ -596,10 +602,10 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                                 String(it.labelHtml || '').trim() ? sanitizeLimitedHtml(it.labelHtml) : escapeHtml(String(it.label || ''))
                               )}${escapeHtml(': ')}`
                           : '';
-                      if (!String(val || '').trim() && ph) {
-                        if (source === 'static' || source === 'title') {
-                          val = String(ph?.staticValue || '');
-                        } else if (source === 'product') {
+                      if (ph && (source === 'static' || source === 'title')) {
+                        val = String(ph?.staticValue || '');
+                      } else if (!String(val || '').trim() && ph) {
+                        if (source === 'product') {
                           const bindPath = String(ph?.bindPath || '').trim();
                           if (bindPath) {
                             effectivePath = bindPath;

@@ -145,25 +145,99 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
 
           {selectedBlock.type === 'container' ? (
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-medium text-zinc-700">{t('backgroundColor')}</label>
-                  <input
-                    type="color"
-                    value={String(selectedBlock.content?.backgroundColor || '#ffffff')}
-                    onChange={(e) => updateSelectedContent({ backgroundColor: e.target.value })}
-                    className="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-zinc-700">{t('borderColor')}</label>
-                  <input
-                    type="color"
-                    value={String(selectedBlock.content?.borderColor || '#e4e4e7')}
-                    onChange={(e) => updateSelectedContent({ borderColor: e.target.value })}
-                    className="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-2"
-                  />
-                </div>
+              {(() => {
+                const fill = String(selectedBlock.content?.backgroundFill || 'solid');
+                const bg = String(selectedBlock.content?.backgroundColor || '#ffffff');
+                const from = String(selectedBlock.content?.gradientFrom || bg || '#ffffff');
+                const to = String(selectedBlock.content?.gradientTo || '#ffffff');
+                const angle = Number(selectedBlock.content?.gradientAngle ?? 180);
+                const nextAngle = Number.isFinite(angle) ? Math.max(0, Math.min(360, angle)) : 180;
+                return (
+                  <div className="space-y-2">
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-700">{t('backgroundFill')}</label>
+                      <select
+                        value={fill}
+                        onChange={(e) => {
+                          const v = String(e.target.value || 'solid');
+                          if (v === 'gradient') {
+                            updateSelectedContent({
+                              backgroundFill: 'gradient',
+                              gradientFrom: from,
+                              gradientTo: to,
+                              gradientAngle: nextAngle
+                            });
+                            return;
+                          }
+                          updateSelectedContent({ backgroundFill: 'solid', backgroundColor: bg || from || '#ffffff' });
+                        }}
+                        className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                      >
+                        <option value="solid">{t('solid')}</option>
+                        <option value="gradient">{t('gradient')}</option>
+                      </select>
+                    </div>
+
+                    {fill === 'gradient' ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-zinc-700">{t('gradientFrom')}</label>
+                          <input
+                            type="color"
+                            value={from}
+                            onChange={(e) => updateSelectedContent({ gradientFrom: e.target.value })}
+                            className="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-2"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-zinc-700">{t('gradientTo')}</label>
+                          <input
+                            type="color"
+                            value={to}
+                            onChange={(e) => updateSelectedContent({ gradientTo: e.target.value })}
+                            className="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-2"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-700">{t('backgroundColor')}</label>
+                        <input
+                          type="color"
+                          value={bg}
+                          onChange={(e) => updateSelectedContent({ backgroundColor: e.target.value })}
+                          className="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-2"
+                        />
+                      </div>
+                    )}
+
+                    {fill === 'gradient' ? (
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-700">{t('gradientAngle')}</label>
+                        <input
+                          type="range"
+                          min={0}
+                          max={360}
+                          step={1}
+                          value={nextAngle}
+                          onChange={(e) => updateSelectedContent({ gradientAngle: Number(e.target.value) })}
+                          className="mt-2 w-full"
+                        />
+                        <div className="mt-1 text-xs text-zinc-500">{nextAngle}°</div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })()}
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-700">{t('borderColor')}</label>
+                <input
+                  type="color"
+                  value={String(selectedBlock.content?.borderColor || '#e4e4e7')}
+                  onChange={(e) => updateSelectedContent({ borderColor: e.target.value })}
+                  className="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-2"
+                />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>

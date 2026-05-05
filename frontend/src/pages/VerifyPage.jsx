@@ -59,13 +59,13 @@ const VerifyPage = () => {
     if (epc || nfcUid) {
       setLoadingMode('resolve');
       if (epc) setLoadingMeta({ label: t('epc'), value: epc });
-      else setLoadingMeta({ label: 'NFC UID', value: nfcUid });
+      else setLoadingMeta({ label: t('nfcUid'), value: nfcUid });
       resolveCertificate({ epc: epc || null, nfcUid: nfcUid || null }, { lang });
     }
   }, [id, lang, location.search, resolveCertificate, t, verifyCertificate]);
 
   useEffect(() => {
-    const minDurationMs = 4000;
+    const minDurationMs = 2000;
     const minHideDelayMs = 180;
     if (loaderHideTimerRef.current) {
       clearTimeout(loaderHideTimerRef.current);
@@ -109,7 +109,7 @@ const VerifyPage = () => {
     const looksLikeHex = /^[0-9A-F]+$/.test(value);
     if (looksLikeHex && value.length >= 8 && value.length <= 32) {
       setLoadingMode('resolve');
-      setLoadingMeta({ label: 'NFC UID', value });
+      setLoadingMeta({ label: t('nfcUid'), value });
       resolveCertificate({ epc: null, nfcUid: value }, { lang });
       return;
     }
@@ -123,7 +123,7 @@ const VerifyPage = () => {
     return (
       <div className="min-h-[100dvh]">
         <div className="fixed right-3 top-3 z-[60]">
-          <LanguageSwitcher size="xs" />
+          <LanguageSwitcher size="md" />
         </div>
         <VerifyLoadingScreen meta={loadingMeta} mode={loadingMode} />
       </div>
@@ -147,7 +147,7 @@ const VerifyPage = () => {
           }}
         >
           <div className="fixed right-3 top-3 z-50">
-            <LanguageSwitcher size="xs" />
+            <LanguageSwitcher size="md" />
           </div>
           <div className="w-full">
             <PublicRenderer layout={certificate.layout} data={certificate} responsive responsiveMode="viewport" baseWidth={390} />
@@ -175,7 +175,7 @@ const VerifyPage = () => {
               <div className="text-sm font-semibold">{t('verification')}</div>
               <div className="rounded-full bg-white/70 px-2 py-1 text-xs font-semibold">{statusUpper || '-'}</div>
             </div>
-            <LanguageSwitcher size="xs" />
+            <LanguageSwitcher size="md" />
           </div>
 
           {hasTemplate ? (
@@ -246,7 +246,7 @@ const VerifyPage = () => {
     <div className="flex min-h-[100dvh] flex-col items-center justify-center px-4 py-8">
       <div className="mx-auto w-full max-w-md">
         <div className="mb-3 flex justify-end">
-          <LanguageSwitcher size="xs" />
+          <LanguageSwitcher size="md" />
         </div>
         <div className="ac-card p-6 text-center">
           <IconShieldCheck className="mx-auto mb-4 h-12 w-12 text-zinc-900" />
@@ -256,7 +256,7 @@ const VerifyPage = () => {
           <form onSubmit={handleManualVerify} className="mt-5 space-y-3">
             <input
               type="text"
-              placeholder="CERTDDMMYY001 / EPC"
+              placeholder={t('verifyInputPlaceholder')}
               value={certId}
               onChange={(e) => setCertId(e.target.value)}
               className="ac-input text-center font-mono uppercase"
@@ -276,7 +276,7 @@ const VerifyPage = () => {
           ) : null}
         </div>
 
-        <p className="mt-6 text-center text-xs text-zinc-500 sm:text-sm">© 2026 Product Authenticity Verification System</p>
+        <p className="mt-6 text-center text-sm text-zinc-500 sm:text-base">{t('publicFooter')}</p>
       </div>
     </div>
   );
