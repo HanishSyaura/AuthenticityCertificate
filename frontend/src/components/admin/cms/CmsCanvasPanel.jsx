@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import CanvasStage from '../CanvasStage';
 import PublicRenderer from '../../PublicRenderer';
 import { useT } from '../../../i18n/useT';
@@ -72,6 +72,57 @@ const DEVICE_PRESETS = [
   { id: 'ipad-pro-11', label: 'iPad Pro 11"', kind: 'phone', w: 834, h: 1194 },
   { id: 'ipad-pro-12-9', label: 'iPad Pro 12.9"', kind: 'phone', w: 1024, h: 1366 }
 ];
+
+function PreviewStage({
+  compact = false,
+  baseW,
+  baseH,
+  scale,
+  effectivePreviewLayout,
+  previewData,
+  previewLoading,
+  previewError,
+  previewEpc,
+  t
+}) {
+  const scrollRef = useRef(null);
+  const lastScrollTopRef = useRef(0);
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const maxScroll = Math.max(0, (el.scrollHeight || 0) - (el.clientHeight || 0));
+    const nextTop = Math.max(0, Math.min(maxScroll, Number(lastScrollTopRef.current) || 0));
+    if (Math.abs((el.scrollTop || 0) - nextTop) > 1) el.scrollTop = nextTop;
+  }, [effectivePreviewLayout, previewData, scale]);
+
+  return (
+    <div className={`w-full overflow-auto ${compact ? 'p-2' : 'p-3'}`}>
+      <div className="mx-auto" style={{ width: baseW * scale, height: baseH * scale }}>
+        <div className="relative rounded-xl border border-zinc-200 shadow-sm" style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+          <div
+            ref={scrollRef}
+            onScroll={(e) => {
+              lastScrollTopRef.current = e.currentTarget.scrollTop || 0;
+            }}
+            className="h-full w-full overflow-x-hidden overflow-y-auto"
+          >
+            <PublicRenderer layout={effectivePreviewLayout} data={previewData || sampleCert()} />
+          </div>
+          {previewLoading ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-white/60 text-xs font-semibold text-zinc-700">{t('loading')}</div>
+          ) : null}
+          {previewError ? (
+            <div className="absolute left-2 right-2 top-2 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">{previewError}</div>
+          ) : null}
+          {!previewLoading && !previewError && previewEpc ? (
+            <div className="absolute bottom-2 left-2 rounded-lg border border-zinc-200 bg-white/80 px-2 py-1 text-[11px] font-mono text-zinc-700">{previewEpc}</div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPage, layout, previewLayout, setLayout, selectedBlockId, setSelectedBlockId }) {
   const { t } = useT();
@@ -228,36 +279,6 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
     }));
   }, [safeLayout, t]);
 
-  const PreviewStage = ({ compact = false }) => {
-    return (
-      <div className={`w-full overflow-auto ${compact ? 'p-2' : 'p-3'}`}>
-        <div className="mx-auto" style={{ width: baseW * scale, height: baseH * scale }}>
-          <div
-            className="relative rounded-xl border border-zinc-200 shadow-sm"
-            style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }}
-          >
-            <div className="h-full w-full overflow-x-hidden overflow-y-auto">
-              <PublicRenderer layout={effectivePreviewLayout} data={previewData || sampleCert()} />
-            </div>
-            {previewLoading ? (
-              <div className="absolute inset-0 flex items-center justify-center bg-white/60 text-xs font-semibold text-zinc-700">{t('loading')}</div>
-            ) : null}
-            {previewError ? (
-              <div className="absolute left-2 right-2 top-2 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">
-                {previewError}
-              </div>
-            ) : null}
-            {!previewLoading && !previewError && previewEpc ? (
-              <div className="absolute bottom-2 left-2 rounded-lg border border-zinc-200 bg-white/80 px-2 py-1 text-[11px] font-mono text-zinc-700">
-                {previewEpc}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-3">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -389,7 +410,17 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
       </div>
 
       {viewMode === 'preview' ? (
-        <PreviewStage />
+        <PreviewStage
+          baseW={baseW}
+          baseH={baseH}
+          scale={scale}
+          effectivePreviewLayout={effectivePreviewLayout}
+          previewData={previewData}
+          previewLoading={previewLoading}
+          previewError={previewError}
+          previewEpc={previewEpc}
+          t={t}
+        />
       ) : viewMode === 'split' ? (
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
           <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
@@ -404,7 +435,18 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
             />
           </div>
           <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
-            <PreviewStage compact />
+            <PreviewStage
+              compact
+              baseW={baseW}
+              baseH={baseH}
+              scale={scale}
+              effectivePreviewLayout={effectivePreviewLayout}
+              previewData={previewData}
+              previewLoading={previewLoading}
+              previewError={previewError}
+              previewEpc={previewEpc}
+              t={t}
+            />
           </div>
         </div>
       ) : (
