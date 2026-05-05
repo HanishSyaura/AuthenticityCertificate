@@ -4,6 +4,8 @@ import useAdminAuthStore from '../../store/useAdminAuthStore';
 import useAccessStore from '../../store/useAccessStore';
 import { useT } from '../../i18n/useT';
 import { hasPermission } from '../../utils/permissions';
+import DataTable from '../../components/ui/DataTable';
+import RowActionsMenu from '../../components/ui/RowActionsMenu';
 
 function formatDate(input) {
   if (!input) return '';
@@ -142,108 +144,125 @@ export default function AdminUsers() {
 
       {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
 
-      <div className="rounded-xl border border-zinc-200 bg-white">
-        <div className="overflow-x-auto">
-          <div className="min-w-[820px]">
-            <div className="grid grid-cols-[2fr_1fr_1fr_120px] gap-4 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-600">
-              <div>{t('user')}</div>
-              <div>{t('role')}</div>
-              <div>{t('status')}</div>
-              <div className="text-right">{t('actions')}</div>
-            </div>
-            {loading ? (
-              <div className="p-4 text-sm text-zinc-600">{t('loading')}</div>
-            ) : filtered.length === 0 ? (
-              <div className="p-8 text-center">
-                <div className="text-sm font-semibold text-zinc-900">{t('noUsers')}</div>
-                <div className="mt-1 text-xs text-zinc-600">{t('noUsersHint')}</div>
+      <DataTable
+        minWidth={820}
+        rows={filtered}
+        rowKey={(u) => u.id}
+        loading={loading}
+        loadingContent={t('loading')}
+        emptyContent={
+          <div>
+            <div className="text-sm font-semibold text-zinc-900">{t('noUsers')}</div>
+            <div className="mt-1 text-xs text-zinc-600">{t('noUsersHint')}</div>
+          </div>
+        }
+        columns={[
+          {
+            id: 'user',
+            header: t('user'),
+            cell: (u) => (
+              <div>
+                <div className="font-medium text-zinc-900">{u.name}</div>
+                <div className="mt-0.5 text-[11px] text-zinc-500">{u.email}</div>
               </div>
-            ) : (
-              filtered.map((u) => {
-                const disabled = String(u.email) === String(authUser?.email);
-                return (
-                  <div
-                    key={u.id}
-                    className="grid grid-cols-[2fr_1fr_1fr_120px] gap-4 border-b border-zinc-100 px-4 py-3 text-sm text-zinc-800 last:border-b-0"
+            )
+          },
+          {
+            id: 'role',
+            header: t('role'),
+            cell: (u) => {
+              const disabled = String(u.email) === String(authUser?.email);
+              return (
+                <div>
+                  <select
+                    value={u.role}
+                    disabled={disabled}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={async (e) => {
+                      const role = e.target.value;
+                      await updateUserRole({ id: u.id, role });
+                    }}
+                    className="w-full rounded-xl border border-zinc-200 bg-white px-2 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400 disabled:bg-zinc-50 disabled:text-zinc-500"
                   >
-                    <div>
-                      <div className="font-medium text-zinc-900">{u.name}</div>
-                      <div className="mt-0.5 text-[11px] text-zinc-500">{u.email}</div>
-                    </div>
-                    <div>
-                      <select
-                        value={u.role}
-                        disabled={disabled}
-                        onChange={async (e) => {
-                          const role = e.target.value;
-                          await updateUserRole({ id: u.id, role });
-                        }}
-                        className="w-full rounded-xl border border-zinc-200 bg-white px-2 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400 disabled:bg-zinc-50 disabled:text-zinc-500"
-                      >
-                        <option value="super_admin">super_admin</option>
-                        <option value="admin">admin</option>
-                        <option value="operator">operator</option>
-                      </select>
-                      {canManageAccess ? (
-                        <button
-                          type="button"
-                          className="mt-1 text-[11px] text-zinc-600 underline disabled:text-zinc-400"
-                          disabled={disabled}
-                          onClick={async () => {
-                            if (roles.length === 0) await fetchRoles();
-                            setRolesUser(u);
-                            const selected = (roles || [])
-                              .filter((r) => (u.roles || []).includes(r.name) || String(u.role) === String(r.name))
-                              .map((r) => r.id);
-                            setSelectedUserRoleIds(Array.from(new Set(selected)));
-                            setShowUserRoles(true);
-                          }}
-                        >
-                          Edit access
-                        </button>
-                      ) : null}
-                      {Array.isArray(u.roles) && u.roles.length > 0 ? (
-                        <div className="mt-1 text-[11px] text-zinc-500">{u.roles.join(', ')}</div>
-                      ) : null}
-                    </div>
-                    <div className="text-xs text-zinc-700">
-                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">{t('active')}</span>
-                      <div className="mt-1 text-[11px] text-zinc-500">{formatDate(u.updatedAt || u.createdAt)}</div>
-                    </div>
-                    <div className="flex justify-end">
-                  <div className="flex items-center gap-2">
+                    <option value="super_admin">super_admin</option>
+                    <option value="admin">admin</option>
+                    <option value="operator">operator</option>
+                  </select>
+                  {canManageAccess ? (
                     <button
                       type="button"
-                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                      className="mt-1 text-[11px] text-zinc-600 underline disabled:text-zinc-400"
                       disabled={disabled}
-                      onClick={() => {
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (roles.length === 0) await fetchRoles();
+                        setRolesUser(u);
+                        const selected = (roles || [])
+                          .filter((r) => (u.roles || []).includes(r.name) || String(u.role) === String(r.name))
+                          .map((r) => r.id);
+                        setSelectedUserRoleIds(Array.from(new Set(selected)));
+                        setShowUserRoles(true);
+                      }}
+                    >
+                      Edit access
+                    </button>
+                  ) : null}
+                  {Array.isArray(u.roles) && u.roles.length > 0 ? (
+                    <div className="mt-1 text-[11px] text-zinc-500">{u.roles.join(', ')}</div>
+                  ) : null}
+                </div>
+              );
+            }
+          },
+          {
+            id: 'status',
+            header: t('status'),
+            cell: (u) => (
+              <div className="text-xs text-zinc-700">
+                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">{t('active')}</span>
+                <div className="mt-1 text-[11px] text-zinc-500">{formatDate(u.updatedAt || u.createdAt)}</div>
+              </div>
+            )
+          },
+          {
+            id: 'actions',
+            header: t('actions'),
+            align: 'right',
+            cell: (u) => {
+              const disabled = String(u.email) === String(authUser?.email);
+              return (
+                <RowActionsMenu
+                  ariaLabel={t('actions')}
+                  items={[
+                    {
+                      key: 'reset',
+                      label: t('resetPassword'),
+                      disabled,
+                      onSelect: () => {
                         setResetUser(u);
                         setResetPassword('');
                         setShowReset(true);
-                      }}
-                    >
-                      {t('resetPassword')}
-                    </button>
-                    <button
-                      type="button"
-                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                      disabled={disabled}
-                      onClick={async () => {
+                      }
+                    },
+                    {
+                      key: 'delete',
+                      label: t('delete'),
+                      tone: 'danger',
+                      disabled,
+                      onSelect: async () => {
                         if (!window.confirm(t('confirmDeleteUser'))) return;
                         await deleteUser({ id: u.id });
-                      }}
-                    >
-                      {t('delete')}
-                    </button>
-                  </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      </div>
+                      }
+                    }
+                  ]}
+                />
+              );
+            },
+            headerClassName: 'pr-3',
+            className: 'pr-3'
+          }
+        ]}
+      />
 
       {showCreate ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

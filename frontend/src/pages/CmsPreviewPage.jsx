@@ -7,7 +7,7 @@ import { getPublicApiBaseUrl } from '../utils/apiBase';
 function sampleCertificateLayout() {
   return [
     { id: 't1', type: 'text', x: 24, y: 24, w: 342, h: 40, content: { text: 'CERTIFICATE' } },
-    { id: 't2', type: 'text', x: 24, y: 72, w: 342, h: 52, content: { text: 'Sample preview.\nAppend ?certId=BN-... or ?epc=... to the URL to load real data.' } },
+    { id: 't2', type: 'text', x: 24, y: 72, w: 342, h: 52, content: { text: 'Sample preview.\nAppend ?certId=CERT... (or BN-...) or ?epc=... to the URL to load real data.' } },
     { id: 'img1', type: 'image', x: 24, y: 150, w: 342, h: 220, content: { url: '' } },
     { id: 't3', type: 'text', x: 24, y: 388, w: 342, h: 120, content: { text: 'Certificate ID: CERTIFICATE_ID\nProduct: PRODUCT_NAME\nBatch: BATCH_NO' } }
   ];

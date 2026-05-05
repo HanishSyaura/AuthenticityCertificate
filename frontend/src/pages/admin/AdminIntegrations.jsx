@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import useIntegrationsStore from '../../store/useIntegrationsStore';
 import { useT } from '../../i18n/useT';
+import DataTable from '../../components/ui/DataTable';
+import RowActionsMenu from '../../components/ui/RowActionsMenu';
 
 function formatDate(input) {
   if (!input) return '';
@@ -107,51 +109,51 @@ export default function AdminIntegrations() {
             ) : null}
           </div>
 
-          <div className="overflow-x-auto">
-            <div className="min-w-[760px]">
-              <div className="ac-table-head grid grid-cols-[1.2fr_1fr_120px_180px_200px] gap-4 border-t border-zinc-200/70">
-                <div>{t('name')}</div>
-                <div>{t('apiKey')}</div>
-                <div>{t('rateLimitPerMin')}</div>
-                <div>{t('created')}</div>
-                <div className="text-right">{t('actions')}</div>
-              </div>
-
-              {apiKeys.length === 0 ? (
-                <div className="p-4 text-xs text-zinc-600">{t('noApiKeys')}</div>
-              ) : (
-                apiKeys.map((k) => (
-                  <div key={k.id} className="ac-table-row grid grid-cols-[1.2fr_1fr_120px_180px_200px] gap-4">
-                    <div className="text-xs text-zinc-800">{k.name}</div>
-                    <div className="truncate font-mono text-[11px] text-zinc-900">{k.key}</div>
-                    <div className="text-xs text-zinc-700">{k.rateLimitPerMin}</div>
-                    <div className="text-[11px] text-zinc-500">{formatDate(k.createdAt)}</div>
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                        onClick={async () => {
-                          await navigator.clipboard.writeText(String(k.key));
-                        }}
-                      >
-                        {t('copy')}
-                      </button>
-                      <button
-                        type="button"
-                        className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                        disabled={Boolean(k.revokedAt)}
-                        onClick={async () => {
-                          if (!window.confirm(t('confirmRevokeApiKey'))) return;
-                          await revokeApiKey({ id: k.id });
-                        }}
-                      >
-                        {k.revokedAt ? t('revoked') : t('revoke')}
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+          <div className="px-4 pb-4">
+            <DataTable
+              containerClassName="rounded-xl border border-zinc-200/80 shadow-none"
+              minWidth={760}
+              rows={apiKeys}
+              rowKey={(k) => k.id}
+              emptyContent={t('noApiKeys')}
+              columns={[
+                { id: 'name', header: t('name'), cell: (k) => <span className="text-xs text-zinc-800">{k.name}</span> },
+                { id: 'key', header: t('apiKey'), cell: (k) => <span className="block max-w-[360px] truncate font-mono text-[11px] text-zinc-900">{k.key}</span> },
+                { id: 'rate', header: t('rateLimitPerMin'), cell: (k) => <span className="text-xs text-zinc-700">{k.rateLimitPerMin}</span> },
+                { id: 'created', header: t('created'), cell: (k) => <span className="text-[11px] text-zinc-500">{formatDate(k.createdAt)}</span> },
+                {
+                  id: 'actions',
+                  header: t('actions'),
+                  align: 'right',
+                  cell: (k) => (
+                    <RowActionsMenu
+                      ariaLabel={t('actions')}
+                      items={[
+                        {
+                          key: 'copy',
+                          label: t('copy'),
+                          onSelect: async () => {
+                            await navigator.clipboard.writeText(String(k.key));
+                          }
+                        },
+                        {
+                          key: 'revoke',
+                          label: k.revokedAt ? t('revoked') : t('revoke'),
+                          disabled: Boolean(k.revokedAt),
+                          tone: 'danger',
+                          onSelect: async () => {
+                            if (!window.confirm(t('confirmRevokeApiKey'))) return;
+                            await revokeApiKey({ id: k.id });
+                          }
+                        }
+                      ]}
+                    />
+                  ),
+                  headerClassName: 'pr-3',
+                  className: 'pr-3'
+                }
+              ]}
+            />
           </div>
         </div>
 
@@ -204,38 +206,40 @@ export default function AdminIntegrations() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <div className="min-w-[760px]">
-              <div className="ac-table-head grid grid-cols-[1.5fr_1fr_120px_220px] gap-4 border-t border-zinc-200/70">
-                <div>{t('webhookUrl')}</div>
-                <div>{t('events')}</div>
-                <div>{t('active')}</div>
-                <div className="text-right">{t('actions')}</div>
-              </div>
-
-              {webhooks.length === 0 ? (
-                <div className="p-4 text-xs text-zinc-600">{t('noWebhooks')}</div>
-              ) : (
-                webhooks.map((h) => (
-                  <div key={h.id} className="ac-table-row grid grid-cols-[1.5fr_1fr_120px_220px] gap-4">
-                    <div className="truncate text-xs text-zinc-800">{h.url}</div>
-                    <div className="truncate font-mono text-[11px] text-zinc-700">{Array.isArray(h.events) ? h.events.join(',') : ''}</div>
-                    <div className="text-xs text-zinc-700">{h.isActive ? t('active') : t('inactive')}</div>
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                        onClick={async () => {
-                          await setWebhookActive({ id: h.id, isActive: !h.isActive });
-                        }}
-                      >
-                        {h.isActive ? t('disable') : t('enable')}
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+          <div className="px-4 pb-4">
+            <DataTable
+              containerClassName="rounded-xl border border-zinc-200/80 shadow-none"
+              minWidth={760}
+              rows={webhooks}
+              rowKey={(h) => h.id}
+              emptyContent={t('noWebhooks')}
+              columns={[
+                { id: 'url', header: t('webhookUrl'), cell: (h) => <span className="block max-w-[420px] truncate text-xs text-zinc-800">{h.url}</span> },
+                { id: 'events', header: t('events'), cell: (h) => <span className="block max-w-[260px] truncate font-mono text-[11px] text-zinc-700">{Array.isArray(h.events) ? h.events.join(',') : ''}</span> },
+                { id: 'active', header: t('active'), cell: (h) => <span className="text-xs text-zinc-700">{h.isActive ? t('active') : t('inactive')}</span> },
+                {
+                  id: 'actions',
+                  header: t('actions'),
+                  align: 'right',
+                  cell: (h) => (
+                    <RowActionsMenu
+                      ariaLabel={t('actions')}
+                      items={[
+                        {
+                          key: 'toggle',
+                          label: h.isActive ? t('disable') : t('enable'),
+                          onSelect: async () => {
+                            await setWebhookActive({ id: h.id, isActive: !h.isActive });
+                          }
+                        }
+                      ]}
+                    />
+                  ),
+                  headerClassName: 'pr-3',
+                  className: 'pr-3'
+                }
+              ]}
+            />
           </div>
         </div>
       </div>

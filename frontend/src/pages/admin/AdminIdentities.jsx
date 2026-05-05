@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import useIdentitiesStore from '../../store/useIdentitiesStore';
 import { useT } from '../../i18n/useT';
+import DataTable from '../../components/ui/DataTable';
+import RowActionsMenu from '../../components/ui/RowActionsMenu';
 
 function formatDate(input) {
   if (!input) return '';
@@ -69,78 +71,73 @@ export default function AdminIdentities() {
 
       {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
 
-      <div className="ac-table">
-        <div className="overflow-x-auto">
-          <div className="min-w-[980px]">
-            <div className="ac-table-head grid grid-cols-[1fr_1fr_1.2fr_160px_160px_200px] gap-4">
-              <div>NFC UID</div>
-              <div>EPC</div>
-              <div>{t('certificateId')}</div>
-              <div>{t('assignedAt')}</div>
-              <div>{t('unassignedAt')}</div>
-              <div className="text-right">{t('actions')}</div>
+      <DataTable
+        minWidth={980}
+        rows={items}
+        rowKey={(it) => it.id}
+        loading={loading}
+        loadingContent={t('loading')}
+        emptyContent={
+          <div>
+            <div className="text-sm font-semibold text-zinc-900">{t('noIdentities')}</div>
+            <div className="mt-1 text-xs text-zinc-600">{t('noIdentitiesHint')}</div>
+          </div>
+        }
+        bottom={
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-600">
+            <div>{t('showingCount', { from: showing.from, to: showing.to, total })}</div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                disabled={offset <= 0 || loading}
+                onClick={() => void fetchIdentities({ q, active: activeOnly, offset: Math.max(0, offset - limit) })}
+              >
+                {t('prev')}
+              </button>
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                disabled={offset + limit >= total || loading}
+                onClick={() => void fetchIdentities({ q, active: activeOnly, offset: offset + limit })}
+              >
+                {t('next')}
+              </button>
             </div>
-
-            {loading ? (
-              <div className="p-4 text-sm text-zinc-600">{t('loading')}</div>
-            ) : items.length === 0 ? (
-              <div className="p-8 text-center">
-                <div className="text-sm font-semibold text-zinc-900">{t('noIdentities')}</div>
-                <div className="mt-1 text-xs text-zinc-600">{t('noIdentitiesHint')}</div>
-              </div>
-            ) : (
-              items.map((it) => (
-                <div
-                  key={it.id}
-                  className="ac-table-row grid grid-cols-[1fr_1fr_1.2fr_160px_160px_200px] gap-4"
-                >
-                  <div className="truncate font-mono text-[11px] text-zinc-900">{it.nfcUid || '-'}</div>
-                  <div className="truncate font-mono text-[11px] text-zinc-900">{it.epc || '-'}</div>
-                  <div className="truncate font-mono text-[11px] text-zinc-900">{it.certificateId}</div>
-                  <div className="text-[11px] text-zinc-600">{formatDate(it.assignedAt)}</div>
-                  <div className="text-[11px] text-zinc-600">{formatDate(it.unassignedAt)}</div>
-                  <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                      disabled={Boolean(it.unassignedAt)}
-                      onClick={async () => {
-                        if (!window.confirm(t('confirmUnassign'))) return;
-                        await unassignIdentity({ id: it.id });
-                        await fetchIdentities({ q, active: activeOnly });
-                      }}
-                    >
-                      {t('unassign')}
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
           </div>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 px-4 py-3 text-xs text-zinc-600">
-          <div>{t('showingCount', { from: showing.from, to: showing.to, total })}</div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-              disabled={offset <= 0 || loading}
-              onClick={() => void fetchIdentities({ q, active: activeOnly, offset: Math.max(0, offset - limit) })}
-            >
-              {t('prev')}
-            </button>
-            <button
-              type="button"
-              className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-              disabled={offset + limit >= total || loading}
-              onClick={() => void fetchIdentities({ q, active: activeOnly, offset: offset + limit })}
-            >
-              {t('next')}
-            </button>
-          </div>
-        </div>
-      </div>
+        }
+        columns={[
+          { id: 'nfc', header: 'NFC UID', cell: (it) => <span className="block max-w-[220px] truncate font-mono text-[11px] text-zinc-900">{it.nfcUid || '-'}</span> },
+          { id: 'epc', header: 'EPC', cell: (it) => <span className="block max-w-[220px] truncate font-mono text-[11px] text-zinc-900">{it.epc || '-'}</span> },
+          { id: 'certificateId', header: t('certificateId'), cell: (it) => <span className="block max-w-[260px] truncate font-mono text-[11px] text-zinc-900">{it.certificateId}</span> },
+          { id: 'assignedAt', header: t('assignedAt'), cell: (it) => <span className="text-[11px] text-zinc-600">{formatDate(it.assignedAt)}</span> },
+          { id: 'unassignedAt', header: t('unassignedAt'), cell: (it) => <span className="text-[11px] text-zinc-600">{formatDate(it.unassignedAt)}</span> },
+          {
+            id: 'actions',
+            header: t('actions'),
+            align: 'right',
+            cell: (it) => (
+              <RowActionsMenu
+                ariaLabel={t('actions')}
+                items={[
+                  {
+                    key: 'unassign',
+                    label: t('unassign'),
+                    disabled: Boolean(it.unassignedAt),
+                    onSelect: async () => {
+                      if (!window.confirm(t('confirmUnassign'))) return;
+                      await unassignIdentity({ id: it.id });
+                      await fetchIdentities({ q, active: activeOnly });
+                    }
+                  }
+                ]}
+              />
+            ),
+            headerClassName: 'pr-3',
+            className: 'pr-3'
+          }
+        ]}
+      />
     </div>
   );
 }

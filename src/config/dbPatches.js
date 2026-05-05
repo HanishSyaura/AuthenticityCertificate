@@ -371,6 +371,18 @@ async function ensureCertificateTemplateSchemaCompat() {
   );
   await ensureColumn(
     tableName,
+    'templateType',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`templateType\` VARCHAR(32) NULL`,
+    `UPDATE \`${tableName}\`
+      SET \`templateType\` = CASE
+        WHEN LOWER(\`certificateId\`) LIKE '%auth%' OR LOWER(\`name\`) LIKE '%authentic%' THEN 'auth'
+        ELSE 'supporting'
+      END
+      WHERE \`templateType\` IS NULL OR \`templateType\` = ''`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`templateType\` VARCHAR(32) NOT NULL DEFAULT 'auth'`
+  );
+  await ensureColumn(
+    tableName,
     'backgroundColor',
     `ALTER TABLE \`${tableName}\` ADD COLUMN \`backgroundColor\` VARCHAR(32) NULL`,
     `UPDATE \`${tableName}\` SET \`backgroundColor\` = '#ffffff' WHERE \`backgroundColor\` IS NULL OR \`backgroundColor\` = ''`,
@@ -403,6 +415,11 @@ async function ensureCertificateTemplateSchemaCompat() {
     const hasIdxCertId = await indexExists(tableName, idxCertId);
     if (!hasIdxCertId)
       await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX \`${idxCertId}\` ON \`${tableName}\` (\`organizationId\`, \`certificateId\`)`);
+
+    const idxType = `${tableName}_organizationId_templateType_idx`;
+    if (!(await indexExists(tableName, idxType))) {
+      await prisma.$executeRawUnsafe(`CREATE INDEX \`${idxType}\` ON \`${tableName}\` (\`organizationId\`, \`templateType\`)`);
+    }
   }
 }
 
@@ -814,6 +831,43 @@ async function ensureCertificateSchemaCompat() {
   await prisma.$executeRawUnsafe(`ALTER TABLE \`${tableName}\` MODIFY \`batchId\` INT NULL`);
 }
 
+async function ensureCertificateSequenceSchemaCompat() {
+  const tableName = 'CertificateSequence';
+  const exists = await tableExists(tableName);
+  if (!exists) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`${tableName}\` (
+        \`dateKey\` VARCHAR(6) NOT NULL,
+        \`lastNo\` BIGINT NOT NULL DEFAULT 0,
+        \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`dateKey\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+
+  await ensureColumn(
+    tableName,
+    'dateKey',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`dateKey\` VARCHAR(6) NULL`,
+    null,
+    `ALTER TABLE \`${tableName}\` MODIFY \`dateKey\` VARCHAR(6) NOT NULL`
+  );
+  await ensureColumn(
+    tableName,
+    'lastNo',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`lastNo\` BIGINT NULL`,
+    `UPDATE \`${tableName}\` SET \`lastNo\` = 0 WHERE \`lastNo\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`lastNo\` BIGINT NOT NULL DEFAULT 0`
+  );
+  await ensureColumn(
+    tableName,
+    'updatedAt',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`updatedAt\` DATETIME NULL`,
+    `UPDATE \`${tableName}\` SET \`updatedAt\` = NOW() WHERE \`updatedAt\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`
+  );
+}
+
 async function applyDbPatches() {
   await ensureProductSchemaCompat();
   await ensureProductSupportingCertificateSchemaCompat();
@@ -821,6 +875,7 @@ async function applyDbPatches() {
   await ensureCmsPageSchemaCompat();
   await ensureCertificateTemplateSchemaCompat();
   await ensureCertificateSchemaCompat();
+  await ensureCertificateSequenceSchemaCompat();
   await ensureEpcSchemaCompat();
   await ensureOrganizationSettingsSchemaCompat();
   await ensureAccessControlSchemaCompat();

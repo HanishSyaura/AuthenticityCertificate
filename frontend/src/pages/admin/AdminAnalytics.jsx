@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import useAnalyticsStore from '../../store/useAnalyticsStore';
 import { useT } from '../../i18n/useT';
+import DataTable from '../../components/ui/DataTable';
 
 function StatCard({ title, value, hint }) {
   return (
@@ -63,37 +64,34 @@ export default function AdminAnalytics() {
             <div className="ac-card-title">{t('recentScans')}</div>
             <div className="ac-card-subtitle">{scans?.total ? `${scans.total} total` : ''}</div>
           </div>
-          <div className="mt-4 overflow-auto">
-            <table className="min-w-full border-collapse">
-              <thead className="bg-zinc-50 text-left text-xs font-semibold text-zinc-600">
-                <tr>
-                  <th className="px-5 py-3">{t('time')}</th>
-                  <th className="px-5 py-3">{t('certificateId')}</th>
-                  <th className="px-5 py-3">{t('ip')}</th>
-                  <th className="px-5 py-3">{t('risk')}</th>
-                </tr>
-              </thead>
-              <tbody className="text-sm">
-                {rows.map((r) => (
-                  <tr key={r.id} className="border-t border-zinc-100 hover:bg-zinc-50">
-                    <td className="px-5 py-3 text-zinc-700">{new Date(r.timestamp).toLocaleString(locale)}</td>
-                    <td className="px-5 py-3">
-                      <button
-                        type="button"
-                        className="font-mono text-[12px] font-semibold text-zinc-900 underline"
-                        onClick={() => fetchCertificate(r.certificateId)}
-                      >
-                        {r.certificateId}
-                      </button>
-                    </td>
-                    <td className="px-5 py-3 font-mono text-[12px] text-zinc-700">{r.ip}</td>
-                    <td className="px-5 py-3">
-                      <RiskPill score={r.riskScore ?? 0} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="mt-4 overflow-auto px-5 pb-5">
+            <DataTable
+              containerClassName="rounded-xl border border-zinc-200/80 shadow-none"
+              rows={rows}
+              rowKey={(r) => r.id}
+              emptyContent="—"
+              columns={[
+                { id: 'time', header: t('time'), cell: (r) => <span className="text-zinc-700">{new Date(r.timestamp).toLocaleString(locale)}</span> },
+                {
+                  id: 'certificateId',
+                  header: t('certificateId'),
+                  cell: (r) => (
+                    <button
+                      type="button"
+                      className="font-mono text-[12px] font-semibold text-zinc-900 underline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fetchCertificate(r.certificateId);
+                      }}
+                    >
+                      {r.certificateId}
+                    </button>
+                  )
+                },
+                { id: 'ip', header: t('ip'), cell: (r) => <span className="font-mono text-[12px] text-zinc-700">{r.ip}</span> },
+                { id: 'risk', header: t('risk'), cell: (r) => <RiskPill score={r.riskScore ?? 0} /> }
+              ]}
+            />
           </div>
         </div>
 

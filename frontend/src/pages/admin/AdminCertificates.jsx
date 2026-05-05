@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import useCertificatesStore from '../../store/useCertificatesStore';
 import { useT } from '../../i18n/useT';
+import DataTable from '../../components/ui/DataTable';
+import RowActionsMenu from '../../components/ui/RowActionsMenu';
 
 function formatDate(input) {
   if (!input) return '';
@@ -111,115 +113,125 @@ export default function AdminCertificates() {
 
       {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
 
-      <div className="ac-table">
-        <div className="overflow-x-auto">
-          <div className="min-w-[980px]">
-            <div className="ac-table-head grid grid-cols-[1.3fr_110px_120px_1fr_1fr_240px] gap-4">
-              <div>{t('certificateId')}</div>
-              <div>{t('type')}</div>
-              <div>{t('status')}</div>
-              <div>{t('product')}</div>
-              <div>{t('batch')}</div>
-              <div className="text-right">{t('actions')}</div>
+      <DataTable
+        minWidth={980}
+        rows={items}
+        rowKey={(c) => c.certificateId}
+        loading={loading}
+        loadingContent={t('loading')}
+        emptyContent={
+          <div>
+            <div className="text-sm font-semibold text-zinc-900">{t('noCertificates')}</div>
+            <div className="mt-1 text-xs text-zinc-600">{t('noCertificatesHint')}</div>
+          </div>
+        }
+        bottom={
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-600">
+            <div>{t('showingCount', { from: showing.from, to: showing.to, total })}</div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                disabled={offset <= 0 || loading}
+                onClick={() => void fetchCertificates({ q, status, type, offset: Math.max(0, offset - limit) })}
+              >
+                {t('prev')}
+              </button>
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                disabled={offset + limit >= total || loading}
+                onClick={() => void fetchCertificates({ q, status, type, offset: offset + limit })}
+              >
+                {t('next')}
+              </button>
             </div>
-
-            {loading ? (
-              <div className="p-4 text-sm text-zinc-600">{t('loading')}</div>
-            ) : items.length === 0 ? (
-              <div className="p-8 text-center">
-                <div className="text-sm font-semibold text-zinc-900">{t('noCertificates')}</div>
-                <div className="mt-1 text-xs text-zinc-600">{t('noCertificatesHint')}</div>
-              </div>
-            ) : (
-              items.map((c) => (
-                <div
-                  key={c.certificateId}
-                  className="ac-table-row grid grid-cols-[1.3fr_110px_120px_1fr_1fr_240px] gap-4"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate font-mono text-[11px] text-zinc-900">{c.certificateId}</div>
-                    <div className="mt-0.5 flex flex-wrap gap-2 text-[11px] text-zinc-500">
-                      {c.issuedAt ? <span>{t('issued')}: {formatDate(c.issuedAt)}</span> : null}
-                      {c.expiresAt ? <span>{t('expires')}: {formatDate(c.expiresAt)}</span> : null}
-                    </div>
-                    {Array.isArray(c.identities) && c.identities.length > 0 ? (
-                      <div className="mt-1 flex flex-wrap gap-2">
-                        {c.identities.slice(0, 2).map((it) => (
-                          <Tag key={it.id}>{it.nfcUid || it.epc}</Tag>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="text-xs text-zinc-700">{c.type}</div>
-                  <div className="text-xs text-zinc-700">{c.status}</div>
-                  <div className="text-xs text-zinc-700">{c.batch?.product?.name ? `${c.batch.product.name} (${c.batch.product.code})` : '-'}</div>
-                  <div className="text-xs text-zinc-700">{c.batch?.batchNo || '-'}</div>
-                  <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                      onClick={() => {
-                        setAssignCertId(c.certificateId);
-                        setAssignNfc('');
-                        setAssignEpc('');
-                        setAssignExp('');
-                        setAssignOpen(true);
-                      }}
-                    >
-                      {t('assign')}
-                    </button>
-                    <button
-                      type="button"
-                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                      onClick={async () => {
-                        if (!window.confirm(t('confirmRevoke'))) return;
-                        await revokeCertificate({ certificateId: c.certificateId });
-                        await fetchCertificates({ q, status, type });
-                      }}
-                    >
-                      {t('revoke')}
-                    </button>
-                    <button
-                      type="button"
-                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                      onClick={async () => {
-                        const reason = window.prompt(t('reissueReasonPrompt'));
-                        if (reason == null) return;
-                        await reissueCertificate({ certificateId: c.certificateId, reason });
-                        await fetchCertificates({ q, status, type });
-                      }}
-                    >
-                      {t('reissue')}
-                    </button>
-                  </div>
+          </div>
+        }
+        columns={[
+          {
+            id: 'certificateId',
+            header: t('certificateId'),
+            cell: (c) => (
+              <div className="min-w-0">
+                <div className="truncate font-mono text-[11px] text-zinc-900">{c.certificateId}</div>
+                <div className="mt-0.5 flex flex-wrap gap-2 text-[11px] text-zinc-500">
+                  {c.issuedAt ? (
+                    <span>
+                      {t('issued')}: {formatDate(c.issuedAt)}
+                    </span>
+                  ) : null}
+                  {c.expiresAt ? (
+                    <span>
+                      {t('expires')}: {formatDate(c.expiresAt)}
+                    </span>
+                  ) : null}
                 </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 px-4 py-3 text-xs text-zinc-600">
-          <div>{t('showingCount', { from: showing.from, to: showing.to, total })}</div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-              disabled={offset <= 0 || loading}
-              onClick={() => void fetchCertificates({ q, status, type, offset: Math.max(0, offset - limit) })}
-            >
-              {t('prev')}
-            </button>
-            <button
-              type="button"
-              className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-              disabled={offset + limit >= total || loading}
-              onClick={() => void fetchCertificates({ q, status, type, offset: offset + limit })}
-            >
-              {t('next')}
-            </button>
-          </div>
-        </div>
-      </div>
+                {Array.isArray(c.identities) && c.identities.length > 0 ? (
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {c.identities.slice(0, 2).map((it) => (
+                      <Tag key={it.id}>{it.nfcUid || it.epc}</Tag>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            )
+          },
+          { id: 'type', header: t('type'), cell: (c) => <span className="text-xs text-zinc-700">{c.type}</span> },
+          { id: 'status', header: t('status'), cell: (c) => <span className="text-xs text-zinc-700">{c.status}</span> },
+          {
+            id: 'product',
+            header: t('product'),
+            cell: (c) => <span className="text-xs text-zinc-700">{c.batch?.product?.name ? `${c.batch.product.name} (${c.batch.product.code})` : '-'}</span>
+          },
+          { id: 'batch', header: t('batch'), cell: (c) => <span className="text-xs text-zinc-700">{c.batch?.batchNo || '-'}</span> },
+          {
+            id: 'actions',
+            header: t('actions'),
+            align: 'right',
+            cell: (c) => (
+              <RowActionsMenu
+                ariaLabel={t('actions')}
+                items={[
+                  {
+                    key: 'assign',
+                    label: t('assign'),
+                    onSelect: () => {
+                      setAssignCertId(c.certificateId);
+                      setAssignNfc('');
+                      setAssignEpc('');
+                      setAssignExp('');
+                      setAssignOpen(true);
+                    }
+                  },
+                  {
+                    key: 'revoke',
+                    label: t('revoke'),
+                    tone: 'danger',
+                    onSelect: async () => {
+                      if (!window.confirm(t('confirmRevoke'))) return;
+                      await revokeCertificate({ certificateId: c.certificateId });
+                      await fetchCertificates({ q, status, type });
+                    }
+                  },
+                  {
+                    key: 'reissue',
+                    label: t('reissue'),
+                    onSelect: async () => {
+                      const reason = window.prompt(t('reissueReasonPrompt'));
+                      if (reason == null) return;
+                      await reissueCertificate({ certificateId: c.certificateId, reason });
+                      await fetchCertificates({ q, status, type });
+                    }
+                  }
+                ]}
+              />
+            ),
+            headerClassName: 'pr-3',
+            className: 'pr-3'
+          }
+        ]}
+      />
 
       {assignOpen ? (
         <div className="ac-modal-backdrop">

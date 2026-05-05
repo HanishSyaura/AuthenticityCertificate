@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import useRecordsStore from '../../store/useRecordsStore';
 import { useT } from '../../i18n/useT';
 import { stripHtmlToText } from '../../utils/richText';
+import DataTable from '../../components/ui/DataTable';
+import RowActionsMenu from '../../components/ui/RowActionsMenu';
 
 function formatDate(input) {
   if (!input) return '';
@@ -13,6 +15,7 @@ function formatDate(input) {
 
 export default function AdminRecords() {
   const { t } = useT();
+  const navigate = useNavigate();
   const {
     products,
     categories,
@@ -277,78 +280,94 @@ export default function AdminRecords() {
       ) : null}
 
       {activeTab === 'products' ? (
-        <div className="ac-table">
-          {selectedCount ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200/70 bg-white px-4 py-3">
-              <div className="text-sm font-semibold text-zinc-900">{t('selectedProducts', { value: selectedCount })}</div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button type="button" className="ac-btn ac-btn-soft px-3 py-2" onClick={() => setSelectedProductIds(new Set())}>
-                  {t('clearSelection')}
-                </button>
-                <button
-                  type="button"
-                  className="ac-btn ac-btn-soft px-3 py-2"
-                  onClick={async () => {
-                    const ids = Array.from(selectedProductIds);
-                    const activeIds = ids.filter((id) => {
-                      const p = productById.get(String(id));
-                      return String(p?.status || '').toLowerCase() !== 'inactive';
-                    });
-                    if (!activeIds.length) return;
-                    if (!window.confirm(t('confirmDeactivateSelectedProducts', { value: activeIds.length }))) return;
-                    for (const id of activeIds) {
-                      await deactivateProduct({ id });
-                    }
-                    void fetchProducts();
-                  }}
-                  disabled={Array.from(selectedProductIds).every((id) => String(productById.get(String(id))?.status || '').toLowerCase() === 'inactive')}
-                >
-                  {t('deactivateSelected')}
-                </button>
-                <button
-                  type="button"
-                  className="ac-btn ac-btn-soft px-3 py-2"
-                  onClick={async () => {
-                    const ids = Array.from(selectedProductIds);
-                    if (!ids.length) return;
-                    if (!window.confirm(t('confirmDeleteSelectedProducts', { value: ids.length }))) return;
-                    const result = await bulkDeleteProducts({ ids });
-                    const deletedCount = Array.isArray(result?.deletedIds) ? result.deletedIds.length : 0;
-                    const notInactiveCount = Array.isArray(result?.notInactiveIds) ? result.notInactiveIds.length : 0;
-                    const notFoundCount = Array.isArray(result?.notFoundIds) ? result.notFoundIds.length : 0;
-
-                    setSelectedProductIds((prev) => {
-                      if (!prev.size) return prev;
-                      const next = new Set(prev);
-                      (Array.isArray(result?.deletedIds) ? result.deletedIds : []).forEach((id) => next.delete(id));
-                      return next;
-                    });
-                    void fetchProducts();
-
-                    if (notInactiveCount || notFoundCount) {
-                      setBulkNotice({
-                        type: 'warning',
-                        message: t('bulkDeletePartial', { deleted: deletedCount, notInactive: notInactiveCount, notFound: notFoundCount })
-                      });
-                    } else {
-                      setBulkNotice({ type: 'success', message: t('bulkDeleteSuccess', { value: deletedCount }) });
-                    }
-                  }}
-                >
-                  {t('deleteSelected')}
-                </button>
-              </div>
+        <DataTable
+          minWidth={1300}
+          rows={filteredProducts}
+          rowKey={(p) => p.id}
+          loading={loading}
+          loadingContent={t('loading')}
+          emptyContent={
+            <div>
+              <div className="text-sm font-semibold text-zinc-900">{t('noProducts')}</div>
+              <div className="mt-1 text-sm text-zinc-600">{t('noProductsHint')}</div>
             </div>
-          ) : null}
-          <div className="overflow-x-auto">
-            <div className="min-w-[1300px]">
-              <div className="ac-table-head grid grid-cols-[36px_1fr_2fr_1.5fr_1fr_1fr_1fr_1fr_220px] gap-4">
+          }
+          top={
+            selectedCount ? (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-sm font-semibold text-zinc-900">{t('selectedProducts', { value: selectedCount })}</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" className="ac-btn ac-btn-soft px-3 py-2" onClick={() => setSelectedProductIds(new Set())}>
+                    {t('clearSelection')}
+                  </button>
+                  <button
+                    type="button"
+                    className="ac-btn ac-btn-soft px-3 py-2"
+                    onClick={async () => {
+                      const ids = Array.from(selectedProductIds);
+                      const activeIds = ids.filter((id) => {
+                        const p = productById.get(String(id));
+                        return String(p?.status || '').toLowerCase() !== 'inactive';
+                      });
+                      if (!activeIds.length) return;
+                      if (!window.confirm(t('confirmDeactivateSelectedProducts', { value: activeIds.length }))) return;
+                      for (const id of activeIds) {
+                        await deactivateProduct({ id });
+                      }
+                      void fetchProducts();
+                    }}
+                    disabled={Array.from(selectedProductIds).every((id) => String(productById.get(String(id))?.status || '').toLowerCase() === 'inactive')}
+                  >
+                    {t('deactivateSelected')}
+                  </button>
+                  <button
+                    type="button"
+                    className="ac-btn ac-btn-soft px-3 py-2"
+                    onClick={async () => {
+                      const ids = Array.from(selectedProductIds);
+                      if (!ids.length) return;
+                      if (!window.confirm(t('confirmDeleteSelectedProducts', { value: ids.length }))) return;
+                      const result = await bulkDeleteProducts({ ids });
+                      const deletedCount = Array.isArray(result?.deletedIds) ? result.deletedIds.length : 0;
+                      const notInactiveCount = Array.isArray(result?.notInactiveIds) ? result.notInactiveIds.length : 0;
+                      const notFoundCount = Array.isArray(result?.notFoundIds) ? result.notFoundIds.length : 0;
+
+                      setSelectedProductIds((prev) => {
+                        if (!prev.size) return prev;
+                        const next = new Set(prev);
+                        (Array.isArray(result?.deletedIds) ? result.deletedIds : []).forEach((id) => next.delete(id));
+                        return next;
+                      });
+                      void fetchProducts();
+
+                      if (notInactiveCount || notFoundCount) {
+                        setBulkNotice({
+                          type: 'warning',
+                          message: t('bulkDeletePartial', { deleted: deletedCount, notInactive: notInactiveCount, notFound: notFoundCount })
+                        });
+                      } else {
+                        setBulkNotice({ type: 'success', message: t('bulkDeleteSuccess', { value: deletedCount }) });
+                      }
+                    }}
+                  >
+                    {t('deleteSelected')}
+                  </button>
+                </div>
+              </div>
+            ) : null
+          }
+          onRowClick={(p) => navigate(`/admin/records/${p.id}`)}
+          columns={[
+            {
+              id: 'select',
+              header: (
                 <div className="flex items-center justify-center">
                   <input
                     ref={headerCheckboxRef}
                     type="checkbox"
                     className="h-4 w-4 rounded border-zinc-300 text-brand-600"
                     checked={allVisibleSelected}
+                    onClick={(e) => e.stopPropagation()}
                     onChange={() => {
                       setSelectedProductIds((prev) => {
                         const next = new Set(prev);
@@ -363,173 +382,184 @@ export default function AdminRecords() {
                     aria-label={t('selectAll')}
                   />
                 </div>
-                <div>{t('sku')}</div>
-                <div>{t('product')}</div>
-                <div>{t('remark')}</div>
-                <div>{t('productCode')}</div>
-                <div>{t('category')}</div>
-                <div>{t('status')}</div>
-                <div>{t('updated')}</div>
-                <div className="text-right">{t('actions')}</div>
-              </div>
-              {loading ? (
-                <div className="p-4 text-sm text-zinc-600">{t('loading')}</div>
-              ) : filteredProducts.length === 0 ? (
-                <div className="p-8 text-center">
-                  <div className="text-sm font-semibold text-zinc-900">{t('noProducts')}</div>
-                  <div className="mt-1 text-sm text-zinc-600">{t('noProductsHint')}</div>
+              ),
+              cell: (p) => (
+                <div className="flex items-center justify-center">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-zinc-300 text-brand-600"
+                    checked={selectedProductIds.has(p.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={() => toggleSelected(p.id)}
+                    aria-label={t('selectProduct')}
+                  />
                 </div>
-              ) : (
-                filteredProducts.map((p) => {
-                  const isInactive = String(p?.status || '').toLowerCase() === 'inactive';
-                  const canDeactivate = !isInactive;
-                  return (
-                    <div key={p.id} className="ac-table-row grid grid-cols-[36px_1fr_2fr_1.5fr_1fr_1fr_1fr_1fr_220px] gap-4">
-                      <div className="flex items-center justify-center">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-zinc-300 text-brand-600"
-                          checked={selectedProductIds.has(p.id)}
-                          onChange={() => toggleSelected(p.id)}
-                          aria-label={t('selectProduct')}
-                        />
-                      </div>
-                      <div className="font-mono text-sm text-zinc-700">{p.sku}</div>
-                      <div className="font-medium text-zinc-900">{p.name}</div>
-                      <div>
-                        <div className="text-sm text-zinc-600">{String(stripHtmlToText(p.remark) || '').trim() ? stripHtmlToText(p.remark) : '-'}</div>
-                      </div>
-                      <div className="font-mono text-sm text-zinc-700">{p.code}</div>
-                      <div className="text-sm text-zinc-700">{categoryByCode.get(String(p.category || ''))?.name || p.category || '-'}</div>
-                      <div className="text-sm text-zinc-700">{isInactive ? t('inactive') : t('active')}</div>
-                      <div className="text-sm text-zinc-600">{formatDate(p.updatedAt || p.createdAt)}</div>
-                      <div className="flex justify-end">
-                        <div className="flex items-center gap-2">
-                          <Link className="ac-btn ac-btn-soft px-3 py-2" to={`/admin/records/${p.id}`}>
-                            {t('view')}
-                          </Link>
-                          <button
-                            type="button"
-                            className="ac-btn ac-btn-soft px-3 py-2"
-                            onClick={() => {
-                              setEditing(p);
-                              setSku(p.sku || '');
-                              setName(p.name || '');
-                              setProductCode(p.code || '');
-                              setCategory(p.category || '');
-                              setStatus(String(p.status || '').toLowerCase() === 'inactive' ? 'inactive' : 'active');
-                              setRemark(stripHtmlToText(p.remark || ''));
-                              setShowEdit(true);
-                            }}
-                          >
-                            {t('edit')}
-                          </button>
-                          {canDeactivate ? (
-                            <button
-                              type="button"
-                              className="ac-btn ac-btn-soft px-3 py-2"
-                              onClick={async () => {
-                                if (!window.confirm(t('confirmDeactivateProduct'))) return;
-                                await deactivateProduct({ id: p.id });
-                                void fetchProducts();
-                              }}
-                            >
-                              {t('deactivate')}
-                            </button>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                className="ac-btn ac-btn-soft px-3 py-2"
-                                onClick={async () => {
-                                  if (!window.confirm(t('confirmActivateProduct'))) return;
-                                  await activateProduct({ id: p.id });
-                                  void fetchProducts();
-                                }}
-                              >
-                                {t('activate')}
-                              </button>
-                              <button
-                                type="button"
-                                className="ac-btn ac-btn-soft px-3 py-2"
-                                onClick={async () => {
-                                  if (!window.confirm(t('confirmDeleteProduct'))) return;
-                                  await deleteProduct({ id: p.id });
-                                  void fetchProducts();
-                                }}
-                              >
-                                {t('delete')}
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>
+              ),
+              align: 'center',
+              headerClassName: 'px-2',
+              className: 'px-2'
+            },
+            {
+              id: 'sku',
+              header: t('sku'),
+              cell: (p) => <span className="font-mono text-sm text-zinc-700">{p.sku}</span>
+            },
+            {
+              id: 'product',
+              header: t('product'),
+              cell: (p) => <span className="font-medium text-zinc-900">{p.name}</span>
+            },
+            {
+              id: 'productCode',
+              header: t('productCode'),
+              cell: (p) => <span className="font-mono text-sm text-zinc-700">{p.code}</span>
+            },
+            {
+              id: 'category',
+              header: t('category'),
+              cell: (p) => <span className="text-sm text-zinc-700">{categoryByCode.get(String(p.category || ''))?.name || p.category || '-'}</span>
+            },
+            {
+              id: 'status',
+              header: t('status'),
+              cell: (p) => {
+                const isInactive = String(p?.status || '').toLowerCase() === 'inactive';
+                return <span className="text-sm text-zinc-700">{isInactive ? t('inactive') : t('active')}</span>;
+              }
+            },
+            {
+              id: 'updated',
+              header: t('updated'),
+              cell: (p) => <span className="text-sm text-zinc-600">{formatDate(p.updatedAt || p.createdAt)}</span>
+            },
+            {
+              id: 'remark',
+              header: t('remark'),
+              cell: (p) => {
+                const plain = stripHtmlToText(p.remark);
+                const text = String(plain || '').trim();
+                return <div className="max-w-[360px] truncate text-sm text-zinc-600">{text ? plain : '-'}</div>;
+              }
+            },
+            {
+              id: 'actions',
+              header: t('actions'),
+              align: 'right',
+              cell: (p) => {
+                const isInactive = String(p?.status || '').toLowerCase() === 'inactive';
+                const canDeactivate = !isInactive;
+                return (
+                  <RowActionsMenu
+                    ariaLabel={t('actions')}
+                    items={[
+                      {
+                        key: 'edit',
+                        label: t('edit'),
+                        onSelect: () => {
+                          setEditing(p);
+                          setSku(p.sku || '');
+                          setName(p.name || '');
+                          setProductCode(p.code || '');
+                          setCategory(p.category || '');
+                          setStatus(String(p.status || '').toLowerCase() === 'inactive' ? 'inactive' : 'active');
+                          setRemark(stripHtmlToText(p.remark || ''));
+                          setShowEdit(true);
+                        }
+                      },
+                      canDeactivate
+                        ? {
+                            key: 'deactivate',
+                            label: t('deactivate'),
+                            onSelect: async () => {
+                              if (!window.confirm(t('confirmDeactivateProduct'))) return;
+                              await deactivateProduct({ id: p.id });
+                              void fetchProducts();
+                            }
+                          }
+                        : {
+                            key: 'activate',
+                            label: t('activate'),
+                            onSelect: async () => {
+                              if (!window.confirm(t('confirmActivateProduct'))) return;
+                              await activateProduct({ id: p.id });
+                              void fetchProducts();
+                            }
+                          },
+                      !canDeactivate
+                        ? {
+                            key: 'delete',
+                            label: t('delete'),
+                            tone: 'danger',
+                            onSelect: async () => {
+                              if (!window.confirm(t('confirmDeleteProduct'))) return;
+                              await deleteProduct({ id: p.id });
+                              void fetchProducts();
+                            }
+                          }
+                        : null
+                    ].filter(Boolean)}
+                  />
+                );
+              },
+              headerClassName: 'pr-3',
+              className: 'pr-3'
+            }
+          ]}
+        />
       ) : (
-        <div className="ac-table">
-          <div className="overflow-x-auto">
-            <div className="min-w-[900px]">
-              <div className="ac-table-head grid grid-cols-[2fr_1fr_1fr_1fr_180px] gap-4">
-                <div>{t('name')}</div>
-                <div>{t('code')}</div>
-                <div>{t('status')}</div>
-                <div>{t('updated')}</div>
-                <div className="text-right">{t('actions')}</div>
-              </div>
-              {loading ? (
-                <div className="p-4 text-sm text-zinc-600">{t('loading')}</div>
-              ) : filteredCategories.length === 0 ? (
-                <div className="p-8 text-center">
-                  <div className="text-sm font-semibold text-zinc-900">{t('noCategories')}</div>
-                  <div className="mt-1 text-sm text-zinc-600">{t('noCategoriesHint')}</div>
-                </div>
-              ) : (
-                filteredCategories.map((c) => (
-                  <div key={c.id} className="ac-table-row grid grid-cols-[2fr_1fr_1fr_1fr_180px] gap-4">
-                    <div className="font-medium text-zinc-900">{c.name}</div>
-                    <div className="font-mono text-sm text-zinc-700">{c.code}</div>
-                    <div className="text-sm text-zinc-700">{c.isActive === false ? t('inactive') : t('active')}</div>
-                    <div className="text-sm text-zinc-600">{formatDate(c.updatedAt || c.createdAt)}</div>
-                    <div className="flex justify-end">
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          className="ac-btn ac-btn-soft px-3 py-2"
-                          onClick={() => {
-                            setEditingCategory(c);
-                            setCategoryNameEdit(c.name || '');
-                            setCategoryCodeEdit(c.code || '');
-                            setCategoryStatusEdit(c.isActive === false ? 'inactive' : 'active');
-                            setShowEditCategory(true);
-                          }}
-                        >
-                          {t('edit')}
-                        </button>
-                        <button
-                          type="button"
-                          className="ac-btn ac-btn-soft px-3 py-2"
-                          onClick={async () => {
-                            const nextStatus = c.isActive === false ? 'active' : 'inactive';
-                            await updateCategory({ id: c.id, patch: { status: nextStatus } });
-                            void fetchCategories();
-                          }}
-                        >
-                          {c.isActive === false ? t('enable') : t('disable')}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
+        <DataTable
+          minWidth={900}
+          rows={filteredCategories}
+          rowKey={(c) => c.id}
+          loading={loading}
+          loadingContent={t('loading')}
+          emptyContent={
+            <div>
+              <div className="text-sm font-semibold text-zinc-900">{t('noCategories')}</div>
+              <div className="mt-1 text-sm text-zinc-600">{t('noCategoriesHint')}</div>
             </div>
-          </div>
-        </div>
+          }
+          columns={[
+            { id: 'name', header: t('name'), cell: (c) => <span className="font-medium text-zinc-900">{c.name}</span> },
+            { id: 'code', header: t('code'), cell: (c) => <span className="font-mono text-sm text-zinc-700">{c.code}</span> },
+            { id: 'status', header: t('status'), cell: (c) => <span className="text-sm text-zinc-700">{c.isActive === false ? t('inactive') : t('active')}</span> },
+            { id: 'updated', header: t('updated'), cell: (c) => <span className="text-sm text-zinc-600">{formatDate(c.updatedAt || c.createdAt)}</span> },
+            {
+              id: 'actions',
+              header: t('actions'),
+              align: 'right',
+              cell: (c) => (
+                <RowActionsMenu
+                  ariaLabel={t('actions')}
+                  items={[
+                    {
+                      key: 'edit',
+                      label: t('edit'),
+                      onSelect: () => {
+                        setEditingCategory(c);
+                        setCategoryNameEdit(c.name || '');
+                        setCategoryCodeEdit(c.code || '');
+                        setCategoryStatusEdit(c.isActive === false ? 'inactive' : 'active');
+                        setShowEditCategory(true);
+                      }
+                    },
+                    {
+                      key: 'toggle',
+                      label: c.isActive === false ? t('enable') : t('disable'),
+                      onSelect: async () => {
+                        const nextStatus = c.isActive === false ? 'active' : 'inactive';
+                        await updateCategory({ id: c.id, patch: { status: nextStatus } });
+                        void fetchCategories();
+                      }
+                    }
+                  ]}
+                />
+              ),
+              headerClassName: 'pr-3',
+              className: 'pr-3'
+            }
+          ]}
+        />
       )}
 
       {showCreate ? (

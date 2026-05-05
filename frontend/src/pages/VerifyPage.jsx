@@ -71,7 +71,7 @@ const VerifyPage = () => {
     const value = raw.toUpperCase();
     if (value !== certId) setCertId(value);
 
-    const looksLikeCertId = /^BN-[A-Z0-9]+$/.test(value);
+    const looksLikeCertId = /^(BN-[A-Z0-9]+|CERT\d{9,})$/.test(value);
     if (looksLikeCertId) {
       setLoadingMode('verify');
       setLoadingMeta({ label: t('certificateId'), value });
@@ -205,7 +205,7 @@ const VerifyPage = () => {
           <form onSubmit={handleManualVerify} className="mt-5 space-y-3">
             <input
               type="text"
-              placeholder="BN-XXXXXXXXXX / EPC"
+              placeholder="CERTDDMMYY001 / EPC"
               value={certId}
               onChange={(e) => setCertId(e.target.value)}
               className="ac-input text-center font-mono uppercase"

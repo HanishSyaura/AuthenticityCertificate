@@ -30,12 +30,13 @@ const useCertTemplatesStore = create((set, get) => ({
     }
   },
 
-  createTemplate: async ({ certificateId, name, background, backgroundColor, layoutJson, placeholders, canvasWidth, canvasHeight }) => {
+  createTemplate: async ({ certificateId, templateType, name, background, backgroundColor, layoutJson, placeholders, canvasWidth, canvasHeight }) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
       const res = await api.post('/templates', {
         certificateId,
+        templateType,
         name,
         background,
         backgroundColor,

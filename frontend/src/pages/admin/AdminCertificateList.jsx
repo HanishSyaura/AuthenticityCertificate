@@ -4,6 +4,7 @@ import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import useEpcStore from '../../store/useEpcStore';
 import useMediaStore from '../../store/useMediaStore';
 import { useT } from '../../i18n/useT';
+import DataTable from '../../components/ui/DataTable';
 
 function formatDate(input) {
   if (!input) return '';
@@ -19,6 +20,7 @@ export default function AdminCertificateList() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [newCertificateId, setNewCertificateId] = useState('');
+  const [newTemplateType, setNewTemplateType] = useState('auth');
   const [newCertificateName, setNewCertificateName] = useState('');
   const [newBackground, setNewBackground] = useState('');
   const [newBgUploading, setNewBgUploading] = useState(false);
@@ -76,6 +78,7 @@ export default function AdminCertificateList() {
           onClick={() => {
             setNewError(null);
             setNewBgError(null);
+            setNewTemplateType('auth');
             setCreateOpen(true);
           }}
         >
@@ -85,41 +88,46 @@ export default function AdminCertificateList() {
 
       {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
 
-      <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
-        <div className="grid grid-cols-[1fr_120px_140px_110px] gap-3 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-600">
-          <div>{t('certificateName')}</div>
-          <div>{t('fields')}</div>
-          <div>{t('epcBatches')}</div>
-          <div>{t('created')}</div>
-        </div>
-        {loading ? (
-          <div className="px-4 py-6 text-sm text-zinc-600">{t('loading')}</div>
-        ) : (Array.isArray(templates) ? templates : []).length === 0 ? (
-          <div className="px-4 py-10 text-center">
+      <DataTable
+        minWidth={720}
+        rows={Array.isArray(templates) ? templates : []}
+        rowKey={(tpl) => tpl.id}
+        loading={loading}
+        loadingContent={t('loading')}
+        emptyContent={
+          <div>
             <div className="text-sm font-semibold text-zinc-900">{t('noCertificates')}</div>
             <div className="mt-1 text-xs text-zinc-600">{t('noCertificatesHint')}</div>
           </div>
-        ) : (
-          (Array.isArray(templates) ? templates : []).map((tpl) => (
-            <button
-              key={tpl.id}
-              type="button"
-              onClick={() => navigate(`/admin/certificates/${tpl.id}`)}
-              className="grid w-full grid-cols-[1fr_120px_140px_110px] gap-3 border-b border-zinc-100 px-4 py-3 text-left text-xs text-zinc-800 hover:bg-zinc-50 last:border-b-0"
-            >
+        }
+        onRowClick={(tpl) => navigate(`/admin/certificates/${tpl.id}`)}
+        columns={[
+          {
+            id: 'name',
+            header: t('certificateName'),
+            cell: (tpl) => (
               <div className="min-w-0">
                 <div className="truncate font-semibold text-zinc-900">{tpl.name}</div>
-                <div className="mt-0.5 truncate text-[11px] text-zinc-500">
-                  {String(tpl.certificateId || '').trim() || `#${tpl.id}`}
+                <div className="mt-0.5 truncate text-[11px] text-zinc-500">{String(tpl.certificateId || '').trim() || `#${tpl.id}`}</div>
+                <div className="mt-1 text-[11px] font-semibold text-zinc-600">
+                  {String(tpl?.templateType || 'auth') === 'supporting' ? t('supportingCertificate') : t('authCertificate')}
                 </div>
               </div>
-              <div className="text-[11px] text-zinc-700">{Array.isArray(tpl.layoutJson) ? tpl.layoutJson.length : 0}</div>
-              <div className="text-[11px] text-zinc-700">{assignedCountByTemplateId.get(String(tpl.id)) || 0}</div>
-              <div className="text-[11px] text-zinc-500">{formatDate(tpl.createdAt)}</div>
-            </button>
-          ))
-        )}
-      </div>
+            )
+          },
+          {
+            id: 'fields',
+            header: t('fields'),
+            cell: (tpl) => <span className="text-[11px] text-zinc-700">{Array.isArray(tpl.layoutJson) ? tpl.layoutJson.length : 0}</span>
+          },
+          {
+            id: 'batches',
+            header: t('epcBatches'),
+            cell: (tpl) => <span className="text-[11px] text-zinc-700">{assignedCountByTemplateId.get(String(tpl.id)) || 0}</span>
+          },
+          { id: 'created', header: t('created'), cell: (tpl) => <span className="text-[11px] text-zinc-500">{formatDate(tpl.createdAt)}</span> }
+        ]}
+      />
 
       {createOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -143,6 +151,17 @@ export default function AdminCertificateList() {
                   onChange={(e) => setNewCertificateId(e.target.value)}
                   className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-700">{t('certificateType')}</label>
+                <select
+                  value={newTemplateType}
+                  onChange={(e) => setNewTemplateType(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="auth">{t('authCertificate')}</option>
+                  <option value="supporting">{t('supportingCertificate')}</option>
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-700">{t('certificateName')}</label>
@@ -204,6 +223,7 @@ export default function AdminCertificateList() {
                   try {
                     const created = await createTemplate({
                       certificateId: cid,
+                      templateType: newTemplateType,
                       name: nm,
                       background: String(newBackground || '').trim() || '',
                       backgroundColor: '#ffffff',

@@ -90,8 +90,8 @@ export default function CanvasStage({
             return { ...it, x: nx, y: ny };
           }
 
-          const minW = 40;
-          const minH = 30;
+          const minW = 24;
+          const minH = 20;
           const nw = snap(clamp(d.startW + (x - d.startX), minW, width - it.x), grid);
           const nh = snap(clamp(d.startH + (y - d.startY), minH, height - it.y), grid);
           return { ...it, w: nw, h: nh };

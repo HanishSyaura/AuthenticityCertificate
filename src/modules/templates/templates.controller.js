@@ -2,9 +2,11 @@ const { z } = require('zod');
 const templatesService = require('./templates.service');
 
 const backgroundModeSchema = z.enum(['background', 'fit', 'actual']);
+const templateTypeSchema = z.enum(['auth', 'supporting']);
 
 const createSchema = z.object({
   certificateId: z.string().trim().min(1),
+  templateType: templateTypeSchema.optional(),
   name: z.string().trim().min(1),
   background: z.string().optional(),
   backgroundColor: z.string().optional(),
@@ -17,6 +19,7 @@ const createSchema = z.object({
 
 const updateSchema = z.object({
   certificateId: z.string().trim().min(1).optional(),
+  templateType: templateTypeSchema.optional(),
   name: z.string().trim().min(1).optional(),
   background: z.string().optional(),
   backgroundColor: z.string().optional(),
@@ -29,7 +32,9 @@ const updateSchema = z.object({
 
 async function list(req, res) {
   try {
-    const templates = await templatesService.listTemplates({ organizationId: req.organization.id });
+    const typeRaw = typeof req.query.type === 'string' ? req.query.type.trim() : '';
+    const type = typeRaw ? templateTypeSchema.safeParse(typeRaw).data : undefined;
+    const templates = await templatesService.listTemplates({ organizationId: req.organization.id, templateType: type });
     res.success(templates);
   } catch (e) {
     res.error(e.message);
@@ -42,6 +47,7 @@ async function create(req, res) {
     const created = await templatesService.createTemplate({
       organizationId: req.organization.id,
       certificateId: data.certificateId,
+      templateType: data.templateType,
       name: data.name,
       background: data.background,
       backgroundColor: data.backgroundColor,

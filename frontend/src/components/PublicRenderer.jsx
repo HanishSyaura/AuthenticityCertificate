@@ -587,7 +587,10 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                       }
                       const hasValue = String(val || '').trim().length > 0;
                       if (!hasValue && source !== 'static' && source !== 'title') return null;
-                      const valueHtml = source === 'static' || source === 'manual' || source === 'title' ? sanitizeLimitedHtml(val) : escapeTextToHtml(val);
+                      const valueHtml =
+                        source === 'static' || source === 'manual' || source === 'batch' || source === 'title'
+                          ? sanitizeLimitedHtml(val)
+                          : escapeTextToHtml(val);
                       const html = `${prefixHtml}${valueHtml || ''}`;
                       if (!String(html || '').trim()) return null;
                       return (

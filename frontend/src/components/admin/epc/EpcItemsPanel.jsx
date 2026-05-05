@@ -1,4 +1,5 @@
 import React from 'react';
+import DataTable from '../../ui/DataTable';
 
 export default function EpcItemsPanel({
   t,
@@ -32,31 +33,29 @@ export default function EpcItemsPanel({
 
       <div className="mb-3 text-xs text-zinc-600">{t('total', { value: itemTotal })}</div>
 
-      <div className="overflow-x-auto rounded-xl border border-zinc-200">
-        <div className="min-w-[980px]">
-          <div className="grid grid-cols-[240px_1fr_1fr_160px] gap-4 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-600">
-            <div>{t('epcCode')}</div>
-            <div>{t('batchName')}</div>
-            <div>{t('product')}</div>
-            <div>{t('createdAt')}</div>
-          </div>
-
-          {items.map((it) => (
-            <div key={it.id} className="grid grid-cols-[240px_1fr_1fr_160px] gap-4 border-t border-zinc-100 px-4 py-3 text-sm text-zinc-800">
-              <div className="font-mono text-xs">{it.epcCode}</div>
-              <div className="text-sm">{it.batch?.batchName || '-'}</div>
+      <DataTable
+        minWidth={980}
+        rows={items}
+        rowKey={(it) => it.id}
+        loading={loading}
+        loadingContent={t('loading')}
+        emptyContent={t('noEpc')}
+        columns={[
+          { id: 'epcCode', header: t('epcCode'), cell: (it) => <span className="font-mono text-xs">{it.epcCode}</span> },
+          { id: 'batchName', header: t('batchName'), cell: (it) => <span className="text-sm">{it.batch?.batchName || '-'}</span> },
+          {
+            id: 'product',
+            header: t('product'),
+            cell: (it) => (
               <div>
                 <div className="font-medium text-zinc-900">{it.batch?.product?.name || '-'}</div>
                 <div className="text-[11px] text-zinc-500">{it.batch?.sku || '-'}</div>
               </div>
-              <div className="text-xs text-zinc-600">{formatDate(it.createdAt)}</div>
-            </div>
-          ))}
-
-          {!loading && items.length === 0 ? <div className="p-6 text-center text-sm text-zinc-600">{t('noEpc')}</div> : null}
-        </div>
-      </div>
+            )
+          },
+          { id: 'createdAt', header: t('createdAt'), cell: (it) => <span className="text-xs text-zinc-600">{formatDate(it.createdAt)}</span> }
+        ]}
+      />
     </div>
   );
 }
-

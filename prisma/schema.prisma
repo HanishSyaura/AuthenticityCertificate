@@ -221,6 +221,12 @@ model CorpSequence {
   @@index([organizationId])
 }
 
+model CertificateSequence {
+  dateKey   String   @id
+  lastNo    BigInt   @default(0)
+  updatedAt DateTime @updatedAt
+}
+
 model EpcBatch {
   id             Int          @id @default(autoincrement())
   organizationId Int
@@ -446,6 +452,7 @@ model CertificateTemplate {
   organizationId  Int
   organization    Organization @relation(fields: [organizationId], references: [id])
   certificateId   String
+  templateType    String       @default("auth")
   name            String
   background      String // URL to background image
   backgroundColor String       @default("#ffffff")

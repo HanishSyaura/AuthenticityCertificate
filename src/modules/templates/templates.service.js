@@ -4,23 +4,39 @@ async function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), ms))]);
 }
 
-async function listTemplates({ organizationId }) {
+async function listTemplates({ organizationId, templateType }) {
   return await withTimeout(
     prisma.certificateTemplate.findMany({
-      where: { organizationId: Number(organizationId) },
+      where: {
+        organizationId: Number(organizationId),
+        ...(templateType ? { templateType: String(templateType) } : {})
+      },
       orderBy: { createdAt: 'desc' }
     }),
     1200
   );
 }
 
-async function createTemplate({ organizationId, certificateId, name, background, backgroundColor, backgroundMode, layoutJson, placeholders, canvasWidth, canvasHeight }) {
+async function createTemplate({
+  organizationId,
+  certificateId,
+  templateType,
+  name,
+  background,
+  backgroundColor,
+  backgroundMode,
+  layoutJson,
+  placeholders,
+  canvasWidth,
+  canvasHeight
+}) {
   try {
     return await withTimeout(
       prisma.certificateTemplate.create({
         data: {
           organizationId: Number(organizationId),
           certificateId: String(certificateId || '').trim(),
+          templateType: String(templateType || '').trim() || 'auth',
           name,
           background: background || '',
           backgroundColor: String(backgroundColor || '').trim() || '#ffffff',
@@ -42,6 +58,7 @@ async function createTemplate({ organizationId, certificateId, name, background,
 async function updateTemplate({ organizationId, id, patch }) {
   const data = {};
   if (patch.certificateId !== undefined) data.certificateId = String(patch.certificateId || '').trim();
+  if (patch.templateType !== undefined) data.templateType = String(patch.templateType || '').trim() || 'auth';
   if (patch.name !== undefined) data.name = patch.name;
   if (patch.background !== undefined) data.background = patch.background || '';
   if (patch.backgroundColor !== undefined) data.backgroundColor = String(patch.backgroundColor || '').trim() || '#ffffff';

@@ -3,6 +3,8 @@ import useRecordsStore from '../../store/useRecordsStore';
 import useEpcStore from '../../store/useEpcStore';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import { useT } from '../../i18n/useT';
+import RichTextEditor from '../../components/admin/RichTextEditor';
+import DataTable from '../../components/ui/DataTable';
 
 function formatDateTime(input) {
   if (!input) return '';
@@ -131,6 +133,11 @@ export default function AdminEpc() {
 
   const selectedProduct = useMemo(() => (Array.isArray(products) ? products : []).find((p) => String(p.id) === String(productId)) || null, [products, productId]);
 
+  const authTemplates = useMemo(
+    () => (Array.isArray(templates) ? templates : []).filter((tpl) => String(tpl?.templateType || 'auth') !== 'supporting'),
+    [templates]
+  );
+
   useEffect(() => {
     if (!selectedProduct) return;
     if (selectedProduct.certificateTemplateId != null) {
@@ -139,8 +146,8 @@ export default function AdminEpc() {
   }, [selectedProduct]);
 
   const selectedTemplate = useMemo(
-    () => (Array.isArray(templates) ? templates : []).find((x) => String(x.id) === String(certificateTemplateId)) || null,
-    [certificateTemplateId, templates]
+    () => authTemplates.find((x) => String(x.id) === String(certificateTemplateId)) || null,
+    [authTemplates, certificateTemplateId]
   );
 
   const placeholders = useMemo(() => {
@@ -247,6 +254,13 @@ export default function AdminEpc() {
                     ) : null}
                     {source === 'product' ? (
                       <input value={String(templateData?.[key] || '')} disabled className="ac-input" />
+                    ) : source === 'batch' ? (
+                      <RichTextEditor
+                        value={String(templateData?.[key] || '')}
+                        onChange={(v) => setTemplateData((prev) => ({ ...(prev || {}), [key]: v }))}
+                        minHeight="4rem"
+                        maxHeight="10rem"
+                      />
                     ) : (
                       <div
                         className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm"
@@ -293,7 +307,7 @@ export default function AdminEpc() {
                   value={certificateId}
                   onChange={(e) => setCertificateId(e.target.value)}
                   className="ac-input font-mono uppercase"
-                  placeholder="BN-XXXXXXXXXX"
+                  placeholder="CERTDDMMYY001"
                 />
               </div>
 
@@ -301,7 +315,7 @@ export default function AdminEpc() {
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('certTemplate')}</div>
                 <select value={certificateTemplateId} onChange={(e) => setCertificateTemplateId(e.target.value)} className="ac-input">
                   <option value="">{t('none')}</option>
-                  {(Array.isArray(templates) ? templates : []).map((tpl) => (
+                  {authTemplates.map((tpl) => (
                     <option key={tpl.id} value={String(tpl.id)}>
                       {String(tpl?.certificateId || '').trim() ? `${tpl.certificateId} — ${tpl.name}` : tpl.name}
                     </option>
@@ -356,6 +370,8 @@ export default function AdminEpc() {
                       certificateTemplateId: certificateTemplateId ? Number(certificateTemplateId) : null,
                       templateData
                     });
+                    const createdCertId = String(created?.batch?.certificateId || '').trim();
+                    if (createdCertId) setCertificateId(createdCertId);
                     const batchId = created?.batch?.id;
                     if (batchId) await exportBatchXlsx(batchId);
                     await fetchBatches({ limit: 50, offset: 0 });
@@ -487,34 +503,38 @@ export default function AdminEpc() {
             </div>
 
             <div className="p-4">
-              <div className="overflow-auto rounded-lg border border-zinc-200">
-                <table className="min-w-full divide-y divide-zinc-200 text-xs">
-                  <thead className="bg-zinc-50">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-semibold text-zinc-700">{t('epcCode')}</th>
-                      <th className="px-3 py-2 text-left font-semibold text-zinc-700">{t('runningNo')}</th>
-                      <th className="px-3 py-2 text-left font-semibold text-zinc-700">{t('netWeight')}</th>
-                      <th className="px-3 py-2 text-left font-semibold text-zinc-700">{t('caiqNumber')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-100 bg-white">
-                    {(Array.isArray(items) ? items : []).map((it) => (
-                      <tr key={it.id}>
-                        <td className="whitespace-nowrap px-3 py-2 font-mono text-[11px] text-zinc-900">{String(it.epcCode || '')}</td>
-                        <td className="whitespace-nowrap px-3 py-2 text-zinc-800">{it.runningNo == null ? '-' : String(it.runningNo)}</td>
-                        <td className="whitespace-nowrap px-3 py-2 text-zinc-800">{it.netWeight == null ? '-' : String(it.netWeight)}</td>
-                        <td className="whitespace-nowrap px-3 py-2 text-zinc-800">{it.caiqNumber == null ? '-' : String(it.caiqNumber)}</td>
-                      </tr>
-                    ))}
-                    {(!items || items.length === 0) && !loading ? (
-                      <tr>
-                        <td colSpan={4} className="px-3 py-6 text-center text-zinc-500">
-                          {t('noEpc')}
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
+              <div className="overflow-auto">
+                <DataTable
+                  containerClassName="rounded-lg border border-zinc-200 shadow-none"
+                  minWidth={720}
+                  rows={Array.isArray(items) ? items : []}
+                  rowKey={(it) => it.id}
+                  loading={loading}
+                  loadingContent={t('loading')}
+                  emptyContent={t('noEpc')}
+                  columns={[
+                    {
+                      id: 'epc',
+                      header: t('epcCode'),
+                      cell: (it) => <span className="whitespace-nowrap font-mono text-[11px] text-zinc-900">{String(it.epcCode || '')}</span>
+                    },
+                    {
+                      id: 'runningNo',
+                      header: t('runningNo'),
+                      cell: (it) => <span className="whitespace-nowrap text-zinc-800">{it.runningNo == null ? '-' : String(it.runningNo)}</span>
+                    },
+                    {
+                      id: 'netWeight',
+                      header: t('netWeight'),
+                      cell: (it) => <span className="whitespace-nowrap text-zinc-800">{it.netWeight == null ? '-' : String(it.netWeight)}</span>
+                    },
+                    {
+                      id: 'caiqNumber',
+                      header: t('caiqNumber'),
+                      cell: (it) => <span className="whitespace-nowrap text-zinc-800">{it.caiqNumber == null ? '-' : String(it.caiqNumber)}</span>
+                    }
+                  ]}
+                />
               </div>
 
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">

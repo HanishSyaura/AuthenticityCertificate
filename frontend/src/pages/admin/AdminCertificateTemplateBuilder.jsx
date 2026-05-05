@@ -248,6 +248,10 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         templateData[key] = String(p?.sample || '');
         continue;
       }
+      if (source === 'batch') {
+        templateData[key] = '';
+        continue;
+      }
       templateData[key] = '';
     }
     return { ...base, templateData: { ...(base.templateData || {}), ...templateData } };
@@ -258,7 +262,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     return layout.map((f) => ({
       ...(f || {}),
       render: (it) => (
-        <div className="h-full w-full p-1">
+        <div className="h-full w-full p-[2px]">
           {(() => {
             const raw = safePreview ? getValue(it.path, safePreview) : '';
             const path = String(it.path || '');
@@ -271,7 +275,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             const labelText = showPrefix ? String(stripHtmlToText(labelHtmlRaw) || '').trim() : '';
             const sepText = showPrefix ? (key ? String(ph?.separator ?? ': ') : ': ') : '';
             const prefixRaw = showPrefix && labelText ? `${escapeHtml(labelText)}${escapeHtml(sepText)}` : '';
-            const valueHtml = source === 'static' || source === 'manual' || source === 'title' ? val : escapeTextToHtml(val);
+            const valueHtml = source === 'static' || source === 'manual' || source === 'batch' || source === 'title' ? val : escapeTextToHtml(val);
             const html = sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`);
             const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
             const align = textAlignClass(it.align);
@@ -304,7 +308,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         const labelText = showPrefix ? String(stripHtmlToText(labelHtmlRaw) || '').trim() : '';
         const sepText = showPrefix ? (key ? String(ph?.separator ?? ': ') : ': ') : '';
         const prefixRaw = showPrefix && labelText ? `${escapeHtml(labelText)}${escapeHtml(sepText)}` : '';
-        const valueHtml = source === 'static' || source === 'manual' || source === 'title' ? val : escapeTextToHtml(val);
+        const valueHtml = source === 'static' || source === 'manual' || source === 'batch' || source === 'title' ? val : escapeTextToHtml(val);
         const html = sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`);
         const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
         const align = textAlignClass(it.align);
@@ -406,8 +410,8 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
 
   const updateField = (patch) => {
     if (!selectedField || !selected) return;
-    const minW = 40;
-    const minH = 30;
+    const minW = 24;
+    const minH = 20;
     const nextLayout = (Array.isArray(draftLayout) ? draftLayout : []).map((f) => {
       if (f.id !== selectedField.id) return f;
       const merged = { ...f, ...(patch || {}) };
@@ -1178,7 +1182,13 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                               <div className="min-w-0 flex-1">
                                 <div className="truncate text-sm font-semibold text-zinc-900">{title}</div>
                                 <div className="mt-0.5 truncate text-[11px] text-zinc-500">
-                                  {uiSource === 'product' ? t('bindTo') : uiSource === 'title' ? t('sourceTitle') : t('sourceManual')}
+                                  {uiSource === 'product'
+                                    ? t('bindTo')
+                                    : uiSource === 'title'
+                                      ? t('sourceTitle')
+                                      : uiSource === 'batch'
+                                        ? t('sourceBatch')
+                                        : t('sourceManual')}
                                 </div>
                               </div>
                             </button>
@@ -1269,6 +1279,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                       className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                                     >
                                       <option value="static">{t('sourceManual')}</option>
+                                      <option value="batch">{t('sourceBatch')}</option>
                                       <option value="title">{t('sourceTitle')}</option>
                                       <option value="product">{t('bindTo')}</option>
                                     </select>

@@ -51,7 +51,12 @@ async function generateCertificates(batchId, type, quantity = 1, organizationId)
 
   if (type === 'batch') {
     // One certificate for the entire batch
-    const certificateId = generateCertificateId();
+    let certificateId;
+    try {
+      certificateId = await generateCertificateId(prisma);
+    } catch {
+      certificateId = await generateCertificateId(null);
+    }
     try {
       const cert = await withTimeout(
         prisma.certificate.create({
@@ -74,7 +79,12 @@ async function generateCertificates(batchId, type, quantity = 1, organizationId)
   } else {
     // Unique certificate for each unit
     for (let i = 0; i < quantity; i++) {
-      const certificateId = generateCertificateId();
+      let certificateId;
+      try {
+        certificateId = await generateCertificateId(prisma);
+      } catch {
+        certificateId = await generateCertificateId(null);
+      }
       try {
         const cert = await withTimeout(
           prisma.certificate.create({
@@ -187,9 +197,15 @@ async function reissueCertificate({ organizationId, certificateId, reason }) {
   if (!from) throw new Error('Certificate not found');
   if (from.organizationId && from.organizationId !== orgId) throw new Error('Certificate belongs to a different organization');
 
-  const toId = generateCertificateId();
+  let toId;
+  try {
+    toId = await generateCertificateId(prisma);
+  } catch {
+    toId = await generateCertificateId(null);
+  }
   const now = new Date();
   const exp = from.expiresAt ? new Date(from.expiresAt) : null;
+
 
   try {
     await withTimeout(

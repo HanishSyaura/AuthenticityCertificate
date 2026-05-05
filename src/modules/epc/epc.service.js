@@ -190,12 +190,12 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, product
       const desiredCertIdRaw = String(certificateId || '').trim();
       const desiredCertId = desiredCertIdRaw ? desiredCertIdRaw.toUpperCase() : '';
 
-      const batchCertId = desiredCertId || generateCertificateId();
+      const batchCertId = desiredCertId || (await generateCertificateId(tx));
       const existingCert = await tx.certificate.findUnique({
         where: { certificateId: batchCertId },
-        select: { certificateId: true, organizationId: true, deletedAt: true }
+        select: { certificateId: true, organizationId: true }
       });
-      if (existingCert && existingCert.deletedAt == null) {
+      if (existingCert) {
         if (Number(existingCert.organizationId) !== orgId) throw new Error('Certificate ID belongs to a different organization');
       } else {
         await tx.certificate.create({
@@ -231,6 +231,14 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, product
         data: { lastNo: endNo }
       });
 
+      const tplId = typeof certificateTemplateId === 'number' ? certificateTemplateId : null;
+      if (tplId != null) {
+        const tpl = await tx.certificateTemplate.findFirst({
+          where: { id: tplId, organizationId: orgId, deletedAt: null, templateType: 'auth' },
+          select: { id: true }
+        });
+        if (!tpl) throw new Error('Certificate template mesti jenis Auth');
+      }
 
       const batch = await tx.epcBatch.create({
         data: {
@@ -242,7 +250,7 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, product
           batchQty,
           remark: remark || null,
           certificateId: batchCertId,
-          certificateTemplateId: typeof certificateTemplateId === 'number' ? certificateTemplateId : null,
+          certificateTemplateId: tplId,
           templateData: templateData || null,
           productionUploadedAt: null,
           productionDoneAt: null
@@ -330,17 +338,22 @@ async function importExistingEpc({ organizationId, productId, batchName, base64 
       select: { id: true }
     });
 
-    const batchCertId = generateCertificateId();
-    await tx.certificate.create({
-      data: {
-        certificateId: batchCertId,
-        organizationId: orgId,
-        type: 'shared',
-        batchId: null,
-        status: 'VALID',
-        issuedAt: new Date()
-      }
-    });
+    const batchCertId = await generateCertificateId(tx);
+    const existingCert = await tx.certificate.findUnique({ where: { certificateId: batchCertId }, select: { certificateId: true, organizationId: true } });
+    if (existingCert) {
+      if (Number(existingCert.organizationId) !== orgId) throw new Error('Certificate ID belongs to a different organization');
+    } else {
+      await tx.certificate.create({
+        data: {
+          certificateId: batchCertId,
+          organizationId: orgId,
+          type: 'shared',
+          batchId: null,
+          status: 'VALID',
+          issuedAt: new Date()
+        }
+      });
+    }
 
     const batch = await tx.epcBatch.create({
       data: {
@@ -763,7 +776,20 @@ async function updateBatch({ organizationId, batchId, patch }) {
   const id = Number(batchId);
   if (!Number.isFinite(id)) throw new Error('Invalid batch id');
   const data = {};
-  if (patch.certificateTemplateId !== undefined) data.certificateTemplateId = patch.certificateTemplateId == null ? null : Number(patch.certificateTemplateId);
+  if (patch.certificateTemplateId !== undefined) {
+    const tplId = patch.certificateTemplateId == null ? null : Number(patch.certificateTemplateId);
+    if (tplId != null) {
+      const tpl = await withTimeout(
+        prisma.certificateTemplate.findFirst({
+          where: { id: tplId, organizationId: orgId, deletedAt: null, templateType: 'auth' },
+          select: { id: true }
+        }),
+        1200
+      );
+      if (!tpl) throw new Error('Certificate template mesti jenis Auth');
+    }
+    data.certificateTemplateId = tplId;
+  }
   const res = await withTimeout(
     prisma.epcBatch.updateMany({
       where: { id, organizationId: orgId },
