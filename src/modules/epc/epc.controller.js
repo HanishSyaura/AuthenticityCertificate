@@ -43,9 +43,9 @@ const getItemByEpcSchema = z.object({
 });
 
 const updateItemProductionSchema = z.object({
-  netWeight: z.union([z.string(), z.number()]).optional(),
-  caiqNumber: z.union([z.string(), z.number()]).optional(),
-  productionDate: z.string().optional()
+  netWeight: z.union([z.string(), z.number(), z.null()]).optional(),
+  caiqNumber: z.union([z.string(), z.number(), z.null()]).optional(),
+  productionDate: z.union([z.string(), z.null()]).optional()
 });
 
 const resetItemsProductionSchema = z.object({
@@ -166,6 +166,9 @@ async function updateItemProduction(req, res) {
     });
     res.success(updated, 'Item updated');
   } catch (e) {
+    if (e instanceof z.ZodError) {
+      return res.error('Invalid input. Please check Net Weight and CAIQ values and try again.', 400);
+    }
     const status = Number(e.status) || 400;
     res.error(e.message, status);
   }
@@ -181,7 +184,10 @@ async function resetItemsProduction(req, res) {
     });
     res.success(result, 'Production fields cleared');
   } catch (e) {
-    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    if (e instanceof z.ZodError) {
+      const first = e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input';
+      return res.error(first, 400);
+    }
     const status = Number(e.status) || 400;
     res.error(e.message, status);
   }

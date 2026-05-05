@@ -7,7 +7,7 @@ const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, pla
   const Quill = ReactQuill?.Quill;
   if (Quill && !Quill.__acConfigured) {
     const Font = Quill.import('formats/font');
-    Font.whitelist = ['sans-serif', 'serif', 'monospace', 'arial', 'times-new-roman', 'georgia', 'courier-new'];
+    Font.whitelist = ['serif', 'monospace', 'arial', 'times-new-roman', 'georgia', 'courier-new'];
     Quill.register(Font, true);
 
     const SizeStyle = Quill.import('attributors/style/size');
@@ -46,8 +46,8 @@ const RichTextEditor = forwardRef(function RichTextEditor({ value, onChange, pla
         [{ list: 'ordered' }, { list: 'bullet' }],
         [{ script: 'super' }, { align: [] }],
         [
-          { size: ['8pt', '9pt', '10pt', '11pt', '12pt', '14pt', '16pt', '18pt', '24pt', '36pt', '48pt'] },
-          { font: ['sans-serif', 'serif', 'monospace', 'arial', 'times-new-roman', 'georgia', 'courier-new'] }
+          { size: [false, '8pt', '9pt', '10pt', '11pt', '12pt', '14pt', '16pt', '18pt', '24pt', '36pt', '48pt'] },
+          { font: [false, 'serif', 'monospace', 'arial', 'times-new-roman', 'georgia', 'courier-new'] }
         ]
       ],
       keyboard: {

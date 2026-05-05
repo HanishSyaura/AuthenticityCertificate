@@ -70,7 +70,7 @@ export default function AdminEpcScan() {
   const [batchOffset, setBatchOffset] = useState(0);
   const batchLimit = 50;
   const [batchQuery, setBatchQuery] = useState('');
-  const [pendingOnly, setPendingOnly] = useState(true);
+  const [pendingOnly, setPendingOnly] = useState(false);
   const [batchLoading, setBatchLoading] = useState(false);
 
   const selectedRow = rows.find((r) => String(r.id) === String(selectedId)) || null;

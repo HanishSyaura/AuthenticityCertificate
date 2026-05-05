@@ -630,13 +630,14 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                       const valueHtmlRaw =
                         source === 'static' || source === 'manual' || source === 'batch' || source === 'title' ? sanitizeLimitedHtml(val) : escapeTextToHtml(val);
                       const valueHtml = inlineizeHtml(valueHtmlRaw);
-                      const html = `${prefixHtml}${valueHtml || ''}`;
+                      const prefixBoldHtml = prefixHtml ? `<span style="font-weight: 700">${prefixHtml}</span>` : '';
+                      const html = `${prefixBoldHtml}${valueHtml || ''}`;
                       if (!String(html || '').trim()) return null;
                       const wrap = typeof it.wrap === 'boolean' ? it.wrap : true;
                       return (
                         <div
                           key={it.id || `${idx}`}
-                          className="absolute overflow-hidden px-2 text-zinc-900"
+                          className="absolute overflow-hidden p-[2px] text-zinc-900"
                           style={{
                             left: `${it.x}px`,
                             top: `${it.y}px`,
@@ -647,7 +648,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                           }}
                         >
                           <div
-                            className={`ql-editor ac-richtext h-full w-full font-semibold ${textAlignClass(it.align)} ${
+                            className={`ql-editor ac-richtext h-full w-full ${textAlignClass(it.align)} ${
                               wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-nowrap'
                             }`}
                             style={{

@@ -25,6 +25,13 @@ function IconShieldAlert(props) {
   );
 }
 
+function backgroundSizeForMode(mode) {
+  const m = String(mode || '').trim().toLowerCase() || 'background';
+  if (m === 'fit') return 'contain';
+  if (m === 'actual') return 'auto';
+  return '100% 100%';
+}
+
 const VerifyPage = () => {
   const { id } = useParams();
   const location = useLocation();
@@ -127,6 +134,7 @@ const VerifyPage = () => {
     if (Array.isArray(certificate?.layout)) {
       const pageBg = String(certificate?.certificateTemplate?.backgroundColor || '').trim() || '#ffffff';
       const pageBgUrl = certificate?.certificateTemplate?.background ? String(certificate.certificateTemplate.background) : '';
+      const pageBgMode = String(certificate?.certificateTemplate?.backgroundMode || '').trim() || 'background';
       return (
         <div
           className="min-h-[100dvh] w-full overflow-x-hidden"
@@ -135,7 +143,7 @@ const VerifyPage = () => {
             backgroundImage: pageBgUrl ? `url(${pageBgUrl})` : undefined,
             backgroundRepeat: 'no-repeat',
             backgroundPosition: 'top center',
-            backgroundSize: pageBgUrl ? 'cover' : undefined
+            backgroundSize: pageBgUrl ? backgroundSizeForMode(pageBgMode) : undefined
           }}
         >
           <div className="fixed right-3 top-3 z-50">
@@ -178,6 +186,7 @@ const VerifyPage = () => {
               const baseH = Number.isFinite(canvasH) && canvasH > 0 ? canvasH : 844;
               const pageBg = String(certificate?.certificateTemplate?.backgroundColor || '').trim() || '#ffffff';
               const pageBgUrl = certificate?.certificateTemplate?.background ? String(certificate.certificateTemplate.background) : '';
+              const pageBgMode = String(certificate?.certificateTemplate?.backgroundMode || '').trim() || 'background';
               return (
                 <div
                   className="min-h-[100dvh] overflow-x-hidden"
@@ -186,7 +195,7 @@ const VerifyPage = () => {
                     backgroundImage: pageBgUrl ? `url(${pageBgUrl})` : undefined,
                     backgroundRepeat: 'no-repeat',
                     backgroundPosition: 'top center',
-                    backgroundSize: pageBgUrl ? 'cover' : undefined
+                    backgroundSize: pageBgUrl ? backgroundSizeForMode(pageBgMode) : undefined
                   }}
                 >
                   <div className="w-full">

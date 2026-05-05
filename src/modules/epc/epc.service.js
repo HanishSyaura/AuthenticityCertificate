@@ -733,7 +733,7 @@ async function resetItemsProduction({ organizationId, itemIds, actor }) {
   const res = await withTimeout(
     prisma.epcItem.updateMany({
       where: { organizationId: orgId, id: { in: ids } },
-      data: { netWeight: null, caiqNumber: null, productionDate: null }
+      data: { netWeight: null, caiqNumber: null }
     }),
     1500
   );

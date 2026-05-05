@@ -46,6 +46,27 @@ function inlineizeHtml(input) {
   return s;
 }
 
+function buildPrefixHtml({ showPrefix, key, placeholder, item }) {
+  if (!showPrefix) return '';
+  const labelText = key
+    ? String(stripHtmlToText(placeholder?.labelHtml ?? placeholder?.label ?? key) || '').trim()
+    : String(stripHtmlToText(item?.labelHtml ?? item?.label ?? '') || '').trim();
+  if (!labelText) return '';
+
+  if (key) {
+    const labelHtml = String(placeholder?.labelHtml || '').trim()
+      ? sanitizeLimitedHtml(placeholder.labelHtml)
+      : escapeHtml(String(placeholder?.label || key));
+    const separatorHtml = String(placeholder?.separatorHtml || '').trim()
+      ? sanitizeLimitedHtml(placeholder.separatorHtml)
+      : escapeHtml(String(placeholder?.separator ?? ': '));
+    return `<span style="font-weight: 700">${inlineizeHtml(labelHtml)}${inlineizeHtml(separatorHtml)}</span>`;
+  }
+
+  const labelHtml = String(item?.labelHtml || '').trim() ? sanitizeLimitedHtml(item.labelHtml) : escapeHtml(String(item?.label || ''));
+  return `<span style="font-weight: 700">${inlineizeHtml(labelHtml)}${escapeHtml(': ')}</span>`;
+}
+
 function normalizeKeyCandidate(input) {
   return String(input || '')
     .trim()
@@ -301,10 +322,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             const val = raw == null ? '' : String(raw);
             const source = String(ph?.source || '').trim();
             const showPrefix = source !== 'title';
-            const labelHtmlRaw = showPrefix ? (key ? String(ph?.labelHtml ?? toQuillHtml(ph?.label || key)) : String(it.labelHtml ?? toQuillHtml(it.label || ''))) : '';
-            const labelText = showPrefix ? String(stripHtmlToText(labelHtmlRaw) || '').trim() : '';
-            const sepText = showPrefix ? (key ? String(ph?.separator ?? ': ') : ': ') : '';
-            const prefixRaw = showPrefix && labelText ? `${escapeHtml(labelText)}${escapeHtml(sepText)}` : '';
+            const prefixRaw = buildPrefixHtml({ showPrefix, key, placeholder: ph, item: it });
             const valueHtmlRaw = source === 'static' || source === 'manual' || source === 'batch' || source === 'title' ? val : escapeTextToHtml(val);
             const valueHtml = inlineizeHtml(String(valueHtmlRaw || ''));
             const html = inlineizeHtml(sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`));
@@ -313,9 +331,10 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             const wrap = typeof it.wrap === 'boolean' ? it.wrap : true;
             return (
               <div
-                className={`ql-editor ac-richtext font-semibold text-zinc-900 ${align} ${wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-nowrap'}`}
+                className={`ql-editor ac-richtext text-zinc-900 ${align} ${wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-nowrap'}`}
                 style={{
                   fontSize: fs,
+                  lineHeight: 1.2,
                   textAlign: String(it.align || 'left'),
                   whiteSpace: wrap ? 'pre-wrap' : 'nowrap',
                   overflowWrap: wrap ? 'anywhere' : undefined,
@@ -342,10 +361,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         const val = raw == null ? '' : String(raw);
         const source = String(ph?.source || '').trim();
         const showPrefix = source !== 'title';
-        const labelHtmlRaw = showPrefix ? (key ? String(ph?.labelHtml ?? toQuillHtml(ph?.label || key)) : String(it.labelHtml ?? toQuillHtml(it.label || ''))) : '';
-        const labelText = showPrefix ? String(stripHtmlToText(labelHtmlRaw) || '').trim() : '';
-        const sepText = showPrefix ? (key ? String(ph?.separator ?? ': ') : ': ') : '';
-        const prefixRaw = showPrefix && labelText ? `${escapeHtml(labelText)}${escapeHtml(sepText)}` : '';
+        const prefixRaw = buildPrefixHtml({ showPrefix, key, placeholder: ph, item: it });
         const valueHtmlRaw = source === 'static' || source === 'manual' || source === 'batch' || source === 'title' ? val : escapeTextToHtml(val);
         const valueHtml = inlineizeHtml(String(valueHtmlRaw || ''));
         const html = inlineizeHtml(sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`));
@@ -357,6 +373,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             className={`ql-editor ac-richtext h-full w-full ${align} ${wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-nowrap'}`}
             style={{
               fontSize: fs,
+              lineHeight: 1.2,
               textAlign: String(it.align || 'left'),
               whiteSpace: wrap ? 'pre-wrap' : 'nowrap',
               overflowWrap: wrap ? 'anywhere' : undefined,
