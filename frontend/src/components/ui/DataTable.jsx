@@ -16,6 +16,7 @@ export default function DataTable({
   onRowClick,
   top,
   bottom,
+  density,
   minWidth,
   containerClassName,
   tableClassName
@@ -24,6 +25,11 @@ export default function DataTable({
   const safeRows = Array.isArray(rows) ? rows : [];
   const keyFn = typeof rowKey === 'function' ? rowKey : (r) => r?.id;
   const clickable = typeof onRowClick === 'function';
+  const isCompact = String(density || '') === 'compact';
+  const thClass = `${isCompact ? 'px-3 py-2' : 'px-4 py-3'} text-xs font-semibold text-zinc-600`;
+  const tdClass = `${isCompact ? 'px-3 py-2' : 'px-4 py-3'} text-sm text-zinc-800`;
+  const loadingCellClass = `${isCompact ? 'px-3 py-5' : 'px-4 py-6'} text-sm text-zinc-600`;
+  const emptyCellClass = `${isCompact ? 'px-3 py-8' : 'px-4 py-10'} text-center text-sm text-zinc-600`;
 
   return (
     <div className={`ac-table ${containerClassName || ''}`.trim()}>
@@ -39,7 +45,7 @@ export default function DataTable({
                     <th
                       key={c.id}
                       scope="col"
-                      className={`whitespace-nowrap border-b border-zinc-200/70 px-4 py-3 text-xs font-semibold text-zinc-600 ${align} ${
+                      className={`whitespace-nowrap border-b border-zinc-200/70 ${thClass} ${align} ${
                         c?.headerClassName || ''
                       }`.trim()}
                       style={c?.headerStyle}
@@ -53,13 +59,13 @@ export default function DataTable({
             <tbody className="divide-y divide-zinc-100/80 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={safeColumns.length || 1} className="px-4 py-6 text-sm text-zinc-600">
+                  <td colSpan={safeColumns.length || 1} className={loadingCellClass}>
                     {loadingContent || 'Loading…'}
                   </td>
                 </tr>
               ) : safeRows.length === 0 ? (
                 <tr>
-                  <td colSpan={safeColumns.length || 1} className="px-4 py-10 text-center text-sm text-zinc-600">
+                  <td colSpan={safeColumns.length || 1} className={emptyCellClass}>
                     {emptyContent || 'No data.'}
                   </td>
                 </tr>
@@ -75,7 +81,7 @@ export default function DataTable({
                       return (
                         <td
                           key={c.id}
-                          className={`px-4 py-3 text-sm text-zinc-800 ${align} ${c?.className || ''}`.trim()}
+                          className={`${tdClass} ${align} ${c?.className || ''}`.trim()}
                           style={c?.cellStyle}
                         >
                           {typeof c.cell === 'function' ? c.cell(r) : null}

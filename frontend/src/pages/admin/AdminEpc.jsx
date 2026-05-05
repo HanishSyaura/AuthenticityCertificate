@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import useRecordsStore from '../../store/useRecordsStore';
 import useEpcStore from '../../store/useEpcStore';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
@@ -100,7 +100,12 @@ export default function AdminEpc() {
   const [itemsOpen, setItemsOpen] = useState(false);
   const [itemsBatch, setItemsBatch] = useState(null);
   const [itemsOffset, setItemsOffset] = useState(0);
-  const itemsLimit = 50;
+  const itemsLimit = 20;
+
+  const closeItems = useCallback(() => {
+    setItemsOpen(false);
+    setItemsBatch(null);
+  }, []);
 
   const openVerifyUrl = (url) => {
     const u = String(url || '').trim();
@@ -191,6 +196,20 @@ export default function AdminEpc() {
     setItemsOpen(true);
     await fetchItems({ batchId: b.id, limit: itemsLimit, offset: 0 });
   };
+
+  useEffect(() => {
+    if (!itemsOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') closeItems();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [closeItems, itemsOpen]);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -473,8 +492,16 @@ export default function AdminEpc() {
       ) : null}
 
       {itemsOpen && itemsBatch ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-5xl rounded-xl border border-zinc-200 bg-white shadow-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          onClick={closeItems}
+        >
+          <div
+            className="flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-zinc-900">
@@ -496,15 +523,16 @@ export default function AdminEpc() {
                 <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchVerifyUrlXlsx(itemsBatch.id)}>
                   {t('exportVerifyUrlXlsx')}
                 </button>
-                <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => setItemsOpen(false)}>
+                <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={closeItems}>
                   {t('close')}
                 </button>
               </div>
             </div>
 
-            <div className="p-4">
-              <div className="overflow-auto">
+            <div className="min-h-0 flex-1 p-4">
+              <div className="h-full overflow-auto">
                 <DataTable
+                  density="compact"
                   containerClassName="rounded-lg border border-zinc-200 shadow-none"
                   minWidth={720}
                   rows={Array.isArray(items) ? items : []}
@@ -536,37 +564,40 @@ export default function AdminEpc() {
                   ]}
                 />
               </div>
+            </div>
 
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                <div className="text-[11px] text-zinc-500">
-                  {t('total', { value: Number(itemTotal) || 0 })}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                    disabled={loading || itemsOffset <= 0}
-                    onClick={async () => {
-                      const nextOffset = Math.max(0, itemsOffset - itemsLimit);
-                      setItemsOffset(nextOffset);
-                      await fetchItems({ batchId: itemsBatch.id, limit: itemsLimit, offset: nextOffset });
-                    }}
-                  >
-                    {t('prev')}
-                  </button>
-                  <button
-                    type="button"
-                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                    disabled={loading || itemsOffset + itemsLimit >= (Number(itemTotal) || 0)}
-                    onClick={async () => {
-                      const nextOffset = itemsOffset + itemsLimit;
-                      setItemsOffset(nextOffset);
-                      await fetchItems({ batchId: itemsBatch.id, limit: itemsLimit, offset: nextOffset });
-                    }}
-                  >
-                    {t('next')}
-                  </button>
-                </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 bg-white px-4 py-3">
+              <div className="text-[11px] text-zinc-500">
+                {t('total', { value: Number(itemTotal) || 0 })}{' '}
+                <span className="text-zinc-400">
+                  • Page {Math.floor(itemsOffset / itemsLimit) + 1} / {Math.max(1, Math.ceil((Number(itemTotal) || 0) / itemsLimit))}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                  disabled={loading || itemsOffset <= 0}
+                  onClick={async () => {
+                    const nextOffset = Math.max(0, itemsOffset - itemsLimit);
+                    setItemsOffset(nextOffset);
+                    await fetchItems({ batchId: itemsBatch.id, limit: itemsLimit, offset: nextOffset });
+                  }}
+                >
+                  {t('prev')}
+                </button>
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                  disabled={loading || itemsOffset + itemsLimit >= (Number(itemTotal) || 0)}
+                  onClick={async () => {
+                    const nextOffset = itemsOffset + itemsLimit;
+                    setItemsOffset(nextOffset);
+                    await fetchItems({ batchId: itemsBatch.id, limit: itemsLimit, offset: nextOffset });
+                  }}
+                >
+                  {t('next')}
+                </button>
               </div>
             </div>
           </div>
