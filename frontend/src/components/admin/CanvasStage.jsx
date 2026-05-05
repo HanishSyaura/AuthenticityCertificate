@@ -212,14 +212,16 @@ export default function CanvasStage({
             )
           ) : null}
 
-          {(Array.isArray(items) ? items : []).map((it) => {
+          {(Array.isArray(items) ? items : []).map((raw, idx) => {
+            const it = raw && typeof raw === 'object' ? raw : {};
+            const key = it.id != null ? it.id : `item-${idx}`;
             const selected = interactive && it.id === selectedId;
             const resizeHandleClass = largeUi
               ? 'absolute -bottom-3 -right-3 h-6 w-6 rounded bg-brand-600 cursor-nwse-resize'
               : 'absolute -bottom-1 -right-1 h-3 w-3 rounded bg-brand-600 cursor-nwse-resize';
             return (
               <div
-                key={it.id}
+                key={key}
                 className={`absolute rounded-lg ${
                   interactive
                     ? selected
@@ -231,7 +233,7 @@ export default function CanvasStage({
                 onPointerDown={(e) => onItemPointerDown(e, it, 'drag')}
               >
                 <div className="h-full w-full overflow-hidden rounded-lg">
-                  {it.render ? it.render(it) : null}
+                  {typeof it.render === 'function' ? it.render(it) : null}
                 </div>
 
                 <div

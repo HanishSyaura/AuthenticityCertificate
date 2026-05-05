@@ -10,16 +10,9 @@ const certificateRoutes = require('./modules/certificate/certificate.routes');
 const publicRoutes = require('./modules/public/public.routes');
 const publicV1Routes = require('./modules/public/publicV1.routes');
 const cmsRoutes = require('./modules/cms/cms.routes');
-const analyticsRoutes = require('./modules/analytics/analytics.routes');
 const usersRoutes = require('./modules/users/users.routes');
-const auditRoutes = require('./modules/audit/audit.routes');
-const bulkRoutes = require('./modules/bulk/bulk.routes');
-const fraudRoutes = require('./modules/fraud/fraud.routes');
-const integrationsRoutes = require('./modules/integrations/integrations.routes');
 const templatesRoutes = require('./modules/templates/templates.routes');
-const mediaRoutes = require('./modules/media/media.routes');
 const uploadsRoutes = require('./modules/uploads/uploads.routes');
-const identityRoutes = require('./modules/identity/identity.routes');
 const organizationsRoutes = require('./modules/organizations/organizations.routes');
 const settingsRoutes = require('./modules/settings/settings.routes');
 const accessRoutes = require('./modules/access/access.routes');
@@ -27,8 +20,6 @@ const { rateLimit } = require('./middleware/rateLimit.middleware');
 const { applyDbPatches } = require('./config/dbPatches');
 
 dotenv.config();
-
-require('./modules/bulk/bulk.service').registerHandlers();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -141,28 +132,14 @@ app.use(
 
 app.use('/api/v1/public', publicV1Routes);
 app.use('/cms', cmsRoutes);
-app.use('/analytics', analyticsRoutes);
 app.use('/users', usersRoutes);
-app.use('/audit', auditRoutes);
-app.use('/bulk', bulkRoutes);
-app.use('/fraud', fraudRoutes);
-app.use('/integrations', integrationsRoutes);
 app.use('/templates', templatesRoutes);
-app.use('/media', mediaRoutes);
 app.use('/uploads', uploadsRoutes);
-app.use('/identities', identityRoutes);
 app.use('/organizations', organizationsRoutes);
 app.use('/api/cms', cmsRoutes);
-app.use('/api/analytics', analyticsRoutes);
 app.use('/api/users', usersRoutes);
-app.use('/api/audit', auditRoutes);
-app.use('/api/bulk', bulkRoutes);
-app.use('/api/fraud', fraudRoutes);
-app.use('/api/integrations', integrationsRoutes);
 app.use('/api/templates', templatesRoutes);
-app.use('/api/media', mediaRoutes);
 app.use('/api/uploads', uploadsRoutes);
-app.use('/api/identities', identityRoutes);
 app.use('/api/organizations', organizationsRoutes);
 app.use('/settings', settingsRoutes);
 app.use('/api/settings', settingsRoutes);

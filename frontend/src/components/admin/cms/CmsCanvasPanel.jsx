@@ -73,7 +73,8 @@ const DEVICE_PRESETS = [
 
 export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPage, layout, previewLayout, setLayout, selectedBlockId, setSelectedBlockId }) {
   const { t } = useT();
-  const layoutRef = useRef(layout);
+  const safeLayout = useMemo(() => (Array.isArray(layout) ? layout.filter((b) => b && typeof b === 'object') : []), [layout]);
+  const layoutRef = useRef(safeLayout);
 
   const [previewCertId, setPreviewCertId] = useState('');
   const [previewEpc, setPreviewEpc] = useState('');
@@ -111,8 +112,8 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
   }, [devicePreset]);
 
   useEffect(() => {
-    layoutRef.current = layout;
-  }, [layout]);
+    layoutRef.current = safeLayout;
+  }, [safeLayout]);
 
   const setCanvasItems = (updaterOrNext) => {
     const current = layoutRef.current || [];
@@ -121,17 +122,16 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
   };
 
   const hasAuthCertificateBlock = useMemo(() => {
-    if (!Array.isArray(layout)) return false;
-    return layout.some((b) => {
+    return safeLayout.some((b) => {
       if (b?.type !== 'certificate') return false;
       const variant = String(b?.content?.variant || 'auth');
       return variant === 'auth';
     });
-  }, [layout]);
+  }, [safeLayout]);
 
   const blocks = useMemo(() => {
-    return layout.map((b) => ({
-      ...b,
+    return safeLayout.map((b) => ({
+      ...(b || {}),
       render: (it) => {
         if (it.type === 'container') {
           const bg = String(it.content?.backgroundColor || '#ffffff');
@@ -198,7 +198,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
         );
       }
     }));
-  }, [layout, t]);
+  }, [safeLayout, t]);
 
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-3">
@@ -229,7 +229,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
             type="button"
             onClick={() => {
               const next = [
-                ...layout,
+                ...safeLayout,
                 {
                   id: makeId('container'),
                   type: 'container',
@@ -250,7 +250,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
             type="button"
             onClick={() => {
               const next = [
-                ...layout,
+                ...safeLayout,
                 { id: makeId('text'), type: 'text', x: 20, y: 20, w: 240, h: 80, content: { text: 'New text' } }
               ];
               setLayout(next);
@@ -263,7 +263,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
             type="button"
             onClick={() => {
               const next = [
-                ...layout,
+                ...safeLayout,
                 {
                   id: makeId('image'),
                   type: 'image',
@@ -285,7 +285,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
           <button
             type="button"
             onClick={() => {
-              const next = [...layout, { id: makeId('video'), type: 'video', x: 20, y: 300, w: 260, h: 80, content: { url: '' } }];
+              const next = [...safeLayout, { id: makeId('video'), type: 'video', x: 20, y: 300, w: 260, h: 80, content: { url: '' } }];
               setLayout(next);
             }}
             className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
@@ -296,7 +296,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
             <button
               type="button"
               onClick={() => {
-                const next = [...layout, { id: makeId('cert'), type: 'certificate', x: 0, y: 0, w: baseW, h: baseH, content: { variant: 'auth' } }];
+                const next = [...safeLayout, { id: makeId('cert'), type: 'certificate', x: 0, y: 0, w: baseW, h: baseH, content: { variant: 'auth' } }];
                 setLayout(next);
               }}
               className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
@@ -309,7 +309,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
               type="button"
               onClick={() => {
                 const next = [
-                  ...layout,
+                  ...safeLayout,
                   {
                     id: makeId('supporting-cert'),
                     type: 'certificate',

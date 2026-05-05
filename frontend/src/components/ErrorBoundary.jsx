@@ -12,7 +12,13 @@ export default class ErrorBoundary extends React.Component {
     return { error: error || new Error('Unknown error') };
   }
 
-  componentDidCatch() {}
+  componentDidCatch(error, info) {
+    try {
+      console.error(error, info);
+    } catch {
+      void 0;
+    }
+  }
 
   render() {
     const error = this.state?.error;
@@ -51,4 +57,3 @@ export default class ErrorBoundary extends React.Component {
     );
   }
 }
-

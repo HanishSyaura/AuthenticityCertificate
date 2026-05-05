@@ -3,7 +3,7 @@ import CanvasStage from '../../components/admin/CanvasStage';
 import RichTextEditor from '../../components/admin/RichTextEditor';
 import { useT } from '../../i18n/useT';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
-import useMediaStore from '../../store/useMediaStore';
+import useUploadsStore from '../../store/useUploadsStore';
 import useEpcStore from '../../store/useEpcStore';
 import { stripHtmlToText, toQuillHtml } from '../../utils/richText';
 import { sanitizeLimitedHtml } from '../../utils/sanitizeLimitedHtml';
@@ -120,7 +120,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     updateTemplate: s.updateTemplate,
     deleteTemplate: s.deleteTemplate
   }));
-  const { uploadMedia } = useMediaStore((s) => ({ uploadMedia: s.uploadMedia }));
+  const { uploadMedia } = useUploadsStore((s) => ({ uploadMedia: s.uploadMedia }));
   const { batches, fetchBatches, updateBatch } = useEpcStore((s) => ({
     batches: s.batches,
     fetchBatches: s.fetchBatches,

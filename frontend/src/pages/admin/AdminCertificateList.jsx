@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import useEpcStore from '../../store/useEpcStore';
-import useMediaStore from '../../store/useMediaStore';
+import useUploadsStore from '../../store/useUploadsStore';
 import { useT } from '../../i18n/useT';
 import DataTable from '../../components/ui/DataTable';
 
@@ -41,7 +41,7 @@ export default function AdminCertificateList() {
     fetchBatches: s.fetchBatches
   }));
 
-  const { uploadMedia } = useMediaStore((s) => ({ uploadMedia: s.uploadMedia }));
+  const { uploadMedia } = useUploadsStore((s) => ({ uploadMedia: s.uploadMedia }));
 
   useEffect(() => {
     void fetchTemplates();

@@ -13,19 +13,7 @@ const FALLBACK_ROLE_PERMISSIONS = {
     'certificates.write',
     'templates.read',
     'templates.write',
-    'media.read',
-    'media.write',
     'uploads.write',
-    'audit.read',
-    'analytics.read',
-    'fraud.read',
-    'fraud.write',
-    'integrations.read',
-    'integrations.write',
-    'bulk.read',
-    'bulk.write',
-    'identities.read',
-    'identities.write',
     'organizations.read',
     'settings.read',
     'cms.read',
@@ -33,7 +21,7 @@ const FALLBACK_ROLE_PERMISSIONS = {
     'cms.publish',
     'cms.meta.write'
   ],
-  operator: ['bulk.read', 'bulk.write', 'cms.read', 'cms.write']
+  operator: ['cms.read', 'cms.write']
 };
 
 function matchPermission(owned, required) {

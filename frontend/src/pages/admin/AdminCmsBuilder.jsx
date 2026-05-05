@@ -128,7 +128,7 @@ export default function AdminCmsBuilder() {
   const previewLayout = useMemo(() => composeLayouts({ pages, layoutsByPageKey, language }), [language, layoutsByPageKey, pages]);
 
   const selectedBlock = useMemo(
-    () => layout.find((b) => b.id === selectedBlockId) || null,
+    () => (Array.isArray(layout) ? layout : []).find((b) => b && b.id === selectedBlockId) || null,
     [layout, selectedBlockId]
   );
 
@@ -141,8 +141,9 @@ export default function AdminCmsBuilder() {
   }, [fetchTemplates]);
 
   useEffect(() => {
-    if (!selectedPageId && pages[0]?.id) {
-      selectPage(pages[0].id);
+    const list = Array.isArray(pages) ? pages : [];
+    if (!selectedPageId && list[0]?.id) {
+      selectPage(list[0].id);
     }
   }, [pages, selectPage, selectedPageId]);
 

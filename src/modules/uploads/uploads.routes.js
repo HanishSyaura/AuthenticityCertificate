@@ -1,24 +1,129 @@
 const express = require('express');
 const router = express.Router();
 
-const mediaController = require('../media/media.controller');
+const multer = require('multer');
+const path = require('path');
+const crypto = require('crypto');
+const fs = require('fs/promises');
+const prisma = require('../../config/prisma');
 const { verifyToken } = require('../../middleware/auth.middleware');
 const { attachOrganization, requireOrganization } = require('../../middleware/org.middleware');
 const { attachAccessContext, requireAccess } = require('../../middleware/access.middleware');
 const { auditAction } = require('../../services/audit.service');
 
+async function withTimeout(promise, ms) {
+  return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), ms))]);
+}
+
+function getUploadsRoot() {
+  return path.resolve(process.cwd(), 'uploads');
+}
+
+function makeFileName(originalName) {
+  const ext = path.extname(String(originalName || '')).slice(0, 10);
+  const rand = crypto.randomBytes(16).toString('hex');
+  return `${Date.now()}-${rand}${ext}`;
+}
+
+function storage() {
+  return multer.diskStorage({
+    destination: async (req, file, cb) => {
+      try {
+        const orgId = String(req.organization.id);
+        const dest = path.join(getUploadsRoot(), 'media', orgId);
+        await fs.mkdir(dest, { recursive: true });
+        cb(null, dest);
+      } catch (e) {
+        cb(e);
+      }
+    },
+    filename: (req, file, cb) => {
+      cb(null, makeFileName(file.originalname));
+    }
+  });
+}
+
+const upload = multer({
+  storage: storage(),
+  limits: { fileSize: 25 * 1024 * 1024 }
+}).single('file');
+
+async function listMedia(req, res) {
+  try {
+    const items = await withTimeout(
+      prisma.mediaAsset.findMany({
+        where: { organizationId: Number(req.organization.id) },
+        orderBy: { createdAt: 'desc' }
+      }),
+      1200
+    );
+    res.success(items);
+  } catch (e) {
+    res.error(e.message);
+  }
+}
+
+function uploadMedia(req, res) {
+  upload(req, res, async (err) => {
+    if (err) return res.error(err.message, 400);
+    try {
+      const file = req.file;
+      if (!file) return res.error('File required', 400);
+      const url = `/uploads/media/${Number(req.organization.id)}/${file.filename}`;
+      const created = await withTimeout(
+        prisma.mediaAsset.create({
+          data: {
+            organizationId: Number(req.organization.id),
+            originalName: file.originalname,
+            fileName: file.filename,
+            mimeType: file.mimetype,
+            sizeBytes: Number(file.size),
+            url
+          }
+        }),
+        1500
+      );
+      res.success(created, 'Uploaded');
+    } catch (e) {
+      res.error(e.message, 400);
+    }
+  });
+}
+
+async function deleteMedia(req, res) {
+  try {
+    const { id } = req.params;
+    const asset = await withTimeout(
+      prisma.mediaAsset.findFirst({ where: { id: Number(id), organizationId: Number(req.organization.id) } }),
+      1200
+    );
+    if (!asset) return res.error('Media not found', 404);
+
+    await withTimeout(prisma.mediaAsset.delete({ where: { id: Number(id) } }), 1200);
+
+    const filePath = path.join(getUploadsRoot(), 'media', String(Number(req.organization.id)), asset.fileName);
+    try {
+      await fs.unlink(filePath);
+    } catch {}
+
+    res.success({ id: Number(id) }, 'Deleted');
+  } catch (e) {
+    res.error(e.message, 400);
+  }
+}
+
 router.use(verifyToken);
 router.use(attachAccessContext);
 router.use(attachOrganization);
 router.use(requireOrganization);
-router.use(requireAccess({ read: 'media.read', write: 'uploads.write' }));
+router.use(requireAccess({ read: 'uploads.write', write: 'uploads.write' }));
 
-router.get('/media', mediaController.list);
-router.post('/media', auditAction('UPLOAD_MEDIA', { targetType: 'media_asset' }), mediaController.uploadFile);
+router.get('/media', listMedia);
+router.post('/media', auditAction('UPLOAD_MEDIA', { targetType: 'media_asset' }), uploadMedia);
 router.delete(
   '/media/:id',
   auditAction('DELETE_MEDIA', { targetType: 'media_asset', getTargetId: (req) => req.params.id }),
-  mediaController.remove
+  deleteMedia
 );
 
 module.exports = router;

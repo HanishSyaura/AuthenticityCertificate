@@ -5,7 +5,6 @@ import useAdminSettingsStore from '../../store/useAdminSettingsStore';
 import { createAdminApi } from '../../utils/adminApi';
 import ProfileSettingsCard from '../../components/admin/settings/ProfileSettingsCard';
 import SystemSettingsCard from '../../components/admin/settings/SystemSettingsCard';
-import { hasPermission } from '../../utils/permissions';
 
 function shallowEqual(a, b) {
   const ak = Object.keys(a);
@@ -29,10 +28,8 @@ export default function AdminSettings() {
   const { setSettingsResponse } = useAdminSettingsStore((s) => ({ setSettingsResponse: s.setSettingsResponse }));
 
   const role = user?.role || 'admin';
-  const perms = user?.permissions || [];
   const canEditEmail = role === 'super_admin' || role === 'admin';
-  const canEditSystem = role === 'super_admin' || hasPermission(perms, 'settings.write');
-  const canUploadLogo = role === 'super_admin' || hasPermission(perms, 'media.write');
+  const canEditSystem = role === 'super_admin';
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -190,7 +187,6 @@ export default function AdminSettings() {
 
   async function uploadLogo(file) {
     if (!file) return;
-    if (!canUploadLogo) return;
     setLogoUploadError('');
     setSystemNotice({ kind: '', text: '' });
     setLogoUploading(true);
@@ -198,7 +194,7 @@ export default function AdminSettings() {
       const api = createAdminApi({ token });
       const form = new FormData();
       form.append('file', file);
-      const res = await api.post('/media/upload', form, {
+      const res = await api.post('/uploads/media', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 60_000
       });
@@ -360,7 +356,7 @@ export default function AdminSettings() {
           localeOptions={localeOptions}
           timezoneOptions={timezoneOptions}
           onChange={(patch) => setSystemDraft((d) => ({ ...d, ...patch }))}
-          onUploadLogo={canUploadLogo ? uploadLogo : undefined}
+          onUploadLogo={uploadLogo}
           onSave={saveSystem}
         />
       </div>

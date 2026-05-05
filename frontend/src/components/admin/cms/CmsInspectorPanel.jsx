@@ -1,11 +1,11 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useT } from '../../../i18n/useT';
-import useMediaStore from '../../../store/useMediaStore';
+import useUploadsStore from '../../../store/useUploadsStore';
 import RichTextEditor from '../RichTextEditor';
 
 export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, clearSelection, templates }) {
   const { t } = useT();
-  const { uploadMedia } = useMediaStore((s) => ({ uploadMedia: s.uploadMedia }));
+  const { uploadMedia } = useUploadsStore((s) => ({ uploadMedia: s.uploadMedia }));
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
   const [fileKey, setFileKey] = useState(0);

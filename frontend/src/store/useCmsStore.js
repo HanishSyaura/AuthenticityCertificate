@@ -21,6 +21,26 @@ function safeSlugify(input) {
     .replace(/-+/g, '-');
 }
 
+function sanitizeLayoutBlocks(raw, { pageId, language }) {
+  const list = Array.isArray(raw) ? raw : [];
+  const used = new Set();
+  const out = [];
+  for (let i = 0; i < list.length; i += 1) {
+    const b = list[i];
+    if (!b || typeof b !== 'object') continue;
+    const base = String(b.id || `b-${String(pageId)}-${String(language || 'en')}-${i}`);
+    let id = base;
+    let n = 1;
+    while (used.has(id)) {
+      id = `${base}-${n}`;
+      n += 1;
+    }
+    used.add(id);
+    out.push({ ...b, id });
+  }
+  return out;
+}
+
 const useCmsStore = create((set, get) => ({
   pages: [],
   layoutsByPageKey: {},
@@ -95,7 +115,8 @@ const useCmsStore = create((set, get) => ({
         }
       }
       if (Array.isArray(dbLayout)) {
-        const next = { ...current, [key]: dbLayout };
+        const safe = sanitizeLayoutBlocks(dbLayout, { pageId: page.id, language });
+        const next = { ...current, [key]: safe };
         set({ layoutsByPageKey: next, error: null });
         return;
       }
@@ -114,14 +135,15 @@ const useCmsStore = create((set, get) => ({
   saveLayout: async ({ pageId, layoutJson, language }) => {
     const lang = language || get().language || 'en';
     const { token } = useAdminAuthStore.getState();
-    const nextLayouts = { ...(get().layoutsByPageKey || {}), [`${pageId}:${lang}`]: layoutJson };
+    const safe = sanitizeLayoutBlocks(layoutJson, { pageId, language: lang });
+    const nextLayouts = { ...(get().layoutsByPageKey || {}), [`${pageId}:${lang}`]: safe };
     set({ layoutsByPageKey: nextLayouts });
 
     if (!token) throw new Error('Not authenticated');
 
     try {
       const api = createAdminApi({ token });
-      await api.post('/cms/layout', { pageId, layoutJson, language: lang });
+      await api.post('/cms/layout', { pageId, layoutJson: safe, language: lang });
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || 'Failed to save layout';
       throw new Error(msg);
