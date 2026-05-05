@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
 import { useT } from '../../i18n/useT';
 import LanguageSwitcher from '../../components/LanguageSwitcher';
@@ -20,8 +20,7 @@ export default function AdminLogin() {
   const [password, setPassword] = useState('');
 
   if (token) {
-    navigate(from, { replace: true });
-    return null;
+    return <Navigate to={from} replace />;
   }
 
   return (

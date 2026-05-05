@@ -14,5 +14,5 @@ export default function AdminGuide() {
     navigate('/admin/dashboard', { replace: true });
   }, [navigate, openTour, t]);
 
-  return null;
+  return <div className="p-6 text-sm text-zinc-700">{t('loading')}</div>;
 }

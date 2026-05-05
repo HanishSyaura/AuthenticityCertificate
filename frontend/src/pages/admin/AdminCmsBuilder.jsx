@@ -108,7 +108,7 @@ export default function AdminCmsBuilder() {
   const saveSeqRef = useRef(0);
 
   const selectedPage = useMemo(
-    () => pages.find((p) => String(p.id) === String(selectedPageId)) || null,
+    () => (Array.isArray(pages) ? pages : []).find((p) => String(p.id) === String(selectedPageId)) || null,
     [pages, selectedPageId]
   );
 

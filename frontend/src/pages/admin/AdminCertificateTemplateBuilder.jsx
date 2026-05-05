@@ -147,8 +147,12 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const [designerZoomPct, setDesignerZoomPct] = useState(125);
   const [largeUi, setLargeUi] = useState(true);
   const designerCanvasViewportRef = useRef(null);
+  const builderCanvasViewportRef = useRef(null);
   const persistTimerRef = useRef(null);
   const pendingPatchRef = useRef(null);
+  const activeTemplateIdRef = useRef(null);
+  const localEditSeqRef = useRef(0);
+  const hydratedEditSeqRef = useRef(0);
   const previewNowRef = useRef(new Date().toISOString());
   const hydratedTemplateIdRef = useRef(null);
   const saveSeqRef = useRef(0);
@@ -160,12 +164,26 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const canvasH = Number(selected?.canvasHeight) > 0 ? Number(selected.canvasHeight) : 844;
   const canvasBgColor = String(selected?.backgroundColor || '#ffffff');
   const devicePreset = useMemo(() => DEVICE_PRESETS.find((d) => d.id === devicePresetId) || DEVICE_PRESETS[0], [devicePresetId]);
+  const builderViewportSize = useElementSize(builderCanvasViewportRef);
+  const fitBuilderScale = useMemo(() => {
+    const w = Number(builderViewportSize?.w) || 0;
+    const h = Number(builderViewportSize?.h) || 0;
+    if (!w || !h) return 1;
+    const pad = 16;
+    const availW = Math.max(1, w - pad);
+    const availH = Math.max(1, h - pad);
+    const s = Math.min(availW / Math.max(1, canvasW), availH / Math.max(1, canvasH));
+    return clamp(s, 0.1, 6);
+  }, [builderViewportSize?.h, builderViewportSize?.w, canvasH, canvasW]);
   const builderScale = useMemo(() => {
     if (!devicePreset) return 1;
-    if (Number(devicePreset.scale) > 0) return Math.max(0.1, Math.min(2, Number(devicePreset.scale)));
+    if (devicePreset.id === 'fit') return fitBuilderScale;
+    if (Number(devicePreset.scale) > 0) return clamp(Number(devicePreset.scale), 0.1, 6);
     if (!devicePreset.w) return 1;
-    return Math.max(0.1, Math.min(2, Number(devicePreset.w) / canvasW));
-  }, [canvasW, devicePreset]);
+    const sw = Number(devicePreset.w) / Math.max(1, canvasW);
+    const sh = Number(devicePreset.h || devicePreset.w) / Math.max(1, canvasH);
+    return clamp(Math.min(sw, sh), 0.1, 6);
+  }, [canvasH, canvasW, devicePreset, fitBuilderScale]);
   const designerViewportSize = useElementSize(designerCanvasViewportRef);
   const fitDesignerScale = useMemo(() => {
     const w = Number(designerViewportSize?.w) || 0;
@@ -325,21 +343,72 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
 
   const selectedField = useMemo(() => (Array.isArray(draftLayout) ? draftLayout : []).find((f) => f.id === selectedFieldId) || null, [draftLayout, selectedFieldId]);
 
+  const flushPendingPatch = useCallback(
+    (id) => {
+      const templateId = id ?? activeTemplateIdRef.current;
+      if (!templateId) return;
+      if (persistTimerRef.current) {
+        window.clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+      const toSend = pendingPatchRef.current;
+      pendingPatchRef.current = null;
+      if (!toSend) return;
+      void updateTemplate({ id: templateId, patch: toSend });
+    },
+    [updateTemplate]
+  );
+
+  const markLocalEdit = useCallback(() => {
+    localEditSeqRef.current += 1;
+  }, []);
+
+  useEffect(() => {
+    const nextId = selected?.id ?? null;
+    const prevId = activeTemplateIdRef.current;
+    if (prevId != null && nextId != null && String(prevId) !== String(nextId)) flushPendingPatch(prevId);
+    activeTemplateIdRef.current = nextId;
+  }, [flushPendingPatch, selected?.id]);
+
+  useEffect(() => () => flushPendingPatch(), [flushPendingPatch]);
+
   useEffect(() => {
     const id = selected?.id ? String(selected.id) : null;
     if (!id) return;
-    if (hydratedTemplateIdRef.current === id) return;
-    hydratedTemplateIdRef.current = id;
-    setDraftPlaceholders(Array.isArray(selected?.placeholders) ? selected.placeholders : []);
-    setDraftLayout(Array.isArray(selected?.layoutJson) ? selected.layoutJson : []);
-    setBackgroundMode(String(selected?.backgroundMode || '').trim() || 'background');
-    pendingPatchRef.current = null;
-    setSaveStatus('idle');
-    if (persistTimerRef.current) {
-      window.clearTimeout(persistTimerRef.current);
-      persistTimerRef.current = null;
+    const selectedPlaceholders = Array.isArray(selected?.placeholders) ? selected.placeholders : [];
+    const selectedLayout = Array.isArray(selected?.layoutJson) ? selected.layoutJson : [];
+    const selectedBgMode = String(selected?.backgroundMode || '').trim() || 'background';
+    const noLocalEditsSinceHydrate = hydratedEditSeqRef.current === localEditSeqRef.current;
+
+    if (hydratedTemplateIdRef.current !== id) {
+      hydratedTemplateIdRef.current = id;
+      setDraftPlaceholders(selectedPlaceholders);
+      setDraftLayout(selectedLayout);
+      setBackgroundMode(selectedBgMode);
+      pendingPatchRef.current = null;
+      setSaveStatus('idle');
+      if (persistTimerRef.current) {
+        window.clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+      hydratedEditSeqRef.current = localEditSeqRef.current;
+      return;
     }
-  }, [selected?.backgroundMode, selected?.id, selected?.layoutJson, selected?.placeholders]);
+
+    if (!noLocalEditsSinceHydrate) return;
+
+    const curLayout = Array.isArray(draftLayout) ? draftLayout : [];
+    if (curLayout.length === 0 && selectedLayout.length > 0) {
+      setDraftLayout(selectedLayout);
+    }
+
+    const curPlaceholders = Array.isArray(draftPlaceholders) ? draftPlaceholders : [];
+    if (curPlaceholders.length === 0 && selectedPlaceholders.length > 0) {
+      setDraftPlaceholders(selectedPlaceholders);
+    }
+
+    if (!String(backgroundMode || '').trim()) setBackgroundMode(selectedBgMode);
+  }, [backgroundMode, draftLayout, draftPlaceholders, selected?.backgroundMode, selected?.id, selected?.layoutJson, selected?.placeholders]);
 
   const queueTemplatePatch = useCallback((patch) => {
     const id = selected?.id;
@@ -388,6 +457,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     const labelHtml = String(ph?.labelHtml || '') ? String(ph.labelHtml) : toQuillHtml(labelText);
     const item = { id: makeId('field'), path: `templateData.${k}`, label: labelText, labelHtml, x: 20, y: 40, w: 200, h: 44, fontSize: 14, align: 'left' };
     const nextLayout = [...(Array.isArray(draftLayout) ? draftLayout : []), item];
+    markLocalEdit();
     setDraftLayout(nextLayout);
     queueTemplatePatch({ layoutJson: nextLayout });
     setSelectedFieldId(item.id);
@@ -404,6 +474,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     const current = Array.isArray(draftLayout) ? draftLayout : [];
     const next = typeof updaterOrNext === 'function' ? updaterOrNext(current) : updaterOrNext;
     const sanitized = sanitizeLayout(next);
+    markLocalEdit();
     setDraftLayout(sanitized);
     queueTemplatePatch({ layoutJson: sanitized });
   };
@@ -421,15 +492,17 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       const y = clamp(Number(merged.y) || 0, 0, Math.max(0, canvasH - h));
       return { ...merged, x, y, w, h };
     });
+    markLocalEdit();
     setDraftLayout(nextLayout);
     queueTemplatePatch({ layoutJson: nextLayout });
   };
 
   const replacePlaceholders = useCallback((next) => {
     const arr = Array.isArray(next) ? next : [];
+    markLocalEdit();
     setDraftPlaceholders(arr);
     queueTemplatePatch({ placeholders: arr });
-  }, [queueTemplatePatch]);
+  }, [markLocalEdit, queueTemplatePatch]);
 
   useEffect(() => {
     const list = Array.isArray(placeholders) ? placeholders : [];
@@ -454,6 +527,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const replacePlaceholdersAndLayout = ({ nextPlaceholders, nextLayout }) => {
     const ph = Array.isArray(nextPlaceholders) ? nextPlaceholders : [];
     const ly = Array.isArray(nextLayout) ? nextLayout : [];
+    markLocalEdit();
     setDraftPlaceholders(ph);
     setDraftLayout(ly);
     queueTemplatePatch({ placeholders: ph, layoutJson: ly });
@@ -734,7 +808,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                         mode="preview"
                         width={canvasW}
                         height={canvasH}
-                        scale={Math.max(0.1, Math.min(2, 380 / canvasW))}
+                        scale={Math.max(0.1, Math.min(2, 380 / Math.max(1, canvasW)))}
                         backgroundMode={backgroundMode}
                         backgroundColor={canvasBgColor}
                         backgroundUrl={selected.background || ''}
@@ -867,6 +941,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                 onClick={() => {
                                   const next = (Array.isArray(draftLayout) ? draftLayout : []).filter((f) => f.id !== selectedField.id);
                                   setSelectedFieldId(null);
+                                  markLocalEdit();
                                   setDraftLayout(next);
                                   queueTemplatePatch({ layoutJson: next });
                                 }}
@@ -1142,19 +1217,23 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
               ) : null}
 
               {wizardStep === 'canvas' ? (
-                <CanvasStage
-                  width={canvasW}
-                  height={canvasH}
-                  scale={canvasScale}
-                  backgroundMode={backgroundMode}
-                  backgroundColor={canvasBgColor}
-                  backgroundUrl={selected.background || ''}
-                  items={canvasItems}
-                  setItems={setCanvasItems}
-                  selectedId={selectedFieldId}
-                  setSelectedId={setSelectedFieldId}
-                  grid={4}
-                />
+                <div ref={builderCanvasViewportRef} className="h-[calc(100vh-20rem)] overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
+                  <CanvasStage
+                    width={canvasW}
+                    height={canvasH}
+                    scale={canvasScale}
+                    backgroundMode={backgroundMode}
+                    backgroundColor={canvasBgColor}
+                    backgroundUrl={selected.background || ''}
+                    items={canvasItems}
+                    setItems={setCanvasItems}
+                    selectedId={selectedFieldId}
+                    setSelectedId={setSelectedFieldId}
+                    grid={4}
+                    containerClassName="p-2"
+                    containerStyle={{ height: '100%' }}
+                  />
+                </div>
               ) : (
                 <div className="flex max-h-[calc(100vh-20rem)] min-h-0 flex-col rounded-lg border border-zinc-200 bg-white p-4">
                   <div className="text-xs font-semibold text-zinc-700">{t('step1DefineFields')}</div>
@@ -1218,7 +1297,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           </div>
                           {isOpen ? (
                             <div className="mt-2 grid grid-cols-1 gap-2" onFocusCapture={() => setExpandedPlaceholderKey(cardKey)}>
-                              <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+                              <div className="grid grid-cols-1 gap-2">
                                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_120px]">
                                   <input
                                     value={String(p?.label || stripHtmlToText(p?.labelHtml ?? '') || '')}
@@ -1641,6 +1720,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                       onClick={() => {
                         const next = (Array.isArray(draftLayout) ? draftLayout : []).filter((f) => f.id !== selectedField.id);
                         setSelectedFieldId(null);
+                        markLocalEdit();
                         setDraftLayout(next);
                         queueTemplatePatch({ layoutJson: next });
                       }}
@@ -1663,7 +1743,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                 mode="preview"
                 width={canvasW}
                 height={canvasH}
-                scale={Math.max(0.1, Math.min(1, 360 / canvasW))}
+                scale={Math.max(0.1, Math.min(2, 380 / Math.max(1, canvasW)))}
                 backgroundMode={backgroundMode}
                 backgroundColor={canvasBgColor}
                 backgroundUrl={selected.background || ''}

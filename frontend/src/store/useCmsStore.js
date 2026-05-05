@@ -85,14 +85,26 @@ const useCmsStore = create((set, get) => ({
     try {
       const api = createAdminApi({ token: null });
       const res = await api.get(`/cms/page/${encodeURIComponent(page.slug)}`, { params: { language } });
-      const dbLayout = res?.data?.data?.effectiveLayout || res?.data?.data?.layout?.layoutJson;
+      const rawLayout = res?.data?.data?.effectiveLayout ?? res?.data?.data?.layout?.layoutJson ?? null;
+      let dbLayout = rawLayout;
+      if (typeof dbLayout === 'string') {
+        try {
+          dbLayout = JSON.parse(dbLayout);
+        } catch {
+          dbLayout = rawLayout;
+        }
+      }
       if (Array.isArray(dbLayout)) {
         const next = { ...current, [key]: dbLayout };
-        set({ layoutsByPageKey: next });
+        set({ layoutsByPageKey: next, error: null });
         return;
       }
+      const next = { ...current, [key]: [] };
+      set({ layoutsByPageKey: next, error: 'Failed to load page layout' });
     } catch (e) {
-      void e;
+      const msg = e?.response?.data?.message || e?.message || 'Failed to load page layout';
+      const next = { ...current, [key]: [] };
+      set({ layoutsByPageKey: next, error: msg });
     }
   },
 

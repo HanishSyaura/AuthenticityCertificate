@@ -55,6 +55,24 @@ export default function AdminShell() {
   const role = user?.role || 'admin';
   const perms = user?.permissions || [];
   const canSeeUsers = role === 'super_admin' || hasPermission(perms, 'users.manage') || hasPermission(perms, 'access.manage');
+  const canSeeProducts = role === 'super_admin' || hasPermission(perms, 'products.read') || hasPermission(perms, 'products.write');
+  const canSeeEpc = role === 'super_admin' || hasPermission(perms, 'epc.read') || hasPermission(perms, 'epc.write');
+  const canSeeCertificates =
+    role === 'super_admin' ||
+    hasPermission(perms, 'certificates.read') ||
+    hasPermission(perms, 'certificates.write') ||
+    hasPermission(perms, 'templates.read') ||
+    hasPermission(perms, 'templates.write');
+  const canSeeCms =
+    role === 'super_admin' || hasPermission(perms, 'cms.read') || hasPermission(perms, 'cms.write') || hasPermission(perms, 'cms.publish');
+  const canSeeAnalytics = role === 'super_admin' || hasPermission(perms, 'analytics.read');
+  const canSeeFraud = role === 'super_admin' || hasPermission(perms, 'fraud.read') || hasPermission(perms, 'fraud.write');
+  const canSeeAudit = role === 'super_admin' || hasPermission(perms, 'audit.read');
+  const canSeeIntegrations = role === 'super_admin' || hasPermission(perms, 'integrations.read') || hasPermission(perms, 'integrations.write');
+  const canSeeMedia = role === 'super_admin' || hasPermission(perms, 'media.read') || hasPermission(perms, 'media.write');
+  const canSeeBulk = role === 'super_admin' || hasPermission(perms, 'bulk.read') || hasPermission(perms, 'bulk.write');
+  const canSeeIdentities = role === 'super_admin' || hasPermission(perms, 'identities.read') || hasPermission(perms, 'identities.write');
+  const canSeeSettings = role === 'super_admin' || hasPermission(perms, 'settings.read') || hasPermission(perms, 'settings.write');
 
   return (
     <div className="min-h-screen bg-zinc-100">
@@ -76,23 +94,48 @@ export default function AdminShell() {
               <NavItem to="/admin/dashboard" label={t('dashboard')} tourId="nav-dashboard" />
             </NavSection>
 
-            <NavSection title={t('navProductsBatches')}>
-              <NavItem to="/admin/records" label={t('productModule')} tourId="nav-records" />
-              <NavItem to="/admin/epc" label={t('epc')} tourId="nav-epc" />
-            </NavSection>
+            {canSeeProducts || canSeeEpc ? (
+              <NavSection title={t('navProductsBatches')}>
+                {canSeeProducts ? <NavItem to="/admin/records" label={t('productModule')} tourId="nav-records" /> : null}
+                {canSeeEpc ? <NavItem to="/admin/epc" label={t('epc')} tourId="nav-epc" /> : null}
+              </NavSection>
+            ) : null}
 
-            <NavSection title={t('navCertificates')}>
-              <NavItem to="/admin/certificates" label={t('certificateList')} tourId="nav-certificates" />
-            </NavSection>
+            {canSeeCertificates || canSeeIdentities ? (
+              <NavSection title={t('navCertificates')}>
+                {canSeeCertificates ? <NavItem to="/admin/certificates" label={t('certificateList')} tourId="nav-certificates" /> : null}
+                {canSeeIdentities ? <NavItem to="/admin/identities" label={t('identities')} /> : null}
+              </NavSection>
+            ) : null}
 
-            <NavSection title={t('navContent')}>
-              <NavItem to="/admin/cms" label={t('cmsLanding')} tourId="nav-cms" />
-            </NavSection>
+            {canSeeCms ? (
+              <NavSection title={t('navContent')}>
+                <NavItem to="/admin/cms" label={t('cmsLanding')} tourId="nav-cms" />
+              </NavSection>
+            ) : null}
 
-            <NavSection title={t('navSettings')}>
-              <NavItem to="/admin/settings" label={t('settings')} tourId="nav-settings" />
-              {canSeeUsers ? <NavItem to="/admin/users" label={t('usersRoles')} /> : null}
-            </NavSection>
+            {canSeeAnalytics || canSeeFraud || canSeeAudit ? (
+              <NavSection title={t('navMonitoring')}>
+                {canSeeAnalytics ? <NavItem to="/admin/analytics" label={t('analytics')} /> : null}
+                {canSeeFraud ? <NavItem to="/admin/fraud" label={t('fraudDetection')} /> : null}
+                {canSeeAudit ? <NavItem to="/admin/audit" label={t('auditLog')} /> : null}
+              </NavSection>
+            ) : null}
+
+            {canSeeMedia || canSeeIntegrations || canSeeBulk ? (
+              <NavSection title={t('navTools')}>
+                {canSeeMedia ? <NavItem to="/admin/media" label={t('media')} /> : null}
+                {canSeeIntegrations ? <NavItem to="/admin/integrations" label={t('integrations')} /> : null}
+                {canSeeBulk ? <NavItem to="/admin/bulk" label={t('bulk')} /> : null}
+              </NavSection>
+            ) : null}
+
+            {canSeeSettings || canSeeUsers ? (
+              <NavSection title={t('navSettings')}>
+                {canSeeSettings ? <NavItem to="/admin/settings" label={t('settings')} tourId="nav-settings" /> : null}
+                {canSeeUsers ? <NavItem to="/admin/users" label={t('usersRoles')} /> : null}
+              </NavSection>
+            ) : null}
           </div>
         </aside>
 

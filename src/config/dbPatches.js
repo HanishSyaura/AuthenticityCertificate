@@ -703,46 +703,47 @@ async function ensureAccessControlSchemaCompat() {
   }
 
   const permissions = [
-    ['*', 'Full access'],
-    ['users.manage', 'Manage users'],
-    ['access.manage', 'Manage roles & permissions'],
-    ['products.read', 'Read products & batches'],
-    ['products.write', 'Write products & batches'],
-    ['categories.read', 'Read categories'],
-    ['categories.write', 'Write categories'],
-    ['epc.read', 'Read EPC'],
-    ['epc.write', 'Write EPC'],
-    ['certificates.read', 'Read certificates'],
-    ['certificates.write', 'Write certificates'],
-    ['templates.read', 'Read templates'],
-    ['templates.write', 'Write templates'],
-    ['media.read', 'Read media'],
-    ['media.write', 'Write media'],
-    ['uploads.write', 'Upload files'],
-    ['audit.read', 'Read audit logs'],
-    ['analytics.read', 'Read analytics'],
-    ['fraud.read', 'Read fraud flags'],
-    ['fraud.write', 'Write fraud flags'],
-    ['integrations.read', 'Read integrations'],
-    ['integrations.write', 'Write integrations'],
-    ['bulk.read', 'Read bulk jobs'],
-    ['bulk.write', 'Execute bulk jobs'],
-    ['identities.read', 'Read identities'],
-    ['identities.write', 'Write identities'],
-    ['organizations.read', 'Read organizations'],
-    ['organizations.write', 'Write organizations'],
-    ['settings.read', 'Read settings'],
-    ['settings.write', 'Write settings'],
-    ['cms.read', 'Read CMS'],
-    ['cms.write', 'Write CMS'],
-    ['cms.publish', 'Publish CMS'],
-    ['cms.meta.write', 'Edit CMS meta']
+    ['*', 'Full access (all pages & actions)'],
+    ['users.manage', 'Users & Roles: create/update/delete users, reset password, assign roles'],
+    ['access.manage', 'Access management: create/update/delete roles; set role permissions; view permissions'],
+    ['products.read', 'Products: view products, batches, and supporting certificates'],
+    ['products.write', 'Products: create/update/delete products, batches, and supporting certificates'],
+    ['categories.read', 'Categories: view categories'],
+    ['categories.write', 'Categories: create/update categories'],
+    ['epc.read', 'EPC: view corp codes, batches, items, and export'],
+    ['epc.write', 'EPC: generate/import/update/delete batches; recalculate sequences; production import/done'],
+    ['certificates.read', 'Certificates: view/search certificates'],
+    ['certificates.write', 'Certificates: generate/assign/revoke/reissue; override status (analytics)'],
+    ['templates.read', 'Certificate templates: view templates'],
+    ['templates.write', 'Certificate templates: create/update/delete; edit canvas/background'],
+    ['media.read', 'Media library: view media list'],
+    ['media.write', 'Media library: upload/delete media (incl. logo upload)'],
+    ['uploads.write', 'Uploads: upload/delete media via uploads endpoints'],
+    ['audit.read', 'Audit log: view audit entries'],
+    ['analytics.read', 'Analytics: view overview, scans, and certificate timeline'],
+    ['fraud.read', 'Fraud: view fraud flags'],
+    ['fraud.write', 'Fraud: create/resolve fraud flags'],
+    ['integrations.read', 'Integrations: view API keys and webhooks'],
+    ['integrations.write', 'Integrations: create/revoke API keys; create/update webhooks'],
+    ['bulk.read', 'Bulk jobs: view job status'],
+    ['bulk.write', 'Bulk jobs: import XLSX and execute bulk actions'],
+    ['identities.read', 'Identities: view tag mappings (NFC UID/EPC)'],
+    ['identities.write', 'Identities: unassign tags from certificates'],
+    ['organizations.read', 'Organizations: view organizations'],
+    ['organizations.write', 'Organizations: create/update organizations'],
+    ['settings.read', 'Settings: view system/organization settings'],
+    ['settings.write', 'Settings: update system/organization settings'],
+    ['cms.read', 'CMS: view pages and layouts'],
+    ['cms.write', 'CMS: create/update/delete pages; save layout; reorder pages'],
+    ['cms.publish', 'CMS: publish landing page'],
+    ['cms.meta.write', 'CMS: edit page meta']
   ];
 
   for (const [key, description] of permissions) {
     await prisma.$executeRaw`
-      INSERT IGNORE INTO \`Permission\` (\`key\`, \`description\`, \`createdAt\`, \`updatedAt\`)
+      INSERT INTO \`Permission\` (\`key\`, \`description\`, \`createdAt\`, \`updatedAt\`)
       VALUES (${key}, ${description}, NOW(), NOW())
+      ON DUPLICATE KEY UPDATE \`description\` = VALUES(\`description\`), \`updatedAt\` = NOW()
     `;
   }
 

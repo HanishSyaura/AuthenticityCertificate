@@ -28,7 +28,7 @@ export default function CmsPagePanel({ pages, selectedPageId, onSelectPage, onCr
     <div className="ac-card p-3">
       <div className="mb-3 text-xs font-semibold text-zinc-500">{t('pages')}</div>
       <div className="space-y-1">
-        {pages.map((p, idx) => (
+        {(Array.isArray(pages) ? pages : []).map((p, idx) => (
           <div
             key={p.id}
             className={`flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm ${
@@ -64,10 +64,11 @@ export default function CmsPagePanel({ pages, selectedPageId, onSelectPage, onCr
                   <button
                     type="button"
                     title={t('moveDown')}
-                    disabled={idx === pages.length - 1}
+                    disabled={idx === (Array.isArray(pages) ? pages : []).length - 1}
                     onClick={() => {
-                      if (idx >= pages.length - 1) return;
-                      const ids = (pages || []).map((x) => x.id);
+                      const list = Array.isArray(pages) ? pages : [];
+                      if (idx >= list.length - 1) return;
+                      const ids = list.map((x) => x.id);
                       const next = [...ids];
                       const tmp = next[idx + 1];
                       next[idx + 1] = next[idx];
