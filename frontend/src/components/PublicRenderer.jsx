@@ -257,6 +257,21 @@ function toDateOrNull(input) {
   return null;
 }
 
+function pad2(input) {
+  return String(Number(input) || 0).padStart(2, '0');
+}
+
+function formatYmdValue(input) {
+  if (input == null) return '';
+  const s = String(input ?? '').trim();
+  if (!s) return '';
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  const d = toDateOrNull(input);
+  if (!d) return s;
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
 function applyFormatter(token, value, locale) {
   const raw = String(token || '').trim();
   if (!raw) return value;
@@ -437,9 +452,15 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
         {
           const interpolated = interpolateText(block.content?.text || '', data, locale, { escapeValue: true });
           const html = sanitizeLimitedHtml(interpolated);
+          const fs = Number(block.content?.fontSize) > 0 ? Number(block.content.fontSize) : 14;
+          const color = String(block.content?.fontColor || '').trim() || '#18181b';
           return (
             <div key={block.id} style={style} className="overflow-hidden">
-              <div className="ql-editor ac-richtext text-sm text-zinc-900" dangerouslySetInnerHTML={{ __html: html }} />
+              <div
+                className="ql-editor ac-richtext"
+                style={{ fontSize: `${fs}px`, lineHeight: 1.2, color }}
+                dangerouslySetInnerHTML={{ __html: html }}
+              />
             </div>
           );
         }
@@ -481,9 +502,13 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
           const productName = data?.product?.name || '-';
           const batchNo = data?.batch?.batchNo || '-';
           const issued = data?.issuedAt ? new Date(data.issuedAt) : null;
-          const netWeight = data?.epcItem?.netWeight || null;
-          const caiqNumber = data?.epcItem?.caiqNumber || null;
-          const productionDate = data?.epcItem?.productionDate ? new Date(data.epcItem.productionDate) : null;
+          const netWeightRaw = data?.epcItem?.netWeight ?? null;
+          const caiqNumberRaw = data?.epcItem?.caiqNumber ?? null;
+          const productionDateRaw = data?.epcItem?.productionDate ?? null;
+          const netWeightText = netWeightRaw == null ? '' : String(netWeightRaw).trim();
+          const caiqNumberText = caiqNumberRaw == null ? '' : String(caiqNumberRaw).trim();
+          const productionDateText = formatYmdValue(productionDateRaw);
+          const showEpcDetails = Boolean(netWeightText || caiqNumberText || productionDateText);
 
           const template = variant === 'supporting' ? supportingTemplate : data?.certificateTemplate || null;
           const templateLayout = normalizeJsonArray(template?.layoutJson);
@@ -520,11 +545,12 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                 label: String(it.label || ''),
                 labelHtml: String(it.labelHtml || ''),
                 fontSize: Number(it.fontSize) > 0 ? Number(it.fontSize) : 14,
-                align: String(it.align || 'left')
+                align: String(it.align || 'left'),
+                wrap: Boolean(it.wrap)
               }));
 
             return (
-              <div key={block.id} style={style} className="overflow-hidden rounded-none border border-zinc-200 bg-white">
+              <div key={block.id} style={style} className="overflow-hidden rounded-none">
                 <div style={{ width: baseW * scale, height: baseH * scale }} className="mx-auto">
                   <div style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }} className="relative overflow-hidden">
                     <div className="absolute inset-0" style={{ backgroundColor: bgColor }} />
@@ -548,6 +574,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                       const key = path.startsWith('templateData.') ? path.slice('templateData.'.length) : '';
                       const ph = key ? placeholderByKey.get(key) : null;
                       let val = raw == null ? '' : String(raw);
+                      let effectivePath = path;
                       const source = String(ph?.source || '').trim() || 'manual';
                       const showPrefix = source !== 'title';
                       const labelText = showPrefix
@@ -575,6 +602,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                         } else if (source === 'product') {
                           const bindPath = String(ph?.bindPath || '').trim();
                           if (bindPath) {
+                            effectivePath = bindPath;
                             const v = getValue(bindPath, {
                               product: dataForTemplate?.product || null,
                               batch: dataForTemplate?.batch || null,
@@ -585,6 +613,18 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                           }
                         }
                       }
+                      const effectivePathLower = String(effectivePath || '').trim().toLowerCase();
+                      const isEpcProductionDate = effectivePathLower === 'epcitem.productiondate';
+                      const isEpcDash =
+                        effectivePathLower === 'epcitem.netweight' ||
+                        effectivePathLower === 'epcitem.caiqnumber' ||
+                        isEpcProductionDate;
+                      if (isEpcProductionDate) {
+                        val = formatYmdValue(val);
+                      }
+                      if (!String(val || '').trim() && isEpcDash) {
+                        val = '-';
+                      }
                       const hasValue = String(val || '').trim().length > 0;
                       if (!hasValue && source !== 'static' && source !== 'title') return null;
                       const valueHtmlRaw =
@@ -592,6 +632,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                       const valueHtml = inlineizeHtml(valueHtmlRaw);
                       const html = `${prefixHtml}${valueHtml || ''}`;
                       if (!String(html || '').trim()) return null;
+                      const wrap = Boolean(it.wrap);
                       return (
                         <div
                           key={it.id || `${idx}`}
@@ -606,8 +647,15 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                           }}
                         >
                           <div
-                            className={`ql-editor ac-richtext h-full w-full font-semibold ${textAlignClass(it.align)} whitespace-nowrap`}
-                            style={{ textAlign: String(it.align || 'left'), whiteSpace: 'nowrap' }}
+                            className={`ql-editor ac-richtext h-full w-full font-semibold ${textAlignClass(it.align)} ${
+                              wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-nowrap'
+                            }`}
+                            style={{
+                              textAlign: String(it.align || 'left'),
+                              whiteSpace: wrap ? 'pre-wrap' : 'nowrap',
+                              overflowWrap: wrap ? 'anywhere' : undefined,
+                              wordBreak: wrap ? 'break-word' : undefined
+                            }}
                             dangerouslySetInnerHTML={{ __html: html }}
                           />
                         </div>
@@ -657,26 +705,20 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                 <span className="font-semibold">{t('issued')}:</span>
                 <span className="truncate">{issued ? issued.toLocaleDateString(locale) : '-'}</span>
               </div>
-              {netWeight || caiqNumber || productionDate ? (
+              {showEpcDetails ? (
                 <div className="mt-2 border-t border-white/40 pt-2">
-                  {netWeight ? (
-                    <div className="flex justify-between gap-3">
-                      <span className="font-semibold">{t('netWeight')}:</span>
-                      <span className="truncate">{String(netWeight)}</span>
-                    </div>
-                  ) : null}
-                  {caiqNumber ? (
-                    <div className={`flex justify-between gap-3${netWeight ? ' mt-1' : ''}`}>
-                      <span className="font-semibold">{t('caiqNo')}:</span>
-                      <span className="truncate">{String(caiqNumber)}</span>
-                    </div>
-                  ) : null}
-                  {productionDate ? (
-                    <div className={`flex justify-between gap-3${netWeight || caiqNumber ? ' mt-1' : ''}`}>
-                      <span className="font-semibold">{t('productionDate')}:</span>
-                      <span className="truncate">{productionDate.toLocaleDateString(locale)}</span>
-                    </div>
-                  ) : null}
+                  <div className="flex justify-between gap-3">
+                    <span className="font-semibold">{t('netWeight')}:</span>
+                    <span className="truncate">{netWeightText || '-'}</span>
+                  </div>
+                  <div className="mt-1 flex justify-between gap-3">
+                    <span className="font-semibold">{t('caiqNo')}:</span>
+                    <span className="truncate">{caiqNumberText || '-'}</span>
+                  </div>
+                  <div className="mt-1 flex justify-between gap-3">
+                    <span className="font-semibold">{t('productionDate')}:</span>
+                    <span className="truncate">{productionDateText || '-'}</span>
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -704,7 +746,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
     const content = (
       <div
         ref={containerRef}
-        className={`w-full overflow-x-hidden bg-white ${className || ''}`}
+        className={`w-full overflow-x-hidden ${className || ''}`}
         style={{ minHeight: `${containerHeight * scale}px` }}
       >
         <div className="mx-auto" style={{ width: `${baseW * scale}px`, height: `${containerHeight * scale}px` }}>
@@ -728,7 +770,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
   const content = (
     <div
       ref={containerRef}
-      className={`relative w-full overflow-x-hidden bg-white ${className || ''}`}
+      className={`relative w-full overflow-x-hidden ${className || ''}`}
       style={containerHeight ? { minHeight: `${containerHeight}px` } : undefined}
     >
       {layoutSafe ? blocks.map(renderBlock) : null}

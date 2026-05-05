@@ -145,8 +145,9 @@ const VerifyPage = () => {
               const canvasH = Number(certificate?.certificateTemplate?.canvasHeight || 844);
               const baseW = Number.isFinite(canvasW) && canvasW > 0 ? canvasW : 390;
               const baseH = Number.isFinite(canvasH) && canvasH > 0 ? canvasH : 844;
+              const pageBg = String(certificate?.certificateTemplate?.backgroundColor || '').trim() || '#ffffff';
               return (
-                <div className="min-h-[100dvh] overflow-x-hidden bg-white">
+                <div className="min-h-[100dvh] overflow-x-hidden" style={{ backgroundColor: pageBg }}>
                   <div className="w-full">
                     <PublicRenderer
                       responsive

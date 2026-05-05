@@ -441,16 +441,6 @@ async function exportBatchXlsx({ organizationId, batchId }) {
     12_000
   );
 
-  const header = [
-    { key: 'corpPrefix', value: batch.corpPrefix },
-    { key: 'batchName', value: batch.batchName },
-    { key: 'batchQty', value: batch.batchQty },
-    { key: 'product', value: batch.product?.name || '' },
-    { key: 'sku', value: batch.sku || batch.product?.sku || '' },
-    { key: 'certificateId', value: String(batch.certificateId || '') }
-  ];
-
-  const wsInfo = XLSX.utils.json_to_sheet(header, { header: ['key', 'value'] });
   const wsItems = XLSX.utils.json_to_sheet(
     items.map((it) => ({
       epcCode: it.epcCode,
@@ -461,7 +451,6 @@ async function exportBatchXlsx({ organizationId, batchId }) {
   );
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, wsInfo, 'batch');
   XLSX.utils.book_append_sheet(wb, wsItems, 'epc');
 
   const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
@@ -496,16 +485,6 @@ async function exportBatchVerifyUrlXlsx({ organizationId, batchId, verifyUrlPref
     12_000
   );
 
-  const header = [
-    { key: 'corpPrefix', value: batch.corpPrefix },
-    { key: 'batchName', value: batch.batchName },
-    { key: 'batchQty', value: batch.batchQty },
-    { key: 'product', value: batch.product?.name || '' },
-    { key: 'sku', value: batch.sku || batch.product?.sku || '' },
-    { key: 'certificateId', value: String(batch.certificateId || '') }
-  ];
-
-  const wsInfo = XLSX.utils.json_to_sheet(header, { header: ['key', 'value'] });
   const prefix = String(verifyUrlPrefix || '').trim();
   const wsItems = XLSX.utils.json_to_sheet(
     items.map((it) => ({
@@ -515,7 +494,6 @@ async function exportBatchVerifyUrlXlsx({ organizationId, batchId, verifyUrlPref
   );
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, wsInfo, 'batch');
   XLSX.utils.book_append_sheet(wb, wsItems, 'epc');
 
   const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });

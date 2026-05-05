@@ -101,7 +101,7 @@ export default function AdminCmsBuilder() {
   }));
 
   const [selectedBlockId, setSelectedBlockId] = useState(null);
-  const [viewMode, setViewMode] = useState('edit');
+  const [viewMode, setViewMode] = useState('split');
   const [saveStatus, setSaveStatus] = useState('idle');
   const [saveError, setSaveError] = useState(null);
   const [, setLastSavedAt] = useState(null);
@@ -163,7 +163,7 @@ export default function AdminCmsBuilder() {
   }, [selectedPageId]);
 
   useEffect(() => {
-    if (viewMode !== 'preview') return;
+    if (viewMode !== 'preview' && viewMode !== 'split') return;
     let cancelled = false;
     (async () => {
       for (const p of pages || []) {
@@ -177,7 +177,7 @@ export default function AdminCmsBuilder() {
   }, [loadLayoutForPage, pages, viewMode]);
 
   useEffect(() => {
-    if (viewMode !== 'preview') return;
+    if (viewMode !== 'preview' && viewMode !== 'split') return;
     try {
       const toStore = previewLayout?.length ? previewLayout : layout;
       localStorage.setItem('ac_cms_preview', JSON.stringify({ layout: toStore, kind: 'landing', language: language || 'en', ts: Date.now() }));
@@ -268,6 +268,15 @@ export default function AdminCmsBuilder() {
             }`}
           >
             {t('edit')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('split')}
+            className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+              viewMode === 'split' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200/80 bg-white text-zinc-900 hover:bg-zinc-50'
+            }`}
+          >
+            {t('split')}
           </button>
           <button
             type="button"

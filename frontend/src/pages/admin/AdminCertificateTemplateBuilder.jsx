@@ -310,10 +310,17 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             const html = inlineizeHtml(sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`));
             const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
             const align = textAlignClass(it.align);
+            const wrap = Boolean(it.wrap);
             return (
               <div
-                className={`ql-editor ac-richtext font-semibold text-zinc-900 ${align} whitespace-nowrap`}
-                style={{ fontSize: fs, textAlign: String(it.align || 'left'), whiteSpace: 'nowrap' }}
+                className={`ql-editor ac-richtext font-semibold text-zinc-900 ${align} ${wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-nowrap'}`}
+                style={{
+                  fontSize: fs,
+                  textAlign: String(it.align || 'left'),
+                  whiteSpace: wrap ? 'pre-wrap' : 'nowrap',
+                  overflowWrap: wrap ? 'anywhere' : undefined,
+                  wordBreak: wrap ? 'break-word' : undefined
+                }}
                 dangerouslySetInnerHTML={{ __html: html }}
               />
             );
@@ -344,10 +351,17 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         const html = inlineizeHtml(sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`));
         const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
         const align = textAlignClass(it.align);
+        const wrap = Boolean(it.wrap);
         return (
           <div
-            className={`ql-editor ac-richtext h-full w-full ${align} whitespace-nowrap`}
-            style={{ fontSize: fs, textAlign: String(it.align || 'left'), whiteSpace: 'nowrap' }}
+            className={`ql-editor ac-richtext h-full w-full ${align} ${wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-nowrap'}`}
+            style={{
+              fontSize: fs,
+              textAlign: String(it.align || 'left'),
+              whiteSpace: wrap ? 'pre-wrap' : 'nowrap',
+              overflowWrap: wrap ? 'anywhere' : undefined,
+              wordBreak: wrap ? 'break-word' : undefined
+            }}
             dangerouslySetInnerHTML={{ __html: html }}
           />
         );
@@ -947,6 +961,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                 </select>
                               </div>
                             </div>
+
+                            <label className="mt-3 flex items-center gap-2 text-sm">
+                              <input type="checkbox" checked={Boolean(selectedField.wrap)} onChange={(e) => updateField({ wrap: e.target.checked })} />
+                              <span className="text-xs font-medium text-zinc-700">{t('wrapText')}</span>
+                            </label>
 
                             <div className="mt-3 flex items-center gap-2">
                               <button
@@ -1715,6 +1734,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                       </select>
                     </div>
                   </div>
+
+                <label className="mt-3 flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={Boolean(selectedField.wrap)} onChange={(e) => updateField({ wrap: e.target.checked })} />
+                  <span className="text-xs font-medium text-zinc-700">{t('wrapText')}</span>
+                </label>
 
                   <div className="flex items-center gap-2">
                     <button

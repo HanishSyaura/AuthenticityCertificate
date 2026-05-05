@@ -34,6 +34,11 @@ export default function AdminEpcScan() {
   const { t } = useT();
   const inputRef = useRef(null);
   const scannedRef = useRef(new Set());
+  const scanIdleTimerRef = useRef(null);
+  const scanLastInputAtRef = useRef(0);
+  const scanBurstStartAtRef = useRef(0);
+  const scanPrevLenRef = useRef(0);
+  const scanAutoModeRef = useRef(false);
 
   const { token, user } = useAdminAuthStore((s) => ({ token: s.token, user: s.user }));
   const role = user?.role || 'admin';
@@ -66,6 +71,13 @@ export default function AdminEpcScan() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  const clearScanIdleTimer = () => {
+    if (scanIdleTimerRef.current) {
+      window.clearTimeout(scanIdleTimerRef.current);
+      scanIdleTimerRef.current = null;
+    }
+  };
 
   const upsertRow = (item, extra) => {
     setRows((prev) => {
@@ -194,10 +206,15 @@ export default function AdminEpcScan() {
     };
   }, [selectedBatchId, batchQuery, pendingOnly, batchOffset, fetchBatchItems]);
 
-  const handleScan = async () => {
-    const raw = String(scanValue || '').trim();
+  const handleScan = async (rawOverride) => {
+    clearScanIdleTimer();
+    const raw = String(rawOverride ?? scanValue ?? '').trim();
     if (!raw) return;
     setScanValue('');
+    scanLastInputAtRef.current = 0;
+    scanBurstStartAtRef.current = 0;
+    scanPrevLenRef.current = 0;
+    scanAutoModeRef.current = false;
     setTopError('');
     setTopHint('');
 
@@ -323,6 +340,41 @@ export default function AdminEpcScan() {
     }
   };
 
+  useEffect(() => {
+    clearScanIdleTimer();
+    const now = Date.now();
+    const raw = String(scanValue || '').trim();
+    if (!raw) {
+      scanLastInputAtRef.current = 0;
+      scanBurstStartAtRef.current = 0;
+      scanPrevLenRef.current = 0;
+      scanAutoModeRef.current = false;
+      return;
+    }
+
+    const prevLen = scanPrevLenRef.current;
+    if (prevLen === 0 || raw.length < prevLen) {
+      scanBurstStartAtRef.current = now;
+      scanAutoModeRef.current = false;
+    }
+    const lastAt = scanLastInputAtRef.current;
+    if (lastAt && now - lastAt < 50) scanAutoModeRef.current = true;
+    if (scanBurstStartAtRef.current && now - scanBurstStartAtRef.current > 500) scanAutoModeRef.current = false;
+    scanLastInputAtRef.current = now;
+    scanPrevLenRef.current = raw.length;
+
+    const minLen = step === 'epc' ? 6 : 1;
+    if (raw.length < minLen) return;
+    if (!scanAutoModeRef.current) return;
+    scanIdleTimerRef.current = window.setTimeout(() => {
+      scanIdleTimerRef.current = null;
+      void handleScan(raw);
+    }, 120);
+    return () => {
+      clearScanIdleTimer();
+    };
+  }, [scanValue, step]);
+
   const selectedRow = rows.find((r) => String(r.id) === String(selectedId)) || null;
 
   const saveAmend = async () => {
@@ -424,12 +476,31 @@ export default function AdminEpcScan() {
           <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_auto]">
             <input
               ref={inputRef}
+              autoFocus
               value={scanValue}
               onChange={(e) => setScanValue(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') void handleScan();
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                  e.preventDefault();
+                  void handleScan();
+                }
               }}
-              placeholder={t('scanPlaceholder')}
+              onBlur={() => {
+                window.setTimeout(() => {
+                  const el = document.activeElement;
+                  if (!el) return;
+                  const tag = String(el.tagName || '').toLowerCase();
+                  const isEditable = el.isContentEditable || tag === 'input' || tag === 'textarea' || tag === 'select';
+                  if (!isEditable) inputRef.current?.focus();
+                }, 0);
+              }}
+              onPaste={(e) => {
+                const text = e.clipboardData?.getData('text') || '';
+                if (!text) return;
+                e.preventDefault();
+                void handleScan(text);
+              }}
+              placeholder={step === 'netWeight' ? t('scanPromptNetWeight') : step === 'caiqNumber' ? t('scanPromptCaiq') : t('scanPromptEpc')}
               className="ac-input font-mono"
               autoComplete="off"
               inputMode="text"

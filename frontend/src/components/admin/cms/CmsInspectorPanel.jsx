@@ -58,6 +58,28 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
           {selectedBlock.type === 'text' ? (
             <div>
               <label className="block text-xs font-medium text-zinc-700">{t('content')}</label>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-semibold text-zinc-600">{t('fontSize')}</label>
+                  <input
+                    type="number"
+                    min={8}
+                    max={96}
+                    value={Number(selectedBlock.content?.fontSize) > 0 ? Number(selectedBlock.content.fontSize) : 14}
+                    onChange={(e) => updateSelectedContent({ fontSize: Number(e.target.value) || 14 })}
+                    className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-zinc-600">{t('fontColor')}</label>
+                  <input
+                    type="color"
+                    value={String(selectedBlock.content?.fontColor || '#18181b')}
+                    onChange={(e) => updateSelectedContent({ fontColor: e.target.value })}
+                    className="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-2"
+                  />
+                </div>
+              </div>
               <div className="mt-1">
                 <label className="block text-[11px] font-semibold text-zinc-600">{t('insertPlaceholder')}</label>
                 <select

@@ -111,6 +111,10 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
     return Math.max(0.1, Math.min(2, Number(devicePreset.w) / baseW));
   }, [devicePreset]);
 
+  const effectivePreviewLayout = useMemo(() => {
+    return Array.isArray(previewLayout) && previewLayout.length ? previewLayout : layout;
+  }, [layout, previewLayout]);
+
   useEffect(() => {
     layoutRef.current = safeLayout;
   }, [safeLayout]);
@@ -159,9 +163,13 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
         }
         if (it.type === 'text') {
           const preview = stripHtmlToText(it.content?.text || '');
+          const fs = Number(it.content?.fontSize) > 0 ? Number(it.content.fontSize) : 14;
+          const color = String(it.content?.fontColor || '').trim() || '#18181b';
           return (
             <div className="h-full w-full p-2">
-              <div className="whitespace-pre-wrap text-sm text-zinc-900">{preview || ''}</div>
+              <div className="whitespace-pre-wrap" style={{ fontSize: `${fs}px`, lineHeight: 1.2, color }}>
+                {preview || ''}
+              </div>
             </div>
           );
         }
@@ -199,6 +207,100 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
       }
     }));
   }, [safeLayout, t]);
+
+  const PreviewPane = ({ compact = false }) => {
+    return (
+      <div className="overflow-hidden rounded-xl border border-zinc-200">
+        <div className={`border-b border-zinc-200 bg-zinc-50 ${compact ? 'p-2' : 'p-3'}`}>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto] md:items-end">
+            <div>
+              <div className="text-[11px] font-semibold text-zinc-600">{t('previewCertificateId')}</div>
+              <input
+                value={previewCertId}
+                onChange={(e) => setPreviewCertId(e.target.value)}
+                placeholder="CERTIFICATE_ID"
+                className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-mono outline-none focus:border-zinc-400"
+              />
+              <div className="mt-1 text-[11px] text-zinc-500">{t('previewCertificateHint')}</div>
+              <div className="mt-3 text-[11px] font-semibold text-zinc-600">EPC</div>
+              <input
+                value={previewEpc}
+                onChange={(e) => setPreviewEpc(e.target.value)}
+                placeholder="EPC_CODE"
+                className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-mono outline-none focus:border-zinc-400"
+              />
+            </div>
+            <button
+              type="button"
+              className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+              onClick={async () => {
+                setPreviewError(null);
+                const id = String(previewCertId || '').trim();
+                const epc = String(previewEpc || '').trim();
+                if (!id && !epc) {
+                  setPreviewData(null);
+                  return;
+                }
+                try {
+                  const base = getPublicApiBaseUrl();
+                  const url = id ? `${base}/cert/${encodeURIComponent(id)}` : `${base}/resolve`;
+                  const res = await axios.get(url, { params: id ? undefined : { epc } });
+                  setPreviewData(res?.data?.data || null);
+                } catch (e) {
+                  const msg = e?.response?.data?.message || e?.message || 'Failed to load certificate';
+                  setPreviewData(null);
+                  setPreviewError(msg);
+                }
+              }}
+            >
+              {t('load')}
+            </button>
+          </div>
+          {previewLinks.length ? (
+            <div className={`mt-3 rounded-xl border border-zinc-200 bg-white ${compact ? 'px-2 py-2' : 'px-3 py-2'}`}>
+              <div className="text-[11px] font-semibold text-zinc-600">{t('previewUrl')}</div>
+              <div className="mt-1 space-y-2">
+                {previewLinks.map((l) => (
+                  <div key={l.key} className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-[11px] text-zinc-500">{l.label}</div>
+                      <a href={l.url} target="_blank" rel="noreferrer" className="mt-0.5 block truncate font-mono text-xs text-brand-700 hover:underline">
+                        {l.url}
+                      </a>
+                    </div>
+                    <button
+                      type="button"
+                      className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(l.url);
+                        } catch {
+                          void 0;
+                        }
+                      }}
+                    >
+                      {t('copy')}
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-[11px] text-zinc-500">{t('previewUrlHint')}</div>
+            </div>
+          ) : null}
+          {previewError ? <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{previewError}</div> : null}
+        </div>
+        <div className="overflow-auto bg-white">
+          <div className="mx-auto" style={{ width: devicePreset?.w || baseW, height: devicePreset?.h || baseH }}>
+            <div style={{ width: baseW * scale, height: baseH * scale }} className="mx-auto">
+              <div style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }} className="overflow-auto rounded-xl border border-zinc-200">
+                <PublicRenderer layout={effectivePreviewLayout} data={previewData || sampleCert()} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-3">
@@ -251,7 +353,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
             onClick={() => {
               const next = [
                 ...safeLayout,
-                { id: makeId('text'), type: 'text', x: 20, y: 20, w: 240, h: 80, content: { text: 'New text' } }
+                { id: makeId('text'), type: 'text', x: 20, y: 20, w: 240, h: 80, content: { text: 'New text', fontSize: 14, fontColor: '#18181b' } }
               ];
               setLayout(next);
             }}
@@ -331,94 +433,21 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
       </div>
 
       {viewMode === 'preview' ? (
-        <div className="overflow-hidden rounded-xl border border-zinc-200">
-          <div className="border-b border-zinc-200 bg-zinc-50 p-3">
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto] md:items-end">
-              <div>
-                <div className="text-[11px] font-semibold text-zinc-600">{t('previewCertificateId')}</div>
-                <input
-                  value={previewCertId}
-                  onChange={(e) => setPreviewCertId(e.target.value)}
-                  placeholder="CERTIFICATE_ID"
-                  className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-mono outline-none focus:border-zinc-400"
-                />
-                <div className="mt-1 text-[11px] text-zinc-500">{t('previewCertificateHint')}</div>
-                <div className="mt-3 text-[11px] font-semibold text-zinc-600">EPC</div>
-                <input
-                  value={previewEpc}
-                  onChange={(e) => setPreviewEpc(e.target.value)}
-                  placeholder="EPC_CODE"
-                  className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-mono outline-none focus:border-zinc-400"
-                />
-              </div>
-              <button
-                type="button"
-                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                onClick={async () => {
-                  setPreviewError(null);
-                  const id = String(previewCertId || '').trim();
-                  const epc = String(previewEpc || '').trim();
-                  if (!id && !epc) {
-                    setPreviewData(null);
-                    return;
-                  }
-                  try {
-                    const base = getPublicApiBaseUrl();
-                    const url = id ? `${base}/cert/${encodeURIComponent(id)}` : `${base}/resolve`;
-                    const res = await axios.get(url, { params: id ? undefined : { epc } });
-                    setPreviewData(res?.data?.data || null);
-                  } catch (e) {
-                    const msg = e?.response?.data?.message || e?.message || 'Failed to load certificate';
-                    setPreviewData(null);
-                    setPreviewError(msg);
-                  }
-                }}
-              >
-                {t('load')}
-              </button>
-            </div>
-            {previewLinks.length ? (
-              <div className="mt-3 rounded-xl border border-zinc-200 bg-white px-3 py-2">
-                <div className="text-[11px] font-semibold text-zinc-600">{t('previewUrl')}</div>
-                <div className="mt-1 space-y-2">
-                  {previewLinks.map((l) => (
-                    <div key={l.key} className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-[11px] text-zinc-500">{l.label}</div>
-                        <a href={l.url} target="_blank" rel="noreferrer" className="mt-0.5 block truncate font-mono text-xs text-brand-700 hover:underline">
-                          {l.url}
-                        </a>
-                      </div>
-                      <button
-                        type="button"
-                        className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-                        onClick={async () => {
-                          try {
-                            await navigator.clipboard.writeText(l.url);
-                          } catch {
-                            void 0;
-                          }
-                        }}
-                      >
-                        {t('copy')}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-2 text-[11px] text-zinc-500">{t('previewUrlHint')}</div>
-              </div>
-            ) : null}
-            {previewError ? <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{previewError}</div> : null}
+        <PreviewPane />
+      ) : viewMode === 'split' ? (
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+            <CanvasStage
+              width={baseW}
+              height={baseH}
+              scale={scale}
+              items={blocks}
+              setItems={setCanvasItems}
+              selectedId={selectedBlockId}
+              setSelectedId={setSelectedBlockId}
+            />
           </div>
-          <div className="overflow-auto bg-white">
-            <div className="mx-auto" style={{ width: (devicePreset?.w || baseW), height: (devicePreset?.h || baseH) }}>
-              <div style={{ width: baseW * scale, height: baseH * scale }} className="mx-auto">
-                <div style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }} className="overflow-auto rounded-xl border border-zinc-200">
-                  <PublicRenderer layout={Array.isArray(previewLayout) && previewLayout.length ? previewLayout : layout} data={previewData || sampleCert()} />
-                </div>
-              </div>
-            </div>
-          </div>
+          <PreviewPane compact />
         </div>
       ) : (
         <CanvasStage
