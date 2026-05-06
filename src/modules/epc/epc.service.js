@@ -2,6 +2,7 @@ const prisma = require('../../config/prisma');
 const XLSX = require('xlsx');
 const { generateCertificateId } = require('../../utils/id-generator');
 const { matchPermission } = require('../../middleware/access.middleware');
+const settingsService = require('../settings/settings.service');
 
 async function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), ms))]);
@@ -180,9 +181,18 @@ async function deleteAllBatches({ organizationId, corpPrefix }) {
   };
 }
 
-async function getNextCertificateId() {
+async function getNextCertificateId({ organizationId } = {}) {
+  const orgId = Number(organizationId);
+  let timeZone = null;
+  if (Number.isFinite(orgId) && orgId > 0) {
+    try {
+      const settings = await settingsService.ensureOrganizationSettings(orgId);
+      timeZone = settings?.defaultTimezone || null;
+    } catch {
+    }
+  }
   return await prisma.$transaction(async (tx) => {
-    return await generateCertificateId(tx);
+    return await generateCertificateId(tx, { timeZone });
   });
 }
 
@@ -202,6 +212,12 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, product
   const pd = productionDate ? toDateOrNull(productionDate) : null;
   if (productionDate && !pd) throw new Error('Invalid production date');
   const mmyy = formatMMyy(pd || new Date());
+  let timeZone = null;
+  try {
+    const settings = await settingsService.ensureOrganizationSettings(orgId);
+    timeZone = settings?.defaultTimezone || null;
+  } catch {
+  }
 
   const result = await prisma.$transaction(
     async (tx) => {
@@ -221,7 +237,7 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, product
       const desiredCertIdRaw = String(certificateId || '').trim();
       const desiredCertId = desiredCertIdRaw ? desiredCertIdRaw.toUpperCase() : '';
 
-      const batchCertId = desiredCertId || (await generateCertificateId(tx));
+      const batchCertId = desiredCertId || (await generateCertificateId(tx, { timeZone }));
       const existingCert = await tx.certificate.findUnique({
         where: { certificateId: batchCertId },
         select: { certificateId: true, organizationId: true }
@@ -331,6 +347,12 @@ async function importExistingEpc({ organizationId, productId, batchName, base64 
     1200
   );
   if (!product) throw new Error('Product tidak dijumpai');
+  let timeZone = null;
+  try {
+    const settings = await settingsService.ensureOrganizationSettings(orgId);
+    timeZone = settings?.defaultTimezone || null;
+  } catch {
+  }
 
   const { rows } = parseXlsxBase64(base64);
   if (!Array.isArray(rows) || rows.length === 0) throw new Error('Excel kosong');
@@ -369,7 +391,7 @@ async function importExistingEpc({ organizationId, productId, batchName, base64 
       select: { id: true }
     });
 
-    const batchCertId = await generateCertificateId(tx);
+    const batchCertId = await generateCertificateId(tx, { timeZone });
     const existingCert = await tx.certificate.findUnique({ where: { certificateId: batchCertId }, select: { certificateId: true, organizationId: true } });
     if (existingCert) {
       if (Number(existingCert.organizationId) !== orgId) throw new Error('Certificate ID belongs to a different organization');

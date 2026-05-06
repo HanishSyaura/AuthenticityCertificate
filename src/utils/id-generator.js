@@ -1,6 +1,24 @@
 const crypto = require('crypto');
 
-function formatDdMmYy(d = new Date()) {
+function formatDdMmYy(d = new Date(), timeZone = null) {
+  const tz = typeof timeZone === 'string' && timeZone.trim() ? timeZone.trim() : null;
+  if (tz) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: tz,
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit'
+      }).formatToParts(d);
+
+      const dd = parts.find((p) => p.type === 'day')?.value;
+      const mm = parts.find((p) => p.type === 'month')?.value;
+      const yy = parts.find((p) => p.type === 'year')?.value;
+      if (dd && mm && yy) return `${dd}${mm}${yy}`;
+    } catch {
+    }
+  }
+
   const dd = String(d.getDate()).padStart(2, '0');
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const yy = String(d.getFullYear() % 100).padStart(2, '0');
@@ -12,16 +30,16 @@ function formatCertificateId({ dateKey, runningNo, prefix = 'CERT', pad = 3 }) {
   return `${prefix}${dateKey}${run}`;
 }
 
-function generateFallbackCertificateId({ date = new Date(), prefix = 'CERT', pad = 3 } = {}) {
-  const dateKey = formatDdMmYy(date);
+function generateFallbackCertificateId({ date = new Date(), prefix = 'CERT', pad = 3, timeZone = null } = {}) {
+  const dateKey = formatDdMmYy(date, timeZone);
   const max = Math.max(10, 10 ** Math.min(6, Math.max(1, Number(pad) || 3)));
   const r = crypto.randomInt(1, max);
   return formatCertificateId({ dateKey, runningNo: r, prefix, pad });
 }
 
-async function generateCertificateId(db, { date = new Date(), prefix = 'CERT', pad = 3 } = {}) {
-  if (!db) return generateFallbackCertificateId({ date, prefix, pad });
-  const dateKey = formatDdMmYy(date);
+async function generateCertificateId(db, { date = new Date(), prefix = 'CERT', pad = 3, timeZone = null } = {}) {
+  if (!db) return generateFallbackCertificateId({ date, prefix, pad, timeZone });
+  const dateKey = formatDdMmYy(date, timeZone);
 
   const allocateInTx = async (tx) => {
     await tx.certificateSequence.upsert({

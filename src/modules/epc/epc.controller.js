@@ -76,7 +76,7 @@ async function getCorpCodes(req, res) {
 
 async function getNextCertificateId(req, res) {
   try {
-    const certificateId = await epcService.getNextCertificateId();
+    const certificateId = await epcService.getNextCertificateId({ organizationId: req.organization.id });
     res.success({ certificateId });
   } catch (e) {
     res.error(e.message, 400);

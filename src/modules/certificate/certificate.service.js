@@ -1,6 +1,7 @@
 const prisma = require('../../config/prisma');
 const { generateCertificateId } = require('../../utils/id-generator');
 const identityService = require('../../services/identity.service');
+const settingsService = require('../settings/settings.service');
 
 async function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), ms))]);
@@ -35,6 +36,12 @@ async function generateCertificates(batchId, type, quantity = 1, organizationId)
   const certificates = [];
 
   let orgId = Number(organizationId);
+  let timeZone = null;
+  try {
+    const settings = await settingsService.ensureOrganizationSettings(orgId);
+    timeZone = settings?.defaultTimezone || null;
+  } catch {
+  }
 
   const batchPk = Number(batchId);
   if (!Number.isFinite(batchPk)) throw new Error('Invalid batchId');
@@ -53,9 +60,9 @@ async function generateCertificates(batchId, type, quantity = 1, organizationId)
     // One certificate for the entire batch
     let certificateId;
     try {
-      certificateId = await generateCertificateId(prisma);
+      certificateId = await generateCertificateId(prisma, { timeZone });
     } catch {
-      certificateId = await generateCertificateId(null);
+      certificateId = await generateCertificateId(null, { timeZone });
     }
     try {
       const cert = await withTimeout(
@@ -81,9 +88,9 @@ async function generateCertificates(batchId, type, quantity = 1, organizationId)
     for (let i = 0; i < quantity; i++) {
       let certificateId;
       try {
-        certificateId = await generateCertificateId(prisma);
+        certificateId = await generateCertificateId(prisma, { timeZone });
       } catch {
-        certificateId = await generateCertificateId(null);
+        certificateId = await generateCertificateId(null, { timeZone });
       }
       try {
         const cert = await withTimeout(
@@ -198,10 +205,17 @@ async function reissueCertificate({ organizationId, certificateId, reason }) {
   if (from.organizationId && from.organizationId !== orgId) throw new Error('Certificate belongs to a different organization');
 
   let toId;
+  let timeZone = null;
   try {
-    toId = await generateCertificateId(prisma);
+    const targetOrgId = Number(from.organizationId || orgId);
+    const settings = await settingsService.ensureOrganizationSettings(targetOrgId);
+    timeZone = settings?.defaultTimezone || null;
   } catch {
-    toId = await generateCertificateId(null);
+  }
+  try {
+    toId = await generateCertificateId(prisma, { timeZone });
+  } catch {
+    toId = await generateCertificateId(null, { timeZone });
   }
   const now = new Date();
   const exp = from.expiresAt ? new Date(from.expiresAt) : null;

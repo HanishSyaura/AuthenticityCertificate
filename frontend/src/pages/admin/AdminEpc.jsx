@@ -165,6 +165,13 @@ export default function AdminEpc() {
 
   const openExportCols = useCallback((b) => {
     setExportColsBatch(b || null);
+    setExportCols({
+      epcCode: true,
+      runningNo: false,
+      netWeight: true,
+      productionDate: true,
+      caiqNumber: true
+    });
     setExportColsOpen(true);
   }, []);
 
@@ -663,18 +670,8 @@ export default function AdminEpc() {
                     </button>
                   ) : null}
                   {canExportXlsx ? (
-                    <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchXlsx(b.id)}>
-                      {t('exportXlsx')}
-                    </button>
-                  ) : null}
-                  {canExportXlsx ? (
                     <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openExportCols(b)}>
-                      {t('exportXlsxCustom')}
-                    </button>
-                  ) : null}
-                  {canEncoding ? (
-                    <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchVerifyUrlXlsx(b.id)}>
-                      {t('exportVerifyUrlXlsx')}
+                      {t('exportXlsx')}
                     </button>
                   ) : null}
                   {canDelete ? (
@@ -1110,13 +1107,13 @@ export default function AdminEpc() {
 
                   <div className="flex flex-wrap items-center gap-2">
                     {canExportXlsx ? (
-                      <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchXlsx(b.id)}>
-                        {t('download')}
+                      <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openExportCols(b)}>
+                        {t('exportXlsx')}
                       </button>
                     ) : null}
-                    {canExportXlsx ? (
-                      <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openExportCols(b)}>
-                        {t('exportXlsxCustom')}
+                    {canEncoding ? (
+                      <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchVerifyUrlXlsx(b.id)}>
+                        {t('exportVerifyUrlXlsx')}
                       </button>
                     ) : null}
                     <label className="ac-btn ac-btn-soft px-3 py-2 text-xs">
