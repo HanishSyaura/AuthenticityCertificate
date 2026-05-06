@@ -172,7 +172,7 @@ export default function CmsPreviewPage() {
             className="relative rounded-xl border border-zinc-200 bg-white shadow-sm"
             style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }}
           >
-            <div className="ac-scrollbar-inside">
+            <div className="ac-scrollbar-outside">
               <PublicRenderer layout={storedLayout} data={data || sampleCert()} />
             </div>
           </div>
