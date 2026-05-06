@@ -78,5 +78,46 @@ async function generateCertificateId(db, { date = new Date(), prefix = 'CERT', p
 }
 
 module.exports = {
-  generateCertificateId
+  generateCertificateId,
+  getCertificateDateKey: ({ date = new Date(), timeZone = null } = {}) => formatDdMmYy(date, timeZone),
+  peekNextCertificateId: async (db, { date = new Date(), prefix = 'CERT', pad = 3, timeZone = null } = {}) => {
+    if (!db) return generateFallbackCertificateId({ date, prefix, pad, timeZone });
+    const dateKey = formatDdMmYy(date, timeZone);
+
+    const peekInTx = async (tx) => {
+      await tx.certificateSequence.upsert({
+        where: { dateKey },
+        update: {},
+        create: { dateKey, lastNo: 0n }
+      });
+
+      let base = 0n;
+      try {
+        const rows = await tx.$queryRaw`
+          SELECT lastNo FROM \`CertificateSequence\`
+          WHERE dateKey = ${dateKey}
+          LIMIT 1
+        `;
+        base = rows && rows[0] && rows[0].lastNo !== undefined ? BigInt(rows[0].lastNo) : 0n;
+      } catch {
+        const row = await tx.certificateSequence.findUnique({ where: { dateKey }, select: { lastNo: true } });
+        base = row?.lastNo != null ? BigInt(row.lastNo) : 0n;
+      }
+
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        const next = base + BigInt(attempt) + 1n;
+        const candidate = formatCertificateId({ dateKey, runningNo: next.toString(), prefix, pad });
+        const exists = await tx.certificate.findUnique({ where: { certificateId: candidate }, select: { certificateId: true } });
+        if (!exists) return candidate;
+      }
+
+      return formatCertificateId({ dateKey, runningNo: (base + 1n).toString(), prefix, pad });
+    };
+
+    if (typeof db.$transaction === 'function') {
+      return db.$transaction((tx) => peekInTx(tx), { timeout: 8_000, maxWait: 2_000 });
+    }
+
+    return peekInTx(db);
+  }
 };

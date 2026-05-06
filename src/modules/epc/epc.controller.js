@@ -83,6 +83,24 @@ async function getNextCertificateId(req, res) {
   }
 }
 
+async function peekCertificateId(req, res) {
+  try {
+    const certificateId = await epcService.peekCertificateId({ organizationId: req.organization.id });
+    res.success({ certificateId });
+  } catch (e) {
+    res.error(e.message, 400);
+  }
+}
+
+async function resetTodayCertificateId(req, res) {
+  try {
+    const result = await epcService.resetTodayCertificateId({ organizationId: req.organization.id });
+    res.success(result, 'Certificate ID reset');
+  } catch (e) {
+    res.error(e.message, 400);
+  }
+}
+
 async function generateBatch(req, res) {
   try {
     const validated = generateSchema.parse(req.body || {});
@@ -326,6 +344,8 @@ async function deleteAll(req, res) {
 module.exports = {
   getCorpCodes,
   getNextCertificateId,
+  peekCertificateId,
+  resetTodayCertificateId,
   generateBatch,
   listBatches,
   listItems,

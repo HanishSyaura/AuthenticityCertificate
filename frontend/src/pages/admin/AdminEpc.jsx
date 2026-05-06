@@ -72,7 +72,8 @@ export default function AdminEpc() {
     error,
     lastGenerated,
     fetchCorpCodes,
-    fetchNextCertificateId,
+    fetchPeekCertificateId,
+    resetTodayCertificateId,
     fetchBatches,
     fetchItems,
     generateBatch,
@@ -95,7 +96,8 @@ export default function AdminEpc() {
     error: s.error,
     lastGenerated: s.lastGenerated,
     fetchCorpCodes: s.fetchCorpCodes,
-    fetchNextCertificateId: s.fetchNextCertificateId,
+    fetchPeekCertificateId: s.fetchPeekCertificateId,
+    resetTodayCertificateId: s.resetTodayCertificateId,
     fetchBatches: s.fetchBatches,
     fetchItems: s.fetchItems,
     generateBatch: s.generateBatch,
@@ -121,6 +123,7 @@ export default function AdminEpc() {
   const [batchQty, setBatchQty] = useState(1);
   const [remark, setRemark] = useState('');
   const [certificateId, setCertificateId] = useState('');
+  const [certificateIdMode, setCertificateIdMode] = useState('auto');
   const [certificateTemplateId, setCertificateTemplateId] = useState('');
   const [templateData, setTemplateData] = useState({});
   const [importProductId, setImportProductId] = useState('');
@@ -198,9 +201,10 @@ export default function AdminEpc() {
   };
 
   const refreshCertificateId = useCallback(async () => {
-    const nextId = await fetchNextCertificateId();
+    const nextId = await fetchPeekCertificateId();
     if (nextId) setCertificateId(nextId);
-  }, [fetchNextCertificateId]);
+    setCertificateIdMode('auto');
+  }, [fetchPeekCertificateId]);
 
   useEffect(() => {
     if (!canBatchCreate && !canBatchView && !canProduction) return;
@@ -506,11 +510,29 @@ export default function AdminEpc() {
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('certificateId')}</div>
                 <input
                   value={certificateId}
-                  disabled
-                  readOnly
+                  onChange={(e) => {
+                    setCertificateId(String(e.target.value || '').toUpperCase());
+                    setCertificateIdMode('manual');
+                  }}
                   className="ac-input font-mono uppercase"
                   placeholder="CERTDDMMYY001"
                 />
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                    disabled={loading}
+                    onClick={async () => {
+                      if (!window.confirm('Reset Certificate ID hari ini balik ke 001? (Hanya boleh jika tiada certificate dicipta hari ini)')) return;
+                      const res = await resetTodayCertificateId();
+                      const id = String(res?.certificateId || '').trim();
+                      if (id) setCertificateId(id);
+                      setCertificateIdMode('auto');
+                    }}
+                  >
+                    Reset today to 001
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -550,6 +572,7 @@ export default function AdminEpc() {
                     setRemark('');
                     setProductionDate('');
                     setCertificateId('');
+                    setCertificateIdMode('auto');
                     setTemplateData({});
                     clearLastGenerated();
                     void refreshCertificateId();
@@ -569,12 +592,15 @@ export default function AdminEpc() {
                       batchName: String(batchName).trim(),
                       batchQty,
                       remark: String(remark || '').trim() || undefined,
-                      certificateId: String(certificateId || '').trim() || undefined,
+                      certificateId: certificateIdMode === 'manual' ? String(certificateId || '').trim() || undefined : undefined,
                       certificateTemplateId: certificateTemplateId ? Number(certificateTemplateId) : null,
                       templateData
                     });
                     const createdCertId = String(created?.batch?.certificateId || '').trim();
-                    if (createdCertId) setCertificateId(createdCertId);
+                    if (createdCertId) {
+                      setCertificateId(createdCertId);
+                      setCertificateIdMode('auto');
+                    }
                     const batchId = created?.batch?.id;
                     if (batchId && canExportXlsx) await exportBatchXlsx(batchId);
                     await fetchBatches({ limit: 50, offset: 0 });

@@ -77,6 +77,9 @@ function PreviewStage({
   compact = false,
   baseW,
   baseH,
+  frameH,
+  viewportW,
+  viewportH,
   scale,
   effectivePreviewLayout,
   previewData,
@@ -98,14 +101,17 @@ function PreviewStage({
 
   return (
     <div className={`w-full overflow-auto ${compact ? 'p-2' : 'p-3'}`}>
-      <div className="mx-auto" style={{ width: baseW * scale, height: baseH * scale }}>
-        <div className="relative rounded-xl border border-zinc-200 shadow-sm" style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+      <div className="mx-auto" style={{ width: viewportW, height: viewportH }}>
+        <div
+          className="relative rounded-xl border border-zinc-200 shadow-sm"
+          style={{ width: baseW, height: frameH, transform: `scale(${scale})`, transformOrigin: 'top left' }}
+        >
           <div
             ref={scrollRef}
             onScroll={(e) => {
               lastScrollTopRef.current = e.currentTarget.scrollTop || 0;
             }}
-            className="ac-scrollbar-outside"
+            className="ac-scrollbar-inside"
           >
             <PublicRenderer layout={effectivePreviewLayout} data={previewData || sampleCert()} />
           </div>
@@ -145,6 +151,21 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
     if (!devicePreset.w) return 1;
     return Math.max(0.1, Math.min(2, Number(devicePreset.w) / baseW));
   }, [devicePreset]);
+  const viewportW = useMemo(() => {
+    if (Number(devicePreset?.w) > 0) return Number(devicePreset.w);
+    return baseW * scale;
+  }, [devicePreset, scale]);
+  const viewportH = useMemo(() => {
+    if (Number(devicePreset?.h) > 0) return Number(devicePreset.h);
+    return baseH * scale;
+  }, [devicePreset, scale]);
+  const frameH = useMemo(() => {
+    const h = Number(devicePreset?.h);
+    if (!Number.isFinite(h) || h <= 0) return baseH;
+    const unscaled = h / scale;
+    if (!Number.isFinite(unscaled) || unscaled <= 0) return baseH;
+    return Math.max(80, Math.min(baseH, unscaled));
+  }, [devicePreset, scale]);
 
   const effectivePreviewLayout = useMemo(() => {
     return Array.isArray(previewLayout) && previewLayout.length ? previewLayout : layout;
@@ -419,6 +440,9 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
         <PreviewStage
           baseW={baseW}
           baseH={baseH}
+          frameH={frameH}
+          viewportW={viewportW}
+          viewportH={viewportH}
           scale={scale}
           effectivePreviewLayout={effectivePreviewLayout}
           previewData={previewData}
@@ -445,6 +469,9 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
               compact
               baseW={baseW}
               baseH={baseH}
+              frameH={frameH}
+              viewportW={viewportW}
+              viewportH={viewportH}
               scale={scale}
               effectivePreviewLayout={effectivePreviewLayout}
               previewData={previewData}

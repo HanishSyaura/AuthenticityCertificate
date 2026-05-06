@@ -1,6 +1,6 @@
 const prisma = require('../../config/prisma');
 const XLSX = require('xlsx');
-const { generateCertificateId } = require('../../utils/id-generator');
+const { generateCertificateId, peekNextCertificateId, getCertificateDateKey } = require('../../utils/id-generator');
 const { matchPermission } = require('../../middleware/access.middleware');
 const settingsService = require('../settings/settings.service');
 
@@ -193,6 +193,54 @@ async function getNextCertificateId({ organizationId } = {}) {
   }
   return await prisma.$transaction(async (tx) => {
     return await generateCertificateId(tx, { timeZone });
+  });
+}
+
+async function peekCertificateId({ organizationId } = {}) {
+  const orgId = Number(organizationId);
+  let timeZone = null;
+  if (Number.isFinite(orgId) && orgId > 0) {
+    try {
+      const settings = await settingsService.ensureOrganizationSettings(orgId);
+      timeZone = settings?.defaultTimezone || null;
+    } catch {
+    }
+  }
+  return await prisma.$transaction(async (tx) => {
+    return await peekNextCertificateId(tx, { timeZone });
+  });
+}
+
+async function resetTodayCertificateId({ organizationId } = {}) {
+  const orgId = Number(organizationId);
+  if (!Number.isFinite(orgId) || orgId <= 0) throw new Error('Invalid organization');
+
+  let timeZone = null;
+  try {
+    const settings = await settingsService.ensureOrganizationSettings(orgId);
+    timeZone = settings?.defaultTimezone || null;
+  } catch {
+  }
+
+  const dateKey = getCertificateDateKey({ date: new Date(), timeZone });
+  const prefix = 'CERT';
+  const idPrefix = `${prefix}${dateKey}`;
+
+  return await prisma.$transaction(async (tx) => {
+    const exists = await tx.certificate.findFirst({
+      where: { organizationId: orgId, certificateId: { startsWith: idPrefix } },
+      select: { certificateId: true }
+    });
+    if (exists?.certificateId) throw new Error('Tak boleh reset: ada certificate untuk hari ini');
+
+    await tx.certificateSequence.upsert({
+      where: { dateKey },
+      update: { lastNo: 0n },
+      create: { dateKey, lastNo: 0n }
+    });
+
+    const nextId = await peekNextCertificateId(tx, { timeZone, prefix });
+    return { dateKey, certificateId: nextId };
   });
 }
 
@@ -1094,6 +1142,8 @@ async function updateBatch({ organizationId, batchId, patch, actor }) {
 module.exports = {
   getAllowedCorpPrefixes,
   getNextCertificateId,
+  peekCertificateId,
+  resetTodayCertificateId,
   generateEpcBatch,
   exportBatchXlsx,
   exportBatchVerifyUrlXlsx,
