@@ -42,6 +42,7 @@ model Organization {
   cmsVersions     CmsVersion[]
   cmsTranslations CmsTranslation[]
   templates       CertificateTemplate[]
+  templateTranslations CertificateTemplateTranslation[]
   mediaAssets     MediaAsset[]
   auditLogs       AuditLog[]
 }

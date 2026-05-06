@@ -285,8 +285,8 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
 
         const effectivePages = sorted.map((p) => {
           const tRow = tByPageId.get(Number(p.id));
-          const effectiveLayout = Array.isArray(tRow?.contentJson)
-            ? tRow.contentJson
+          const tLayout = Array.isArray(tRow?.contentJson) && tRow.contentJson.length > 0 ? tRow.contentJson : null;
+          const effectiveLayout = tLayout
             : Array.isArray(p?.publishedVersion?.layoutJson)
               ? p.publishedVersion.layoutJson
               : Array.isArray(p?.layout?.layoutJson)
@@ -300,7 +300,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
           layout = composed;
         } else if (pageId) {
           const tRow = tByPageId.get(Number(pageId));
-          if (Array.isArray(tRow?.contentJson)) layout = tRow.contentJson;
+          if (Array.isArray(tRow?.contentJson) && tRow.contentJson.length > 0) layout = tRow.contentJson;
         }
       } catch {
         dbGate.markDbFailure({ cooldownMs: 10_000 });
