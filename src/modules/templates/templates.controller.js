@@ -34,10 +34,23 @@ async function list(req, res) {
   try {
     const typeRaw = typeof req.query.type === 'string' ? req.query.type.trim() : '';
     const type = typeRaw ? templateTypeSchema.safeParse(typeRaw).data : undefined;
-    const templates = await templatesService.listTemplates({ organizationId: req.organization.id, templateType: type });
+    const lang = typeof req.query?.lang === 'string' ? req.query.lang : typeof req.query?.language === 'string' ? req.query.language : undefined;
+    const templates = await templatesService.listTemplates({ organizationId: req.organization.id, templateType: type, lang });
     res.success(templates);
   } catch (e) {
     res.error(e.message);
+  }
+}
+
+async function getOne(req, res) {
+  try {
+    const { id } = req.params;
+    const lang = typeof req.query?.lang === 'string' ? req.query.lang : typeof req.query?.language === 'string' ? req.query.language : undefined;
+    const tpl = await templatesService.getTemplateById({ organizationId: req.organization.id, id, lang });
+    if (!tpl) return res.error('Template not found', 404);
+    res.success(tpl);
+  } catch (e) {
+    res.error(e.message, 400);
   }
 }
 
@@ -67,8 +80,9 @@ async function create(req, res) {
 async function update(req, res) {
   try {
     const { id } = req.params;
+    const lang = typeof req.query?.lang === 'string' ? req.query.lang : typeof req.query?.language === 'string' ? req.query.language : undefined;
     const data = updateSchema.parse(req.body);
-    const updated = await templatesService.updateTemplate({ organizationId: req.organization.id, id, patch: data });
+    const updated = await templatesService.updateTemplate({ organizationId: req.organization.id, id, patch: data, lang });
     res.success(updated, 'Template updated');
   } catch (e) {
     if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
@@ -88,6 +102,7 @@ async function remove(req, res) {
 
 module.exports = {
   list,
+  getOne,
   create,
   update,
   remove

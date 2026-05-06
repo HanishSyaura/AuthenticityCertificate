@@ -3,6 +3,7 @@ import CanvasStage from '../../components/admin/CanvasStage';
 import RichTextEditor from '../../components/admin/RichTextEditor';
 import { useT } from '../../i18n/useT';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
+import useI18nStore from '../../store/useI18nStore';
 import useUploadsStore from '../../store/useUploadsStore';
 import useEpcStore from '../../store/useEpcStore';
 import { stripHtmlToText, toQuillHtml } from '../../utils/richText';
@@ -146,10 +147,12 @@ const DEVICE_PRESETS = [
 
 export default function AdminCertificateTemplateBuilder({ initialSelectedId = null, uiMode = 'builder' }) {
   const { t } = useT();
-  const { templates, error, fetchTemplates, updateTemplate, deleteTemplate } = useCertTemplatesStore((s) => ({
+  const uiLang = useI18nStore((s) => s.lang);
+  const { templates, error, fetchTemplates, fetchTemplate, updateTemplate, deleteTemplate } = useCertTemplatesStore((s) => ({
     templates: s.templates,
     error: s.error,
     fetchTemplates: s.fetchTemplates,
+    fetchTemplate: s.fetchTemplate,
     updateTemplate: s.updateTemplate,
     deleteTemplate: s.deleteTemplate
   }));
@@ -183,14 +186,31 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const builderCanvasViewportRef = useRef(null);
   const persistTimerRef = useRef(null);
   const pendingPatchRef = useRef(null);
+  const basePersistTimerRef = useRef(null);
+  const pendingBasePatchRef = useRef(null);
   const activeTemplateIdRef = useRef(null);
   const localEditSeqRef = useRef(0);
   const hydratedEditSeqRef = useRef(0);
   const previewNowRef = useRef(new Date().toISOString());
   const hydratedTemplateIdRef = useRef(null);
+  const hydratedTemplateLangRef = useRef(null);
   const saveSeqRef = useRef(0);
+  const baseSaveSeqRef = useRef(0);
   const prevSelectedIdRef = useRef(null);
   const selectedPlaceholdersRef = useRef([]);
+  const initialContentLang = useMemo(() => {
+    try {
+      const stored = typeof window !== 'undefined' ? window.localStorage.getItem('ac:templateLang') : null;
+      const v = String(stored || '').trim().toLowerCase();
+      if (v === 'en' || v === 'ms' || v === 'zh') return v;
+    } catch {
+    }
+    const v = String(uiLang || '').trim().toLowerCase();
+    if (v === 'en' || v === 'ms' || v === 'zh') return v;
+    return 'en';
+  }, [uiLang]);
+  const [contentLang, setContentLang] = useState(initialContentLang);
+  const contentLangRef = useRef(initialContentLang);
 
   const selected = useMemo(() => templates.find((it) => String(it.id) === String(selectedId)) || null, [templates, selectedId]);
   const canvasW = Number(selected?.canvasWidth) > 0 ? Number(selected.canvasWidth) : 390;
@@ -396,10 +416,17 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         window.clearTimeout(persistTimerRef.current);
         persistTimerRef.current = null;
       }
+      if (basePersistTimerRef.current) {
+        window.clearTimeout(basePersistTimerRef.current);
+        basePersistTimerRef.current = null;
+      }
+      const langToSend = contentLangRef.current || 'en';
       const toSend = pendingPatchRef.current;
       pendingPatchRef.current = null;
-      if (!toSend) return;
-      void updateTemplate({ id: templateId, patch: toSend });
+      const toSendBase = pendingBasePatchRef.current;
+      pendingBasePatchRef.current = null;
+      if (toSend) void updateTemplate({ id: templateId, patch: toSend, lang: langToSend });
+      if (toSendBase) void updateTemplate({ id: templateId, patch: toSendBase, lang: 'en' });
     },
     [updateTemplate]
   );
@@ -420,21 +447,28 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   useEffect(() => {
     const id = selected?.id ? String(selected.id) : null;
     if (!id) return;
+    const langKey = String(contentLangRef.current || contentLang || 'en');
     const selectedPlaceholders = Array.isArray(selected?.placeholders) ? selected.placeholders : [];
     const selectedLayout = Array.isArray(selected?.layoutJson) ? selected.layoutJson : [];
     const selectedBgMode = String(selected?.backgroundMode || '').trim() || 'background';
     const noLocalEditsSinceHydrate = hydratedEditSeqRef.current === localEditSeqRef.current;
 
-    if (hydratedTemplateIdRef.current !== id) {
+    if (hydratedTemplateIdRef.current !== id || hydratedTemplateLangRef.current !== langKey) {
       hydratedTemplateIdRef.current = id;
+      hydratedTemplateLangRef.current = langKey;
       setDraftPlaceholders(selectedPlaceholders);
       setDraftLayout(selectedLayout);
       setBackgroundMode(selectedBgMode);
       pendingPatchRef.current = null;
+      pendingBasePatchRef.current = null;
       setSaveStatus('idle');
       if (persistTimerRef.current) {
         window.clearTimeout(persistTimerRef.current);
         persistTimerRef.current = null;
+      }
+      if (basePersistTimerRef.current) {
+        window.clearTimeout(basePersistTimerRef.current);
+        basePersistTimerRef.current = null;
       }
       hydratedEditSeqRef.current = localEditSeqRef.current;
       return;
@@ -468,11 +502,35 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       setSaveStatus('saving');
       void (async () => {
         try {
-          await updateTemplate({ id, patch: toSend });
+          await updateTemplate({ id, patch: toSend, lang: contentLangRef.current || 'en' });
           if (seq !== saveSeqRef.current) return;
           setSaveStatus('saved');
         } catch (e) {
           if (seq !== saveSeqRef.current) return;
+          setSaveStatus('error');
+        }
+      })();
+    }, 350);
+  }, [selected?.id, updateTemplate]);
+
+  const queueBasePatch = useCallback((patch) => {
+    const id = selected?.id;
+    if (!id) return;
+    pendingBasePatchRef.current = { ...(pendingBasePatchRef.current || {}), ...(patch || {}) };
+    if (basePersistTimerRef.current) window.clearTimeout(basePersistTimerRef.current);
+    basePersistTimerRef.current = window.setTimeout(() => {
+      const toSend = pendingBasePatchRef.current;
+      pendingBasePatchRef.current = null;
+      if (!toSend) return;
+      const seq = (baseSaveSeqRef.current += 1);
+      setSaveStatus('saving');
+      void (async () => {
+        try {
+          await updateTemplate({ id, patch: toSend, lang: 'en' });
+          if (seq !== baseSaveSeqRef.current) return;
+          setSaveStatus('saved');
+        } catch (e) {
+          if (seq !== baseSaveSeqRef.current) return;
           setSaveStatus('error');
         }
       })();
@@ -484,7 +542,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     const seq = (saveSeqRef.current += 1);
     setSaveStatus('saving');
     try {
-      await updateTemplate({ id: selected.id, patch });
+      await updateTemplate({ id: selected.id, patch, lang: 'en' });
       if (seq !== saveSeqRef.current) return;
       setSaveStatus('saved');
     } catch (e) {
@@ -507,6 +565,23 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     queueTemplatePatch({ layoutJson: nextLayout });
     setSelectedFieldId(item.id);
   };
+
+  useEffect(() => {
+    contentLangRef.current = contentLang;
+    try {
+      if (typeof window !== 'undefined') window.localStorage.setItem('ac:templateLang', String(contentLang || 'en'));
+    } catch {
+    }
+  }, [contentLang]);
+
+  useEffect(() => {
+    void fetchTemplates({ lang: contentLang });
+  }, [contentLang, fetchTemplates]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    void fetchTemplate({ id: selectedId, lang: contentLang });
+  }, [contentLang, fetchTemplate, selectedId]);
 
   const sanitizeLayout = (nextFields) =>
     (nextFields || []).map((field) => {
@@ -610,10 +685,6 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   }, [placeholders, t]);
 
   useEffect(() => {
-    void fetchTemplates();
-  }, [fetchTemplates]);
-
-  useEffect(() => {
     if (initialSelectedId == null) return;
     setSelectedId(initialSelectedId);
     setSelectedFieldId(null);
@@ -706,6 +777,23 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="text-[11px] font-semibold text-zinc-600">{t('contentLanguage')}</div>
+                      <select
+                        value={contentLang}
+                        onChange={(e) => {
+                          const next = String(e.target.value || 'en');
+                          if (!next || next === contentLang) return;
+                          if (selected?.id) flushPendingPatch(selected.id);
+                          setContentLang(next);
+                        }}
+                        className="rounded-lg border border-zinc-200 bg-white px-2 py-2 text-xs font-semibold text-zinc-900"
+                      >
+                        <option value="en">EN</option>
+                        <option value="ms">BM</option>
+                        <option value="zh">中文</option>
+                      </select>
+                    </div>
                     <select value={addOverlayKey} onChange={(e) => setAddOverlayKey(e.target.value)} className="ac-input w-60 rounded-lg px-3 py-2 text-xs">
                       <option value="">{t('selectDataField')}</option>
                       {placeholders
@@ -1007,7 +1095,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                         <label className="block text-xs font-medium text-zinc-700">{t('certificateId')}</label>
                         <input
                           value={selected.certificateId || ''}
-                          onChange={(e) => queueTemplatePatch({ certificateId: e.target.value })}
+                          onChange={(e) => queueBasePatch({ certificateId: e.target.value })}
                           className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                         />
                       </div>
@@ -1016,7 +1104,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                         <label className="block text-xs font-medium text-zinc-700">{t('certificateName')}</label>
                         <input
                           value={selected.name || ''}
-                          onChange={(e) => queueTemplatePatch({ name: e.target.value })}
+                          onChange={(e) => queueBasePatch({ name: e.target.value })}
                           className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                         />
                       </div>
@@ -1025,7 +1113,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                         <label className="block text-xs font-medium text-zinc-700">{t('backgroundUrl')}</label>
                         <input
                           value={selected.background || ''}
-                          onChange={(e) => queueTemplatePatch({ background: e.target.value })}
+                          onChange={(e) => queueBasePatch({ background: e.target.value })}
                           className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                         />
                         <div className="mt-2 flex items-center gap-2">
@@ -1040,7 +1128,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                               setBgUploading(true);
                               try {
                                 const res = await uploadMedia({ file });
-                                queueTemplatePatch({ background: res?.url || '' });
+                                queueBasePatch({ background: res?.url || '' });
                                 setBgFileKey((k) => k + 1);
                               } catch (err) {
                                 setBgError(err?.message || String(err));
@@ -1059,7 +1147,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                         <label className="block text-xs font-medium text-zinc-700">{t('backgroundColor')}</label>
                         <input
                           value={selected.backgroundColor || ''}
-                          onChange={(e) => queueTemplatePatch({ backgroundColor: e.target.value })}
+                          onChange={(e) => queueBasePatch({ backgroundColor: e.target.value })}
                           className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                         />
                       </div>
@@ -1071,7 +1159,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           onChange={(e) => {
                             const v = String(e.target.value || 'background');
                             setBackgroundMode(v);
-                            queueTemplatePatch({ backgroundMode: v });
+                            queueBasePatch({ backgroundMode: v });
                           }}
                           className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                         >
@@ -1088,7 +1176,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           <input
                             type="number"
                             value={canvasW}
-                            onChange={(e) => queueTemplatePatch({ canvasWidth: Number(e.target.value) || 390 })}
+                            onChange={(e) => queueBasePatch({ canvasWidth: Number(e.target.value) || 390 })}
                             className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                           />
                         </div>
@@ -1097,7 +1185,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           <input
                             type="number"
                             value={canvasH}
-                            onChange={(e) => queueTemplatePatch({ canvasHeight: Number(e.target.value) || 844 })}
+                            onChange={(e) => queueBasePatch({ canvasHeight: Number(e.target.value) || 844 })}
                             className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                           />
                         </div>
@@ -1169,6 +1257,23 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   {saveStatus === 'error' ? <div className="mt-0.5 text-[11px] font-semibold text-rose-700">Save failed</div> : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="text-[11px] font-semibold text-zinc-600">{t('contentLanguage')}</div>
+                    <select
+                      value={contentLang}
+                      onChange={(e) => {
+                        const next = String(e.target.value || 'en');
+                        if (!next || next === contentLang) return;
+                        if (selected?.id) flushPendingPatch(selected.id);
+                        setContentLang(next);
+                      }}
+                      className="rounded-lg border border-zinc-200 bg-white px-2 py-2 text-xs font-semibold text-zinc-900"
+                    >
+                      <option value="en">EN</option>
+                      <option value="ms">BM</option>
+                      <option value="zh">中文</option>
+                    </select>
+                  </div>
                   <div className="inline-flex overflow-hidden rounded-lg border border-zinc-200 bg-white">
                     <button
                       type="button"
@@ -1496,7 +1601,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                 <label className="block text-xs font-medium text-zinc-700">{t('certificateId')}</label>
                 <input
                   value={selected.certificateId || ''}
-                  onChange={(e) => queueTemplatePatch({ certificateId: e.target.value })}
+                  onChange={(e) => queueBasePatch({ certificateId: e.target.value })}
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
               </div>
@@ -1505,7 +1610,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                 <label className="block text-xs font-medium text-zinc-700">{t('certificateName')}</label>
                 <input
                   value={selected.name || ''}
-                  onChange={(e) => queueTemplatePatch({ name: e.target.value })}
+                  onChange={(e) => queueBasePatch({ name: e.target.value })}
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
               </div>
@@ -1541,7 +1646,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                     onChange={(e) => {
                       const v = e.target.value;
                       setBackgroundMode(v);
-                      queueTemplatePatch({ backgroundMode: v });
+                      queueBasePatch({ backgroundMode: v });
                     }}
                     className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                   >

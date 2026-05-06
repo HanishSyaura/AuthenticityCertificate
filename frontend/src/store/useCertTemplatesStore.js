@@ -15,11 +15,12 @@ const useCertTemplatesStore = create((set, get) => ({
   saveSeqById: {},
   savingById: {},
 
-  fetchTemplates: async () => {
+  fetchTemplates: async (opts = {}) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const res = await api.get('/templates');
+      const lang = opts?.lang ? String(opts.lang) : null;
+      const res = await api.get('/templates', { params: lang ? { lang } : undefined });
       const templates = Array.isArray(res?.data?.data) ? res.data.data : [];
       set({ templates, loading: false, lastSyncAt: Date.now() });
       return templates;
@@ -27,6 +28,25 @@ const useCertTemplatesStore = create((set, get) => ({
       const msg = e?.response?.data?.message || e?.message || 'Failed to load templates';
       set({ templates: [], loading: false, error: msg });
       return [];
+    }
+  },
+
+  fetchTemplate: async ({ id, lang } = {}) => {
+    if (!id) return null;
+    set({ error: null });
+    try {
+      const api = getApi();
+      const l = lang ? String(lang) : null;
+      const res = await api.get(`/templates/${encodeURIComponent(id)}`, { params: l ? { lang: l } : undefined });
+      const tpl = res?.data?.data || null;
+      if (!tpl) return null;
+      const templates = get().templates.map((t) => (String(t.id) === String(id) ? tpl : t));
+      set({ templates, lastSyncAt: Date.now() });
+      return tpl;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Failed to load template';
+      set({ error: msg });
+      throw e;
     }
   },
 
@@ -56,7 +76,7 @@ const useCertTemplatesStore = create((set, get) => ({
     }
   },
 
-  updateTemplate: async ({ id, patch }) => {
+  updateTemplate: async ({ id, patch, lang } = {}) => {
     const key = String(id);
     const seq = (get().saveSeqById?.[key] || 0) + 1;
     set((s) => ({
@@ -66,7 +86,8 @@ const useCertTemplatesStore = create((set, get) => ({
     }));
     try {
       const api = getApi();
-      const res = await api.patch(`/templates/${encodeURIComponent(id)}`, patch);
+      const l = lang ? String(lang) : null;
+      const res = await api.patch(`/templates/${encodeURIComponent(id)}`, patch, { params: l ? { lang: l } : undefined });
       const updated = res?.data?.data;
       const isLatest = (get().saveSeqById?.[key] || 0) === seq;
       if (isLatest) {

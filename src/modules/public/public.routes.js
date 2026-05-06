@@ -327,6 +327,44 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
       }
     }
 
+    let certificateTemplate = epcBatchTemplate || resolvedProduct?.certificateTemplate || null;
+    if (resolvedOrgId && lang !== 'en') {
+      const ids = [];
+      const mainId = certificateTemplate?.id != null ? Number(certificateTemplate.id) : NaN;
+      if (Number.isFinite(mainId) && mainId > 0) ids.push(mainId);
+      for (const t of Array.isArray(supportingTemplates) ? supportingTemplates : []) {
+        const tid = t?.id != null ? Number(t.id) : NaN;
+        if (Number.isFinite(tid) && tid > 0) ids.push(tid);
+      }
+      const uniqIds = Array.from(new Set(ids));
+      if (uniqIds.length) {
+        try {
+          if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
+          const trs = await Promise.race([
+            prisma.certificateTemplateTranslation.findMany({
+              where: { organizationId: resolvedOrgId, language: lang, templateId: { in: uniqIds } }
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
+          ]);
+          const byId = new Map((trs || []).map((r) => [Number(r.templateId), r]));
+          const applyTr = (tpl) => {
+            if (!tpl || tpl.id == null) return tpl;
+            const row = byId.get(Number(tpl.id));
+            if (!row) return tpl;
+            return {
+              ...tpl,
+              layoutJson: row.layoutJson ?? tpl.layoutJson,
+              placeholders: row.placeholders ?? tpl.placeholders
+            };
+          };
+          certificateTemplate = applyTr(certificateTemplate);
+          supportingTemplates = (Array.isArray(supportingTemplates) ? supportingTemplates : []).map(applyTr);
+        } catch {
+          dbGate.markDbFailure({ cooldownMs: 10_000 });
+        }
+      }
+    }
+
     let effectiveStatus = certificateService.computeEffectiveStatus(cert);
     if (effectiveStatus === 'PENDING' && (verifiedVia === 'epc' || verifiedVia === 'nfc_uid')) effectiveStatus = 'VALID';
     const status = chooseStatus({ effectiveStatus, overrideStatus });
@@ -361,7 +399,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         supportingTemplates,
         layout,
         certificateLayout: null,
-        certificateTemplate: epcBatchTemplate || resolvedProduct?.certificateTemplate || null,
+        certificateTemplate,
         risk: {
           score: scanEntry.riskScore,
           flags: scanEntry.riskFlags

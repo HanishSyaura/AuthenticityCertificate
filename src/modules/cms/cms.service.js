@@ -12,6 +12,23 @@ function normalizeLang(lang) {
   return 'en';
 }
 
+function coerceLayoutToArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  if (value && typeof value === 'object') {
+    if (Array.isArray(value.blocks)) return value.blocks;
+    if (Array.isArray(value.layoutJson)) return value.layoutJson;
+  }
+  return null;
+}
+
 async function createPage(data) {
   const orgId = Number(data.organizationId);
   const kind = data.kind || 'landing';
@@ -54,10 +71,10 @@ async function getPageBySlug({ organizationId, slug, language }) {
         where: { organizationId: Number(organizationId), pageId: page.id, language: lang }
       });
       const effectiveLayout =
-        (translation && translation.contentJson) ||
-        page?.publishedVersion?.layoutJson ||
-        page?.draftVersion?.layoutJson ||
-        page?.layout?.layoutJson ||
+        coerceLayoutToArray(translation?.contentJson) ??
+        coerceLayoutToArray(page?.publishedVersion?.layoutJson) ??
+        coerceLayoutToArray(page?.draftVersion?.layoutJson) ??
+        coerceLayoutToArray(page?.layout?.layoutJson) ??
         null;
       return { ...page, effectiveLayout, language: lang };
     })(),

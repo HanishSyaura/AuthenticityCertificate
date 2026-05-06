@@ -423,6 +423,76 @@ async function ensureCertificateTemplateSchemaCompat() {
   }
 }
 
+async function ensureCertificateTemplateTranslationSchemaCompat() {
+  const tableName =
+    (await resolveTableName([
+      'CertificateTemplateTranslation',
+      'certificateTemplateTranslation',
+      'certificate_template_translations'
+    ])) || 'CertificateTemplateTranslation';
+  if (!(await tableExists(tableName))) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`${tableName}\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`organizationId\` INT NOT NULL,
+        \`templateId\` INT NOT NULL,
+        \`language\` VARCHAR(32) NOT NULL,
+        \`layoutJson\` JSON NOT NULL,
+        \`placeholders\` JSON NULL,
+        \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+
+  await ensureColumn(
+    tableName,
+    'organizationId',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`organizationId\` INT NULL`,
+    null,
+    `ALTER TABLE \`${tableName}\` MODIFY \`organizationId\` INT NOT NULL`
+  );
+  await ensureColumn(
+    tableName,
+    'templateId',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`templateId\` INT NULL`,
+    null,
+    `ALTER TABLE \`${tableName}\` MODIFY \`templateId\` INT NOT NULL`
+  );
+  await ensureColumn(
+    tableName,
+    'language',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`language\` VARCHAR(32) NULL`,
+    null,
+    `ALTER TABLE \`${tableName}\` MODIFY \`language\` VARCHAR(32) NOT NULL`
+  );
+  await ensureColumn(
+    tableName,
+    'layoutJson',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`layoutJson\` JSON NULL`,
+    `UPDATE \`${tableName}\` SET \`layoutJson\` = JSON_ARRAY() WHERE \`layoutJson\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`layoutJson\` JSON NOT NULL`
+  );
+  await ensureColumn(tableName, 'placeholders', `ALTER TABLE \`${tableName}\` ADD COLUMN \`placeholders\` JSON NULL`, null, null);
+  await ensureColumn(
+    tableName,
+    'updatedAt',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`updatedAt\` DATETIME NULL`,
+    `UPDATE \`${tableName}\` SET \`updatedAt\` = NOW() WHERE \`updatedAt\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`
+  );
+
+  const idxUnique = `${tableName}_templateId_language_key`;
+  if (!(await indexExists(tableName, idxUnique))) {
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX \`${idxUnique}\` ON \`${tableName}\` (\`templateId\`, \`language\`)`);
+  }
+
+  const idxOrgTemplate = `${tableName}_organizationId_templateId_idx`;
+  if (!(await indexExists(tableName, idxOrgTemplate))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${idxOrgTemplate}\` ON \`${tableName}\` (\`organizationId\`, \`templateId\`)`);
+  }
+}
+
 async function ensureEpcSchemaCompat() {
   const hasCorpSequence = await tableExists('CorpSequence');
   if (!hasCorpSequence) {
@@ -850,6 +920,7 @@ async function applyDbPatches() {
   await ensureCategorySchemaCompat();
   await ensureCmsPageSchemaCompat();
   await ensureCertificateTemplateSchemaCompat();
+  await ensureCertificateTemplateTranslationSchemaCompat();
   await ensureCertificateSchemaCompat();
   await ensureCertificateSequenceSchemaCompat();
   await ensureEpcSchemaCompat();

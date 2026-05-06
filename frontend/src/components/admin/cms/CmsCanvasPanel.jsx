@@ -105,7 +105,7 @@ function PreviewStage({
             onScroll={(e) => {
               lastScrollTopRef.current = e.currentTarget.scrollTop || 0;
             }}
-            className="h-full w-full overflow-x-hidden overflow-y-auto"
+            className="ac-scrollbar-outside"
           >
             <PublicRenderer layout={effectivePreviewLayout} data={previewData || sampleCert()} />
           </div>

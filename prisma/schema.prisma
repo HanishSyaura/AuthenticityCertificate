@@ -465,6 +465,7 @@ model CertificateTemplate {
   products   Product[]
   epcBatches EpcBatch[] @relation("EpcBatchTemplate")
   productSupportingCertificates ProductSupportingCertificate[]
+  translations CertificateTemplateTranslation[]
 
   versionNo Int       @default(1)
   createdAt DateTime  @default(now())
@@ -472,6 +473,21 @@ model CertificateTemplate {
   deletedAt DateTime?
 
   @@unique([organizationId, certificateId])
+}
+
+model CertificateTemplateTranslation {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  templateId     Int
+  template       CertificateTemplate @relation(fields: [templateId], references: [id])
+  language       String
+  layoutJson     Json
+  placeholders   Json?
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([templateId, language])
+  @@index([organizationId, templateId])
 }
 
 model MediaAsset {

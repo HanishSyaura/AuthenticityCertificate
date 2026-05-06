@@ -4,8 +4,25 @@ async function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), ms))]);
 }
 
-async function listTemplates({ organizationId, templateType }) {
-  return await withTimeout(
+function normalizeLang(lang) {
+  const l = String(lang || 'en').toLowerCase();
+  if (l === 'ms' || l === 'bm') return 'ms';
+  if (l === 'zh' || l === 'zh-cn' || l === 'cn') return 'zh';
+  return 'en';
+}
+
+function applyTranslationRow(base, tRow) {
+  if (!tRow) return base;
+  return {
+    ...(base || {}),
+    layoutJson: tRow.layoutJson ?? base?.layoutJson ?? [],
+    placeholders: tRow.placeholders ?? base?.placeholders ?? null
+  };
+}
+
+async function listTemplates({ organizationId, templateType, lang }) {
+  const language = normalizeLang(lang);
+  const rows = await withTimeout(
     prisma.certificateTemplate.findMany({
       where: {
         organizationId: Number(organizationId),
@@ -15,6 +32,36 @@ async function listTemplates({ organizationId, templateType }) {
     }),
     1200
   );
+  if (language === 'en') return rows;
+  const ids = (rows || []).map((r) => Number(r?.id)).filter((n) => Number.isFinite(n));
+  if (!ids.length) return rows;
+  const trs = await withTimeout(
+    prisma.certificateTemplateTranslation.findMany({
+      where: { organizationId: Number(organizationId), language, templateId: { in: ids } }
+    }),
+    1200
+  );
+  const byId = new Map((trs || []).map((r) => [Number(r.templateId), r]));
+  return (rows || []).map((r) => applyTranslationRow(r, byId.get(Number(r.id))));
+}
+
+async function getTemplateById({ organizationId, id, lang }) {
+  const language = normalizeLang(lang);
+  const base = await withTimeout(
+    prisma.certificateTemplate.findFirst({
+      where: { organizationId: Number(organizationId), id: Number(id) }
+    }),
+    1200
+  );
+  if (!base) return null;
+  if (language === 'en') return base;
+  const tRow = await withTimeout(
+    prisma.certificateTemplateTranslation.findFirst({
+      where: { organizationId: Number(organizationId), language, templateId: Number(id) }
+    }),
+    1200
+  );
+  return applyTranslationRow(base, tRow);
 }
 
 async function createTemplate({
@@ -55,7 +102,43 @@ async function createTemplate({
   }
 }
 
-async function updateTemplate({ organizationId, id, patch }) {
+async function updateTemplate({ organizationId, id, patch, lang }) {
+  const language = normalizeLang(lang);
+
+  if (language !== 'en') {
+    const base = await withTimeout(
+      prisma.certificateTemplate.findFirst({
+        where: { id: Number(id), organizationId: Number(organizationId) }
+      }),
+      1200
+    );
+    if (!base) throw new Error('Template not found');
+    const hasLayout = patch.layoutJson !== undefined;
+    const hasPlaceholders = patch.placeholders !== undefined;
+    if (!hasLayout && !hasPlaceholders) return applyTranslationRow(base, null);
+
+    await withTimeout(
+      prisma.certificateTemplateTranslation.upsert({
+        where: { templateId_language: { templateId: Number(id), language } },
+        update: {
+          organizationId: Number(organizationId),
+          ...(hasLayout ? { layoutJson: patch.layoutJson || [] } : {}),
+          ...(hasPlaceholders ? { placeholders: patch.placeholders || null } : {})
+        },
+        create: {
+          organizationId: Number(organizationId),
+          templateId: Number(id),
+          language,
+          layoutJson: hasLayout ? patch.layoutJson || [] : base.layoutJson || [],
+          placeholders: hasPlaceholders ? patch.placeholders || null : base.placeholders || null
+        }
+      }),
+      1500
+    );
+
+    return await getTemplateById({ organizationId, id, lang: language });
+  }
+
   const data = {};
   if (patch.certificateId !== undefined) data.certificateId = String(patch.certificateId || '').trim();
   if (patch.templateType !== undefined) data.templateType = String(patch.templateType || '').trim() || 'auth';
@@ -82,7 +165,7 @@ async function updateTemplate({ organizationId, id, patch }) {
     throw e;
   }
   if (!res.count) throw new Error('Template not found');
-  return await withTimeout(prisma.certificateTemplate.findUnique({ where: { id: Number(id) } }), 1200);
+  return await getTemplateById({ organizationId, id, lang: 'en' });
 }
 
 async function deleteTemplate({ organizationId, id }) {
@@ -98,6 +181,7 @@ async function deleteTemplate({ organizationId, id }) {
 
     await tx.product.updateMany({ where: { organizationId: orgId, certificateTemplateId: tplId }, data: { certificateTemplateId: null } });
     await tx.epcBatch.updateMany({ where: { organizationId: orgId, certificateTemplateId: tplId }, data: { certificateTemplateId: null } });
+    await tx.certificateTemplateTranslation.deleteMany({ where: { organizationId: orgId, templateId: tplId } });
     await tx.certificateTemplate.deleteMany({ where: { id: tplId, organizationId: orgId } });
   });
 
@@ -106,6 +190,7 @@ async function deleteTemplate({ organizationId, id }) {
 
 module.exports = {
   listTemplates,
+  getTemplateById,
   createTemplate,
   updateTemplate,
   deleteTemplate

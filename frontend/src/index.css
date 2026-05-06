@@ -308,6 +308,16 @@
 }
 
 @layer utilities {
+  .ac-scrollbar-outside {
+    position: absolute;
+    inset: 0;
+    right: -16px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 16px;
+    scrollbar-gutter: stable;
+  }
+
   @keyframes ac-verify-float {
     0% {
       transform: translate3d(0, 0, 0) scale(1);

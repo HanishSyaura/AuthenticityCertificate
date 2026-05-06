@@ -55,6 +55,23 @@ function sanitizeLayoutBlocks(raw, { pageId, language }) {
   return out;
 }
 
+function coerceLayoutToArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  if (value && typeof value === 'object') {
+    if (Array.isArray(value.blocks)) return value.blocks;
+    if (Array.isArray(value.layoutJson)) return value.layoutJson;
+  }
+  return null;
+}
+
 const useCmsStore = create((set, get) => ({
   pages: [],
   layoutsByPageKey: {},
@@ -119,27 +136,20 @@ const useCmsStore = create((set, get) => ({
     try {
       const api = createAdminApi({ token: null });
       const res = await api.get(`/cms/page/${encodeURIComponent(page.slug)}`, { params: { language } });
-      const rawLayout = res?.data?.data?.effectiveLayout ?? res?.data?.data?.layout?.layoutJson ?? null;
-      let dbLayout = rawLayout;
-      if (typeof dbLayout === 'string') {
-        try {
-          dbLayout = JSON.parse(dbLayout);
-        } catch {
-          dbLayout = rawLayout;
-        }
-      }
-      if (Array.isArray(dbLayout)) {
-        const safe = sanitizeLayoutBlocks(dbLayout, { pageId: page.id, language });
-        const next = { ...current, [key]: safe };
-        set({ layoutsByPageKey: next, error: null });
-        return;
-      }
-      const next = { ...current, [key]: [] };
-      set({ layoutsByPageKey: next, error: 'Failed to load page layout' });
+      const data = res?.data?.data || {};
+      const picked =
+        coerceLayoutToArray(data?.effectiveLayout) ??
+        coerceLayoutToArray(data?.layout?.layoutJson) ??
+        [];
+      const safe = sanitizeLayoutBlocks(picked, { pageId: page.id, language });
+      const next = { ...current, [key]: safe };
+      const selectedPageId = get().selectedPageId;
+      set({ layoutsByPageKey: next, ...(String(selectedPageId) === String(page.id) ? { error: null } : {}) });
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || 'Failed to load page layout';
       const next = { ...current, [key]: [] };
-      set({ layoutsByPageKey: next, error: msg });
+      const selectedPageId = get().selectedPageId;
+      set({ layoutsByPageKey: next, ...(String(selectedPageId) === String(page.id) ? { error: msg } : {}) });
     }
   },
 
