@@ -1,4 +1,5 @@
 const prisma = require('../../config/prisma');
+const dbGate = require('../../services/dbGate.service');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
@@ -9,7 +10,11 @@ async function withTimeout(promise, ms) {
 function getDbTimeoutMs() {
   const raw = process.env.AUTH_DB_TIMEOUT_MS || process.env.DB_QUERY_TIMEOUT_MS;
   const ms = Number(raw);
-  return Number.isFinite(ms) && ms > 0 ? ms : 8000;
+  return Number.isFinite(ms) && ms > 0 ? ms : 1200;
+}
+
+function isPrismaError(err) {
+  return typeof err?.name === 'string' && err.name.startsWith('Prisma');
 }
 
 async function login(email, password) {
@@ -18,13 +23,18 @@ async function login(email, password) {
   const dbTimeoutMs = getDbTimeoutMs();
 
   try {
+    if (!dbGate.shouldUseDb()) throw new Error('db_unavailable');
     user = await withTimeout(prisma.user.findUnique({ where: { email } }), dbTimeoutMs);
     if (user) role = user.role;
-  } catch {
+    dbGate.markDbSuccess();
+  } catch (e) {
+    if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000 });
+    throw e?.message === 'db_unavailable' ? e : e?.message === 'db_timeout' ? e : isPrismaError(e) ? e : new Error('db_timeout');
   }
 
   if (!user) {
     try {
+      if (!dbGate.shouldUseDb()) throw new Error('db_unavailable');
       const admin = await withTimeout(
         prisma.admin.findUnique({
           where: { email }
@@ -35,7 +45,9 @@ async function login(email, password) {
         user = admin;
         role = 'admin';
       }
+      dbGate.markDbSuccess();
     } catch (e) {
+      if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000 });
       throw e;
     }
   }

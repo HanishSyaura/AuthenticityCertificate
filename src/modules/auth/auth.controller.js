@@ -18,6 +18,9 @@ async function login(req, res, next) {
     if (error?.message === 'db_timeout') {
       return res.error('Database temporarily unavailable', 503);
     }
+    if (error?.message === 'db_unavailable') {
+      return res.error('Database temporarily unavailable', 503);
+    }
     if (error?.message === 'jwt_secret_missing') {
       return res.error('Service temporarily unavailable', 503);
     }
