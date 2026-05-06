@@ -27,7 +27,13 @@ const importExistingSchema = z.object({
 });
 
 const updateBatchSchema = z.object({
-  certificateTemplateId: z.number().int().nullable().optional()
+  certificateTemplateId: z.number().int().nullable().optional(),
+  remark: z.union([z.string(), z.null()]).optional(),
+  templateData: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
+  productionDate: z
+    .union([z.string(), z.null()])
+    .optional()
+    .refine((v) => v == null || !Number.isNaN(new Date(v).getTime()), 'Invalid productionDate')
 });
 
 const recalcSequenceSchema = z.object({
@@ -45,7 +51,8 @@ const getItemByEpcSchema = z.object({
 const updateItemProductionSchema = z.object({
   netWeight: z.union([z.string(), z.number(), z.null()]).optional(),
   caiqNumber: z.union([z.string(), z.number(), z.null()]).optional(),
-  productionDate: z.union([z.string(), z.null()]).optional()
+  productionDate: z.union([z.string(), z.null()]).optional(),
+  batchId: z.coerce.number().int().positive().optional()
 });
 
 const resetItemsProductionSchema = z.object({
@@ -62,6 +69,15 @@ async function getCorpCodes(req, res) {
   try {
     const codes = epcService.getAllowedCorpPrefixes();
     res.success(codes);
+  } catch (e) {
+    res.error(e.message, 400);
+  }
+}
+
+async function getNextCertificateId(req, res) {
+  try {
+    const certificateId = await epcService.getNextCertificateId();
+    res.success({ certificateId });
   } catch (e) {
     res.error(e.message, 400);
   }
@@ -141,6 +157,7 @@ async function updateItemProduction(req, res) {
     if (!Number.isFinite(itemId) || itemId <= 0) return res.error('Invalid item id', 400);
 
     const parsed = updateItemProductionSchema.parse(req.body || {});
+    const expectedBatchId = Object.prototype.hasOwnProperty.call(parsed, 'batchId') ? parsed.batchId : undefined;
     const patch = {};
     if (Object.prototype.hasOwnProperty.call(parsed, 'netWeight')) {
       const v = parsed.netWeight;
@@ -162,6 +179,7 @@ async function updateItemProduction(req, res) {
       organizationId: req.organization.id,
       itemId,
       patch,
+      expectedBatchId,
       actor: req.user
     });
     res.success(updated, 'Item updated');
@@ -196,7 +214,10 @@ async function resetItemsProduction(req, res) {
 async function exportBatch(req, res) {
   try {
     const batchId = Number(req.params.id);
-    const { buffer, filename } = await epcService.exportBatchXlsx({ organizationId: req.organization.id, batchId });
+    const raw = req.query?.columns;
+    const parts = Array.isArray(raw) ? raw : String(raw || '').split(',');
+    const columns = parts.map((s) => String(s).trim()).filter(Boolean);
+    const { buffer, filename } = await epcService.exportBatchXlsx({ organizationId: req.organization.id, batchId, columns });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.status(200).send(buffer);
@@ -257,7 +278,7 @@ async function updateBatch(req, res) {
   try {
     const batchId = Number(req.params.id);
     const data = updateBatchSchema.parse(req.body);
-    const updated = await epcService.updateBatch({ organizationId: req.organization.id, batchId, patch: data });
+    const updated = await epcService.updateBatch({ organizationId: req.organization.id, batchId, patch: data, actor: req.user });
     res.success(updated, 'Batch updated');
   } catch (e) {
     if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
@@ -304,6 +325,7 @@ async function deleteAll(req, res) {
 
 module.exports = {
   getCorpCodes,
+  getNextCertificateId,
   generateBatch,
   listBatches,
   listItems,

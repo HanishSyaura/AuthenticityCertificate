@@ -29,12 +29,6 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
     ];
   }, [t]);
 
-  const updateSelected = (patch) => {
-    if (!selectedBlock) return;
-    const next = layout.map((b) => (b.id === selectedBlock.id ? { ...b, ...patch } : b));
-    setLayout(next);
-  };
-
   const selectedIndex = useMemo(() => {
     if (!selectedBlock?.id) return -1;
     const arr = Array.isArray(layout) ? layout : [];

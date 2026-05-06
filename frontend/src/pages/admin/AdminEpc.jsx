@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import useRecordsStore from '../../store/useRecordsStore';
 import useEpcStore from '../../store/useEpcStore';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
+import useAdminAuthStore from '../../store/useAdminAuthStore';
 import { useT } from '../../i18n/useT';
 import RichTextEditor from '../../components/admin/RichTextEditor';
 import DataTable from '../../components/ui/DataTable';
+import { hasPermission } from '../../utils/permissions';
 
 function formatDateTime(input) {
   if (!input) return '';
@@ -33,6 +35,24 @@ function getValue(path, data) {
 export default function AdminEpc() {
   const { t } = useT();
   const navigate = useNavigate();
+  const { user } = useAdminAuthStore((s) => ({ user: s.user }));
+  const role = user?.role || 'admin';
+  const perms = useMemo(() => (Array.isArray(user?.permissions) ? user.permissions : []), [user?.permissions]);
+  const allow = useCallback(
+    (...keys) =>
+      role === 'super_admin' || hasPermission(perms, '*') || keys.some((k) => (k ? hasPermission(perms, k) : false)),
+    [perms, role]
+  );
+  const canBatchCreate = allow('epc.write', 'epc.batch.create');
+  const canBatchView = allow('epc.read', 'epc.write', 'epc.batch.view', 'epc.scan.access', 'epc.production.access');
+  const canScan = allow('epc.write', 'epc.scan.access');
+  const canViewCertificate = allow('epc.read', 'epc.write', 'epc.certificate.view');
+  const canExportXlsx = allow('epc.write', 'epc.export.xlsx', 'epc.production.access');
+  const canEncoding = allow('epc.write', 'epc.encoding');
+  const canResetSeq = allow('epc.write', 'epc.sequence.reset');
+  const canDelete = allow('epc.write', 'epc.delete');
+  const canProduction = allow('epc.write', 'epc.production.access');
+  const canOverride = role === 'super_admin' || role === 'admin' || allow('epc.override');
 
   const { products, fetchProducts } = useRecordsStore((s) => ({
     products: s.products,
@@ -52,6 +72,7 @@ export default function AdminEpc() {
     error,
     lastGenerated,
     fetchCorpCodes,
+    fetchNextCertificateId,
     fetchBatches,
     fetchItems,
     generateBatch,
@@ -59,10 +80,12 @@ export default function AdminEpc() {
     exportBatchVerifyUrlXlsx,
     importProductionXlsx,
     markProductionDone,
+    updateBatch,
     deleteBatch,
     recalculateSequence,
     deleteAllBatches,
     importExistingXlsx,
+    exportBatchXlsxCustom,
     clearLastGenerated
   } = useEpcStore((s) => ({
     batches: s.batches,
@@ -72,13 +95,16 @@ export default function AdminEpc() {
     error: s.error,
     lastGenerated: s.lastGenerated,
     fetchCorpCodes: s.fetchCorpCodes,
+    fetchNextCertificateId: s.fetchNextCertificateId,
     fetchBatches: s.fetchBatches,
     fetchItems: s.fetchItems,
     generateBatch: s.generateBatch,
     exportBatchXlsx: s.exportBatchXlsx,
     exportBatchVerifyUrlXlsx: s.exportBatchVerifyUrlXlsx,
+    exportBatchXlsxCustom: s.exportBatchXlsxCustom,
     importProductionXlsx: s.importProductionXlsx,
     markProductionDone: s.markProductionDone,
+    updateBatch: s.updateBatch,
     deleteBatch: s.deleteBatch,
     recalculateSequence: s.recalculateSequence,
     deleteAllBatches: s.deleteAllBatches,
@@ -104,9 +130,42 @@ export default function AdminEpc() {
   const [itemsOffset, setItemsOffset] = useState(0);
   const itemsLimit = 20;
 
+  const [editOpen, setEditOpen] = useState(false);
+  const [editBatch, setEditBatch] = useState(null);
+  const [editCertificateTemplateId, setEditCertificateTemplateId] = useState('');
+  const [editRemark, setEditRemark] = useState('');
+  const [editTemplateData, setEditTemplateData] = useState({});
+  const [editProductionDate, setEditProductionDate] = useState('');
+  const [editProductionDateOrig, setEditProductionDateOrig] = useState('');
+
+  const [exportColsOpen, setExportColsOpen] = useState(false);
+  const [exportColsBatch, setExportColsBatch] = useState(null);
+  const [exportCols, setExportCols] = useState({
+    epcCode: true,
+    runningNo: false,
+    netWeight: true,
+    productionDate: true,
+    caiqNumber: true
+  });
+
   const closeItems = useCallback(() => {
     setItemsOpen(false);
     setItemsBatch(null);
+  }, []);
+
+  const closeEdit = useCallback(() => {
+    setEditOpen(false);
+    setEditBatch(null);
+  }, []);
+
+  const closeExportCols = useCallback(() => {
+    setExportColsOpen(false);
+    setExportColsBatch(null);
+  }, []);
+
+  const openExportCols = useCallback((b) => {
+    setExportColsBatch(b || null);
+    setExportColsOpen(true);
   }, []);
 
   const openVerifyUrl = (url) => {
@@ -131,12 +190,30 @@ export default function AdminEpc() {
     openVerifyUrl(`/verify/${encodeURIComponent(certId)}`);
   };
 
+  const refreshCertificateId = useCallback(async () => {
+    const nextId = await fetchNextCertificateId();
+    if (nextId) setCertificateId(nextId);
+  }, [fetchNextCertificateId]);
+
   useEffect(() => {
-    void fetchProducts();
-    void fetchTemplates();
+    if (!canBatchCreate && !canBatchView && !canProduction) return;
+    if (canBatchCreate) {
+      void fetchProducts();
+      void fetchTemplates();
+      void refreshCertificateId();
+    }
     void fetchCorpCodes();
     void fetchBatches({ limit: 50, offset: 0 });
-  }, [fetchBatches, fetchCorpCodes, fetchProducts, fetchTemplates]);
+  }, [canBatchCreate, canBatchView, canProduction, fetchBatches, fetchCorpCodes, fetchProducts, fetchTemplates, refreshCertificateId]);
+
+  useEffect(() => {
+    if (tab === 'create' && canBatchCreate) return;
+    if (tab === 'batches' && canBatchView) return;
+    if (tab === 'production' && canProduction) return;
+    if (canBatchCreate) setTab('create');
+    else if (canBatchView) setTab('batches');
+    else if (canProduction) setTab('production');
+  }, [canBatchCreate, canBatchView, canProduction, tab]);
 
   const selectedProduct = useMemo(() => (Array.isArray(products) ? products : []).find((p) => String(p.id) === String(productId)) || null, [products, productId]);
 
@@ -199,6 +276,29 @@ export default function AdminEpc() {
     await fetchItems({ batchId: b.id, limit: itemsLimit, offset: 0 });
   };
 
+  const openEditBatch = useCallback(
+    async (b) => {
+      if (!b?.id) return;
+      setEditBatch(b);
+      setEditCertificateTemplateId(b?.certificateTemplateId != null ? String(b.certificateTemplateId) : '');
+      setEditRemark(String(b?.remark || ''));
+      setEditTemplateData(typeof b?.templateData === 'object' && b?.templateData && !Array.isArray(b.templateData) ? b.templateData : {});
+      setEditProductionDate('');
+      setEditProductionDateOrig('');
+      setEditOpen(true);
+      try {
+        const data = await fetchItems({ batchId: b.id, limit: 1, offset: 0 });
+        const pd = data?.items?.[0]?.productionDate;
+        const next = pd ? new Date(pd).toISOString().slice(0, 10) : '';
+        setEditProductionDate(next);
+        setEditProductionDateOrig(next);
+      } catch (e) {
+        void e;
+      }
+    },
+    [fetchItems]
+  );
+
   useEffect(() => {
     if (!itemsOpen) return;
     const prevOverflow = document.body.style.overflow;
@@ -213,6 +313,69 @@ export default function AdminEpc() {
     };
   }, [closeItems, itemsOpen]);
 
+  useEffect(() => {
+    if (!editOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') closeEdit();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [closeEdit, editOpen]);
+
+  const editProduct = useMemo(() => {
+    const pid = editBatch?.product?.id != null ? editBatch.product.id : editBatch?.productId;
+    return (
+      (Array.isArray(products) ? products : []).find((p) => String(p?.id) === String(pid)) ||
+      editBatch?.product ||
+      null
+    );
+  }, [editBatch, products]);
+
+  const editSelectedTemplate = useMemo(
+    () => authTemplates.find((x) => String(x.id) === String(editCertificateTemplateId)) || null,
+    [authTemplates, editCertificateTemplateId]
+  );
+
+  const editPlaceholders = useMemo(() => {
+    const raw = editSelectedTemplate?.placeholders;
+    return Array.isArray(raw) ? raw : [];
+  }, [editSelectedTemplate]);
+
+  useEffect(() => {
+    if (!editOpen || !editBatch) return;
+    setEditTemplateData((prev) => {
+      const next = {};
+      const ctx = {
+        product: editProduct,
+        batch: { batchName: editBatch.batchName, batchQty: editBatch.batchQty, productionDate: '', remark: editRemark },
+        corpPrefix: editBatch.corpPrefix || corpPrefix
+      };
+      for (const p of editPlaceholders) {
+        const key = String(p?.key || '').trim();
+        if (!key) continue;
+        const source = String(p?.source || 'static');
+        if (source === 'static' || source === 'title') {
+          next[key] = String(p?.staticValue || '');
+          continue;
+        }
+        if (source === 'product') {
+          const bindPath = String(p?.bindPath || '').trim();
+          const v = bindPath ? getValue(bindPath, ctx) : '';
+          next[key] = v == null ? '' : String(v);
+          continue;
+        }
+        const existing = prev?.[key];
+        next[key] = existing == null ? '' : String(existing);
+      }
+      return next;
+    });
+  }, [corpPrefix, editBatch, editOpen, editPlaceholders, editProduct, editRemark]);
+
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -221,39 +384,49 @@ export default function AdminEpc() {
           <div className="mt-1 text-sm text-zinc-600">{t('guideStepBatchesBody')}</div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setTab('create')}
-            className={`rounded-lg px-3 py-2 text-xs font-semibold ${
-              tab === 'create' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
-            }`}
-          >
-            {t('epcBatchCreation')}
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('batches')}
-            className={`rounded-lg px-3 py-2 text-xs font-semibold ${
-              tab === 'batches' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
-            }`}
-          >
-            {t('epcBatches')}
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('production')}
-            className={`rounded-lg px-3 py-2 text-xs font-semibold ${
-              tab === 'production' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
-            }`}
-          >
-            {t('productionOrders')}
-          </button>
+          {canBatchCreate ? (
+            <button
+              type="button"
+              onClick={() => setTab('create')}
+              className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+                tab === 'create' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
+              }`}
+            >
+              {t('epcBatchCreation')}
+            </button>
+          ) : null}
+          {canBatchView ? (
+            <button
+              type="button"
+              onClick={() => setTab('batches')}
+              className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+                tab === 'batches' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
+              }`}
+            >
+              {t('epcBatches')}
+            </button>
+          ) : null}
+          {canProduction ? (
+            <button
+              type="button"
+              onClick={() => setTab('production')}
+              className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+                tab === 'production' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
+              }`}
+            >
+              {t('productionOrders')}
+            </button>
+          ) : null}
         </div>
       </div>
 
       {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
 
-      {tab === 'create' ? (
+      {!canBatchCreate && !canBatchView && !canProduction ? (
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-700">Insufficient permissions</div>
+      ) : null}
+
+      {tab === 'create' && canBatchCreate ? (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_420px]">
           <div className="rounded-xl border border-zinc-200 bg-white p-4">
             <div className="mb-3 text-xs font-semibold text-zinc-600">{t('certificateData')}</div>
@@ -326,7 +499,8 @@ export default function AdminEpc() {
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('certificateId')}</div>
                 <input
                   value={certificateId}
-                  onChange={(e) => setCertificateId(e.target.value)}
+                  disabled
+                  readOnly
                   className="ac-input font-mono uppercase"
                   placeholder="CERTDDMMYY001"
                 />
@@ -371,6 +545,7 @@ export default function AdminEpc() {
                     setCertificateId('');
                     setTemplateData({});
                     clearLastGenerated();
+                    void refreshCertificateId();
                   }}
                 >
                   {t('clear')}
@@ -394,7 +569,7 @@ export default function AdminEpc() {
                     const createdCertId = String(created?.batch?.certificateId || '').trim();
                     if (createdCertId) setCertificateId(createdCertId);
                     const batchId = created?.batch?.id;
-                    if (batchId) await exportBatchXlsx(batchId);
+                    if (batchId && canExportXlsx) await exportBatchXlsx(batchId);
                     await fetchBatches({ limit: 50, offset: 0 });
                   }}
                 >
@@ -404,7 +579,7 @@ export default function AdminEpc() {
 
               {lastGenerated?.batch ? (
                 <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
-                  {t('latestBatch')}: <span className="font-mono">{lastGenerated.batch.batchName}</span> (#{lastGenerated.batch.id})
+                  {t('latestBatch')}: <span className="font-mono">{lastGenerated.batch.batchName}</span>
                 </div>
               ) : null}
             </div>
@@ -412,36 +587,40 @@ export default function AdminEpc() {
         </div>
       ) : null}
 
-      {tab === 'batches' ? (
+      {tab === 'batches' && canBatchView ? (
         <div className="rounded-xl border border-zinc-200 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 px-4 py-3">
             <div className="text-xs font-semibold text-zinc-600">{t('epcBatches')}</div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-                disabled={loading || !corpPrefix}
-                onClick={async () => {
-                  if (!window.confirm('Reset running number ikut data semasa? (Jika semua EPC sudah dipadam, next akan start dari 00000001)')) return;
-                  await recalculateSequence({ corpPrefix });
-                }}
-              >
-                Reset running number
-              </button>
-              <button
-                type="button"
-                className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
-                disabled={loading}
-                onClick={async () => {
-                  if (!window.confirm('Delete semua EPC batch & items sekali gus? (Running number akan reset ikut data yang tinggal)')) return;
-                  const res = await deleteAllBatches({ corpPrefix });
-                  if (res) {
-                    await fetchBatches({ limit: 50, offset: 0 });
-                  }
-                }}
-              >
-                Delete all
-              </button>
+              {canResetSeq ? (
+                <button
+                  type="button"
+                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                  disabled={loading || !corpPrefix}
+                  onClick={async () => {
+                    if (!window.confirm('Reset running number ikut data semasa? (Jika semua EPC sudah dipadam, next akan start dari 00000001)')) return;
+                    await recalculateSequence({ corpPrefix });
+                  }}
+                >
+                  Reset running number
+                </button>
+              ) : null}
+              {canDelete ? (
+                <button
+                  type="button"
+                  className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                  disabled={loading}
+                  onClick={async () => {
+                    if (!window.confirm('Delete semua EPC batch & items sekali gus? (Running number akan reset ikut data yang tinggal)')) return;
+                    const res = await deleteAllBatches({ corpPrefix });
+                    if (res) {
+                      await fetchBatches({ limit: 50, offset: 0 });
+                    }
+                  }}
+                >
+                  Delete all
+                </button>
+              ) : null}
             </div>
           </div>
           <div className="divide-y divide-zinc-100">
@@ -449,7 +628,7 @@ export default function AdminEpc() {
               <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-zinc-900">
-                    {b.batchName} <span className="text-xs text-zinc-500">#{b.id}</span>
+                    {b.batchName}
                   </div>
                   <div className="mt-1 text-[11px] text-zinc-500">
                     {b.product?.name || '-'} • {b.batchQty} • {formatDateTime(b.createdAt)} • {t('certificateId')}:{' '}
@@ -460,39 +639,57 @@ export default function AdminEpc() {
                   <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openBatchItems(b)}>
                     {t('viewEpc')}
                   </button>
-                  <button
-                    type="button"
-                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                    disabled={!b?.id}
-                    onClick={() => navigate(`/admin/epc/scan?batchId=${encodeURIComponent(String(b.id))}`)}
-                  >
-                    {t('scanInput')}
+                  <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openEditBatch(b)}>
+                    {t('edit')}
                   </button>
-                  <button
-                    type="button"
-                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                    disabled={!b?.id}
-                    onClick={() => void openCertificate(b)}
-                  >
-                    {t('viewCertificate')}
-                  </button>
-                  <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchXlsx(b.id)}>
-                    {t('exportXlsx')}
-                  </button>
-                  <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchVerifyUrlXlsx(b.id)}>
-                    {t('exportVerifyUrlXlsx')}
-                  </button>
-                  <button
-                    type="button"
-                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                    onClick={async () => {
-                      if (!window.confirm(t('confirmDelete'))) return;
-                      await deleteBatch({ batchId: b.id });
-                      await fetchBatches({ limit: 50, offset: 0 });
-                    }}
-                  >
-                    {t('delete')}
-                  </button>
+                  {canScan ? (
+                    <button
+                      type="button"
+                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                      disabled={!b?.id}
+                      onClick={() => navigate(`/admin/epc/scan?batchId=${encodeURIComponent(String(b.id))}`)}
+                    >
+                      {t('scanInput')}
+                    </button>
+                  ) : null}
+                  {canViewCertificate ? (
+                    <button
+                      type="button"
+                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                      disabled={!b?.id}
+                      onClick={() => void openCertificate(b)}
+                    >
+                      {t('viewCertificate')}
+                    </button>
+                  ) : null}
+                  {canExportXlsx ? (
+                    <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchXlsx(b.id)}>
+                      {t('exportXlsx')}
+                    </button>
+                  ) : null}
+                  {canExportXlsx ? (
+                    <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openExportCols(b)}>
+                      {t('exportXlsxCustom')}
+                    </button>
+                  ) : null}
+                  {canEncoding ? (
+                    <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchVerifyUrlXlsx(b.id)}>
+                      {t('exportVerifyUrlXlsx')}
+                    </button>
+                  ) : null}
+                  {canDelete ? (
+                    <button
+                      type="button"
+                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                      onClick={async () => {
+                        if (!window.confirm(t('confirmDelete'))) return;
+                        await deleteBatch({ batchId: b.id });
+                        await fetchBatches({ limit: 50, offset: 0 });
+                      }}
+                    >
+                      {t('delete')}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             ))}
@@ -515,24 +712,28 @@ export default function AdminEpc() {
             <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-zinc-900">
-                  {t('epcItems')}: {itemsBatch.batchName} <span className="text-xs text-zinc-500">#{itemsBatch.id}</span>
+                  {t('epcItems')}: {itemsBatch.batchName}
                 </div>
                 <div className="mt-1 text-[11px] text-zinc-500">
                   {itemsBatch.product?.name || '-'} • {t('certificateId')}: {itemsBatch.certificateId ? <span className="font-mono">{String(itemsBatch.certificateId)}</span> : '-'}
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                  disabled={!itemsBatch?.id}
-                  onClick={() => void openCertificate(itemsBatch)}
-                >
-                  {t('viewCertificate')}
-                </button>
-                <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchVerifyUrlXlsx(itemsBatch.id)}>
-                  {t('exportVerifyUrlXlsx')}
-                </button>
+                {canViewCertificate ? (
+                  <button
+                    type="button"
+                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                    disabled={!itemsBatch?.id}
+                    onClick={() => void openCertificate(itemsBatch)}
+                  >
+                    {t('viewCertificate')}
+                  </button>
+                ) : null}
+                {canEncoding ? (
+                  <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchVerifyUrlXlsx(itemsBatch.id)}>
+                    {t('exportVerifyUrlXlsx')}
+                  </button>
+                ) : null}
                 <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={closeItems}>
                   {t('close')}
                 </button>
@@ -614,7 +815,282 @@ export default function AdminEpc() {
         </div>
       ) : null}
 
-      {tab === 'production' ? (
+      {editOpen && editBatch ? (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          onClick={closeEdit}
+        >
+          <div
+            className="flex max-h-[calc(100vh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-zinc-900">
+                  {t('edit')} {t('certificateData')}: {editBatch.batchName}
+                </div>
+                <div className="mt-1 text-[11px] text-zinc-500">
+                  {editProduct?.name || editBatch.product?.name || '-'} • {t('certificateId')}:{' '}
+                  {editBatch.certificateId ? <span className="font-mono">{String(editBatch.certificateId)}</span> : '-'}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-primary px-3 py-2 text-xs"
+                  disabled={loading}
+                  onClick={async () => {
+                    const patch = {
+                      certificateTemplateId: editCertificateTemplateId ? Number(editCertificateTemplateId) : null,
+                      remark: editRemark,
+                      templateData: editTemplateData
+                    };
+                    if (editProductionDate !== editProductionDateOrig) {
+                      patch.productionDate = editProductionDate ? String(editProductionDate).trim() : null;
+                    }
+                    await updateBatch({
+                      batchId: editBatch.id,
+                      patch
+                    });
+                    await fetchBatches({ limit: 50, offset: 0 });
+                    closeEdit();
+                  }}
+                >
+                  {t('save')}
+                </button>
+                <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={closeEdit}>
+                  {t('close')}
+                </button>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-auto p-4">
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_420px]">
+                <div className="rounded-xl border border-zinc-200 bg-white p-4">
+                  <div className="mb-3 text-xs font-semibold text-zinc-600">{t('certificateData')}</div>
+                  {editPlaceholders.length === 0 ? <div className="text-xs text-zinc-500">{t('selectField')}</div> : null}
+                  <div className="space-y-3">
+                    {editPlaceholders.map((p) => {
+                      const key = String(p?.key || '').trim();
+                      const label = String(p?.label || key);
+                      const source = String(p?.source || 'static');
+                      const bindPath = String(p?.bindPath || '').trim();
+                      if (!key) return null;
+                      return (
+                        <div key={key}>
+                          <div className="mb-1 text-[11px] font-semibold text-zinc-600">{label}</div>
+                          {source === 'product' && bindPath ? (
+                            <div className="-mt-1 mb-2 text-[11px] text-zinc-500">
+                              {t('bindTo')}: {bindPath}
+                            </div>
+                          ) : null}
+                          {source === 'product' ? (
+                            <input value={String(editTemplateData?.[key] || '')} disabled className="ac-input" />
+                          ) : source === 'batch' ? (
+                            <RichTextEditor
+                              value={String(editTemplateData?.[key] || '')}
+                              onChange={(v) => setEditTemplateData((prev) => ({ ...(prev || {}), [key]: v }))}
+                              minHeight="4rem"
+                              maxHeight="10rem"
+                            />
+                          ) : (
+                            <div
+                              className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm"
+                              dangerouslySetInnerHTML={{ __html: String(editTemplateData?.[key] || '') }}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-zinc-200 bg-white p-4">
+                  <div className="mb-3 text-xs font-semibold text-zinc-600">{t('epcBatchCreation')}</div>
+                  <div className="space-y-3">
+                    <div>
+                      <div className="mb-1 text-xs font-semibold text-zinc-600">{t('corpCode')}</div>
+                      <input value={String(editBatch.corpPrefix || '')} disabled className="ac-input" />
+                    </div>
+                    <div>
+                      <div className="mb-1 text-xs font-semibold text-zinc-600">{t('product')}</div>
+                      <input value={String(editProduct?.name || editBatch.product?.name || '')} disabled className="ac-input" />
+                    </div>
+                    <div>
+                      <div className="mb-1 text-xs font-semibold text-zinc-600">{t('batchName')}</div>
+                      <input value={String(editBatch.batchName || '')} disabled className="ac-input" />
+                    </div>
+                    <div>
+                      <div className="mb-1 text-xs font-semibold text-zinc-600">{t('batchQty')}</div>
+                      <input value={String(editBatch.batchQty || '')} disabled className="ac-input" />
+                    </div>
+                    <div>
+                      <div className="mb-1 text-xs font-semibold text-zinc-600">{t('productionDate')}</div>
+                      <input
+                        type="date"
+                        value={editProductionDate}
+                        onChange={(e) => setEditProductionDate(e.target.value)}
+                        className="ac-input"
+                        disabled={!canOverride}
+                      />
+                      {!canOverride ? <div className="mt-1 text-[11px] text-rose-700">Tiada kebenaran untuk ubah production date.</div> : null}
+                    </div>
+                    <div>
+                      <div className="mb-1 text-xs font-semibold text-zinc-600">{t('certTemplate')}</div>
+                      <select value={editCertificateTemplateId} onChange={(e) => setEditCertificateTemplateId(e.target.value)} className="ac-input">
+                        <option value="">{t('none')}</option>
+                        {authTemplates.map((tpl) => (
+                          <option key={tpl.id} value={String(tpl.id)}>
+                            {String(tpl?.certificateId || '').trim() ? `${tpl.certificateId} — ${tpl.name}` : tpl.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
+                      <textarea
+                        value={editRemark}
+                        onChange={(e) => setEditRemark(e.target.value)}
+                        className="h-24 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {exportColsOpen && exportColsBatch ? (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          onClick={closeExportCols}
+        >
+          <div
+            className="w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-zinc-900">{t('exportColumnsTitle')}</div>
+                <div className="mt-1 text-[11px] text-zinc-500">
+                  {exportColsBatch.batchName} • {exportColsBatch.product?.name || '-'} • {t('batchQty')}: {exportColsBatch.batchQty}
+                </div>
+              </div>
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={closeExportCols}>
+                {t('close')}
+              </button>
+            </div>
+
+            <div className="p-4">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                  onClick={() =>
+                    setExportCols({
+                      epcCode: true,
+                      runningNo: true,
+                      netWeight: true,
+                      productionDate: true,
+                      caiqNumber: true
+                    })
+                  }
+                >
+                  {t('select')}
+                </button>
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                  onClick={() =>
+                    setExportCols({
+                      epcCode: false,
+                      runningNo: false,
+                      netWeight: false,
+                      productionDate: false,
+                      caiqNumber: false
+                    })
+                  }
+                >
+                  {t('clear')}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <label className="flex items-center gap-2 text-xs text-zinc-800">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(exportCols.epcCode)}
+                    onChange={(e) => setExportCols((prev) => ({ ...prev, epcCode: e.target.checked }))}
+                  />
+                  {t('epcCode')}
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-800">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(exportCols.runningNo)}
+                    onChange={(e) => setExportCols((prev) => ({ ...prev, runningNo: e.target.checked }))}
+                  />
+                  {t('runningNo')}
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-800">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(exportCols.netWeight)}
+                    onChange={(e) => setExportCols((prev) => ({ ...prev, netWeight: e.target.checked }))}
+                  />
+                  {t('netWeight')}
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-800">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(exportCols.productionDate)}
+                    onChange={(e) => setExportCols((prev) => ({ ...prev, productionDate: e.target.checked }))}
+                  />
+                  {t('productionDate')}
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-800">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(exportCols.caiqNumber)}
+                    onChange={(e) => setExportCols((prev) => ({ ...prev, caiqNumber: e.target.checked }))}
+                  />
+                  {t('caiqNumber')}
+                </label>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-zinc-200 bg-white px-4 py-3">
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={closeExportCols}>
+                {t('close')}
+              </button>
+              <button
+                type="button"
+                className="ac-btn ac-btn-primary px-3 py-2 text-xs"
+                disabled={
+                  loading ||
+                  !exportColsBatch?.id ||
+                  Object.values(exportCols || {}).filter(Boolean).length === 0
+                }
+                onClick={async () => {
+                  const cols = ['epcCode', 'runningNo', 'netWeight', 'productionDate', 'caiqNumber'].filter((k) => Boolean(exportCols?.[k]));
+                  const ok = await exportBatchXlsxCustom({ batchId: exportColsBatch.id, columns: cols });
+                  if (ok) closeExportCols();
+                }}
+              >
+                {t('exportXlsx')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {tab === 'production' && canProduction ? (
         <div className="rounded-xl border border-zinc-200 bg-white">
           <div className="border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-600">{t('productionOrders')}</div>
           <div className="divide-y divide-zinc-100">
@@ -625,7 +1101,7 @@ export default function AdminEpc() {
                 <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-semibold text-zinc-900">
-                      {b.batchName} <span className="text-xs text-zinc-500">#{b.id}</span>
+                      {b.batchName}
                     </div>
                     <div className="mt-1 text-[11px] text-zinc-500">
                       {uploaded ? `Uploaded: ${formatDateTime(b.productionUploadedAt)}` : 'Not uploaded'} • {done ? `Done: ${formatDateTime(b.productionDoneAt)}` : 'Not done'}
@@ -633,9 +1109,16 @@ export default function AdminEpc() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchXlsx(b.id)}>
-                      {t('download')}
-                    </button>
+                    {canExportXlsx ? (
+                      <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchXlsx(b.id)}>
+                        {t('download')}
+                      </button>
+                    ) : null}
+                    {canExportXlsx ? (
+                      <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openExportCols(b)}>
+                        {t('exportXlsxCustom')}
+                      </button>
+                    ) : null}
                     <label className="ac-btn ac-btn-soft px-3 py-2 text-xs">
                       {t('importXlsx')}
                       <input
@@ -672,7 +1155,7 @@ export default function AdminEpc() {
         </div>
       ) : null}
 
-      {tab === 'production' ? (
+      {tab === 'production' && canProduction && canBatchCreate ? (
         <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-4">
           <div className="mb-3 text-xs font-semibold text-zinc-600">{t('importExistingEpc')}</div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">

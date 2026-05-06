@@ -18,6 +18,15 @@ function downloadBlob(blob, filename) {
   window.URL.revokeObjectURL(url);
 }
 
+function downloadArrayBufferResponse(res, fallbackFilename) {
+  const contentType = res?.headers?.['content-type'] || 'application/octet-stream';
+  const disposition = res?.headers?.['content-disposition'] || '';
+  const match = /filename="([^"]+)"/i.exec(disposition);
+  const filename = match?.[1] || fallbackFilename || 'export.xlsx';
+  const blob = new Blob([res.data], { type: contentType });
+  downloadBlob(blob, filename);
+}
+
 const useEpcStore = create((set, get) => ({
   corpCodes: [],
   batches: [],
@@ -27,6 +36,16 @@ const useEpcStore = create((set, get) => ({
   loading: false,
   error: null,
   lastGenerated: null,
+
+  fetchNextCertificateId: async () => {
+    try {
+      const api = getApi();
+      const res = await api.get('/epc/certificate-id/next');
+      return String(res?.data?.data?.certificateId || '').trim();
+    } catch (e) {
+      return '';
+    }
+  },
 
   fetchCorpCodes: async () => {
     set({ loading: true, error: null });
@@ -115,12 +134,27 @@ const useEpcStore = create((set, get) => ({
       const api = getApi();
       const id = Number(batchId);
       const res = await api.get(`/epc/batches/${id}/export-xlsx`, { responseType: 'arraybuffer' });
-      const contentType = res?.headers?.['content-type'] || 'application/octet-stream';
-      const disposition = res?.headers?.['content-disposition'] || '';
-      const match = /filename="([^"]+)"/i.exec(disposition);
-      const filename = match?.[1] || `epc_batch_${id}.xlsx`;
-      const blob = new Blob([res.data], { type: contentType });
-      downloadBlob(blob, filename);
+      downloadArrayBufferResponse(res, `epc_batch_${id}.xlsx`);
+      set({ loading: false });
+      return true;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Export failed';
+      set({ loading: false, error: msg });
+      return false;
+    }
+  },
+
+  exportBatchXlsxCustom: async ({ batchId, columns }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const id = Number(batchId);
+      const cols = Array.isArray(columns) ? columns.map((c) => String(c || '').trim()).filter(Boolean) : [];
+      const res = await api.get(`/epc/batches/${id}/export-xlsx`, {
+        responseType: 'arraybuffer',
+        params: cols.length > 0 ? { columns: cols.join(',') } : undefined
+      });
+      downloadArrayBufferResponse(res, `epc_batch_${id}.xlsx`);
       set({ loading: false });
       return true;
     } catch (e) {
@@ -136,12 +170,7 @@ const useEpcStore = create((set, get) => ({
       const api = getApi();
       const id = Number(batchId);
       const res = await api.get(`/epc/batches/${id}/export-verify-url-xlsx`, { responseType: 'arraybuffer' });
-      const contentType = res?.headers?.['content-type'] || 'application/octet-stream';
-      const disposition = res?.headers?.['content-disposition'] || '';
-      const match = /filename="([^"]+)"/i.exec(disposition);
-      const filename = match?.[1] || `epc_urls_${id}.xlsx`;
-      const blob = new Blob([res.data], { type: contentType });
-      downloadBlob(blob, filename);
+      downloadArrayBufferResponse(res, `epc_urls_${id}.xlsx`);
       set({ loading: false });
       return true;
     } catch (e) {

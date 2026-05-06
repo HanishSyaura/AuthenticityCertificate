@@ -55,6 +55,21 @@ export default function AdminShell() {
   const role = user?.role || 'admin';
   const perms = user?.permissions || [];
   const canSeeUsers = role === 'super_admin' || hasPermission(perms, 'users.manage') || hasPermission(perms, 'access.manage');
+  const canSeeEpc =
+    role === 'super_admin' ||
+    hasPermission(perms, '*') ||
+    hasPermission(perms, 'epc.read') ||
+    hasPermission(perms, 'epc.write') ||
+    hasPermission(perms, 'epc.batch.view') ||
+    hasPermission(perms, 'epc.batch.create') ||
+    hasPermission(perms, 'epc.scan.access') ||
+    hasPermission(perms, 'epc.production.access') ||
+    hasPermission(perms, 'epc.export.xlsx') ||
+    hasPermission(perms, 'epc.encoding') ||
+    hasPermission(perms, 'epc.sequence.reset') ||
+    hasPermission(perms, 'epc.delete') ||
+    hasPermission(perms, 'epc.override') ||
+    hasPermission(perms, 'epc.certificate.view');
 
   return (
     <div className="min-h-screen bg-zinc-100">
@@ -78,7 +93,7 @@ export default function AdminShell() {
 
             <NavSection title={t('navProductsBatches')}>
               <NavItem to="/admin/records" label={t('productModule')} tourId="nav-records" />
-              <NavItem to="/admin/epc" label={t('epc')} tourId="nav-epc" />
+              {canSeeEpc ? <NavItem to="/admin/epc" label={t('epc')} tourId="nav-epc" /> : null}
             </NavSection>
 
             <NavSection title={t('navCertificates')}>

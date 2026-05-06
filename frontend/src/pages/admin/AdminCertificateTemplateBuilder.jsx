@@ -203,7 +203,8 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       const stored = typeof window !== 'undefined' ? window.localStorage.getItem('ac:templateLang') : null;
       const v = String(stored || '').trim().toLowerCase();
       if (v === 'en' || v === 'ms' || v === 'zh') return v;
-    } catch {
+    } catch (e) {
+      void e;
     }
     const v = String(uiLang || '').trim().toLowerCase();
     if (v === 'en' || v === 'ms' || v === 'zh') return v;
@@ -487,7 +488,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     }
 
     if (!String(backgroundMode || '').trim()) setBackgroundMode(selectedBgMode);
-  }, [backgroundMode, draftLayout, draftPlaceholders, selected?.backgroundMode, selected?.id, selected?.layoutJson, selected?.placeholders]);
+  }, [backgroundMode, contentLang, draftLayout, draftPlaceholders, selected?.backgroundMode, selected?.id, selected?.layoutJson, selected?.placeholders]);
 
   const queueTemplatePatch = useCallback((patch) => {
     const id = selected?.id;
@@ -570,7 +571,8 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     contentLangRef.current = contentLang;
     try {
       if (typeof window !== 'undefined') window.localStorage.setItem('ac:templateLang', String(contentLang || 'en'));
-    } catch {
+    } catch (e) {
+      void e;
     }
   }, [contentLang]);
 

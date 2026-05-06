@@ -62,11 +62,13 @@ export default function AdminEpcScan() {
   const scanPrevLenRef = useRef(0);
   const scanAutoModeRef = useRef(false);
   const amendNetWeightRef = useRef(null);
+  const amendProductionDateRef = useRef(null);
   const amendCaiqRef = useRef(null);
 
   const { token, user } = useAdminAuthStore((s) => ({ token: s.token, user: s.user }));
   const role = user?.role || 'admin';
   const perms = user?.permissions || [];
+  const canScanAccess = role === 'super_admin' || hasPermission(perms, 'epc.write') || hasPermission(perms, 'epc.scan.access') || hasPermission(perms, '*');
   const canOverride = role === 'super_admin' || role === 'admin' || hasPermission(perms, 'epc.override') || hasPermission(perms, '*');
 
   const api = useMemo(() => createAdminApi({ token }), [token]);
@@ -78,6 +80,7 @@ export default function AdminEpcScan() {
   const [rows, setRows] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [editNetWeight, setEditNetWeight] = useState('');
+  const [editProductionDate, setEditProductionDate] = useState('');
   const [editCaiq, setEditCaiq] = useState('');
   const [topError, setTopError] = useState('');
   const [topHint, setTopHint] = useState('');
@@ -94,6 +97,29 @@ export default function AdminEpcScan() {
   const [batchLoading, setBatchLoading] = useState(false);
 
   const selectedRow = rows.find((r) => String(r.id) === String(selectedId)) || null;
+
+  const formatBatchLabel = useCallback(
+    (item) => {
+      const name = item?.batch?.batchName ? String(item.batch.batchName) : '';
+      const corp = item?.batch?.corpPrefix ? String(item.batch.corpPrefix) : '';
+      const id = item?.batchId ? String(item.batchId) : '';
+      if (name && corp) return `${name} (${corp})`;
+      if (name) return name;
+      if (corp && id) return `${corp} #${id}`;
+      if (id) return `#${id}`;
+      return '-';
+    },
+    []
+  );
+
+  const isItemInSelectedBatch = useCallback(
+    (item) => {
+      if (!selectedBatchId) return true;
+      if (!item?.batchId) return false;
+      return String(item.batchId) === String(selectedBatchId);
+    },
+    [selectedBatchId]
+  );
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -158,9 +184,24 @@ export default function AdminEpcScan() {
   };
 
   const selectRow = (item) => {
+    if (selectedBatchId && item?.batchId && String(item.batchId) !== String(selectedBatchId)) {
+      setTopError(
+        t('scanBatchMismatch', {
+          epc: item?.epcCode ? String(item.epcCode) : '',
+          otherBatch: formatBatchLabel(item)
+        })
+      );
+      setTopHint('');
+      setCurrent(null);
+      setSelectedId(null);
+      setStep('epc');
+      inputRef.current?.focus();
+      return;
+    }
     setSelectedId(item?.id ?? null);
     setCurrent(item || null);
     setEditNetWeight(item?.netWeight ? String(item.netWeight) : '');
+    setEditProductionDate(item?.productionDate ? new Date(item.productionDate).toISOString().slice(0, 10) : '');
     setEditCaiq(item?.caiqNumber ? String(item.caiqNumber) : '');
     setStep(nextMissingStep(item));
     setTopHint('');
@@ -201,7 +242,9 @@ export default function AdminEpcScan() {
   );
 
   const patchItem = async (itemId, patch) => {
-    const res = await api.patch(`/epc/items/${Number(itemId)}/production`, patch || {});
+    const body = { ...(patch || {}) };
+    if (selectedBatchId) body.batchId = Number(selectedBatchId);
+    const res = await api.patch(`/epc/items/${Number(itemId)}/production`, body);
     return res?.data?.data || null;
   };
 
@@ -279,6 +322,10 @@ export default function AdminEpcScan() {
     try {
       if (step === 'epc') {
         const epcCode = raw;
+        if (!selectedBatchId) {
+          setTopError(t('scanSelectBatchFirst'));
+          return;
+        }
         if (scannedRef.current.has(epcCode)) {
           const ok = window.confirm(t('scanDuplicateConfirm', { epc: epcCode }));
           if (!ok) return;
@@ -289,8 +336,9 @@ export default function AdminEpcScan() {
 
         const item = await lookupEpc(epcCode);
         if (!item) throw new Error(t('scanEpcNotFound'));
-        if (selectedBatchId && String(item?.batchId) !== String(selectedBatchId)) {
-          setTopHint(t('scanBatchMismatch'));
+        if (!isItemInSelectedBatch(item)) {
+          setTopError(t('scanBatchMismatch', { epc: epcCode, otherBatch: formatBatchLabel(item) }));
+          return;
         }
         scannedRef.current.add(epcCode);
         upsertRow(item, { rowError: '' });
@@ -347,6 +395,15 @@ export default function AdminEpcScan() {
         }
 
         if (maybeNextItem?.epcCode) {
+          if (!isItemInSelectedBatch(maybeNextItem)) {
+            setTopError(
+              t('scanBatchMismatch', {
+                epc: String(maybeNextItem.epcCode || '').trim() || raw,
+                otherBatch: formatBatchLabel(maybeNextItem)
+              })
+            );
+            return;
+          }
           const epcCode = String(maybeNextItem.epcCode || '').trim();
           skipCaiq();
 
@@ -358,11 +415,7 @@ export default function AdminEpcScan() {
             return;
           }
 
-          if (selectedBatchId && String(maybeNextItem?.batchId) !== String(selectedBatchId)) {
-            setTopHint(t('scanBatchMismatch'));
-          } else {
-            setTopHint(t('scanAutoSkipCaiq'));
-          }
+          setTopHint(t('scanAutoSkipCaiq'));
 
           scannedRef.current.add(epcCode);
           upsertRow(maybeNextItem, { rowError: '' });
@@ -455,7 +508,8 @@ export default function AdminEpcScan() {
       upsertRow(selectedRow, { saving: true, rowError: '' });
       const patch = {
         netWeight: editNetWeight ? String(editNetWeight).trim() : null,
-        caiqNumber: editCaiq ? String(editCaiq).trim() : null
+        caiqNumber: editCaiq ? String(editCaiq).trim() : null,
+        productionDate: editProductionDate ? String(editProductionDate).trim() : null
       };
       if (patch.netWeight && looksLikeEpcCode(patch.netWeight)) {
         upsertRow(selectedRow, { saving: false, rowError: '' });
@@ -484,6 +538,14 @@ export default function AdminEpcScan() {
 
   const stepLabel =
     step === 'epc' ? t('scanStepEpc') : step === 'netWeight' ? t('scanStepNetWeight') : step === 'caiqNumber' ? t('scanStepCaiq') : step;
+
+  if (!canScanAccess) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8">
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-700">Insufficient permissions</div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -767,6 +829,15 @@ export default function AdminEpcScan() {
                 { id: 'netWeight', header: t('netWeight'), cell: (it) => <span className="text-sm">{it.netWeight || '-'}</span> },
                 { id: 'caiqNumber', header: t('caiqNo'), cell: (it) => <span className="text-sm">{it.caiqNumber || '-'}</span> },
                 {
+                  id: 'productionDate',
+                  header: t('productionDate'),
+                  cell: (it) => (
+                    <span className="text-sm">
+                      {it.productionDate ? new Date(it.productionDate).toISOString().slice(0, 10) : '-'}
+                    </span>
+                  )
+                },
+                {
                   id: 'status',
                   header: t('status'),
                   cell: (it) => (
@@ -827,10 +898,27 @@ export default function AdminEpcScan() {
                     onKeyDown={(e) => {
                       if (e.key !== 'Enter') return;
                       e.preventDefault();
-                      amendCaiqRef.current?.focus();
+                      amendProductionDateRef.current?.focus();
                     }}
                     className="ac-input"
                     placeholder={t('netWeight')}
+                    disabled={!canOverride}
+                  />
+                </div>
+
+                <div>
+                  <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('productionDate')}</div>
+                  <input
+                    ref={amendProductionDateRef}
+                    type="date"
+                    value={editProductionDate}
+                    onChange={(e) => setEditProductionDate(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return;
+                      e.preventDefault();
+                      amendCaiqRef.current?.focus();
+                    }}
+                    className="ac-input"
                     disabled={!canOverride}
                   />
                 </div>

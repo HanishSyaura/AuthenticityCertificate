@@ -780,8 +780,18 @@ async function ensureAccessControlSchemaCompat() {
     ['products.write', 'Write products & batches'],
     ['categories.read', 'Read categories'],
     ['categories.write', 'Write categories'],
-    ['epc.read', 'Read EPC'],
-    ['epc.write', 'Write EPC'],
+    ['epc.read', 'Read EPC (legacy)'],
+    ['epc.write', 'Write EPC (legacy)'],
+    ['epc.batch.create', 'EPC Batch Creation'],
+    ['epc.batch.view', 'View EPC'],
+    ['epc.scan.access', 'Scan input'],
+    ['epc.certificate.view', 'View certificate'],
+    ['epc.export.xlsx', 'Export XLSX'],
+    ['epc.encoding', 'Encoding'],
+    ['epc.sequence.reset', 'Reset running number'],
+    ['epc.delete', 'Delete EPC'],
+    ['epc.production.access', 'Production orders access'],
+    ['epc.override', 'Override production fields'],
     ['certificates.read', 'Read certificates'],
     ['certificates.write', 'Write certificates'],
     ['templates.read', 'Read templates'],
@@ -801,6 +811,15 @@ async function ensureAccessControlSchemaCompat() {
     await prisma.$executeRaw`
       INSERT IGNORE INTO \`Permission\` (\`key\`, \`description\`, \`createdAt\`, \`updatedAt\`)
       VALUES (${key}, ${description}, NOW(), NOW())
+    `;
+  }
+
+  for (const [key, description] of permissions) {
+    await prisma.$executeRaw`
+      UPDATE \`Permission\`
+      SET \`description\` = ${description}, \`updatedAt\` = NOW()
+      WHERE \`key\` = ${key}
+        AND ( \`description\` IS NULL OR \`description\` <> ${description} )
     `;
   }
 

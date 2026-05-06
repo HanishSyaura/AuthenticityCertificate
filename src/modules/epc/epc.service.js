@@ -180,6 +180,12 @@ async function deleteAllBatches({ organizationId, corpPrefix }) {
   };
 }
 
+async function getNextCertificateId() {
+  return await prisma.$transaction(async (tx) => {
+    return await generateCertificateId(tx);
+  });
+}
+
 async function generateEpcBatch({ organizationId, corpPrefix, productId, productionDate, batchName, batchQty, remark, certificateId, certificateTemplateId, templateData }) {
   const allowed = getAllowedCorpPrefixes();
   if (!allowed.includes(corpPrefix)) throw new Error('Corp code tidak dibenarkan');
@@ -439,7 +445,7 @@ async function importExistingEpc({ organizationId, productId, batchName, base64 
   return result;
 }
 
-async function exportBatchXlsx({ organizationId, batchId }) {
+async function exportBatchXlsx({ organizationId, batchId, columns }) {
   const orgId = Number(organizationId);
   const id = Number(batchId);
   if (!Number.isFinite(id)) throw new Error('Invalid batch id');
@@ -465,21 +471,41 @@ async function exportBatchXlsx({ organizationId, batchId }) {
     12_000
   );
 
+  const allowedColumns = new Set(['epcCode', 'runningNo', 'netWeight', 'productionDate', 'caiqNumber']);
+  const requested = Array.isArray(columns) ? columns : [];
+  const unique = [];
+  for (const c of requested) {
+    const key = String(c || '').trim();
+    if (!key || !allowedColumns.has(key) || unique.includes(key)) continue;
+    unique.push(key);
+  }
+  const exportColumns = unique.length > 0 ? unique : ['epcCode', 'netWeight', 'productionDate', 'caiqNumber'];
+
   const wsItems = XLSX.utils.json_to_sheet(
-    items.map((it) => ({
-      epcCode: it.epcCode,
-      netWeight: it.netWeight || '',
-      productionDate: it.productionDate ? new Date(it.productionDate).toISOString().slice(0, 10) : '',
-      caiqNumber: it.caiqNumber || ''
-    }))
+    items.map((it) => {
+      const row = {};
+      for (const col of exportColumns) {
+        if (col === 'productionDate') {
+          row[col] = it.productionDate ? new Date(it.productionDate).toISOString().slice(0, 10) : '';
+          continue;
+        }
+        const v = it[col];
+        row[col] = v == null ? '' : String(v);
+      }
+      return row;
+    }),
+    { header: exportColumns }
   );
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, wsItems, 'epc');
 
   const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-  const safeBatch = String(batch.batchName || 'batch').replace(/[^\w.-]+/g, '_').slice(0, 64);
-  const filename = `epc_${safeBatch}_${batch.id}.xlsx`;
+  const safePart = (v, fallback) => String(v || fallback).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 64) || fallback;
+  const safeProduct = safePart(batch.product?.name, 'product');
+  const safeBatch = safePart(batch.batchName, 'batch');
+  const safeQty = safePart(batch.batchQty, 'qty');
+  const filename = `${safeProduct}_${safeBatch}_${safeQty}.xlsx`;
   return { buffer, filename };
 }
 
@@ -521,8 +547,11 @@ async function exportBatchVerifyUrlXlsx({ organizationId, batchId, verifyUrlPref
   XLSX.utils.book_append_sheet(wb, wsItems, 'epc');
 
   const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-  const safeBatch = String(batch.batchName || 'batch').replace(/[^\w.-]+/g, '_').slice(0, 64);
-  const filename = `epc_urls_${safeBatch}_${batch.id}.xlsx`;
+  const safePart = (v, fallback) => String(v || fallback).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 64) || fallback;
+  const safeProduct = safePart(batch.product?.name, 'product');
+  const safeBatch = safePart(batch.batchName, 'batch');
+  const safeQty = safePart(batch.batchQty, 'qty');
+  const filename = `${safeProduct}_${safeBatch}_${safeQty}_verify_urls.xlsx`;
   return { buffer, filename };
 }
 
@@ -658,7 +687,7 @@ function canOverrideItem({ actor }) {
   return matchPermission(perms, 'epc.override');
 }
 
-async function updateItemProduction({ organizationId, itemId, patch, actor }) {
+async function updateItemProduction({ organizationId, itemId, patch, actor, expectedBatchId }) {
   const orgId = Number(organizationId);
   const id = Number(itemId);
   if (!Number.isFinite(id) || id <= 0) throw new Error('Invalid item id');
@@ -672,6 +701,15 @@ async function updateItemProduction({ organizationId, itemId, patch, actor }) {
     const err = new Error('EPC item tidak dijumpai');
     err.status = 404;
     throw err;
+  }
+
+  if (expectedBatchId != null) {
+    const expected = Number(expectedBatchId);
+    if (Number.isFinite(expected) && expected > 0 && Number(existing.batchId) !== expected) {
+      const err = new Error('This EPC is recorded in the system, but it is not under the selected batch.');
+      err.status = 409;
+      throw err;
+    }
   }
 
   const data = {};
@@ -943,7 +981,7 @@ async function recalculateCorpSequence({ organizationId, corpPrefix }) {
   };
 }
 
-async function updateBatch({ organizationId, batchId, patch }) {
+async function updateBatch({ organizationId, batchId, patch, actor }) {
   const orgId = Number(organizationId);
   const id = Number(batchId);
   if (!Number.isFinite(id)) throw new Error('Invalid batch id');
@@ -962,19 +1000,78 @@ async function updateBatch({ organizationId, batchId, patch }) {
     }
     data.certificateTemplateId = tplId;
   }
-  const res = await withTimeout(
-    prisma.epcBatch.updateMany({
-      where: { id, organizationId: orgId },
-      data
-    }),
-    1500
-  );
-  if (!res.count) throw new Error('Batch tidak dijumpai');
-  return await withTimeout(prisma.epcBatch.findFirst({ where: { id, organizationId: orgId }, include: { product: { select: { id: true, sku: true, name: true, code: true } } } }), 1500);
+  if (Object.prototype.hasOwnProperty.call(patch || {}, 'remark')) {
+    const v = patch.remark;
+    data.remark = v == null ? null : String(v).trim() || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch || {}, 'templateData')) {
+    const v = patch.templateData;
+    if (v == null) {
+      data.templateData = null;
+    } else if (typeof v === 'object' && !Array.isArray(v)) {
+      data.templateData = Object.keys(v).length ? v : null;
+    } else {
+      throw new Error('Invalid templateData');
+    }
+  }
+  const itemPatch = {};
+  if (Object.prototype.hasOwnProperty.call(patch || {}, 'productionDate')) {
+    if (!canOverrideItem({ actor })) {
+      const err = new Error('Tiada kebenaran untuk ubah production date.');
+      err.status = 403;
+      throw err;
+    }
+    const raw = patch.productionDate;
+    const d = raw ? toDateOrNull(raw) : null;
+    if (raw && !d) throw new Error('Invalid productionDate');
+    itemPatch.productionDate = d;
+  }
+
+  if (Object.keys(data).length === 0 && Object.keys(itemPatch).length === 0) throw new Error('No fields to update');
+
+  const result = await prisma.$transaction(async (tx) => {
+    if (Object.keys(data).length > 0) {
+      const res = await withTimeout(
+        tx.epcBatch.updateMany({
+          where: { id, organizationId: orgId },
+          data
+        }),
+        1500
+      );
+      if (!res.count) throw new Error('Batch tidak dijumpai');
+    } else {
+      const exists = await withTimeout(tx.epcBatch.findFirst({ where: { id, organizationId: orgId }, select: { id: true } }), 1500);
+      if (!exists) throw new Error('Batch tidak dijumpai');
+    }
+
+    if (Object.keys(itemPatch).length > 0) {
+      await withTimeout(
+        tx.epcItem.updateMany({
+          where: { organizationId: orgId, batchId: id },
+          data: itemPatch
+        }),
+        5000
+      );
+    }
+
+    return await withTimeout(
+      tx.epcBatch.findFirst({
+        where: { id, organizationId: orgId },
+        include: {
+          product: { select: { id: true, sku: true, name: true, code: true } },
+          certificateTemplate: { select: { id: true, certificateId: true, name: true } }
+        }
+      }),
+      1500
+    );
+  });
+  if (!result) throw new Error('Batch tidak dijumpai');
+  return result;
 }
 
 module.exports = {
   getAllowedCorpPrefixes,
+  getNextCertificateId,
   generateEpcBatch,
   exportBatchXlsx,
   exportBatchVerifyUrlXlsx,

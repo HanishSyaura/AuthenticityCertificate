@@ -64,11 +64,8 @@ export default function ImageCropModal({ open, file, onClose, onConfirm, onUseOr
     };
   }, [busy, onClose, open]);
 
-  const imgMeta = useMemo(() => {
-    const img = imgRef.current;
-    if (!img) return { nw: 0, nh: 0 };
-    return { nw: Number(img.naturalWidth) || 0, nh: Number(img.naturalHeight) || 0 };
-  }, [ready]);
+  const img = imgRef.current;
+  const imgMeta = img ? { nw: Number(img.naturalWidth) || 0, nh: Number(img.naturalHeight) || 0 } : { nw: 0, nh: 0 };
 
   const getRelPoint = useCallback((e) => {
     const img = imgRef.current;
