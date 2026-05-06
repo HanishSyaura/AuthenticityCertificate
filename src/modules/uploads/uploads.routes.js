@@ -5,6 +5,7 @@ const multer = require('multer');
 const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs/promises');
+const sharp = require('sharp');
 const prisma = require('../../config/prisma');
 const { verifyToken } = require('../../middleware/auth.middleware');
 const { attachOrganization, requireOrganization } = require('../../middleware/org.middleware');
@@ -23,6 +24,29 @@ function makeFileName(originalName) {
   const ext = path.extname(String(originalName || '')).slice(0, 10);
   const rand = crypto.randomBytes(16).toString('hex');
   return `${Date.now()}-${rand}${ext}`;
+}
+
+function isProcessableImage(file) {
+  const mime = String(file?.mimetype || '').toLowerCase();
+  if (!mime.startsWith('image/')) return false;
+  if (mime === 'image/svg+xml') return false;
+  if (mime === 'image/gif') return false;
+  return true;
+}
+
+async function generateWebpVariants({ filePath, destDir, baseName }) {
+  const widths = [320, 640, 1024];
+  const img = sharp(filePath).rotate();
+  await Promise.all(
+    widths.map(async (w) => {
+      const outPath = path.join(destDir, `${baseName}-w${w}.webp`);
+      await img
+        .clone()
+        .resize({ width: w, withoutEnlargement: true })
+        .webp({ quality: 80 })
+        .toFile(outPath);
+    })
+  );
 }
 
 function storage() {
@@ -69,11 +93,19 @@ function uploadMedia(req, res) {
     try {
       const file = req.file;
       if (!file) return res.error('File required', 400);
-      const url = `/uploads/media/${Number(req.organization.id)}/${file.filename}`;
+      const orgId = Number(req.organization.id);
+      const destDir = path.join(getUploadsRoot(), 'media', String(orgId));
+      const baseName = path.parse(String(file.filename || '')).name;
+      if (isProcessableImage(file) && file.path) {
+        try {
+          await generateWebpVariants({ filePath: file.path, destDir, baseName });
+        } catch {}
+      }
+      const url = `/uploads/media/${orgId}/${file.filename}`;
       const created = await withTimeout(
         prisma.mediaAsset.create({
           data: {
-            organizationId: Number(req.organization.id),
+            organizationId: orgId,
             originalName: file.originalname,
             fileName: file.filename,
             mimeType: file.mimetype,
@@ -101,10 +133,18 @@ async function deleteMedia(req, res) {
 
     await withTimeout(prisma.mediaAsset.delete({ where: { id: Number(id) } }), 1200);
 
-    const filePath = path.join(getUploadsRoot(), 'media', String(Number(req.organization.id)), asset.fileName);
+    const orgId = String(Number(req.organization.id));
+    const dir = path.join(getUploadsRoot(), 'media', orgId);
+    const filePath = path.join(dir, asset.fileName);
     try {
       await fs.unlink(filePath);
     } catch {}
+    const baseName = path.parse(String(asset.fileName || '')).name;
+    for (const w of [320, 640, 1024]) {
+      try {
+        await fs.unlink(path.join(dir, `${baseName}-w${w}.webp`));
+      } catch {}
+    }
 
     res.success({ id: Number(id) }, 'Deleted');
   } catch (e) {

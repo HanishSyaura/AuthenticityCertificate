@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n/useT';
 import { stripHtmlToText } from '../utils/richText';
+import { buildUploadsWebpSrcSet } from '../utils/mediaVariants';
 
 const ImageLightbox = ({ src, onClose }) => {
   useEffect(() => {
@@ -404,6 +405,18 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
     return maxBottom > 0 ? maxBottom : null;
   }, [blocks, layoutSafe]);
 
+  const eagerImageIds = useMemo(() => {
+    const candidates = [];
+    for (const b of blocks) {
+      if (!b || b.type !== 'image') continue;
+      const url = String(b?.content?.url || '').trim();
+      if (!url) continue;
+      candidates.push({ id: String(b.id || ''), y: Number(b?.__rect?.y || 0) });
+    }
+    candidates.sort((a, b) => a.y - b.y);
+    return new Set(candidates.slice(0, 1).map((it) => it.id));
+  }, [blocks]);
+
   const baseW = useMemo(() => {
     const raw = Number(baseWidth);
     return Number.isFinite(raw) && raw > 0 ? raw : 390;
@@ -474,16 +487,39 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
         {
           const mode = String(block.content?.mode || 'fit');
           const isStretch = mode === 'stretch';
+          const isEager = eagerImageIds.has(String(block.id || ''));
+          const webpSrcSet = block.content?.url ? buildUploadsWebpSrcSet(block.content.url) : null;
+          const renderedW = Math.max(1, Math.round((Number(block.__rect?.w || 0) || 0) * (Number(scale) || 1)));
+          const sizes = `${renderedW}px`;
           return (
             <div key={block.id} style={style} className="overflow-hidden">
               {block.content?.url ? (
-                <img
-                  src={block.content.url}
-                  alt=""
-                  className={`${isStretch ? 'h-full w-full object-fill' : 'h-full w-full object-contain'} cursor-zoom-in`}
-                  draggable={false}
-                  onClick={() => setLightboxSrc(block.content.url)}
-                />
+                webpSrcSet ? (
+                  <picture className="block h-full w-full">
+                    <source type="image/webp" srcSet={webpSrcSet} sizes={sizes} />
+                    <img
+                      src={block.content.url}
+                      alt=""
+                      className={`${isStretch ? 'h-full w-full object-fill' : 'h-full w-full object-contain'} cursor-zoom-in`}
+                      loading={isEager ? 'eager' : 'lazy'}
+                      decoding="async"
+                      fetchPriority={isEager ? 'high' : 'low'}
+                      draggable={false}
+                      onClick={() => setLightboxSrc(block.content.url)}
+                    />
+                  </picture>
+                ) : (
+                  <img
+                    src={block.content.url}
+                    alt=""
+                    className={`${isStretch ? 'h-full w-full object-fill' : 'h-full w-full object-contain'} cursor-zoom-in`}
+                    loading={isEager ? 'eager' : 'lazy'}
+                    decoding="async"
+                    fetchPriority={isEager ? 'high' : 'low'}
+                    draggable={false}
+                    onClick={() => setLightboxSrc(block.content.url)}
+                  />
+                )
               ) : (
                 <div className="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 text-xs text-zinc-500">
                   {t('image')}
@@ -538,6 +574,8 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
             const bgColor = String(template?.backgroundColor || '#ffffff');
             const bgUrl = template?.background ? String(template.background) : '';
             const bgMode = String(template?.backgroundMode || 'background');
+            const bgSrcSet = bgUrl ? buildUploadsWebpSrcSet(bgUrl) : null;
+            const bgSizes = `${Math.max(1, Math.round(baseW * scale))}px`;
 
             const items = templateLayout
               .filter((it) => it && typeof it === 'object')
@@ -562,16 +600,80 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                     <div className="absolute inset-0" style={{ backgroundColor: bgColor }} />
                     {bgUrl ? (
                       bgMode === 'actual' ? (
-                        <img
-                          src={bgUrl}
-                          alt=""
-                          className="absolute left-1/2 top-1/2 max-w-none -translate-x-1/2 -translate-y-1/2 object-center"
-                          draggable={false}
-                        />
+                        bgSrcSet ? (
+                          <picture className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                            <source type="image/webp" srcSet={bgSrcSet} sizes={bgSizes} />
+                            <img
+                              src={bgUrl}
+                              alt=""
+                              className="max-w-none object-center"
+                              loading="eager"
+                              decoding="async"
+                              fetchPriority="high"
+                              draggable={false}
+                            />
+                          </picture>
+                        ) : (
+                          <img
+                            src={bgUrl}
+                            alt=""
+                            className="absolute left-1/2 top-1/2 max-w-none -translate-x-1/2 -translate-y-1/2 object-center"
+                            loading="eager"
+                            decoding="async"
+                            fetchPriority="high"
+                            draggable={false}
+                          />
+                        )
                       ) : bgMode === 'fit' ? (
-                        <img src={bgUrl} alt="" className="absolute inset-0 h-full w-full object-contain object-center" draggable={false} />
+                        bgSrcSet ? (
+                          <picture className="absolute inset-0 h-full w-full">
+                            <source type="image/webp" srcSet={bgSrcSet} sizes={bgSizes} />
+                            <img
+                              src={bgUrl}
+                              alt=""
+                              className="h-full w-full object-contain object-center"
+                              loading="eager"
+                              decoding="async"
+                              fetchPriority="high"
+                              draggable={false}
+                            />
+                          </picture>
+                        ) : (
+                          <img
+                            src={bgUrl}
+                            alt=""
+                            className="absolute inset-0 h-full w-full object-contain object-center"
+                            loading="eager"
+                            decoding="async"
+                            fetchPriority="high"
+                            draggable={false}
+                          />
+                        )
                       ) : (
-                        <img src={bgUrl} alt="" className="absolute inset-0 h-full w-full object-fill object-center" draggable={false} />
+                        bgSrcSet ? (
+                          <picture className="absolute inset-0 h-full w-full">
+                            <source type="image/webp" srcSet={bgSrcSet} sizes={bgSizes} />
+                            <img
+                              src={bgUrl}
+                              alt=""
+                              className="h-full w-full object-fill object-center"
+                              loading="eager"
+                              decoding="async"
+                              fetchPriority="high"
+                              draggable={false}
+                            />
+                          </picture>
+                        ) : (
+                          <img
+                            src={bgUrl}
+                            alt=""
+                            className="absolute inset-0 h-full w-full object-fill object-center"
+                            loading="eager"
+                            decoding="async"
+                            fetchPriority="high"
+                            draggable={false}
+                          />
+                        )
                       )
                     ) : null}
                     {items.map((it, idx) => {

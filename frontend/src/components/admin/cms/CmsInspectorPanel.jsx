@@ -35,6 +35,47 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
     setLayout(next);
   };
 
+  const selectedIndex = useMemo(() => {
+    if (!selectedBlock?.id) return -1;
+    const arr = Array.isArray(layout) ? layout : [];
+    return arr.findIndex((b) => b && b.id === selectedBlock.id);
+  }, [layout, selectedBlock?.id]);
+
+  const onReorderLayer = useCallback(
+    (action) => {
+      if (!selectedBlock?.id) return;
+      const arr = Array.isArray(layout) ? layout : [];
+      const idx = arr.findIndex((b) => b && b.id === selectedBlock.id);
+      if (idx < 0) return;
+
+      let next = arr;
+      if (action === 'toBack') {
+        if (idx === 0) return;
+        next = [arr[idx], ...arr.slice(0, idx), ...arr.slice(idx + 1)];
+      } else if (action === 'toFront') {
+        if (idx === arr.length - 1) return;
+        next = [...arr.slice(0, idx), ...arr.slice(idx + 1), arr[idx]];
+      } else if (action === 'backward') {
+        if (idx === 0) return;
+        next = arr.slice();
+        const tmp = next[idx - 1];
+        next[idx - 1] = next[idx];
+        next[idx] = tmp;
+      } else if (action === 'forward') {
+        if (idx === arr.length - 1) return;
+        next = arr.slice();
+        const tmp = next[idx + 1];
+        next[idx + 1] = next[idx];
+        next[idx] = tmp;
+      } else {
+        return;
+      }
+
+      setLayout(next);
+    },
+    [layout, selectedBlock?.id, setLayout]
+  );
+
   const updateBlockContentById = useCallback(
     (blockId, contentPatch) => {
       if (!blockId) return;
@@ -86,6 +127,40 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
               <div className="rounded bg-zinc-50 p-2">y: {selectedBlock.y}</div>
               <div className="rounded bg-zinc-50 p-2">w: {selectedBlock.w}</div>
               <div className="rounded bg-zinc-50 p-2">h: {selectedBlock.h}</div>
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => onReorderLayer('toBack')}
+                disabled={selectedIndex <= 0}
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
+              >
+                {t('sendToBack')}
+              </button>
+              <button
+                type="button"
+                onClick={() => onReorderLayer('toFront')}
+                disabled={selectedIndex < 0 || selectedIndex >= (Array.isArray(layout) ? layout.length - 1 : 0)}
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
+              >
+                {t('bringToFront')}
+              </button>
+              <button
+                type="button"
+                onClick={() => onReorderLayer('backward')}
+                disabled={selectedIndex <= 0}
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
+              >
+                {t('sendBackward')}
+              </button>
+              <button
+                type="button"
+                onClick={() => onReorderLayer('forward')}
+                disabled={selectedIndex < 0 || selectedIndex >= (Array.isArray(layout) ? layout.length - 1 : 0)}
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
+              >
+                {t('bringForward')}
+              </button>
             </div>
           </div>
 

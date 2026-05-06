@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
+const fs = require('fs/promises');
+const sharp = require('sharp');
 const authRoutes = require('./modules/auth/auth.routes');
 const productRoutes = require('./modules/product/product.routes');
 const categoriesRoutes = require('./modules/categories/categories.routes');
@@ -24,7 +26,76 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
+const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+const isProd = process.env.NODE_ENV === 'production';
+
+async function fileExists(absPath) {
+  try {
+    await fs.access(absPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isSafeRelPath(relPath) {
+  const raw = String(relPath || '');
+  if (!raw) return false;
+  if (raw.includes('\0')) return false;
+  if (raw.includes('..')) return false;
+  return true;
+}
+
+async function tryServeWebpVariant(req, res, next) {
+  const m = String(req.path || '').match(/^\/(.+)\/([A-Za-z0-9_-]+)-w(\d+)\.webp$/);
+  if (!m) return next();
+  const dirRel = m[1];
+  const base = m[2];
+  const width = Number(m[3]);
+  if (!Number.isFinite(width) || ![320, 640, 1024].includes(width)) return next();
+  if (!isSafeRelPath(dirRel)) return next();
+  if (!/^[A-Za-z0-9_-]+$/.test(base)) return next();
+
+  const dirAbs = path.resolve(uploadsRoot, dirRel);
+  if (!dirAbs.startsWith(uploadsRoot)) return next();
+  const outAbs = path.join(dirAbs, `${base}-w${width}.webp`);
+  if (await fileExists(outAbs)) return next();
+
+  const candidates = ['.jpg', '.jpeg', '.png', '.webp', '.tif', '.tiff', '.avif'];
+  let inAbs = null;
+  for (const ext of candidates) {
+    const p = path.join(dirAbs, `${base}${ext}`);
+    if (await fileExists(p)) {
+      inAbs = p;
+      break;
+    }
+  }
+  if (!inAbs) return next();
+
+  try {
+    await sharp(inAbs)
+      .rotate()
+      .resize({ width, withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toFile(outAbs);
+  } catch {
+    return next();
+  }
+
+  if (isProd) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  return res.sendFile(outAbs);
+}
+
+app.use(
+  '/uploads',
+  tryServeWebpVariant,
+  express.static(uploadsRoot, {
+    etag: true,
+    lastModified: true,
+    immutable: isProd,
+    maxAge: isProd ? '365d' : 0
+  })
+);
 
 function parseAllowedOrigins() {
   const raw = process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || '';
