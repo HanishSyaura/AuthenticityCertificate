@@ -92,15 +92,6 @@ async function peekCertificateId(req, res) {
   }
 }
 
-async function resetTodayCertificateId(req, res) {
-  try {
-    const result = await epcService.resetTodayCertificateId({ organizationId: req.organization.id });
-    res.success(result, 'Certificate ID reset');
-  } catch (e) {
-    res.error(e.message, 400);
-  }
-}
-
 async function generateBatch(req, res) {
   try {
     const validated = generateSchema.parse(req.body || {});
@@ -345,7 +336,6 @@ module.exports = {
   getCorpCodes,
   getNextCertificateId,
   peekCertificateId,
-  resetTodayCertificateId,
   generateBatch,
   listBatches,
   listItems,

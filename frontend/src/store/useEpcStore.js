@@ -57,21 +57,6 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
-  resetTodayCertificateId: async () => {
-    set({ loading: true, error: null });
-    try {
-      const api = getApi();
-      const res = await api.post('/epc/certificate-id/reset-today', {});
-      const data = res?.data?.data || {};
-      set({ loading: false });
-      return data;
-    } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Reset certificate id failed';
-      set({ loading: false, error: msg });
-      throw e;
-    }
-  },
-
   fetchCorpCodes: async () => {
     set({ loading: true, error: null });
     try {

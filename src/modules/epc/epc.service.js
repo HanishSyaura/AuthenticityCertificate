@@ -1,6 +1,6 @@
 const prisma = require('../../config/prisma');
 const XLSX = require('xlsx');
-const { generateCertificateId, peekNextCertificateId, getCertificateDateKey } = require('../../utils/id-generator');
+const { generateCertificateId, peekNextCertificateId } = require('../../utils/id-generator');
 const { matchPermission } = require('../../middleware/access.middleware');
 const settingsService = require('../settings/settings.service');
 
@@ -208,51 +208,6 @@ async function peekCertificateId({ organizationId } = {}) {
   }
   return await prisma.$transaction(async (tx) => {
     return await peekNextCertificateId(tx, { timeZone });
-  });
-}
-
-async function resetTodayCertificateId({ organizationId } = {}) {
-  const orgId = Number(organizationId);
-  if (!Number.isFinite(orgId) || orgId <= 0) throw new Error('Invalid organization');
-
-  let timeZone = null;
-  try {
-    const settings = await settingsService.ensureOrganizationSettings(orgId);
-    timeZone = settings?.defaultTimezone || null;
-  } catch {
-  }
-
-  const dateKey = getCertificateDateKey({ date: new Date(), timeZone });
-  const prefix = 'CERT';
-  const idPrefix = `${prefix}${dateKey}`;
-
-  return await prisma.$transaction(async (tx) => {
-    const exists = await tx.certificate.findFirst({
-      where: { organizationId: orgId, certificateId: { startsWith: idPrefix } },
-      orderBy: { createdAt: 'desc' },
-      select: { certificateId: true, type: true, status: true, createdAt: true, batchId: true }
-    });
-    if (exists?.certificateId) {
-      const info = [
-        `id=${exists.certificateId}`,
-        exists.type ? `type=${String(exists.type)}` : null,
-        exists.status ? `status=${String(exists.status)}` : null,
-        exists.batchId != null ? `batchId=${String(exists.batchId)}` : null,
-        exists.createdAt ? `createdAt=${new Date(exists.createdAt).toISOString()}` : null
-      ]
-        .filter(Boolean)
-        .join(', ');
-      throw new Error(`Tak boleh reset: ada certificate untuk hari ini (${info})`);
-    }
-
-    await tx.certificateSequence.upsert({
-      where: { dateKey },
-      update: { lastNo: 0n },
-      create: { dateKey, lastNo: 0n }
-    });
-
-    const nextId = await peekNextCertificateId(tx, { timeZone, prefix });
-    return { dateKey, certificateId: nextId };
   });
 }
 
@@ -1155,7 +1110,6 @@ module.exports = {
   getAllowedCorpPrefixes,
   getNextCertificateId,
   peekCertificateId,
-  resetTodayCertificateId,
   generateEpcBatch,
   exportBatchXlsx,
   exportBatchVerifyUrlXlsx,

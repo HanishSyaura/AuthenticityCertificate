@@ -19,7 +19,6 @@ router.get(
 
 router.get('/certificate-id/next', requirePermission(['epc.write', 'epc.batch.create']), epcController.getNextCertificateId);
 router.get('/certificate-id/peek', requirePermission(['epc.write', 'epc.batch.create']), epcController.peekCertificateId);
-router.post('/certificate-id/reset-today', requirePermission(['epc.write', 'epc.batch.create']), epcController.resetTodayCertificateId);
 
 router.post(
   '/batches/generate',

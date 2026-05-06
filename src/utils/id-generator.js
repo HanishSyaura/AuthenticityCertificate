@@ -79,7 +79,6 @@ async function generateCertificateId(db, { date = new Date(), prefix = 'CERT', p
 
 module.exports = {
   generateCertificateId,
-  getCertificateDateKey: ({ date = new Date(), timeZone = null } = {}) => formatDdMmYy(date, timeZone),
   peekNextCertificateId: async (db, { date = new Date(), prefix = 'CERT', pad = 3, timeZone = null } = {}) => {
     if (!db) return generateFallbackCertificateId({ date, prefix, pad, timeZone });
     const dateKey = formatDdMmYy(date, timeZone);

@@ -49,7 +49,6 @@ export default function AdminEpc() {
   const canViewCertificate = allow('epc.read', 'epc.write', 'epc.certificate.view');
   const canExportXlsx = allow('epc.write', 'epc.export.xlsx', 'epc.production.access');
   const canEncoding = allow('epc.write', 'epc.encoding');
-  const canResetSeq = allow('epc.write', 'epc.sequence.reset');
   const canDelete = allow('epc.write', 'epc.delete');
   const canProduction = allow('epc.write', 'epc.production.access');
   const canOverride = role === 'super_admin' || role === 'admin' || allow('epc.override');
@@ -73,7 +72,6 @@ export default function AdminEpc() {
     lastGenerated,
     fetchCorpCodes,
     fetchPeekCertificateId,
-    resetTodayCertificateId,
     fetchBatches,
     fetchItems,
     generateBatch,
@@ -97,7 +95,6 @@ export default function AdminEpc() {
     lastGenerated: s.lastGenerated,
     fetchCorpCodes: s.fetchCorpCodes,
     fetchPeekCertificateId: s.fetchPeekCertificateId,
-    resetTodayCertificateId: s.resetTodayCertificateId,
     fetchBatches: s.fetchBatches,
     fetchItems: s.fetchItems,
     generateBatch: s.generateBatch,
@@ -517,22 +514,6 @@ export default function AdminEpc() {
                   className="ac-input font-mono uppercase"
                   placeholder="CERTDDMMYY001"
                 />
-                <div className="mt-2 flex justify-end">
-                  <button
-                    type="button"
-                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                    disabled={loading}
-                    onClick={async () => {
-                      if (!window.confirm('Reset Certificate ID hari ini balik ke 001? (Hanya boleh jika tiada certificate dicipta hari ini)')) return;
-                      const res = await resetTodayCertificateId();
-                      const id = String(res?.certificateId || '').trim();
-                      if (id) setCertificateId(id);
-                      setCertificateIdMode('auto');
-                    }}
-                  >
-                    Reset today to 001
-                  </button>
-                </div>
               </div>
 
               <div>
@@ -625,19 +606,6 @@ export default function AdminEpc() {
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 px-4 py-3">
             <div className="text-xs font-semibold text-zinc-600">{t('epcBatches')}</div>
             <div className="flex items-center gap-2">
-              {canResetSeq ? (
-                <button
-                  type="button"
-                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-                  disabled={loading || !corpPrefix}
-                  onClick={async () => {
-                    if (!window.confirm('Reset running number ikut data semasa? (Jika semua EPC sudah dipadam, next akan start dari 00000001)')) return;
-                    await recalculateSequence({ corpPrefix });
-                  }}
-                >
-                  Reset running number
-                </button>
-              ) : null}
               {canDelete ? (
                 <button
                   type="button"
@@ -866,7 +834,6 @@ export default function AdminEpc() {
                   disabled={loading}
                   onClick={async () => {
                     const patch = {
-                      certificateTemplateId: editCertificateTemplateId ? Number(editCertificateTemplateId) : null,
                       remark: editRemark,
                       templateData: editTemplateData
                     };
@@ -962,7 +929,7 @@ export default function AdminEpc() {
                     </div>
                     <div>
                       <div className="mb-1 text-xs font-semibold text-zinc-600">{t('certTemplate')}</div>
-                      <select value={editCertificateTemplateId} onChange={(e) => setEditCertificateTemplateId(e.target.value)} className="ac-input">
+                      <select value={editCertificateTemplateId} disabled className="ac-input">
                         <option value="">{t('none')}</option>
                         {authTemplates.map((tpl) => (
                           <option key={tpl.id} value={String(tpl.id)}>
@@ -970,6 +937,7 @@ export default function AdminEpc() {
                           </option>
                         ))}
                       </select>
+                      <div className="mt-1 text-[11px] text-zinc-500">Certificate template dikunci selepas batch dijana.</div>
                     </div>
                     <div>
                       <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
