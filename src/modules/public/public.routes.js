@@ -286,12 +286,13 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         const effectivePages = sorted.map((p) => {
           const tRow = tByPageId.get(Number(p.id));
           const tLayout = Array.isArray(tRow?.contentJson) && tRow.contentJson.length > 0 ? tRow.contentJson : null;
-          const effectiveLayout = tLayout
-            : Array.isArray(p?.publishedVersion?.layoutJson)
+          const effectiveLayout =
+            tLayout ??
+            (Array.isArray(p?.publishedVersion?.layoutJson)
               ? p.publishedVersion.layoutJson
               : Array.isArray(p?.layout?.layoutJson)
                 ? p.layout.layoutJson
-                : null;
+                : null);
           return { id: p.id, effectiveLayout };
         });
 
