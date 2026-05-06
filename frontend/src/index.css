@@ -318,6 +318,14 @@
     scrollbar-gutter: stable;
   }
 
+  .ac-scrollbar-inside {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
+  }
+
   @keyframes ac-verify-float {
     0% {
       transform: translate3d(0, 0, 0) scale(1);
