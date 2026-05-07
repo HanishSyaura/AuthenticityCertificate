@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import useAdminAuthStore from './useAdminAuthStore';
 import { createAdminApi } from '../utils/adminApi';
+import { tRaw } from '../i18n/tRaw';
 
 function getApi() {
   const { token } = useAdminAuthStore.getState();
@@ -22,7 +23,7 @@ const useUsersStore = create((set, get) => ({
       set({ users, loading: false, lastSyncAt: Date.now() });
       return users;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to load users';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToLoadUsers');
       set({ loading: false, error: msg });
       return [];
     }
@@ -38,7 +39,7 @@ const useUsersStore = create((set, get) => ({
       set({ users, loading: false, lastSyncAt: Date.now() });
       return created;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to create user';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToCreateUser');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -54,7 +55,7 @@ const useUsersStore = create((set, get) => ({
       set({ users, loading: false, lastSyncAt: Date.now() });
       return updated;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to update role';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToUpdateRole');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -69,7 +70,7 @@ const useUsersStore = create((set, get) => ({
       set({ users, loading: false, lastSyncAt: Date.now() });
       return true;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to delete user';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToDeleteUser');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -83,7 +84,7 @@ const useUsersStore = create((set, get) => ({
       set({ loading: false, lastSyncAt: Date.now() });
       return res?.data?.data || { ok: true };
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to reset password';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToResetPassword');
       set({ loading: false, error: msg });
       throw e;
     }

@@ -203,7 +203,7 @@ export default function AdminCmsBuilder() {
       .catch((e) => {
         if (saveSeqRef.current !== seq) return;
         setSaveStatus('error');
-        setSaveError(e?.message || 'Failed to save');
+        setSaveError(e?.message || t('saveFailed'));
       });
   };
 
@@ -258,7 +258,7 @@ export default function AdminCmsBuilder() {
               } catch (e) {
                 if (saveSeqRef.current !== seq) return;
                 setSaveStatus('error');
-                setSaveError(e?.message || 'Failed to save');
+                setSaveError(e?.message || t('saveFailed'));
               }
             }}
             className="ac-btn rounded-lg px-3 py-2 text-xs"
@@ -275,7 +275,7 @@ export default function AdminCmsBuilder() {
             className="ac-btn rounded-lg px-3 py-2 text-xs"
             disabled={!selectedPageId || layoutLocked}
           >
-            Publish
+            {t('publish')}
           </button>
           <button
             type="button"

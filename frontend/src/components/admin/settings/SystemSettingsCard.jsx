@@ -1,6 +1,7 @@
 import React from 'react';
 import { Field, Input, Select, Toggle } from './SettingsControls';
 import { MAX_UPLOAD_MB } from '../../../utils/uploadLimits';
+import { useT } from '../../../i18n/useT';
 
 export default function SystemSettingsCard({
   title,
@@ -20,6 +21,7 @@ export default function SystemSettingsCard({
   onUploadLogo,
   onSave
 }) {
+  const { t } = useT();
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-4">
       <div className="text-sm font-semibold text-zinc-900">{title}</div>
@@ -27,7 +29,7 @@ export default function SystemSettingsCard({
 
       {!canEdit ? (
         <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
-          Only Super Admin can edit system settings.
+          {t('onlySuperAdminCanEdit')}
         </div>
       ) : null}
 
@@ -42,11 +44,11 @@ export default function SystemSettingsCard({
       ) : null}
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Organization name" error={errors?.organizationName} htmlFor="system-org-name">
+        <Field label={t('organizationName')} error={errors?.organizationName} htmlFor="system-org-name">
           <Input id="system-org-name" value={draft.organizationName} onChange={(v) => onChange({ organizationName: v })} disabled={!canEdit} />
         </Field>
 
-        <Field label="Organization code" error={errors?.organizationCode} hint="Uppercase and unique" htmlFor="system-org-code">
+        <Field label={t('organizationCode')} error={errors?.organizationCode} hint={t('organizationCodeHint')} htmlFor="system-org-code">
           <Input
             id="system-org-code"
             value={draft.organizationCode}
@@ -55,7 +57,7 @@ export default function SystemSettingsCard({
           />
         </Field>
 
-        <Field label="Default locale" error={errors?.defaultLocale} htmlFor="system-locale">
+        <Field label={t('defaultLocale')} error={errors?.defaultLocale} htmlFor="system-locale">
           <Select
             id="system-locale"
             value={draft.defaultLocale}
@@ -65,7 +67,7 @@ export default function SystemSettingsCard({
           />
         </Field>
 
-        <Field label="Default timezone" error={errors?.defaultTimezone} htmlFor="system-timezone">
+        <Field label={t('defaultTimezone')} error={errors?.defaultTimezone} htmlFor="system-timezone">
           <Select
             id="system-timezone"
             value={draft.defaultTimezone}
@@ -75,21 +77,21 @@ export default function SystemSettingsCard({
           />
         </Field>
 
-        <Field label="Maintenance mode" hint="Temporarily disable non-admin access">
+        <Field label={t('maintenanceMode')} hint={t('maintenanceModeHint')}>
           <div className="flex items-center gap-3">
             <Toggle checked={draft.maintenanceMode} onChange={(v) => onChange({ maintenanceMode: v })} disabled={!canEdit} />
-            <div className="text-sm text-zinc-700">{draft.maintenanceMode ? 'Enabled' : 'Disabled'}</div>
+            <div className="text-sm text-zinc-700">{draft.maintenanceMode ? t('enabled') : t('disabled')}</div>
           </div>
         </Field>
 
         <div className="sm:col-span-2">
-          <Field label="Brand logo" hint="Shown in the admin sidebar" error={logoUploadError}>
+          <Field label={t('brandLogo')} hint={t('brandLogoHint')} error={logoUploadError}>
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex h-16 w-48 items-center justify-center overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
                 {draft.logoUrl ? (
-                  <img src={draft.logoUrl} alt="Brand logo" className="h-full w-full object-contain" />
+                  <img src={draft.logoUrl} alt={t('brandLogo')} className="h-full w-full object-contain" />
                 ) : (
-                  <div className="text-xs text-zinc-500">No logo</div>
+                  <div className="text-xs text-zinc-500">{t('noLogo')}</div>
                 )}
               </div>
 
@@ -98,7 +100,7 @@ export default function SystemSettingsCard({
                   !canEdit || logoUploading ? 'cursor-not-allowed opacity-50 hover:bg-white' : ''
                 }`}
               >
-                {logoUploading ? 'Uploading…' : 'Upload image'}
+                {logoUploading ? t('uploading') : t('uploadImage')}
                 <input
                   type="file"
                   accept="image/*"
@@ -111,7 +113,9 @@ export default function SystemSettingsCard({
                   }}
                 />
               </label>
-              <div className="text-[11px] text-zinc-500">Max file size: {MAX_UPLOAD_MB}MB</div>
+              <div className="text-[11px] text-zinc-500">
+                {t('maxFileSize', { mb: MAX_UPLOAD_MB })}
+              </div>
 
               <button
                 type="button"
@@ -119,7 +123,7 @@ export default function SystemSettingsCard({
                 onClick={() => onChange({ logoUrl: '' })}
                 className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Remove
+                {t('remove')}
               </button>
             </div>
           </Field>
@@ -130,10 +134,10 @@ export default function SystemSettingsCard({
         <button
           type="button"
           onClick={onSave}
-          disabled={!canEdit || !dirty || invalid || saving}
+          disabled={!canEdit || !dirty || saving}
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {saving ? 'Saving…' : 'Save Settings'}
+          {saving ? t('saving') : t('saveSettings')}
         </button>
       </div>
     </div>

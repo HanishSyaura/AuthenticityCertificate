@@ -253,7 +253,7 @@ export default function AdminUsers() {
                         setShowUserRoles(true);
                       }}
                     >
-                      Edit access
+                      {t('editAccess')}
                     </button>
                   ) : null}
                   {Array.isArray(u.roles) && u.roles.length > 0 ? (

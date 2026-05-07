@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Field, Input } from './SettingsControls';
+import { useT } from '../../../i18n/useT';
 
 export default function ProfileSettingsCard({
   title,
@@ -14,6 +15,7 @@ export default function ProfileSettingsCard({
   onChange,
   onSave
 }) {
+  const { t } = useT();
   const showCurrent = useMemo(() => Boolean(String(draft.newPassword || '').trim()), [draft.newPassword]);
 
   return (
@@ -32,22 +34,22 @@ export default function ProfileSettingsCard({
       ) : null}
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Name" error={errors?.name} htmlFor="profile-name">
+        <Field label={t('name')} error={errors?.name} htmlFor="profile-name">
           <Input id="profile-name" value={draft.name} onChange={(v) => onChange({ name: v })} />
         </Field>
 
-        <Field label="Email" error={errors?.email} hint={!canEditEmail ? 'Only admins can edit email' : ''} htmlFor="profile-email">
+        <Field label={t('email')} error={errors?.email} hint={!canEditEmail ? t('onlyAdminsCanEditEmail') : ''} htmlFor="profile-email">
           <Input id="profile-email" value={draft.email} onChange={(v) => onChange({ email: v })} disabled={!canEditEmail} type="email" />
         </Field>
 
-        <Field label="Role" htmlFor="profile-role">
+        <Field label={t('role')} htmlFor="profile-role">
           <Input id="profile-role" value={draft.role} onChange={() => {}} disabled />
         </Field>
       </div>
 
       <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
         {showCurrent ? (
-          <Field label="Current password" error={errors?.currentPassword} htmlFor="profile-current-password">
+          <Field label={t('currentPassword')} error={errors?.currentPassword} htmlFor="profile-current-password">
             <Input
               id="profile-current-password"
               value={draft.currentPassword}
@@ -59,17 +61,17 @@ export default function ProfileSettingsCard({
           <div className="hidden sm:block" />
         )}
 
-        <Field label="New password" error={errors?.newPassword} htmlFor="profile-new-password">
+        <Field label={t('newPassword')} error={errors?.newPassword} htmlFor="profile-new-password">
           <Input
             id="profile-new-password"
             value={draft.newPassword}
             onChange={(v) => onChange({ newPassword: v })}
             type="password"
-            placeholder="Leave blank to keep current password"
+            placeholder={t('leaveBlankToKeepCurrentPassword')}
           />
         </Field>
 
-        <Field label="Confirm new password" error={errors?.confirmNewPassword} htmlFor="profile-confirm-new-password">
+        <Field label={t('confirmNewPassword')} error={errors?.confirmNewPassword} htmlFor="profile-confirm-new-password">
           <Input
             id="profile-confirm-new-password"
             value={draft.confirmNewPassword}
@@ -83,10 +85,10 @@ export default function ProfileSettingsCard({
         <button
           type="button"
           onClick={onSave}
-          disabled={!dirty || invalid || saving}
+          disabled={!dirty || saving}
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {saving ? 'Saving…' : 'Save Changes'}
+          {saving ? t('saving') : t('saveChanges')}
         </button>
       </div>
     </div>

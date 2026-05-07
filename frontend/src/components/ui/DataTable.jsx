@@ -1,4 +1,5 @@
 import React from 'react';
+import { useT } from '../../i18n/useT';
 
 function getAlignClass(align) {
   if (align === 'right') return 'text-right';
@@ -21,6 +22,7 @@ export default function DataTable({
   containerClassName,
   tableClassName
 }) {
+  const { t } = useT();
   const safeColumns = Array.isArray(columns) ? columns : [];
   const safeRows = Array.isArray(rows) ? rows : [];
   const keyFn = typeof rowKey === 'function' ? rowKey : (r) => r?.id;
@@ -60,13 +62,13 @@ export default function DataTable({
               {loading ? (
                 <tr>
                   <td colSpan={safeColumns.length || 1} className={loadingCellClass}>
-                    {loadingContent || 'Loading…'}
+                    {loadingContent || t('loading')}
                   </td>
                 </tr>
               ) : safeRows.length === 0 ? (
                 <tr>
                   <td colSpan={safeColumns.length || 1} className={emptyCellClass}>
-                    {emptyContent || 'No data.'}
+                    {emptyContent || t('noData')}
                   </td>
                 </tr>
               ) : (

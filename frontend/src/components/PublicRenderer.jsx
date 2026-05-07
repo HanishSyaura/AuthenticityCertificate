@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n/useT';
 import { stripHtmlToText } from '../utils/richText';
 import { buildUploadsWebpSrcSet } from '../utils/mediaVariants';
+import { resolveCmsVideoSource } from '../utils/videoEmbed';
 
 const ImageLightbox = ({ src, onClose }) => {
   useEffect(() => {
@@ -835,17 +836,29 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
         );
         }
       case 'video':
-        return (
-          <div key={block.id} style={style}>
-            {block.content?.url ? (
-              <video src={block.content.url} controls className="h-full w-full object-cover" />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 text-xs text-zinc-500">
-                {t('video')}
-              </div>
-            )}
-          </div>
-        );
+        return (() => {
+          const raw = String(block.content?.url || '').trim();
+          const resolved = raw ? resolveCmsVideoSource(raw, typeof window !== 'undefined' ? window.location.origin : 'https://example.invalid') : null;
+          return (
+            <div key={block.id} style={style}>
+              {resolved?.kind === 'iframe' ? (
+                <iframe
+                  title="video"
+                  src={resolved.src}
+                  className="h-full w-full border-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              ) : resolved?.kind === 'video' ? (
+                <video src={resolved.src} controls playsInline preload="metadata" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 text-xs text-zinc-500">
+                  {t('video')}
+                </div>
+              )}
+            </div>
+          );
+        })();
       default:
         return null;
     }

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import useAdminAuthStore from './useAdminAuthStore';
 import { createAdminApi } from '../utils/adminApi';
+import { tRaw } from '../i18n/tRaw';
 
 function getApi() {
   const { token } = useAdminAuthStore.getState();
@@ -42,7 +43,7 @@ const useCertificatesStore = create((set, get) => ({
       });
       return data;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to load certificates';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToLoadCertificates');
       set({ loading: false, error: msg });
       return null;
     }
@@ -61,7 +62,7 @@ const useCertificatesStore = create((set, get) => ({
       set({ loading: false, lastSyncAt: Date.now() });
       return res?.data?.data;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Assign failed';
+      const msg = e?.response?.data?.message || e?.message || tRaw('assignFailed');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -75,7 +76,7 @@ const useCertificatesStore = create((set, get) => ({
       set({ loading: false, lastSyncAt: Date.now() });
       return res?.data?.data;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Revoke failed';
+      const msg = e?.response?.data?.message || e?.message || tRaw('revokeFailed');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -89,7 +90,7 @@ const useCertificatesStore = create((set, get) => ({
       set({ loading: false, lastSyncAt: Date.now() });
       return res?.data?.data;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Reissue failed';
+      const msg = e?.response?.data?.message || e?.message || tRaw('reissueFailed');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -97,4 +98,3 @@ const useCertificatesStore = create((set, get) => ({
 }));
 
 export default useCertificatesStore;
-

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import useAdminAuthStore from './useAdminAuthStore';
 import { createAdminApi } from '../utils/adminApi';
+import { tRaw } from '../i18n/tRaw';
 
 function sortPages(list) {
   const pages = Array.isArray(list) ? list : [];
@@ -87,7 +88,7 @@ const useCmsStore = create((set, get) => ({
     const kind = 'landing';
 
     if (!token) {
-      set({ pages: [], loading: false, error: 'Not authenticated' });
+      set({ pages: [], loading: false, error: tRaw('notAuthenticated') });
       return;
     }
 
@@ -97,7 +98,7 @@ const useCmsStore = create((set, get) => ({
       const pages = sortPages(sanitizePagesList(res?.data?.data || []));
       set({ pages, loading: false });
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to load pages';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ pages: [], loading: false, error: msg });
     }
   },
@@ -108,7 +109,7 @@ const useCmsStore = create((set, get) => ({
     const pages = get().pages;
     const kind = 'landing';
 
-    if (!token) throw new Error('Not authenticated');
+    if (!token) throw new Error(tRaw('notAuthenticated'));
 
     try {
       const api = createAdminApi({ token });
@@ -118,7 +119,7 @@ const useCmsStore = create((set, get) => ({
       set({ pages: updated });
       return created;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to create page';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       throw new Error(msg);
     }
   },
@@ -146,7 +147,7 @@ const useCmsStore = create((set, get) => ({
       const selectedPageId = get().selectedPageId;
       set({ layoutsByPageKey: next, ...(String(selectedPageId) === String(page.id) ? { error: null } : {}) });
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to load page layout';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       const next = { ...current, [key]: [] };
       const selectedPageId = get().selectedPageId;
       set({ layoutsByPageKey: next, ...(String(selectedPageId) === String(page.id) ? { error: msg } : {}) });
@@ -163,13 +164,13 @@ const useCmsStore = create((set, get) => ({
     const nextLayouts = { ...(get().layoutsByPageKey || {}), [`${pageId}:${lang}`]: safe };
     set({ layoutsByPageKey: nextLayouts });
 
-    if (!token) throw new Error('Not authenticated');
+    if (!token) throw new Error(tRaw('notAuthenticated'));
 
     try {
       const api = createAdminApi({ token });
       await api.post('/cms/layout', { pageId, layoutJson: safe, language: lang });
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to save layout';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       throw new Error(msg);
     }
   },
@@ -177,7 +178,7 @@ const useCmsStore = create((set, get) => ({
   fillEmptyFromEn: async ({ pageId, language }) => {
     const lang = String(language || get().language || 'en');
     const { token } = useAdminAuthStore.getState();
-    if (!token) throw new Error('Not authenticated');
+    if (!token) throw new Error(tRaw('notAuthenticated'));
     if (!pageId) return null;
     if (String(lang).toLowerCase() === 'en') return null;
     const api = createAdminApi({ token });
@@ -187,7 +188,7 @@ const useCmsStore = create((set, get) => ({
 
   publishPage: async ({ pageId }) => {
     const { token } = useAdminAuthStore.getState();
-    if (!token) throw new Error('Not authenticated');
+    if (!token) throw new Error(tRaw('notAuthenticated'));
     const api = createAdminApi({ token });
     const res = await api.post('/cms/publish', { pageId });
     return res?.data?.data;
@@ -195,7 +196,7 @@ const useCmsStore = create((set, get) => ({
 
   deletePage: async ({ pageId }) => {
     const { token } = useAdminAuthStore.getState();
-    if (!token) throw new Error('Not authenticated');
+    if (!token) throw new Error(tRaw('notAuthenticated'));
     const api = createAdminApi({ token });
     await api.delete(`/cms/page/${encodeURIComponent(pageId)}`);
     const pages = (get().pages || []).filter((p) => String(p.id) !== String(pageId));
@@ -204,7 +205,7 @@ const useCmsStore = create((set, get) => ({
 
   reorderPages: async ({ orderedIds }) => {
     const { token } = useAdminAuthStore.getState();
-    if (!token) throw new Error('Not authenticated');
+    if (!token) throw new Error(tRaw('notAuthenticated'));
 
     const prevPages = sanitizePagesList(get().pages || []);
     const kind = 'landing';
@@ -221,7 +222,7 @@ const useCmsStore = create((set, get) => ({
       const api = createAdminApi({ token });
       await api.patch('/cms/pages/order', { orderedIds: merged.map((p) => Number(p.id)), kind });
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to reorder pages';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ pages: prevPages, error: msg });
       throw new Error(msg);
     }

@@ -26,14 +26,15 @@ function computePlacement(targetRect) {
 
 export default function TourOverlay() {
   const { t } = useT();
-  const { isOpen, steps, stepIndex, next, prev, markSeenAndClose, closeTour } = useTourStore((s) => ({
+  const { isOpen, steps, stepIndex, next, prev, markSeenAndClose, closeTour, navigator } = useTourStore((s) => ({
     isOpen: s.isOpen,
     steps: s.steps,
     stepIndex: s.stepIndex,
     next: s.next,
     prev: s.prev,
     markSeenAndClose: s.markSeenAndClose,
-    closeTour: s.closeTour
+    closeTour: s.closeTour,
+    navigator: s.navigator
   }));
 
   const step = Array.isArray(steps) ? steps[stepIndex] : null;
@@ -139,6 +140,49 @@ export default function TourOverlay() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isOpen, hasNext, hasPrev, next, prev, markSeenAndClose, closeTour]);
+
+  useEffect(() => {
+    if (!isOpen || !step) return;
+    const actions = Array.isArray(step.action) ? step.action : step.action ? [step.action] : [];
+    actions.forEach((a) => {
+      if (!a) return;
+      if (a.type === 'navigate' && typeof navigator === 'function' && a.to) {
+        try {
+          navigator(String(a.to), a.options || undefined);
+        } catch {
+          return;
+        }
+        return;
+      }
+      try {
+        window.dispatchEvent(new CustomEvent('ac_tour_action', { detail: a }));
+      } catch {
+        return;
+      }
+    });
+
+    if (step.navigateTo && typeof navigator === 'function') {
+      try {
+        navigator(String(step.navigateTo), step.navigateOptions || undefined);
+      } catch {
+        return;
+      }
+    }
+
+    const focusSelector = typeof step.focusSelector === 'string' && step.focusSelector.trim() ? step.focusSelector.trim() : null;
+    const shouldFocusTarget = Boolean(step.focus) && !focusSelector;
+    const selectorToFocus = focusSelector || (shouldFocusTarget ? step.selector : null);
+    if (!selectorToFocus) return;
+    const timeout = window.setTimeout(() => {
+      try {
+        const el = document.querySelector(selectorToFocus);
+        if (el && typeof el.focus === 'function') el.focus();
+      } catch {
+        return;
+      }
+    }, 50);
+    return () => window.clearTimeout(timeout);
+  }, [isOpen, stepIndex, step, navigator]);
 
   if (!isOpen || !step) return null;
 

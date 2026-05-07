@@ -7,16 +7,16 @@ import { ADMIN_KEYS } from '../utils/adminKeys';
 import { readJson } from '../utils/storage';
 import { createAdminApi } from '../utils/adminApi';
 
-function sampleCertificateLayout() {
+function sampleCertificateLayout(t) {
   return [
-    { id: 't1', type: 'text', x: 24, y: 24, w: 342, h: 40, content: { text: 'CERTIFICATE' } },
-    { id: 't2', type: 'text', x: 24, y: 72, w: 342, h: 52, content: { text: 'Sample preview.\nAppend ?certId=CERT... (or BN-...) or ?epc=... to the URL to load real data.' } },
+    { id: 't1', type: 'text', x: 24, y: 24, w: 342, h: 40, content: { text: t('cmsPreviewSampleTitle') } },
+    { id: 't2', type: 'text', x: 24, y: 72, w: 342, h: 52, content: { text: t('cmsPreviewSampleHint') } },
     { id: 'img1', type: 'image', x: 24, y: 150, w: 342, h: 220, content: { url: '' } },
-    { id: 't3', type: 'text', x: 24, y: 388, w: 342, h: 120, content: { text: 'Certificate ID: CERTIFICATE_ID\nProduct: PRODUCT_NAME\nBatch: BATCH_NO' } }
+    { id: 't3', type: 'text', x: 24, y: 388, w: 342, h: 120, content: { text: t('cmsPreviewSampleData') } }
   ];
 }
 
-function sampleCert(id = 'CERTIFICATE_ID') {
+function sampleCert(t, id = 'CERTIFICATE_ID') {
   return {
     certificateId: id,
     type: 'unit',
@@ -24,14 +24,14 @@ function sampleCert(id = 'CERTIFICATE_ID') {
     issuedAt: new Date().toISOString(),
     product: { name: 'PRODUCT_NAME', code: 'PRODUCT_CODE' },
     batch: { batchNo: 'BATCH_NO' },
-    certificateLayout: sampleCertificateLayout(),
+    certificateLayout: sampleCertificateLayout(t),
     certificateTemplate: { canvasWidth: 390, canvasHeight: 844 }
   };
 }
 
 export default function CmsPreviewPage() {
   const location = useLocation();
-  const { lang } = useT();
+  const { lang, t } = useT();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -83,7 +83,7 @@ export default function CmsPreviewPage() {
           const token = readJson(ADMIN_KEYS.token, null);
           if (!token) {
             if (!alive) return;
-            setData(sampleCert());
+            setData(sampleCert(t));
             return;
           }
           const api = createAdminApi({ token });
@@ -91,19 +91,19 @@ export default function CmsPreviewPage() {
           const latestEpc = res?.data?.data?.items?.[0]?.epcCode ? String(res.data.data.items[0].epcCode) : '';
           if (!latestEpc) {
             if (!alive) return;
-            setData(sampleCert());
+            setData(sampleCert(t));
             return;
           }
           const base = getPublicApiBaseUrl();
           const url = `${base}/resolve?${new URLSearchParams({ epc: latestEpc, ...(lang ? { lang } : {}) }).toString()}`;
           const out = await fetch(url).then((r) => r.json());
-          if (!out?.success) throw new Error(out?.message || 'Failed to load');
+          if (!out?.success) throw new Error(out?.message || t('failedToLoad'));
           if (!alive) return;
           setData(out.data || null);
         } catch (e) {
           if (!alive) return;
           setData(null);
-          setError(e?.message || 'Failed to load');
+          setError(e?.message || t('failedToLoad'));
         } finally {
           if (alive) setLoading(false);
         }
@@ -122,13 +122,13 @@ export default function CmsPreviewPage() {
       .then((r) => r.json())
       .then((json) => {
         if (!alive) return;
-        if (!json?.success) throw new Error(json?.message || 'Failed to load');
+        if (!json?.success) throw new Error(json?.message || t('failedToLoad'));
         setData(json.data || null);
       })
       .catch((e) => {
         if (!alive) return;
         setData(null);
-        setError(e?.message || 'Failed to load');
+        setError(e?.message || t('failedToLoad'));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -142,7 +142,7 @@ export default function CmsPreviewPage() {
     return (
       <div className="mx-auto max-w-2xl p-6">
         <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-700">
-          No preview layout found. Go back to the CMS builder and click Preview.
+          {t('noPreviewLayoutFound')}
         </div>
       </div>
     );
@@ -151,7 +151,7 @@ export default function CmsPreviewPage() {
   if (loading) {
     return (
       <div className="mx-auto max-w-2xl p-6">
-        <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-700">Loading...</div>
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-700">{t('loading')}</div>
       </div>
     );
   }
@@ -173,7 +173,7 @@ export default function CmsPreviewPage() {
             style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }}
           >
             <div className="ac-scrollbar-inside">
-              <PublicRenderer layout={storedLayout} data={data || sampleCert()} />
+              <PublicRenderer layout={storedLayout} data={data || sampleCert(t)} />
             </div>
           </div>
         </div>

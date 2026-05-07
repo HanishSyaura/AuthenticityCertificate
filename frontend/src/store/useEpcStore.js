@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import useAdminAuthStore from './useAdminAuthStore';
 import { createAdminApi } from '../utils/adminApi';
+import { tRaw } from '../i18n/tRaw';
 
 function getApi() {
   const { token } = useAdminAuthStore.getState();
@@ -66,7 +67,7 @@ const useEpcStore = create((set, get) => ({
       set({ corpCodes, loading: false });
       return corpCodes;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to load corp codes';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ loading: false, error: msg });
       return [];
     }
@@ -85,7 +86,7 @@ const useEpcStore = create((set, get) => ({
       });
       return data;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to load EPC batches';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ loading: false, error: msg });
       return null;
     }
@@ -106,7 +107,7 @@ const useEpcStore = create((set, get) => ({
       });
       return data;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to load EPC items';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ loading: false, error: msg });
       return null;
     }
@@ -132,7 +133,7 @@ const useEpcStore = create((set, get) => ({
       set({ loading: false, lastGenerated: created });
       return created;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Generate EPC failed';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -148,7 +149,7 @@ const useEpcStore = create((set, get) => ({
       set({ loading: false });
       return true;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Export failed';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ loading: false, error: msg });
       return false;
     }
@@ -168,7 +169,7 @@ const useEpcStore = create((set, get) => ({
       set({ loading: false });
       return true;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Export failed';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ loading: false, error: msg });
       return false;
     }
@@ -184,7 +185,7 @@ const useEpcStore = create((set, get) => ({
       set({ loading: false });
       return true;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Export failed';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ loading: false, error: msg });
       return false;
     }
@@ -201,7 +202,7 @@ const useEpcStore = create((set, get) => ({
       set({ loading: false });
       return res?.data?.data;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Import failed';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -216,7 +217,7 @@ const useEpcStore = create((set, get) => ({
       set({ loading: false });
       return res?.data?.data;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Update failed';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -232,7 +233,7 @@ const useEpcStore = create((set, get) => ({
       set({ loading: false, batches });
       return true;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Delete failed';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ loading: false, error: msg });
       return false;
     }
@@ -246,7 +247,7 @@ const useEpcStore = create((set, get) => ({
       set({ loading: false });
       return res?.data?.data;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Recalculate failed';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ loading: false, error: msg });
       return null;
     }
@@ -260,7 +261,7 @@ const useEpcStore = create((set, get) => ({
       set({ loading: false, batches: [], batchTotal: 0, items: [], itemTotal: 0, lastGenerated: null });
       return res?.data?.data;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Delete all failed';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ loading: false, error: msg });
       return null;
     }
@@ -277,7 +278,7 @@ const useEpcStore = create((set, get) => ({
       set({ loading: false, batches });
       return updated;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Update failed';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -296,7 +297,7 @@ const useEpcStore = create((set, get) => ({
       set({ loading: false });
       return res?.data?.data;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Import failed';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ loading: false, error: msg });
       throw e;
     }

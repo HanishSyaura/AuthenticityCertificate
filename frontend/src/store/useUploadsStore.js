@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import useAdminAuthStore from './useAdminAuthStore';
 import { createAdminApi } from '../utils/adminApi';
 import { isFileTooLarge, MAX_UPLOAD_MB } from '../utils/uploadLimits';
+import { tRaw } from '../i18n/tRaw';
 
 function getApi() {
   const { token } = useAdminAuthStore.getState();
@@ -11,7 +12,7 @@ function getApi() {
 const useUploadsStore = create(() => ({
   uploadMedia: async ({ file }) => {
     if (isFileTooLarge(file)) {
-      throw new Error(`File too large. Maximum file size is ${MAX_UPLOAD_MB}MB.`);
+      throw new Error(tRaw('fileTooLargeMaxMb', { mb: MAX_UPLOAD_MB }));
     }
     const api = getApi();
     const form = new FormData();
@@ -25,7 +26,7 @@ const useUploadsStore = create(() => ({
     } catch (e) {
       const status = e?.response?.status;
       if (status === 413) {
-        throw new Error(`File too large. Maximum file size is ${MAX_UPLOAD_MB}MB.`);
+        throw new Error(tRaw('fileTooLargeMaxMb', { mb: MAX_UPLOAD_MB }));
       }
       throw e;
     }

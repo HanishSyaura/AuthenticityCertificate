@@ -6,6 +6,8 @@ import useAdminAuthStore from '../../store/useAdminAuthStore';
 import { createAdminApi } from '../../utils/adminApi';
 import { useT } from '../../i18n/useT';
 import { stripHtmlToText } from '../../utils/richText';
+import useTourStore from '../../store/useTourStore';
+import { getProductLinksTourSteps } from '../../tour/productLinksTour';
 
 function formatDate(input) {
   if (!input) return '';
@@ -18,6 +20,7 @@ export default function AdminRecordDetail() {
   const { t } = useT();
   const navigate = useNavigate();
   const { id } = useParams();
+  const { openTour } = useTourStore((s) => ({ openTour: s.openTour }));
 
   const { products, categories, loading, error, lastSyncAt, fetchProducts, fetchCategories, updateProduct } = useRecordsStore((s) => ({
     products: s.products,
@@ -113,6 +116,15 @@ export default function AdminRecordDetail() {
             {lastSyncAt ? <span>{t('lastUpdated', { value: formatDate(lastSyncAt) })}</span> : null}
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+            onClick={() => openTour({ steps: getProductLinksTourSteps(), storageKey: 'ac_seen_product_links_tour_v1' })}
+          >
+            Guide
+          </button>
+        </div>
       </div>
 
       {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
@@ -177,12 +189,12 @@ export default function AdminRecordDetail() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-zinc-200 bg-white p-4">
+        <div className="rounded-xl border border-zinc-200 bg-white p-4" data-tour="record-detail-links-card">
           <div className="mb-3 text-xs font-semibold text-zinc-600">{t('links')}</div>
           <div className="space-y-3">
             <div>
               <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('certTemplate')}</div>
-              <select value={certificateTemplateId} onChange={(e) => setCertificateTemplateId(e.target.value)} className="ac-input">
+              <select value={certificateTemplateId} onChange={(e) => setCertificateTemplateId(e.target.value)} className="ac-input" data-tour="record-detail-cert-template">
                 <option value="">{t('none')}</option>
                 {(Array.isArray(templates) ? templates : []).map((tpl) => (
                   <option key={tpl.id} value={String(tpl.id)}>
@@ -190,14 +202,19 @@ export default function AdminRecordDetail() {
                   </option>
                 ))}
               </select>
-              <button type="button" className="mt-2 text-[11px] font-semibold underline" onClick={() => navigate('/admin/certificates')}>
+              <button
+                type="button"
+                className="mt-2 text-[11px] font-semibold underline"
+                onClick={() => navigate('/admin/certificates')}
+                data-tour="record-detail-open-certificates"
+              >
                 {t('openModule')}
               </button>
             </div>
 
             <div>
               <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('cmsLanding')}</div>
-              <select value={cmsPageId} onChange={(e) => setCmsPageId(e.target.value)} className="ac-input">
+              <select value={cmsPageId} onChange={(e) => setCmsPageId(e.target.value)} className="ac-input" data-tour="record-detail-cms-landing">
                 <option value="">{t('none')}</option>
                 {landingPages.map((p) => (
                   <option key={p.id} value={String(p.id)}>
@@ -205,7 +222,12 @@ export default function AdminRecordDetail() {
                   </option>
                 ))}
               </select>
-              <button type="button" className="mt-2 text-[11px] font-semibold underline" onClick={() => navigate('/admin/cms')}>
+              <button
+                type="button"
+                className="mt-2 text-[11px] font-semibold underline"
+                onClick={() => navigate('/admin/cms')}
+                data-tour="record-detail-open-cms"
+              >
                 {t('openModule')}
               </button>
             </div>
@@ -231,6 +253,7 @@ export default function AdminRecordDetail() {
                     }
                   });
                 }}
+                data-tour="record-detail-save"
               >
                 {t('save')}
               </button>

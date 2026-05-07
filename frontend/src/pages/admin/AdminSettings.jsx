@@ -129,7 +129,7 @@ export default function AdminSettings() {
         setSettingsResponse({ organization: org || null, settings: settings || null });
       } catch (e) {
         if (!mounted) return;
-        const msg = e?.response?.data?.message || e?.message || 'Failed to load settings';
+        const msg = e?.response?.data?.message || e?.message || t('failedToLoadSettings');
         setLoadError(String(msg));
       } finally {
         if (mounted) setLoading(false);
@@ -143,30 +143,30 @@ export default function AdminSettings() {
 
   function validateProfile(draft) {
     const errs = {};
-    if (!String(draft.name || '').trim()) errs.name = 'Name is required';
+    if (!String(draft.name || '').trim()) errs.name = t('nameRequired');
     if (canEditEmail) {
-      if (!String(draft.email || '').trim()) errs.email = 'Email is required';
-      else if (!isValidEmail(draft.email)) errs.email = 'Invalid email address';
+      if (!String(draft.email || '').trim()) errs.email = t('emailRequired');
+      else if (!isValidEmail(draft.email)) errs.email = t('invalidEmailAddress');
     }
 
     const np = String(draft.newPassword || '');
     const cp = String(draft.confirmNewPassword || '');
     if (np.trim()) {
-      if (np.length < 8) errs.newPassword = 'Password must be at least 8 characters';
-      if (!String(draft.currentPassword || '').trim()) errs.currentPassword = 'Current password is required';
-      if (cp !== np) errs.confirmNewPassword = 'Passwords do not match';
+      if (np.length < 8) errs.newPassword = t('passwordMinLength', { min: 8 });
+      if (!String(draft.currentPassword || '').trim()) errs.currentPassword = t('currentPasswordRequired');
+      if (cp !== np) errs.confirmNewPassword = t('passwordsDoNotMatch');
     }
     return errs;
   }
 
   function validateSystem(draft) {
     const errs = {};
-    if (!String(draft.organizationName || '').trim()) errs.organizationName = 'Organization name is required';
+    if (!String(draft.organizationName || '').trim()) errs.organizationName = t('organizationNameRequired');
     const code = String(draft.organizationCode || '').trim();
-    if (!code) errs.organizationCode = 'Organization code is required';
-    else if (!/^[A-Z0-9_-]+$/.test(code.toUpperCase())) errs.organizationCode = 'Use A-Z, 0-9, underscore, or hyphen';
-    if (!String(draft.defaultLocale || '').trim()) errs.defaultLocale = 'Locale is required';
-    if (!String(draft.defaultTimezone || '').trim()) errs.defaultTimezone = 'Timezone is required';
+    if (!code) errs.organizationCode = t('organizationCodeRequired');
+    else if (!/^[A-Z0-9_-]+$/.test(code.toUpperCase())) errs.organizationCode = t('organizationCodeFormat');
+    if (!String(draft.defaultLocale || '').trim()) errs.defaultLocale = t('localeRequired');
+    if (!String(draft.defaultTimezone || '').trim()) errs.defaultTimezone = t('timezoneRequired');
     return errs;
   }
 
@@ -193,7 +193,7 @@ export default function AdminSettings() {
     setLogoUploading(true);
     try {
       if (isFileTooLarge(file)) {
-        throw new Error(`File too large. Maximum file size is ${MAX_UPLOAD_MB}MB.`);
+        throw new Error(t('fileTooLargeMaxMb', { mb: MAX_UPLOAD_MB }));
       }
       const api = createAdminApi({ token });
       const form = new FormData();
@@ -204,10 +204,10 @@ export default function AdminSettings() {
       });
       const created = res?.data?.data;
       const url = created?.url ? String(created.url) : '';
-      if (!url) throw new Error('Upload response invalid');
+      if (!url) throw new Error(t('uploadResponseInvalid'));
       setSystemDraft((d) => ({ ...d, logoUrl: url }));
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Logo upload failed';
+      const msg = e?.response?.data?.message || e?.message || t('logoUploadFailed');
       setLogoUploadError(String(msg));
     } finally {
       setLogoUploading(false);
@@ -249,9 +249,9 @@ export default function AdminSettings() {
         confirmNewPassword: ''
       }));
       setProfileErrors({});
-      setProfileNotice({ kind: 'success', text: 'Profile updated' });
+      setProfileNotice({ kind: 'success', text: t('profileUpdated') });
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to update profile';
+      const msg = e?.response?.data?.message || e?.message || t('failedToUpdateProfile');
       setProfileNotice({ kind: 'error', text: String(msg) });
     } finally {
       setProfileSaving(false);
@@ -287,11 +287,11 @@ export default function AdminSettings() {
       setSystemInitial(next);
       setSystemDraft(next);
       setSystemErrors({});
-      setSystemNotice({ kind: 'success', text: 'System settings updated' });
+      setSystemNotice({ kind: 'success', text: t('systemSettingsUpdated') });
       setLogoUploadError('');
       setSettingsResponse({ organization: org || null, settings: settings || null });
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to update system settings';
+      const msg = e?.response?.data?.message || e?.message || t('failedToUpdateSystemSettings');
       setSystemNotice({ kind: 'error', text: String(msg) });
     } finally {
       setSystemSaving(false);
@@ -317,7 +317,7 @@ export default function AdminSettings() {
     return (
       <div className="p-4 sm:p-6 lg:p-8">
         <div className="mb-2 text-base font-semibold text-zinc-900">{t('settings')}</div>
-        <div className="text-sm text-zinc-600">{t('systemSettingsHint')}</div>
+        <div className="text-sm text-zinc-600">{t('settingsHint')}</div>
         <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{loadError}</div>
       </div>
     );
@@ -326,7 +326,7 @@ export default function AdminSettings() {
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="mb-2 text-base font-semibold text-zinc-900">{t('settings')}</div>
-      <div className="text-sm text-zinc-600">Manage your profile and system settings.</div>
+      <div className="text-sm text-zinc-600">{t('settingsHint')}</div>
 
       <div className="mt-6">
         <ProfileSettingsCard

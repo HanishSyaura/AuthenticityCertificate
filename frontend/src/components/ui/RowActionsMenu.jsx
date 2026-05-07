@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useT } from '../../i18n/useT';
 
 function clamp(n, min, max) {
   if (max < min) return min;
@@ -7,6 +8,7 @@ function clamp(n, min, max) {
 }
 
 export default function RowActionsMenu({ items, ariaLabel }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0 });
   const rootRef = useRef(null);
@@ -79,7 +81,7 @@ export default function RowActionsMenu({ items, ariaLabel }) {
       <button
         type="button"
         className="rounded-lg border border-zinc-200 bg-white px-2.5 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-        aria-label={ariaLabel || 'Actions'}
+        aria-label={ariaLabel || t('actions')}
         onClick={() => setOpen((v) => !v)}
       >
         ⋯

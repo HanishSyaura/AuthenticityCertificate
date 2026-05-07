@@ -21,6 +21,8 @@ const useTourStore = create((set, get) => ({
   stepIndex: 0,
   steps: [],
   storageKey: null,
+  navigator: null,
+  setNavigator: (navigator) => set({ navigator: typeof navigator === 'function' ? navigator : null }),
   openTour: ({ steps, storageKey }) => {
     set({
       isOpen: true,

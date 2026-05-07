@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import useAdminAuthStore from './useAdminAuthStore';
 import { createAdminApi } from '../utils/adminApi';
+import { tRaw } from '../i18n/tRaw';
 
 function getApi() {
   const { token } = useAdminAuthStore.getState();
@@ -25,7 +26,7 @@ const useCertTemplatesStore = create((set, get) => ({
       set({ templates, loading: false, lastSyncAt: Date.now() });
       return templates;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to load templates';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ templates: [], loading: false, error: msg });
       return [];
     }
@@ -44,7 +45,7 @@ const useCertTemplatesStore = create((set, get) => ({
       set({ templates, lastSyncAt: Date.now() });
       return tpl;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to load template';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ error: msg });
       throw e;
     }
@@ -70,7 +71,7 @@ const useCertTemplatesStore = create((set, get) => ({
       set({ templates, loading: false, lastSyncAt: Date.now() });
       return created;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to create template';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -101,7 +102,7 @@ const useCertTemplatesStore = create((set, get) => ({
       }
       return null;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to update template';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       const isLatest = (get().saveSeqById?.[key] || 0) === seq;
       set((s) => ({
         error: msg,
@@ -125,7 +126,7 @@ const useCertTemplatesStore = create((set, get) => ({
       set({ templates, lastSyncAt: Date.now() });
       return updated;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to fill translation';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ error: msg });
       throw e;
     }
@@ -139,7 +140,7 @@ const useCertTemplatesStore = create((set, get) => ({
       const templates = get().templates.filter((t) => String(t.id) !== String(id));
       set({ templates, loading: false, lastSyncAt: Date.now() });
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to delete template';
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ loading: false, error: msg });
       throw e;
     }

@@ -47,6 +47,20 @@ function sampleCert(id = 'CERTIFICATE_ID') {
   };
 }
 
+function getSupportingTemplateIdsFromLayout(layout) {
+  const ids = [];
+  const arr = Array.isArray(layout) ? layout : [];
+  for (const b of arr) {
+    if (!b || b.type !== 'certificate') continue;
+    const variant = String(b?.content?.variant || 'auth');
+    if (variant !== 'supporting') continue;
+    const rawId = b?.content?.certificateTemplateId;
+    const id = rawId == null ? NaN : Number(rawId);
+    if (Number.isFinite(id) && id > 0) ids.push(id);
+  }
+  return Array.from(new Set(ids));
+}
+
 const DEVICE_PRESETS = [
   { id: 'fit', label: 'Fit', kind: 'scale' },
   { id: 'scale-1-2', label: '1:2', kind: 'scale', scale: 0.5 },
@@ -133,6 +147,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
   const { t } = useT();
   const safeLayout = useMemo(() => (Array.isArray(layout) ? layout.filter((b) => b && typeof b === 'object') : []), [layout]);
   const layoutRef = useRef(safeLayout);
+  const supportingTplCacheRef = useRef(new Map());
 
   const [previewEpc, setPreviewEpc] = useState('');
   const [previewData, setPreviewData] = useState(null);
@@ -193,7 +208,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
         setPreviewData(out?.data?.data || null);
       } catch (e) {
         if (!alive) return;
-        const msg = e?.response?.data?.message || e?.message || 'Failed to load certificate';
+        const msg = e?.response?.data?.message || e?.message || t('failedToLoadCertificate');
         setPreviewData(null);
         setPreviewError(msg);
       } finally {
@@ -205,6 +220,51 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
       alive = false;
     };
   }, [token, viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== 'preview' && viewMode !== 'split') return;
+    if (!token) return;
+    const ids = getSupportingTemplateIdsFromLayout(effectivePreviewLayout);
+    if (!ids.length) return;
+    let alive = true;
+    const run = async () => {
+      try {
+        const api = createAdminApi({ token });
+        const cache = supportingTplCacheRef.current;
+        const missing = ids.filter((id) => !cache.has(id));
+        if (missing.length) {
+          const results = await Promise.allSettled(missing.map((id) => api.get(`/templates/${id}`)));
+          for (let i = 0; i < results.length; i += 1) {
+            const r = results[i];
+            const id = missing[i];
+            if (r.status === 'fulfilled') {
+              const tpl = r.value?.data?.data || null;
+              if (tpl) cache.set(id, tpl);
+            }
+          }
+        }
+        if (!alive) return;
+        const fetched = ids.map((id) => cache.get(id)).filter(Boolean);
+        if (!fetched.length) return;
+        setPreviewData((prev) => {
+          if (!prev) return prev;
+          const existing = Array.isArray(prev?.supportingTemplates) ? prev.supportingTemplates : [];
+          const byId = new Map(existing.map((t) => [Number(t?.id), t]));
+          for (const tpl of fetched) {
+            const tid = Number(tpl?.id);
+            if (Number.isFinite(tid) && tid > 0) byId.set(tid, tpl);
+          }
+          return { ...prev, supportingTemplates: Array.from(byId.values()) };
+        });
+      } catch (e) {
+        void e;
+      }
+    };
+    run();
+    return () => {
+      alive = false;
+    };
+  }, [effectivePreviewLayout, token, viewMode]);
 
   useEffect(() => {
     layoutRef.current = safeLayout;
@@ -280,7 +340,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
         if (it.type === 'video') {
           return (
             <div className="h-full w-full p-2">
-              <div className="text-xs font-semibold text-zinc-800">Video</div>
+              <div className="text-xs font-semibold text-zinc-800">{t('video')}</div>
               <div className="mt-1 text-xs text-zinc-600 break-all">{it.content?.url || t('url')}</div>
             </div>
           );
@@ -299,7 +359,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
           );
         }
         return (
-          <div className="flex h-full w-full items-center justify-center text-xs text-zinc-600">Unknown</div>
+          <div className="flex h-full w-full items-center justify-center text-xs text-zinc-600">{t('unknown')}</div>
         );
       }
     }));
@@ -315,14 +375,14 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
 
         <div className="flex flex-wrap items-center gap-2">
           <select value={devicePresetId} onChange={(e) => setDevicePresetId(e.target.value)} className="ac-input w-36 rounded-lg px-3 py-2 text-xs font-semibold">
-            <optgroup label="Scale">
+            <optgroup label={t('scaleGroup')}>
               {DEVICE_PRESETS.filter((d) => d.kind === 'scale').map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.label}
                 </option>
               ))}
             </optgroup>
-            <optgroup label="Phone">
+            <optgroup label={t('phoneGroup')}>
               {DEVICE_PRESETS.filter((d) => d.kind === 'phone').map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.label}

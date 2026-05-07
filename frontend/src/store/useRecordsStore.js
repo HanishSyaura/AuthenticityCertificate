@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import useAdminAuthStore from './useAdminAuthStore';
 import { createAdminApi } from '../utils/adminApi';
+import { tRaw } from '../i18n/tRaw';
 
 function getApi() {
   const { token } = useAdminAuthStore.getState();
@@ -27,7 +28,7 @@ const useRecordsStore = create((set, get) => ({
       set({ products, loading: false, lastSyncAt: Date.now() });
       return products;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to load products';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToLoadProducts');
       set({ loading: false, error: msg });
       return [];
     }
@@ -42,7 +43,7 @@ const useRecordsStore = create((set, get) => ({
       set({ categories, loading: false, lastSyncAt: Date.now() });
       return categories;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to load categories';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToLoadCategories');
       set({ loading: false, error: msg });
       return [];
     }
@@ -58,7 +59,7 @@ const useRecordsStore = create((set, get) => ({
       set({ categories, loading: false, lastSyncAt: Date.now() });
       return created;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to create category';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToCreateCategory');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -74,7 +75,7 @@ const useRecordsStore = create((set, get) => ({
       set({ categories, loading: false, lastSyncAt: Date.now() });
       return updated;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to update category';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToUpdateCategory');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -90,7 +91,7 @@ const useRecordsStore = create((set, get) => ({
       set({ products, loading: false, lastSyncAt: Date.now() });
       return created;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to create product';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToCreateProduct');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -110,7 +111,7 @@ const useRecordsStore = create((set, get) => ({
       });
       return batches;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to load batches';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToLoadBatches');
       set({ loading: false, error: msg });
       return [];
     }
@@ -131,7 +132,7 @@ const useRecordsStore = create((set, get) => ({
       });
       return created;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to create batch';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToCreateBatch');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -150,7 +151,7 @@ const useRecordsStore = create((set, get) => ({
       set({ loading: false, lastSyncAt: Date.now() });
       return res?.data?.data;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to generate certificates';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToGenerateCertificates');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -166,7 +167,7 @@ const useRecordsStore = create((set, get) => ({
       set({ products, loading: false, lastSyncAt: Date.now() });
       return updated;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to update product';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToUpdateProduct');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -182,7 +183,7 @@ const useRecordsStore = create((set, get) => ({
       set({ products, loading: false, lastSyncAt: Date.now() });
       return updated;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to deactivate product';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToDeactivateProduct');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -198,7 +199,7 @@ const useRecordsStore = create((set, get) => ({
       set({ products, loading: false, lastSyncAt: Date.now() });
       return updated;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to activate product';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToActivateProduct');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -213,7 +214,7 @@ const useRecordsStore = create((set, get) => ({
       set({ products, loading: false, lastSyncAt: Date.now() });
       return true;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to delete product';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToDeleteProduct');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -234,7 +235,7 @@ const useRecordsStore = create((set, get) => ({
       set({ products, loading: false, lastSyncAt: Date.now() });
       return result;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to delete products';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToDeleteProducts');
       set({ loading: false, error: msg });
       throw e;
     }

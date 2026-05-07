@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import useAdminAuthStore from './useAdminAuthStore';
 import { createAdminApi } from '../utils/adminApi';
+import { tRaw } from '../i18n/tRaw';
 
 function getApi() {
   const { token } = useAdminAuthStore.getState();
@@ -33,7 +34,7 @@ const useAdminSettingsStore = create((set) => ({
       set({ organization, settings, loading: false, lastSyncAt: Date.now() });
       return { organization, settings };
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to load settings';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToLoadSettings');
       set({ loading: false, error: msg });
       return null;
     }
@@ -41,4 +42,3 @@ const useAdminSettingsStore = create((set) => ({
 }));
 
 export default useAdminSettingsStore;
-

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import useAdminAuthStore from './useAdminAuthStore';
 import { createAdminApi } from '../utils/adminApi';
+import { tRaw } from '../i18n/tRaw';
 
 function getApi() {
   const { token } = useAdminAuthStore.getState();
@@ -23,7 +24,7 @@ const useAccessStore = create((set, get) => ({
       set({ permissions, loading: false, lastSyncAt: Date.now() });
       return permissions;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to load permissions';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToLoadPermissions');
       set({ loading: false, error: msg });
       return [];
     }
@@ -38,7 +39,7 @@ const useAccessStore = create((set, get) => ({
       set({ roles, loading: false, lastSyncAt: Date.now() });
       return roles;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to load roles';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToLoadRoles');
       set({ loading: false, error: msg });
       return [];
     }
@@ -54,7 +55,7 @@ const useAccessStore = create((set, get) => ({
       set({ roles, loading: false, lastSyncAt: Date.now() });
       return created;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to create role';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToCreateRole');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -71,7 +72,7 @@ const useAccessStore = create((set, get) => ({
       await useAdminAuthStore.getState().fetchMe();
       return payload;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to update permissions';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToUpdatePermissions');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -86,7 +87,7 @@ const useAccessStore = create((set, get) => ({
       set({ roles, loading: false, lastSyncAt: Date.now() });
       return true;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to delete role';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToDeleteRole');
       set({ loading: false, error: msg });
       throw e;
     }
@@ -101,7 +102,7 @@ const useAccessStore = create((set, get) => ({
       await useAdminAuthStore.getState().fetchMe();
       return res?.data?.data;
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Failed to update user roles';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToUpdateUserRoles');
       set({ loading: false, error: msg });
       throw e;
     }

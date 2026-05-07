@@ -190,7 +190,7 @@ export default function ImageCropModal({ open, file, onClose, onConfirm, onUseOr
       const out = new File([blob], nextName, { type: blob.type || mime, lastModified: Date.now() });
       await onConfirm?.(out);
     } catch (err) {
-      setError(err?.message || 'Crop failed');
+      setError(String(err?.message || t('cropFailed')));
     } finally {
       setBusy(false);
     }
@@ -334,7 +334,7 @@ export default function ImageCropModal({ open, file, onClose, onConfirm, onUseOr
                   try {
                     await onUseOriginal?.(file);
                   } catch (err) {
-                    setError(err?.message || 'Upload failed');
+                    setError(String(err?.message || t('uploadFailed')));
                   } finally {
                     setBusy(false);
                   }

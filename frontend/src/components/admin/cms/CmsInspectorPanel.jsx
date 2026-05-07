@@ -97,7 +97,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
         setFileKey((k) => k + 1);
         return created;
       } catch (err) {
-        const msg = err?.response?.data?.message || err?.message || 'Upload failed';
+        const msg = err?.response?.data?.message || err?.message || t('uploadFailed');
         setUploadError(msg);
         throw new Error(msg);
       } finally {
@@ -118,7 +118,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{t('translateOnlyHint')}</div>
           ) : null}
           <div className="rounded-lg border border-zinc-200 bg-white p-3">
-            <div className="text-xs font-semibold text-zinc-700">Block</div>
+            <div className="text-xs font-semibold text-zinc-700">{t('block')}</div>
             <div className="mt-1 text-sm font-semibold text-zinc-900">{selectedBlock.type}</div>
             <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
               <div className="rounded bg-zinc-50 p-2">x: {selectedBlock.x}</div>
@@ -396,6 +396,9 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
                 className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 placeholder="https://..."
               />
+              {selectedBlock.type === 'video' ? (
+                <div className="mt-1 text-[11px] text-zinc-500">YouTube/Vimeo link akan auto-embed. Untuk HTML5 video, guna URL fail .mp4/.webm atau upload file.</div>
+              ) : null}
               {selectedBlock.type === 'image' ? (
                 <div className="mt-2">
                   <label className="block text-xs font-medium text-zinc-700">{t('imageMode')}</label>
@@ -421,7 +424,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
                     if (!file) return;
                     setFileKey((k) => k + 1);
                     if (isFileTooLarge(file)) {
-                      setUploadError(`File too large. Maximum file size is ${MAX_UPLOAD_MB}MB.`);
+                      setUploadError(t('fileTooLargeMaxMb', { mb: MAX_UPLOAD_MB }));
                       return;
                     }
                     if (selectedBlock.type === 'image') {
@@ -434,7 +437,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
                   }}
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
-                <div className="mt-1 text-[11px] text-zinc-500">Max file size: {MAX_UPLOAD_MB}MB</div>
+                <div className="mt-1 text-[11px] text-zinc-500">{t('maxFileSize', { mb: MAX_UPLOAD_MB })}</div>
                 {uploadError ? <div className="mt-2 text-xs text-rose-700">{uploadError}</div> : null}
                 {selectedBlock.type === 'image' && String(selectedBlock.content?.url || '').trim() ? (
                   <button
@@ -448,7 +451,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
                       try {
                         const abs = new URL(rawUrl, window.location.origin).toString();
                         const res = await fetch(abs, { credentials: 'include' });
-                        if (!res.ok) throw new Error(`Failed to load image (${res.status})`);
+                        if (!res.ok) throw new Error(t('failedToLoadImageWithStatus', { status: res.status }));
                         const blob = await res.blob();
                         const name = decodeURIComponent(abs.split('/').pop() || 'image');
                         const f = new File([blob], name, { type: blob.type || 'image/jpeg', lastModified: Date.now() });
@@ -456,8 +459,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
                         setCropBlockId(selectedBlock.id);
                         setCropOpen(true);
                       } catch (err) {
-                        const msg = err?.message || 'Failed to load image';
-                        setUploadError(msg);
+                        setUploadError(String(err?.message || t('failedToLoadImage')));
                       } finally {
                         setCropLoading(false);
                       }

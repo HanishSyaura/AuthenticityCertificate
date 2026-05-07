@@ -1,3 +1,5 @@
+import { tRaw } from '../i18n/tRaw';
+
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
@@ -10,7 +12,7 @@ async function blobToImage(blob) {
     img.src = url;
     await new Promise((resolve, reject) => {
       img.onload = () => resolve();
-      img.onerror = () => reject(new Error('Failed to load image'));
+      img.onerror = () => reject(new Error(tRaw('failedToLoadImage')));
     });
     return img;
   } finally {
@@ -41,13 +43,13 @@ export async function cropImageToBlob(input, crop, opts) {
   canvas.height = Math.max(1, Math.round(h * scale));
 
   const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas 2D context not available');
+  if (!ctx) throw new Error(tRaw('canvas2dContextUnavailable'));
 
   ctx.drawImage(source, x, y, w, h, 0, 0, canvas.width, canvas.height);
 
   const blob = await new Promise((resolve, reject) => {
     canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new Error('toBlob failed'))),
+      (b) => (b ? resolve(b) : reject(new Error(tRaw('toBlobFailed')))),
       mimeType,
       mimeType === 'image/png' ? undefined : quality
     );
@@ -56,4 +58,3 @@ export async function cropImageToBlob(input, crop, opts) {
   if (useBitmap) source.close();
   return blob;
 }
-

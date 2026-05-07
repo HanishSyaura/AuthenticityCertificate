@@ -194,7 +194,7 @@ export default function AdminCertificateList() {
                       if (created?.url) setNewBackground(created.url);
                       setNewBgFileKey((k) => k + 1);
                     } catch (err) {
-                      const msg = err?.response?.data?.message || err?.message || 'Upload failed';
+                      const msg = err?.response?.data?.message || err?.message || t('uploadFailed');
                       setNewBgError(msg);
                     } finally {
                       setNewBgUploading(false);
@@ -202,7 +202,7 @@ export default function AdminCertificateList() {
                   }}
                   className="mt-2 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
-                <div className="mt-1 text-[11px] text-zinc-500">Max file size: {MAX_UPLOAD_MB}MB</div>
+                <div className="mt-1 text-[11px] text-zinc-500">{t('maxFileSize', { mb: MAX_UPLOAD_MB })}</div>
                 {newBgError ? <div className="mt-2 text-xs text-rose-700">{newBgError}</div> : null}
               </div>
             </div>

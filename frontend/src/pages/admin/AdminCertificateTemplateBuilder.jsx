@@ -1190,7 +1190,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                             }}
                             className="text-xs"
                           />
-                          <div className="text-[11px] text-zinc-500">Max file size: {MAX_UPLOAD_MB}MB</div>
+                          <div className="text-[11px] text-zinc-500">{t('maxFileSize', { mb: MAX_UPLOAD_MB })}</div>
                           {bgUploading ? <div className="text-xs font-semibold text-zinc-500">{t('saving')}</div> : null}
                         </div>
                         {bgError ? <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">{bgError}</div> : null}
@@ -1310,9 +1310,9 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   <div className="text-xs font-semibold text-zinc-500">{t('certificateId')}</div>
                   <div className="text-sm font-semibold text-zinc-900">{String(selected?.certificateId || '').trim() || `#${selected.id}`}</div>
                   {String(selected?.name || '').trim() ? <div className="mt-0.5 text-[11px] text-zinc-500">{selected.name}</div> : null}
-                  {saveStatus === 'saving' ? <div className="mt-0.5 text-[11px] font-semibold text-zinc-500">Saving…</div> : null}
-                  {saveStatus === 'saved' ? <div className="mt-0.5 text-[11px] font-semibold text-emerald-700">Saved</div> : null}
-                  {saveStatus === 'error' ? <div className="mt-0.5 text-[11px] font-semibold text-rose-700">Save failed</div> : null}
+                  {saveStatus === 'saving' ? <div className="mt-0.5 text-[11px] font-semibold text-zinc-500">{t('saving')}</div> : null}
+                  {saveStatus === 'saved' ? <div className="mt-0.5 text-[11px] font-semibold text-emerald-700">{t('saved')}</div> : null}
+                  {saveStatus === 'error' ? <div className="mt-0.5 text-[11px] font-semibold text-rose-700">{t('saveFailed')}</div> : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="flex items-center gap-2">
@@ -1368,14 +1368,14 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   {wizardStep === 'canvas' ? (
                     <>
                       <select value={devicePresetId} onChange={(e) => setDevicePresetId(e.target.value)} className="ac-input w-36 rounded-lg px-3 py-2 text-xs font-semibold">
-                        <optgroup label="Scale">
+                        <optgroup label={t('scaleGroup')}>
                           {DEVICE_PRESETS.filter((d) => d.kind === 'scale').map((d) => (
                             <option key={d.id} value={d.id}>
                               {d.label}
                             </option>
                           ))}
                         </optgroup>
-                        <optgroup label="Phone">
+                        <optgroup label={t('phoneGroup')}>
                           {DEVICE_PRESETS.filter((d) => d.kind === 'phone').map((d) => (
                             <option key={d.id} value={d.id}>
                               {d.label}
@@ -1770,7 +1770,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                       if (created?.url) await updateSelected({ background: created.url });
                       setBgFileKey((k) => k + 1);
                     } catch (err) {
-                      const msg = err?.response?.data?.message || err?.message || 'Upload failed';
+                      const msg = err?.response?.data?.message || err?.message || t('uploadFailed');
                       setBgError(msg);
                     } finally {
                       setBgUploading(false);

@@ -5,6 +5,8 @@ import { useT } from '../../i18n/useT';
 import { stripHtmlToText } from '../../utils/richText';
 import DataTable from '../../components/ui/DataTable';
 import RowActionsMenu from '../../components/ui/RowActionsMenu';
+import useTourStore from '../../store/useTourStore';
+import { getProductModuleTourSteps } from '../../tour/productModuleTour';
 
 function formatDate(input) {
   if (!input) return '';
@@ -16,6 +18,7 @@ function formatDate(input) {
 export default function AdminRecords() {
   const { t } = useT();
   const navigate = useNavigate();
+  const { openTour } = useTourStore((s) => ({ openTour: s.openTour }));
   const {
     products,
     categories,
@@ -77,6 +80,36 @@ export default function AdminRecords() {
   const [selectedProductIds, setSelectedProductIds] = useState(() => new Set());
   const [bulkNotice, setBulkNotice] = useState(null);
   const headerCheckboxRef = useRef(null);
+
+  useEffect(() => {
+    const onTourAction = (e) => {
+      const a = e?.detail;
+      if (!a || typeof a !== 'object') return;
+      if (a.type === 'records.setTab') {
+        const tab = String(a.tab || '').toLowerCase();
+        if (tab === 'products' || tab === 'categories') setActiveTab(tab);
+        return;
+      }
+      if (a.type === 'records.openCreateCategory') {
+        setShowCreateCategory(true);
+        return;
+      }
+      if (a.type === 'records.openCreateProduct') {
+        setShowCreate(true);
+        return;
+      }
+      if (a.type === 'records.closeModals') {
+        setShowCreate(false);
+        setShowEdit(false);
+        setShowCreateCategory(false);
+        setShowEditCategory(false);
+        setEditing(null);
+        setEditingCategory(null);
+      }
+    };
+    window.addEventListener('ac_tour_action', onTourAction);
+    return () => window.removeEventListener('ac_tour_action', onTourAction);
+  }, []);
 
   useEffect(() => {
     void fetchProducts();
@@ -196,12 +229,19 @@ export default function AdminRecords() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="ac-btn ac-btn-soft px-3 py-2"
+            onClick={() => openTour({ steps: getProductModuleTourSteps(), storageKey: 'ac_seen_product_module_tour_v1' })}
+          >
+            Guide
+          </button>
           {activeTab === 'categories' ? (
-            <button type="button" className="ac-btn px-3 py-2" onClick={() => setShowCreateCategory(true)}>
+            <button type="button" className="ac-btn px-3 py-2" data-tour="records-add-category" onClick={() => setShowCreateCategory(true)}>
               {t('addCategory')}
             </button>
           ) : (
-            <button type="button" className="ac-btn px-3 py-2" onClick={() => setShowCreate(true)}>
+            <button type="button" className="ac-btn px-3 py-2" data-tour="records-create-product" onClick={() => setShowCreate(true)}>
               {t('createProduct')}
             </button>
           )}
@@ -210,11 +250,12 @@ export default function AdminRecords() {
 
       <div className="mb-4 flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="inline-flex rounded-xl border border-zinc-200 bg-white p-1">
+          <div className="inline-flex rounded-xl border border-zinc-200 bg-white p-1" data-tour="records-tabs">
             <button
               type="button"
               className={activeTab === 'products' ? 'rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white' : 'rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50'}
               onClick={() => setActiveTab('products')}
+              data-tour="records-tab-products"
             >
               {t('productsTab')}
             </button>
@@ -222,6 +263,7 @@ export default function AdminRecords() {
               type="button"
               className={activeTab === 'categories' ? 'rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white' : 'rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50'}
               onClick={() => setActiveTab('categories')}
+              data-tour="records-tab-categories"
             >
               {t('categoriesTab')}
             </button>
@@ -255,9 +297,9 @@ export default function AdminRecords() {
         </div>
 
         {activeTab === 'products' ? (
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('searchProducts')} className="ac-input" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('searchProducts')} className="ac-input" data-tour="records-search-products" />
         ) : (
-          <input value={categoryQuery} onChange={(e) => setCategoryQuery(e.target.value)} placeholder={t('searchCategories')} className="ac-input" />
+          <input value={categoryQuery} onChange={(e) => setCategoryQuery(e.target.value)} placeholder={t('searchCategories')} className="ac-input" data-tour="records-search-categories" />
         )}
       </div>
 
@@ -564,7 +606,7 @@ export default function AdminRecords() {
 
       {showCreate ? (
         <div className="ac-modal-backdrop">
-          <div className="ac-modal">
+          <div className="ac-modal" data-tour="records-product-modal">
             <div className="mb-4 text-sm font-semibold text-zinc-900">{t('createProduct')}</div>
             <div className="space-y-3">
               <div>
@@ -573,6 +615,7 @@ export default function AdminRecords() {
                   value={sku}
                   onChange={(e) => setSku(e.target.value)}
                   className="ac-input font-mono"
+                  data-tour="records-product-sku"
                 />
               </div>
               <div>
@@ -581,6 +624,7 @@ export default function AdminRecords() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="ac-input"
+                  data-tour="records-product-name"
                 />
               </div>
               <div>
@@ -589,11 +633,12 @@ export default function AdminRecords() {
                   value={productCode}
                   onChange={(e) => setProductCode(e.target.value)}
                   className="ac-input font-mono"
+                  data-tour="records-product-code"
                 />
               </div>
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('category')}</div>
-                <select value={category} onChange={(e) => setCategory(e.target.value)} className="ac-input">
+                <select value={category} onChange={(e) => setCategory(e.target.value)} className="ac-input" data-tour="records-product-category">
                   <option value="">{t('selectCategory')}</option>
                   {(Array.isArray(categories) ? categories : [])
                     .filter((c) => Boolean(c?.code) && (c?.isActive !== false || String(c.code) === String(category)))
@@ -606,7 +651,7 @@ export default function AdminRecords() {
               </div>
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('status')}</div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4" data-tour="records-product-status">
                   <label className="flex items-center gap-2 text-xs text-zinc-700">
                     <input type="radio" name="productStatusCreate" value="active" checked={status === 'active'} onChange={() => setStatus('active')} />
                     {t('active')}
@@ -625,7 +670,7 @@ export default function AdminRecords() {
               </div>
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
-                <textarea value={remark} onChange={(e) => setRemark(e.target.value)} className="ac-input h-24 resize-none" />
+                <textarea value={remark} onChange={(e) => setRemark(e.target.value)} className="ac-input h-24 resize-none" data-tour="records-product-remark" />
               </div>
             </div>
             <div className="mt-5 flex justify-end gap-2">
@@ -641,6 +686,7 @@ export default function AdminRecords() {
                   setStatus('active');
                   setRemark('');
                 }}
+                data-tour="records-product-cancel"
               >
                 {t('cancel')}
               </button>
@@ -674,6 +720,7 @@ export default function AdminRecords() {
                     return;
                   }
                 }}
+                data-tour="records-product-create"
               >
                 {t('create')}
               </button>
@@ -789,20 +836,20 @@ export default function AdminRecords() {
 
       {showCreateCategory ? (
         <div className="ac-modal-backdrop">
-          <div className="ac-modal">
+          <div className="ac-modal" data-tour="records-category-modal">
             <div className="mb-4 text-sm font-semibold text-zinc-900">{t('createCategory')}</div>
             <div className="space-y-3">
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('categoryName')}</div>
-                <input value={categoryName} onChange={(e) => setCategoryName(e.target.value)} className="ac-input" />
+                <input value={categoryName} onChange={(e) => setCategoryName(e.target.value)} className="ac-input" data-tour="records-category-name" />
               </div>
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('categoryCode')}</div>
-                <input value={categoryCode} onChange={(e) => setCategoryCode(e.target.value)} className="ac-input font-mono" />
+                <input value={categoryCode} onChange={(e) => setCategoryCode(e.target.value)} className="ac-input font-mono" data-tour="records-category-code" />
               </div>
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('status')}</div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4" data-tour="records-category-status">
                   <label className="flex items-center gap-2 text-xs text-zinc-700">
                     <input
                       type="radio"
@@ -836,6 +883,7 @@ export default function AdminRecords() {
                   setCategoryCode('');
                   setCategoryStatus('active');
                 }}
+                data-tour="records-category-cancel"
               >
                 {t('cancel')}
               </button>
@@ -857,6 +905,7 @@ export default function AdminRecords() {
                     return;
                   }
                 }}
+                data-tour="records-category-create"
               >
                 {t('create')}
               </button>

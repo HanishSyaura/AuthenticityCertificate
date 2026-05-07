@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { ADMIN_KEYS } from '../utils/adminKeys';
 import { readJson, removeKey, writeJson } from '../utils/storage';
 import { createAdminApi } from '../utils/adminApi';
+import { tRaw } from '../i18n/tRaw';
 
 const useAdminAuthStore = create((set) => ({
   token: readJson(ADMIN_KEYS.token, null),
@@ -22,7 +23,7 @@ const useAdminAuthStore = create((set) => ({
       const api = createAdminApi({ token });
       const res = await api.get('/auth/me');
       const user = res?.data?.data?.user;
-      if (!user) throw new Error('Session invalid');
+      if (!user) throw new Error(tRaw('sessionInvalid'));
       writeJson(ADMIN_KEYS.user, user);
       set({ user, loading: false });
       return user;
@@ -34,7 +35,7 @@ const useAdminAuthStore = create((set) => ({
         set({ token: null, user: null, loading: false, error: null });
         return null;
       }
-      const msg = e?.response?.data?.message || e?.message || 'Failed to load session';
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToLoadSession');
       set({ loading: false, error: msg });
       return null;
     }
@@ -54,7 +55,7 @@ const useAdminAuthStore = create((set) => ({
       const res = await api.post('/auth/login', { email, password });
       const token = res?.data?.data?.token;
       const user = res?.data?.data?.user;
-      if (!token || !user) throw new Error('Login response invalid');
+      if (!token || !user) throw new Error(tRaw('loginResponseInvalid'));
       writeJson(ADMIN_KEYS.token, token);
       writeJson(ADMIN_KEYS.user, user);
       set({ token, user, loading: false });
@@ -62,11 +63,11 @@ const useAdminAuthStore = create((set) => ({
     } catch (e) {
       const status = e?.response?.status;
       const serverMsg = e?.response?.data?.message;
-      let msg = serverMsg || e?.message || 'Login failed';
-      if (msg === 'db_timeout') msg = 'Database temporarily unavailable';
-      if (status === 401 && (!serverMsg || serverMsg === 'Unauthorized')) msg = 'Invalid email or password';
-      if (status === 503 && !serverMsg) msg = 'Service temporarily unavailable';
-      if (e?.code === 'ECONNABORTED') msg = 'Request timed out. Please try again.';
+      let msg = serverMsg || e?.message || tRaw('loginFailed');
+      if (msg === 'db_timeout') msg = tRaw('dbTemporarilyUnavailable');
+      if (status === 401 && (!serverMsg || serverMsg === 'Unauthorized')) msg = tRaw('invalidEmailOrPassword');
+      if (status === 503 && !serverMsg) msg = tRaw('serviceTemporarilyUnavailable');
+      if (e?.code === 'ECONNABORTED') msg = tRaw('requestTimedOut');
       set({ loading: false, error: msg });
       throw e;
     }

@@ -5,6 +5,7 @@ import useEpcStore from '../../store/useEpcStore';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
 import { useT } from '../../i18n/useT';
+import { tRaw } from '../../i18n/tRaw';
 import RichTextEditor from '../../components/admin/RichTextEditor';
 import DataTable from '../../components/ui/DataTable';
 import { hasPermission } from '../../utils/permissions';
@@ -20,7 +21,7 @@ function toBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.onerror = () => reject(new Error(tRaw('failedToReadFile')));
     reader.readAsDataURL(file);
   });
 }
@@ -601,14 +602,14 @@ export default function AdminEpc() {
                   className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
                   disabled={loading}
                   onClick={async () => {
-                    if (!window.confirm('Delete semua EPC batch & items sekali gus? (Running number akan reset ikut data yang tinggal)')) return;
+                    if (!window.confirm(t('confirmDeleteAllEpc'))) return;
                     const res = await deleteAllBatches({ corpPrefix });
                     if (res) {
                       await fetchBatches({ limit: 50, offset: 0 });
                     }
                   }}
                 >
-                  Delete all
+                  {t('deleteAll')}
                 </button>
               ) : null}
             </div>
@@ -1084,7 +1085,8 @@ export default function AdminEpc() {
                       {b.batchName}
                     </div>
                     <div className="mt-1 text-[11px] text-zinc-500">
-                      {uploaded ? `Uploaded: ${formatDateTime(b.productionUploadedAt)}` : 'Not uploaded'} • {done ? `Done: ${formatDateTime(b.productionDoneAt)}` : 'Not done'}
+                      {uploaded ? t('uploadedAt', { value: formatDateTime(b.productionUploadedAt) }) : t('notUploaded')} •{' '}
+                      {done ? t('doneAt', { value: formatDateTime(b.productionDoneAt) }) : t('notDone')}
                     </div>
                   </div>
 
