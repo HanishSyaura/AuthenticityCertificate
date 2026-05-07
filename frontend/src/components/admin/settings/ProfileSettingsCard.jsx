@@ -85,7 +85,7 @@ export default function ProfileSettingsCard({
         <button
           type="button"
           onClick={onSave}
-          disabled={!dirty || saving}
+          disabled={!dirty || invalid || saving}
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? t('saving') : t('saveChanges')}

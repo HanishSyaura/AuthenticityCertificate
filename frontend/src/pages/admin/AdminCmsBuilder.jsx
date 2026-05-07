@@ -104,6 +104,20 @@ export default function AdminCmsBuilder() {
 
   const [selectedBlockId, setSelectedBlockId] = useState(null);
   const [viewMode, setViewMode] = useState('split');
+  const [pagesOpen, setPagesOpen] = useState(() => {
+    try {
+      return localStorage.getItem('ac_cms_pages_open_v1') !== '0';
+    } catch {
+      return true;
+    }
+  });
+  const [inspectorOpen, setInspectorOpen] = useState(() => {
+    try {
+      return localStorage.getItem('ac_cms_inspector_open_v1') !== '0';
+    } catch {
+      return true;
+    }
+  });
   const [saveStatus, setSaveStatus] = useState('idle');
   const [saveError, setSaveError] = useState(null);
   const [, setLastSavedAt] = useState(null);
@@ -189,6 +203,22 @@ export default function AdminCmsBuilder() {
     }
   }, [language, layout, previewLayout, viewMode]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('ac_cms_pages_open_v1', pagesOpen ? '1' : '0');
+    } catch {
+      void 0;
+    }
+  }, [pagesOpen]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('ac_cms_inspector_open_v1', inspectorOpen ? '1' : '0');
+    } catch {
+      void 0;
+    }
+  }, [inspectorOpen]);
+
   const setLayout = (next) => {
     if (!selectedPageId) return;
     const seq = (saveSeqRef.current += 1);
@@ -207,8 +237,17 @@ export default function AdminCmsBuilder() {
       });
   };
 
+  const gridCols =
+    pagesOpen && inspectorOpen
+      ? 'lg:grid-cols-[220px_1fr_260px]'
+      : pagesOpen
+        ? 'lg:grid-cols-[220px_1fr]'
+        : inspectorOpen
+          ? 'lg:grid-cols-[1fr_260px]'
+          : 'lg:grid-cols-1';
+
   return (
-    <div className="ac-page">
+    <div className="p-3 sm:p-4 lg:p-4">
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-base font-semibold text-zinc-900">{t('cmsHeading')}</h2>
@@ -279,6 +318,36 @@ export default function AdminCmsBuilder() {
           </button>
           <button
             type="button"
+            onClick={() => setPagesOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+            title={`${pagesOpen ? t('collapse') : t('expand')} ${t('pages')}`}
+          >
+            <span className="hidden xl:inline">{t('pages')}</span>
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path
+                fillRule="evenodd"
+                d="M4 3.5A1.5 1.5 0 0 0 2.5 5v10A1.5 1.5 0 0 0 4 16.5h12A1.5 1.5 0 0 0 17.5 15V5A1.5 1.5 0 0 0 16 3.5H4Zm2.5 1H4.5a.5.5 0 0 0-.5.5v10a.5.5 0 0 0 .5.5h2V4.5Zm1.5.5A.5.5 0 0 1 8.5 4.5h7A.5.5 0 0 1 16 5v10a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5V5Z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => setInspectorOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+            title={`${inspectorOpen ? t('collapse') : t('expand')} ${t('inspector')}`}
+          >
+            <span className="hidden xl:inline">{t('inspector')}</span>
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path
+                fillRule="evenodd"
+                d="M4 3.5A1.5 1.5 0 0 0 2.5 5v10A1.5 1.5 0 0 0 4 16.5h12A1.5 1.5 0 0 0 17.5 15V5A1.5 1.5 0 0 0 16 3.5H4Zm10.5 1H16a.5.5 0 0 1 .5.5v10a.5.5 0 0 1-.5.5h-1.5V4.5Zm-1.5.5A.5.5 0 0 0 12.5 4.5h-7A.5.5 0 0 0 5 5v10a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5V5Z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+          <button
+            type="button"
             onClick={() => setViewMode('edit')}
             className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
               viewMode === 'edit' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200/80 bg-white text-zinc-900 hover:bg-zinc-50'
@@ -309,29 +378,31 @@ export default function AdminCmsBuilder() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_1fr_280px]">
-        <CmsPagePanel
-          pages={pages}
-          selectedPageId={selectedPageId}
-          onSelectPage={(id) => {
-            selectPage(id);
-            setSelectedBlockId(null);
-          }}
-          onReorderPages={async (orderedIds) => {
-            await reorderPages({ orderedIds });
-          }}
-          onCreatePage={async ({ name, slug }) => {
-            const created = await createPage({ name, slug });
-            selectPage(created.id);
-            setSelectedBlockId(null);
-          }}
-          onDeletePage={async (id) => {
-            await deletePage({ pageId: id });
-            setSelectedBlockId(null);
-          }}
-        />
+      <div className={`grid grid-cols-1 gap-3 ${gridCols}`}>
+        {pagesOpen ? (
+          <CmsPagePanel
+            pages={pages}
+            selectedPageId={selectedPageId}
+            onSelectPage={(id) => {
+              selectPage(id);
+              setSelectedBlockId(null);
+            }}
+            onReorderPages={async (orderedIds) => {
+              await reorderPages({ orderedIds });
+            }}
+            onCreatePage={async ({ name, slug }) => {
+              const created = await createPage({ name, slug });
+              selectPage(created.id);
+              setSelectedBlockId(null);
+            }}
+            onDeletePage={async (id) => {
+              await deletePage({ pageId: id });
+              setSelectedBlockId(null);
+            }}
+          />
+        ) : null}
 
-        {saveError ? <div className="lg:col-span-3 -mt-2 text-xs text-rose-700">{saveError}</div> : null}
+        {saveError ? <div className="col-span-full -mt-2 text-xs text-rose-700">{saveError}</div> : null}
 
         <CmsCanvasPanel
           viewMode={viewMode}
@@ -346,14 +417,16 @@ export default function AdminCmsBuilder() {
           layoutLocked={layoutLocked}
         />
 
-        <CmsInspectorPanel
-          selectedBlock={selectedBlock}
-          layout={layout}
-          setLayout={setLayout}
-          clearSelection={() => setSelectedBlockId(null)}
-          templates={templates}
-          layoutLocked={layoutLocked}
-        />
+        {inspectorOpen ? (
+          <CmsInspectorPanel
+            selectedBlock={selectedBlock}
+            layout={layout}
+            setLayout={setLayout}
+            clearSelection={() => setSelectedBlockId(null)}
+            templates={templates}
+            layoutLocked={layoutLocked}
+          />
+        ) : null}
       </div>
     </div>
   );

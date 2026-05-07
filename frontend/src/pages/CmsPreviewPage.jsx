@@ -136,7 +136,7 @@ export default function CmsPreviewPage() {
     return () => {
       alive = false;
     };
-  }, [lang, location.search]);
+  }, [lang, location.search, t]);
 
   if (!storedLayout) {
     return (

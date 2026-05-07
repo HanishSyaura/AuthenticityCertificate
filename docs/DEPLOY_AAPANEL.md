@@ -205,6 +205,7 @@ Routes backend yang perlu diproxy (at minimum):
 - `/users/`
 - `/audit/`
 - `/organizations/`
+- `/uploads/`
 - `/bulk/`
 - `/fraud/`
 - `/integrations/`
@@ -222,6 +223,7 @@ location ^~ /products/ { proxy_pass http://127.0.0.1:5000; }
 location ^~ /users/ { proxy_pass http://127.0.0.1:5000; }
 location ^~ /audit/ { proxy_pass http://127.0.0.1:5000; }
 location ^~ /organizations/ { proxy_pass http://127.0.0.1:5000; }
+location ^~ /uploads/ { proxy_pass http://127.0.0.1:5000; }
 location ^~ /bulk/ { proxy_pass http://127.0.0.1:5000; }
 location ^~ /fraud/ { proxy_pass http://127.0.0.1:5000; }
 location ^~ /integrations/ { proxy_pass http://127.0.0.1:5000; }
@@ -235,6 +237,18 @@ proxy_set_header X-Real-IP $remote_addr;
 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 proxy_set_header X-Forwarded-Proto $scheme;
 ```
+
+Untuk upload media (image/video), pastikan Nginx benarkan body besar dan timeout mencukupi:
+
+```
+client_max_body_size 600m;
+proxy_read_timeout 600s;
+proxy_send_timeout 600s;
+```
+
+Kalau backend set limit sendiri, boleh override di env:
+
+- `MAX_UPLOAD_MB=500`
 
 ## Step 8 — Validate production
 

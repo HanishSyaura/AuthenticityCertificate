@@ -219,7 +219,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
     return () => {
       alive = false;
     };
-  }, [token, viewMode]);
+  }, [t, token, viewMode]);
 
   useEffect(() => {
     if (viewMode !== 'preview' && viewMode !== 'split') return;
@@ -515,8 +515,8 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
           t={t}
         />
       ) : viewMode === 'split' ? (
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-          <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+          <div className="min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white">
             <CanvasStage
               width={baseW}
               height={baseH}
@@ -528,7 +528,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
               setSelectedId={setSelectedBlockId}
             />
           </div>
-          <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+          <div className="min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white">
             <PreviewStage
               compact
               baseW={baseW}

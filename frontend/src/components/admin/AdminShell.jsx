@@ -81,7 +81,9 @@ export default function AdminShell() {
   useEffect(() => {
     try {
       localStorage.setItem('ac_admin_sidebar_collapsed_v1', sidebarCollapsed ? '1' : '0');
-    } catch {}
+    } catch {
+      void 0;
+    }
   }, [sidebarCollapsed]);
 
   const role = user?.role || 'admin';

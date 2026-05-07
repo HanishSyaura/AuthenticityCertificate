@@ -67,7 +67,7 @@ function storage() {
   });
 }
 
-const DEFAULT_MAX_UPLOAD_MB = 100;
+const DEFAULT_MAX_UPLOAD_MB = 500;
 const MAX_UPLOAD_MB_RAW = process.env.MAX_UPLOAD_MB || process.env.UPLOAD_MAX_MB || '';
 const MAX_UPLOAD_MB = Number.isFinite(Number.parseInt(MAX_UPLOAD_MB_RAW, 10))
   ? Math.max(1, Number.parseInt(MAX_UPLOAD_MB_RAW, 10))

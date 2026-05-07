@@ -104,7 +104,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
         setUploading(false);
       }
     },
-    [updateBlockContentById, uploadMedia]
+    [t, updateBlockContentById, uploadMedia]
   );
 
   return (

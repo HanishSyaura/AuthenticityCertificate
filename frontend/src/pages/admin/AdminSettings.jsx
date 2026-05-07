@@ -139,7 +139,7 @@ export default function AdminSettings() {
     return () => {
       mounted = false;
     };
-  }, [token, setSettingsResponse]);
+  }, [setSettingsResponse, t, token]);
 
   function validateProfile(draft) {
     const errs = {};

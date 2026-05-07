@@ -9,6 +9,12 @@ function getApi() {
   return createAdminApi({ token });
 }
 
+function tryExtractMaxMb(message) {
+  const m = String(message || '').match(/(\d+)\s*mb\b/i);
+  const n = m ? Number.parseInt(m[1], 10) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 const useUploadsStore = create(() => ({
   uploadMedia: async ({ file }) => {
     if (isFileTooLarge(file)) {
@@ -26,7 +32,8 @@ const useUploadsStore = create(() => ({
     } catch (e) {
       const status = e?.response?.status;
       if (status === 413) {
-        throw new Error(tRaw('fileTooLargeMaxMb', { mb: MAX_UPLOAD_MB }));
+        const serverMb = tryExtractMaxMb(e?.response?.data?.message);
+        throw new Error(tRaw('fileTooLargeMaxMb', { mb: serverMb || MAX_UPLOAD_MB }));
       }
       throw e;
     }

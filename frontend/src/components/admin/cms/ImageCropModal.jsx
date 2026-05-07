@@ -194,7 +194,7 @@ export default function ImageCropModal({ open, file, onClose, onConfirm, onUseOr
     } finally {
       setBusy(false);
     }
-  }, [busy, cropStats.h, cropStats.w, cropStats.x, cropStats.y, file, onConfirm, ready]);
+  }, [busy, cropStats.h, cropStats.w, cropStats.x, cropStats.y, file, onConfirm, ready, t]);
 
   if (!open) return null;
 
