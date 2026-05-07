@@ -20,6 +20,11 @@ router.patch(
   auditAction('UPDATE_TEMPLATE', { targetType: 'certificate_template', getTargetId: (req) => req.params.id }),
   templatesController.update
 );
+router.post(
+  '/:id/fill-empty',
+  auditAction('FILL_EMPTY_TEMPLATE_TRANSLATION', { targetType: 'certificate_template', getTargetId: (req) => req.params.id }),
+  templatesController.fillEmptyTranslation
+);
 router.delete(
   '/:id',
   auditAction('DELETE_TEMPLATE', { targetType: 'certificate_template', getTargetId: (req) => req.params.id }),

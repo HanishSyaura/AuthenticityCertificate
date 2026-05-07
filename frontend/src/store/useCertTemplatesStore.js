@@ -111,6 +111,26 @@ const useCertTemplatesStore = create((set, get) => ({
     }
   },
 
+  fillEmptyFromEn: async ({ id, lang } = {}) => {
+    if (!id) return null;
+    const l = lang ? String(lang) : null;
+    if (!l || l === 'en') return null;
+    set({ error: null });
+    try {
+      const api = getApi();
+      const res = await api.post(`/templates/${encodeURIComponent(id)}/fill-empty`, null, { params: { lang: l } });
+      const updated = res?.data?.data || null;
+      if (!updated) return null;
+      const templates = get().templates.map((t) => (String(t.id) === String(id) ? updated : t));
+      set({ templates, lastSyncAt: Date.now() });
+      return updated;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Failed to fill translation';
+      set({ error: msg });
+      throw e;
+    }
+  },
+
   deleteTemplate: async ({ id }) => {
     set({ loading: true, error: null });
     try {

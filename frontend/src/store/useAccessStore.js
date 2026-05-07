@@ -68,6 +68,7 @@ const useAccessStore = create((set, get) => ({
       const payload = res?.data?.data;
       const roles = get().roles.map((r) => (String(r.id) === String(roleId) ? { ...r, permissions: payload.permissions } : r));
       set({ roles, loading: false, lastSyncAt: Date.now() });
+      await useAdminAuthStore.getState().fetchMe();
       return payload;
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || 'Failed to update permissions';
@@ -97,6 +98,7 @@ const useAccessStore = create((set, get) => ({
       const api = getApi();
       const res = await api.put(`/access/users/${encodeURIComponent(userId)}/roles`, { roleIds });
       set({ loading: false, lastSyncAt: Date.now() });
+      await useAdminAuthStore.getState().fetchMe();
       return res?.data?.data;
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || 'Failed to update user roles';
@@ -107,4 +109,3 @@ const useAccessStore = create((set, get) => ({
 }));
 
 export default useAccessStore;
-

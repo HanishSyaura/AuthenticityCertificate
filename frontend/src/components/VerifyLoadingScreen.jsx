@@ -71,6 +71,8 @@ function formatMeta(meta) {
 const VerifyLoadingScreen = ({ meta, mode = 'auto' }) => {
   const { t } = useT();
   const reduceMotion = useReducedMotion();
+  const brandLogoUrl = String(import.meta.env.VITE_VERIFY_LOGO_URL || '/brand-logo.png').trim();
+  const [brandLogoOk, setBrandLogoOk] = useState(true);
   const steps = useMemo(() => {
     const base = [t('verifyStepResolve'), t('verifyStepValidate'), t('verifyStepPrepare')].filter(Boolean);
     if (mode === 'resolve') return base;
@@ -78,6 +80,10 @@ const VerifyLoadingScreen = ({ meta, mode = 'auto' }) => {
     return base;
   }, [mode, t]);
   const [stepIndex, setStepIndex] = useState(0);
+
+  useEffect(() => {
+    setBrandLogoOk(true);
+  }, [brandLogoUrl]);
 
   useEffect(() => {
     if (!steps.length) return;
@@ -138,35 +144,50 @@ const VerifyLoadingScreen = ({ meta, mode = 'auto' }) => {
               animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
               transition={reduceMotion ? undefined : { duration: 0.35, delay: 0.08, ease: 'easeOut' }}
             >
-              <motion.div
-                className="ac-verify-nest"
-                aria-hidden="true"
-                animate={
-                  reduceMotion
-                    ? undefined
-                    : {
-                        rotate: [0, 2.5, 0],
-                        scale: [1, 1.02, 1]
-                      }
-                }
-                transition={reduceMotion ? undefined : { duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
-              >
-                <IconNest className="h-full w-full" />
-              </motion.div>
-              <motion.div
-                aria-hidden="true"
-                animate={
-                  reduceMotion
-                    ? undefined
-                    : {
-                        scale: [1, 1.05, 1],
-                        rotate: [0, 1.2, 0]
-                      }
-                }
-                transition={reduceMotion ? undefined : { duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-              >
-                <IconShield className="h-8 w-8" style={{ color: '#f9901d' }} />
-              </motion.div>
+              {brandLogoOk && brandLogoUrl ? (
+                <motion.img
+                  src={brandLogoUrl}
+                  alt=""
+                  aria-hidden="true"
+                  draggable="false"
+                  className="ac-verify-brand-logo"
+                  onError={() => setBrandLogoOk(false)}
+                  animate={reduceMotion ? undefined : { scale: [1, 1.02, 1] }}
+                  transition={reduceMotion ? undefined : { duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+                />
+              ) : (
+                <>
+                  <motion.div
+                    className="ac-verify-nest"
+                    aria-hidden="true"
+                    animate={
+                      reduceMotion
+                        ? undefined
+                        : {
+                            rotate: [0, 2.5, 0],
+                            scale: [1, 1.02, 1]
+                          }
+                    }
+                    transition={reduceMotion ? undefined : { duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+                  >
+                    <IconNest className="h-full w-full" />
+                  </motion.div>
+                  <motion.div
+                    aria-hidden="true"
+                    animate={
+                      reduceMotion
+                        ? undefined
+                        : {
+                            scale: [1, 1.05, 1],
+                            rotate: [0, 1.2, 0]
+                          }
+                    }
+                    transition={reduceMotion ? undefined : { duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+                  >
+                    <IconShield className="h-8 w-8" style={{ color: '#f9901d' }} />
+                  </motion.div>
+                </>
+              )}
             </motion.div>
             <div className="mt-3 text-center">
               <div className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-500 sm:text-base">{t('verification')}</div>

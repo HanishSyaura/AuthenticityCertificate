@@ -90,6 +90,17 @@ async function update(req, res) {
   }
 }
 
+async function fillEmptyTranslation(req, res) {
+  try {
+    const { id } = req.params;
+    const lang = typeof req.query?.lang === 'string' ? req.query.lang : typeof req.query?.language === 'string' ? req.query.language : undefined;
+    const updated = await templatesService.fillEmptyTranslation({ organizationId: req.organization.id, id, lang });
+    res.success(updated, 'Translation filled');
+  } catch (e) {
+    res.error(e.message, 400);
+  }
+}
+
 async function remove(req, res) {
   try {
     const { id } = req.params;
@@ -105,5 +116,6 @@ module.exports = {
   getOne,
   create,
   update,
+  fillEmptyTranslation,
   remove
 };

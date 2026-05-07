@@ -67,9 +67,16 @@ function storage() {
   });
 }
 
+const DEFAULT_MAX_UPLOAD_MB = 100;
+const MAX_UPLOAD_MB_RAW = process.env.MAX_UPLOAD_MB || process.env.UPLOAD_MAX_MB || '';
+const MAX_UPLOAD_MB = Number.isFinite(Number.parseInt(MAX_UPLOAD_MB_RAW, 10))
+  ? Math.max(1, Number.parseInt(MAX_UPLOAD_MB_RAW, 10))
+  : DEFAULT_MAX_UPLOAD_MB;
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+
 const upload = multer({
   storage: storage(),
-  limits: { fileSize: 25 * 1024 * 1024 }
+  limits: { fileSize: MAX_UPLOAD_BYTES }
 }).single('file');
 
 async function listMedia(req, res) {
@@ -89,7 +96,12 @@ async function listMedia(req, res) {
 
 function uploadMedia(req, res) {
   upload(req, res, async (err) => {
-    if (err) return res.error(err.message, 400);
+    if (err) {
+      if (err?.code === 'LIMIT_FILE_SIZE') {
+        return res.error(`File too large. Maximum file size is ${MAX_UPLOAD_MB}MB.`, 413);
+      }
+      return res.error(err.message, 400);
+    }
     try {
       const file = req.file;
       if (!file) return res.error('File required', 400);

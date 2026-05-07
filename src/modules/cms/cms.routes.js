@@ -54,6 +54,15 @@ router.post(
   auditAction('PUBLISH_CMS', { targetType: 'cms_page', getTargetId: (req) => String(req.body?.pageId || '') }),
   cmsController.publish
 );
+router.post(
+  '/fill-empty',
+  verifyToken,
+  attachAccessContext,
+  requirePermission('cms.write'),
+  requireOrganization,
+  auditAction('FILL_EMPTY_CMS_TRANSLATION', { targetType: 'cms_page', getTargetId: (req) => String(req.body?.pageId || '') }),
+  cmsController.fillEmptyTranslation
+);
 router.patch(
   '/page/:id/meta',
   verifyToken,

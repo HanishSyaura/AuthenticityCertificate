@@ -76,6 +76,29 @@ function composeLayouts(pages) {
   return out;
 }
 
+function mergeCmsLayoutBaseWithTranslation(baseLayout, translatedLayout) {
+  const baseArr = Array.isArray(baseLayout) ? baseLayout : [];
+  const trArr = Array.isArray(translatedLayout) ? translatedLayout : [];
+  if (baseArr.length === 0) return trArr;
+  if (trArr.length === 0) return baseArr;
+
+  const trById = new Map(trArr.map((b) => [String(b?.id || ''), b]));
+  return baseArr.map((b) => {
+    const id = String(b?.id || '');
+    if (!id) return b;
+    const tr = trById.get(id);
+    if (!tr) return b;
+    const type = String(b?.type || '');
+    if (type === 'text') {
+      const trText = tr?.content?.text;
+      if (typeof trText === 'string') {
+        return { ...b, content: { ...(b.content || {}), text: trText } };
+      }
+    }
+    return b;
+  });
+}
+
 function getSupportingTemplateIdsFromLayout(layout) {
   const out = new Set();
   if (!Array.isArray(layout)) return [];
@@ -89,6 +112,29 @@ function getSupportingTemplateIdsFromLayout(layout) {
     if (Number.isFinite(id) && id > 0) out.add(id);
   }
   return Array.from(out);
+}
+
+function mergeTemplatePlaceholdersBaseWithTranslation(basePlaceholders, translatedPlaceholders) {
+  const baseArr = Array.isArray(basePlaceholders) ? basePlaceholders : [];
+  const trArr = Array.isArray(translatedPlaceholders) ? translatedPlaceholders : [];
+  if (baseArr.length === 0) return trArr;
+  if (trArr.length === 0) return baseArr;
+
+  const trByKey = new Map(trArr.map((p) => [String(p?.key || '').trim(), p]));
+  return baseArr.map((p) => {
+    const key = String(p?.key || '').trim();
+    if (!key) return p;
+    const tr = trByKey.get(key);
+    if (!tr) return p;
+    return {
+      ...(p || {}),
+      label: tr.label !== undefined ? tr.label : p.label,
+      labelHtml: tr.labelHtml !== undefined ? tr.labelHtml : p.labelHtml,
+      separator: tr.separator !== undefined ? tr.separator : p.separator,
+      separatorHtml: tr.separatorHtml !== undefined ? tr.separatorHtml : p.separatorHtml,
+      staticValue: tr.staticValue !== undefined ? tr.staticValue : p.staticValue
+    };
+  });
 }
 
 async function respondByCertificateId({ req, res, certificateId, verifiedVia, identity }) {
@@ -286,13 +332,12 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         const effectivePages = sorted.map((p) => {
           const tRow = tByPageId.get(Number(p.id));
           const tLayout = Array.isArray(tRow?.contentJson) && tRow.contentJson.length > 0 ? tRow.contentJson : null;
-          const effectiveLayout =
-            tLayout ??
-            (Array.isArray(p?.publishedVersion?.layoutJson)
-              ? p.publishedVersion.layoutJson
-              : Array.isArray(p?.layout?.layoutJson)
-                ? p.layout.layoutJson
-                : null);
+          const baseLayout = Array.isArray(p?.publishedVersion?.layoutJson)
+            ? p.publishedVersion.layoutJson
+            : Array.isArray(p?.layout?.layoutJson)
+              ? p.layout.layoutJson
+              : null;
+          const effectiveLayout = lang !== 'en' ? mergeCmsLayoutBaseWithTranslation(baseLayout, tLayout) : tLayout ?? baseLayout;
           return { id: p.id, effectiveLayout };
         });
 
@@ -354,8 +399,8 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
             if (!row) return tpl;
             return {
               ...tpl,
-              layoutJson: row.layoutJson ?? tpl.layoutJson,
-              placeholders: row.placeholders ?? tpl.placeholders
+              layoutJson: tpl.layoutJson,
+              placeholders: mergeTemplatePlaceholdersBaseWithTranslation(tpl.placeholders, row.placeholders)
             };
           };
           certificateTemplate = applyTr(certificateTemplate);

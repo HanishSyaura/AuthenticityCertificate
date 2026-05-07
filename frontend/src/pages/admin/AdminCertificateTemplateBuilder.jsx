@@ -8,6 +8,7 @@ import useUploadsStore from '../../store/useUploadsStore';
 import useEpcStore from '../../store/useEpcStore';
 import { stripHtmlToText, toQuillHtml } from '../../utils/richText';
 import { sanitizeLimitedHtml } from '../../utils/sanitizeLimitedHtml';
+import { MAX_UPLOAD_MB } from '../../utils/uploadLimits';
 
 function makeId(prefix) {
   return `${prefix}-${Math.random().toString(16).slice(2)}-${Date.now()}`;
@@ -148,12 +149,13 @@ const DEVICE_PRESETS = [
 export default function AdminCertificateTemplateBuilder({ initialSelectedId = null, uiMode = 'builder' }) {
   const { t } = useT();
   const uiLang = useI18nStore((s) => s.lang);
-  const { templates, error, fetchTemplates, fetchTemplate, updateTemplate, deleteTemplate } = useCertTemplatesStore((s) => ({
+  const { templates, error, fetchTemplates, fetchTemplate, updateTemplate, fillEmptyFromEn, deleteTemplate } = useCertTemplatesStore((s) => ({
     templates: s.templates,
     error: s.error,
     fetchTemplates: s.fetchTemplates,
     fetchTemplate: s.fetchTemplate,
     updateTemplate: s.updateTemplate,
+    fillEmptyFromEn: s.fillEmptyFromEn,
     deleteTemplate: s.deleteTemplate
   }));
   const { uploadMedia } = useUploadsStore((s) => ({ uploadMedia: s.uploadMedia }));
@@ -212,6 +214,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   }, [uiLang]);
   const [contentLang, setContentLang] = useState(initialContentLang);
   const contentLangRef = useRef(initialContentLang);
+  const layoutLocked = String(contentLang || 'en') !== 'en';
 
   const selected = useMemo(() => templates.find((it) => String(it.id) === String(selectedId)) || null, [templates, selectedId]);
   const canvasW = Number(selected?.canvasWidth) > 0 ? Number(selected.canvasWidth) : 390;
@@ -553,6 +556,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   };
 
   const addCanvasItemForKey = (key) => {
+    if (layoutLocked) return;
     if (!selected) return;
     const k = String(key || '').trim();
     if (!k) return;
@@ -593,6 +597,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     });
 
   const setCanvasItems = (updaterOrNext) => {
+    if (layoutLocked) return;
     const current = Array.isArray(draftLayout) ? draftLayout : [];
     const next = typeof updaterOrNext === 'function' ? updaterOrNext(current) : updaterOrNext;
     const sanitized = sanitizeLayout(next);
@@ -602,6 +607,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   };
 
   const updateField = (patch) => {
+    if (layoutLocked) return;
     if (!selectedField || !selected) return;
     const minW = 24;
     const minH = 20;
@@ -631,12 +637,22 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     if (!k) return;
     const idx = (Array.isArray(placeholders) ? placeholders : []).findIndex((p) => String(p?.key || '').trim() === k);
     if (idx < 0) return;
+    const safePatch = layoutLocked
+      ? {
+          ...(patch?.label !== undefined ? { label: patch.label } : {}),
+          ...(patch?.labelHtml !== undefined ? { labelHtml: patch.labelHtml } : {}),
+          ...(patch?.separator !== undefined ? { separator: patch.separator } : {}),
+          ...(patch?.separatorHtml !== undefined ? { separatorHtml: patch.separatorHtml } : {}),
+          ...(patch?.staticValue !== undefined ? { staticValue: patch.staticValue } : {})
+        }
+      : patch;
     const next = placeholders.slice();
-    next[idx] = { ...(next[idx] || {}), ...(patch || {}) };
+    next[idx] = { ...(next[idx] || {}), ...(safePatch || {}) };
     replacePlaceholders(next);
-  }, [placeholders, replacePlaceholders]);
+  }, [layoutLocked, placeholders, replacePlaceholders]);
 
   useEffect(() => {
+    if (layoutLocked) return;
     const list = Array.isArray(placeholders) ? placeholders : [];
     if (list.length === 0) return;
     if (!list.some((p) => !String(p?.key || '').trim())) return;
@@ -654,9 +670,10 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       return { ...(p || {}), key };
     });
     replacePlaceholders(next);
-  }, [placeholders, replacePlaceholders]);
+  }, [layoutLocked, placeholders, replacePlaceholders]);
 
   const replacePlaceholdersAndLayout = ({ nextPlaceholders, nextLayout }) => {
+    if (layoutLocked) return;
     const ph = Array.isArray(nextPlaceholders) ? nextPlaceholders : [];
     const ly = Array.isArray(nextLayout) ? nextLayout : [];
     markLocalEdit();
@@ -796,6 +813,19 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                         <option value="zh">中文</option>
                       </select>
                     </div>
+                    {layoutLocked ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!selected?.id) return;
+                          await fillEmptyFromEn({ id: selected.id, lang: contentLang });
+                          await fetchTemplate({ id: selected.id, lang: contentLang });
+                        }}
+                        className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                      >
+                        {t('copyEnFillEmpty')}
+                      </button>
+                    ) : null}
                     <select value={addOverlayKey} onChange={(e) => setAddOverlayKey(e.target.value)} className="ac-input w-60 rounded-lg px-3 py-2 text-xs">
                       <option value="">{t('selectDataField')}</option>
                       {placeholders
@@ -811,7 +841,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                       type="button"
                       onClick={() => addCanvasItemForKey(addOverlayKey)}
                       className="ac-btn ac-btn-soft rounded-lg px-3 py-2 text-xs"
-                      disabled={!validatePlaceholders.ok || !String(addOverlayKey || '').trim()}
+                      disabled={layoutLocked || !validatePlaceholders.ok || !String(addOverlayKey || '').trim()}
                     >
                       {t('addToCanvas')}
                     </button>
@@ -820,6 +850,9 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
 
                 {!validatePlaceholders.ok && validatePlaceholders.errors.length > 0 ? (
                   <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">{validatePlaceholders.errors[0]}</div>
+                ) : null}
+                {layoutLocked ? (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">{t('translateOnlyHint')}</div>
                 ) : null}
 
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
@@ -899,6 +932,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
 
                 <div ref={designerCanvasViewportRef} className="mt-3 min-h-0 flex-1 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
                   <CanvasStage
+                    mode={layoutLocked ? 'select' : 'edit'}
                     width={canvasW}
                     height={canvasH}
                     scale={canvasScale}
@@ -906,7 +940,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                     backgroundColor={canvasBgColor}
                     backgroundUrl={selected.background || ''}
                     items={canvasItems}
-                    setItems={setCanvasItems}
+                    setItems={layoutLocked ? undefined : setCanvasItems}
                     selectedId={selectedFieldId}
                     setSelectedId={setSelectedFieldId}
                     grid={4}
@@ -980,6 +1014,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                   type="number"
                                   value={Number(selectedField.x) || 0}
                                   onChange={(e) => updateField({ x: Number(e.target.value) || 0 })}
+                                  disabled={layoutLocked}
                                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"
                                 />
                               </div>
@@ -989,6 +1024,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                   type="number"
                                   value={Number(selectedField.y) || 0}
                                   onChange={(e) => updateField({ y: Number(e.target.value) || 0 })}
+                                  disabled={layoutLocked}
                                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"
                                 />
                               </div>
@@ -998,6 +1034,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                   type="number"
                                   value={Number(selectedField.w) || 0}
                                   onChange={(e) => updateField({ w: Number(e.target.value) || 0 })}
+                                  disabled={layoutLocked}
                                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"
                                 />
                               </div>
@@ -1007,6 +1044,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                   type="number"
                                   value={Number(selectedField.h) || 0}
                                   onChange={(e) => updateField({ h: Number(e.target.value) || 0 })}
+                                  disabled={layoutLocked}
                                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"
                                 />
                               </div>
@@ -1033,7 +1071,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                           return;
                                         }
                                         if (ph && key) updatePlaceholder(key, { label: nextText, labelHtml: nextHtml });
-                                        updateField({ label: nextText, labelHtml: nextHtml });
+                                        if (!layoutLocked) updateField({ label: nextText, labelHtml: nextHtml });
                                       }}
                                       minHeight="2.5rem"
                                       maxHeight={ph && isStaticLike ? '12rem' : '6rem'}
@@ -1052,6 +1090,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                   max={96}
                                   value={Number(selectedField.fontSize) > 0 ? Number(selectedField.fontSize) : 14}
                                   onChange={(e) => updateField({ fontSize: Number(e.target.value) || 14 })}
+                                  disabled={layoutLocked}
                                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                                 />
                               </div>
@@ -1060,6 +1099,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                 <select
                                   value={String(selectedField.align || 'left')}
                                   onChange={(e) => updateField({ align: e.target.value })}
+                                  disabled={layoutLocked}
                                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                                 >
                                   <option value="left">{t('alignLeft')}</option>
@@ -1070,7 +1110,12 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                             </div>
 
                             <label className="mt-3 flex items-center gap-2 text-sm">
-                              <input type="checkbox" checked={typeof selectedField.wrap === 'boolean' ? selectedField.wrap : true} onChange={(e) => updateField({ wrap: e.target.checked })} />
+                              <input
+                                type="checkbox"
+                                checked={typeof selectedField.wrap === 'boolean' ? selectedField.wrap : true}
+                                onChange={(e) => updateField({ wrap: e.target.checked })}
+                                disabled={layoutLocked}
+                              />
                               <span className="text-xs font-medium text-zinc-700">{t('wrapText')}</span>
                             </label>
 
@@ -1084,6 +1129,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                   setDraftLayout(next);
                                   queueTemplatePatch({ layoutJson: next });
                                 }}
+                                disabled={layoutLocked}
                                 className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
                               >
                                 {t('delete')}
@@ -1098,6 +1144,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                         <input
                           value={selected.certificateId || ''}
                           onChange={(e) => queueBasePatch({ certificateId: e.target.value })}
+                          disabled={layoutLocked}
                           className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                         />
                       </div>
@@ -1107,6 +1154,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                         <input
                           value={selected.name || ''}
                           onChange={(e) => queueBasePatch({ name: e.target.value })}
+                          disabled={layoutLocked}
                           className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                         />
                       </div>
@@ -1116,6 +1164,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                         <input
                           value={selected.background || ''}
                           onChange={(e) => queueBasePatch({ background: e.target.value })}
+                          disabled={layoutLocked}
                           className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                         />
                         <div className="mt-2 flex items-center gap-2">
@@ -1123,6 +1172,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                             key={bgFileKey}
                             type="file"
                             accept="image/*,video/*"
+                            disabled={layoutLocked}
                             onChange={async (e) => {
                               const file = e.target.files?.[0];
                               if (!file) return;
@@ -1140,6 +1190,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                             }}
                             className="text-xs"
                           />
+                          <div className="text-[11px] text-zinc-500">Max file size: {MAX_UPLOAD_MB}MB</div>
                           {bgUploading ? <div className="text-xs font-semibold text-zinc-500">{t('saving')}</div> : null}
                         </div>
                         {bgError ? <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">{bgError}</div> : null}
@@ -1150,6 +1201,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                         <input
                           value={selected.backgroundColor || ''}
                           onChange={(e) => queueBasePatch({ backgroundColor: e.target.value })}
+                          disabled={layoutLocked}
                           className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                         />
                       </div>
@@ -1163,6 +1215,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                             setBackgroundMode(v);
                             queueBasePatch({ backgroundMode: v });
                           }}
+                          disabled={layoutLocked}
                           className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                         >
                           <option value="background">{t('stretchBackground')}</option>
@@ -1179,6 +1232,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                             type="number"
                             value={canvasW}
                             onChange={(e) => queueBasePatch({ canvasWidth: Number(e.target.value) || 390 })}
+                            disabled={layoutLocked}
                             className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                           />
                         </div>
@@ -1188,6 +1242,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                             type="number"
                             value={canvasH}
                             onChange={(e) => queueBasePatch({ canvasHeight: Number(e.target.value) || 844 })}
+                            disabled={layoutLocked}
                             className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                           />
                         </div>
@@ -1205,6 +1260,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                   <input
                                     type="checkbox"
                                     checked={checked}
+                                    disabled={layoutLocked}
                                     onChange={async (e) => {
                                       const next = new Set(Array.from(assignedBatchIds));
                                       if (e.target.checked) next.add(bid);
@@ -1276,6 +1332,19 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                       <option value="zh">中文</option>
                     </select>
                   </div>
+                  {layoutLocked ? (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!selected?.id) return;
+                        await fillEmptyFromEn({ id: selected.id, lang: contentLang });
+                        await fetchTemplate({ id: selected.id, lang: contentLang });
+                      }}
+                      className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                    >
+                      {t('copyEnFillEmpty')}
+                    </button>
+                  ) : null}
                   <div className="inline-flex overflow-hidden rounded-lg border border-zinc-200 bg-white">
                     <button
                       type="button"
@@ -1329,7 +1398,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                         type="button"
                         onClick={() => addCanvasItemForKey(addOverlayKey)}
                         className="ac-btn ac-btn-soft rounded-lg px-3 py-2 text-xs"
-                        disabled={!String(addOverlayKey || '').trim()}
+                        disabled={layoutLocked || !String(addOverlayKey || '').trim()}
                       >
                         {t('addToCanvas')}
                       </button>
@@ -1371,10 +1440,14 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   {validatePlaceholders.errors[0]}
                 </div>
               ) : null}
+              {layoutLocked ? (
+                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">{t('translateOnlyHint')}</div>
+              ) : null}
 
               {wizardStep === 'canvas' ? (
                 <div ref={builderCanvasViewportRef} className="h-[calc(100vh-20rem)] overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
                   <CanvasStage
+                    mode={layoutLocked ? 'select' : 'edit'}
                     width={canvasW}
                     height={canvasH}
                     scale={canvasScale}
@@ -1382,7 +1455,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                     backgroundColor={canvasBgColor}
                     backgroundUrl={selected.background || ''}
                     items={canvasItems}
-                    setItems={setCanvasItems}
+                    setItems={layoutLocked ? undefined : setCanvasItems}
                     selectedId={selectedFieldId}
                     setSelectedId={setSelectedFieldId}
                     grid={4}
@@ -1430,6 +1503,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                             <button
                               type="button"
                               onClick={() => {
+                                if (layoutLocked) return;
                                 const deletingKey = String(placeholders[idx]?.key || '').trim();
                                 const deletingCardKey = deletingKey || `idx-${idx}`;
                                 const nextPlaceholders = placeholders.filter((_, i) => i !== idx);
@@ -1446,6 +1520,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                 }
                                 replacePlaceholders(nextPlaceholders);
                               }}
+                              disabled={layoutLocked}
                               className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
                             >
                               {t('delete')}
@@ -1460,6 +1535,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                     onChange={(e) => {
                                       const nextLabel = String(e.target.value || '');
                                       const nextLabelHtml = toQuillHtml(nextLabel);
+                                      const existingKey = String(p?.key || '').trim();
+                                      if (layoutLocked) {
+                                        if (existingKey) updatePlaceholder(existingKey, { label: nextLabel, labelHtml: nextLabelHtml });
+                                        return;
+                                      }
                                       const next = placeholders.slice();
                                       const cur = next[idx] || {};
                                       const curKey = String(cur.key || '').trim();
@@ -1500,12 +1580,14 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                   <select
                                     value={uiSource}
                                     onChange={(e) => {
+                                      if (layoutLocked) return;
                                       const nextSource = e.target.value;
                                       const next = placeholders.slice();
                                       const cur = next[idx] || {};
                                       next[idx] = { ...cur, source: nextSource };
                                       replacePlaceholders(next);
                                     }}
+                                    disabled={layoutLocked}
                                     className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                                   >
                                     <option value="static">{t('sourceManual')}</option>
@@ -1518,10 +1600,12 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                       <input
                                         value={String(p?.bindPath || '')}
                                         onChange={(e) => {
+                                          if (layoutLocked) return;
                                           const next = placeholders.slice();
                                           next[idx] = { ...(next[idx] || {}), bindPath: e.target.value };
                                           replacePlaceholders(next);
                                         }}
+                                        disabled={layoutLocked}
                                         placeholder={t('bindTo')}
                                         list="certTplBindPaths"
                                         className="w-full min-w-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
@@ -1553,6 +1637,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                   <RichTextEditor
                                     value={String(p?.staticValue || '')}
                                     onChange={(v) => {
+                                      const existingKey = String(p?.key || '').trim();
+                                      if (layoutLocked) {
+                                        if (existingKey) updatePlaceholder(existingKey, { staticValue: v });
+                                        return;
+                                      }
                                       const next = placeholders.slice();
                                       next[idx] = { ...(next[idx] || {}), staticValue: v };
                                       replacePlaceholders(next);
@@ -1573,6 +1662,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                       type="button"
                       onClick={() =>
                         (() => {
+                          if (layoutLocked) return;
                           const used = new Set(
                             placeholders.map((it) => String(it?.key || '').trim().toLowerCase()).filter(Boolean)
                           );
@@ -1581,6 +1671,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           setExpandedPlaceholderKey(key);
                         })()
                       }
+                      disabled={layoutLocked}
                       className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
                     >
                       {t('addPlaceholder')}
@@ -1604,6 +1695,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                 <input
                   value={selected.certificateId || ''}
                   onChange={(e) => queueBasePatch({ certificateId: e.target.value })}
+                  disabled={layoutLocked}
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
               </div>
@@ -1613,6 +1705,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                 <input
                   value={selected.name || ''}
                   onChange={(e) => queueBasePatch({ name: e.target.value })}
+                  disabled={layoutLocked}
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
               </div>
@@ -1622,6 +1715,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                 <input
                   value={selected.background || ''}
                   onChange={(e) => void updateSelected({ background: e.target.value })}
+                  disabled={layoutLocked}
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
                 <div className="mt-2">
@@ -1631,11 +1725,13 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                       type="color"
                       value={canvasBgColor}
                       onChange={(e) => void updateSelected({ backgroundColor: e.target.value })}
+                      disabled={layoutLocked}
                       className="h-10 w-14 rounded border border-zinc-200 bg-white p-1"
                     />
                     <input
                       value={canvasBgColor}
                       onChange={(e) => void updateSelected({ backgroundColor: e.target.value })}
+                      disabled={layoutLocked}
                       className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                       placeholder="#ffffff"
                     />
@@ -1650,6 +1746,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                       setBackgroundMode(v);
                       queueBasePatch({ backgroundMode: v });
                     }}
+                    disabled={layoutLocked}
                     className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                   >
                     <option value="background">{t('stretchBackground')}</option>
@@ -1662,7 +1759,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   key={bgFileKey}
                   type="file"
                   accept="image/*,video/*"
-                  disabled={bgUploading}
+                  disabled={layoutLocked || bgUploading}
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
@@ -1693,6 +1790,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                     max={1200}
                     value={canvasW}
                     onChange={(e) => void updateSelected({ canvasWidth: Number(e.target.value) || 390 })}
+                    disabled={layoutLocked}
                     className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                   />
                 </div>
@@ -1704,6 +1802,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                     max={2400}
                     value={canvasH}
                     onChange={(e) => void updateSelected({ canvasHeight: Number(e.target.value) || 844 })}
+                    disabled={layoutLocked}
                     className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                   />
                 </div>
@@ -1722,6 +1821,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                         <input
                           type="checkbox"
                           checked={checked}
+                          disabled={layoutLocked}
                           onChange={(e) => {
                             const next = new Set(assignedBatchIds);
                             if (e.target.checked) next.add(id);
@@ -1739,6 +1839,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                 <button
                   type="button"
                   className="ac-btn mt-3 w-full rounded-lg px-3 py-2 text-sm"
+                  disabled={layoutLocked}
                   onClick={async () => {
                     const list = Array.isArray(batches) ? batches : [];
                     for (const b of list) {
@@ -1769,6 +1870,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           type="number"
                           value={Number(selectedField.x) || 0}
                           onChange={(e) => updateField({ x: Number(e.target.value) || 0 })}
+                          disabled={layoutLocked}
                           className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"
                         />
                       </div>
@@ -1778,6 +1880,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           type="number"
                           value={Number(selectedField.y) || 0}
                           onChange={(e) => updateField({ y: Number(e.target.value) || 0 })}
+                          disabled={layoutLocked}
                           className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"
                         />
                       </div>
@@ -1787,6 +1890,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           type="number"
                           value={Number(selectedField.w) || 0}
                           onChange={(e) => updateField({ w: Number(e.target.value) || 0 })}
+                          disabled={layoutLocked}
                           className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"
                         />
                       </div>
@@ -1796,6 +1900,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           type="number"
                           value={Number(selectedField.h) || 0}
                           onChange={(e) => updateField({ h: Number(e.target.value) || 0 })}
+                          disabled={layoutLocked}
                           className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"
                         />
                       </div>
@@ -1823,7 +1928,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                 return;
                               }
                               if (ph && key) updatePlaceholder(key, { label: nextText, labelHtml: nextHtml });
-                              updateField({ label: nextText, labelHtml: nextHtml });
+                              if (!layoutLocked) updateField({ label: nextText, labelHtml: nextHtml });
                             }}
                             minHeight="2.5rem"
                             maxHeight={ph && isStaticLike ? '12rem' : '6rem'}
@@ -1842,6 +1947,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                         max={96}
                         value={Number(selectedField.fontSize) > 0 ? Number(selectedField.fontSize) : 14}
                         onChange={(e) => updateField({ fontSize: Number(e.target.value) || 14 })}
+                        disabled={layoutLocked}
                         className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                       />
                     </div>
@@ -1850,6 +1956,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                       <select
                         value={String(selectedField.align || 'left')}
                         onChange={(e) => updateField({ align: e.target.value })}
+                        disabled={layoutLocked}
                         className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                       >
                         <option value="left">{t('alignLeft')}</option>
@@ -1860,7 +1967,12 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                   </div>
 
                 <label className="mt-3 flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={typeof selectedField.wrap === 'boolean' ? selectedField.wrap : true} onChange={(e) => updateField({ wrap: e.target.checked })} />
+                  <input
+                    type="checkbox"
+                    checked={typeof selectedField.wrap === 'boolean' ? selectedField.wrap : true}
+                    onChange={(e) => updateField({ wrap: e.target.checked })}
+                    disabled={layoutLocked}
+                  />
                   <span className="text-xs font-medium text-zinc-700">{t('wrapText')}</span>
                 </label>
 
@@ -1868,12 +1980,14 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                     <button
                       type="button"
                       onClick={() => {
+                        if (layoutLocked) return;
                         const next = (Array.isArray(draftLayout) ? draftLayout : []).filter((f) => f.id !== selectedField.id);
                         setSelectedFieldId(null);
                         markLocalEdit();
                         setDraftLayout(next);
                         queueTemplatePatch({ layoutJson: next });
                       }}
+                      disabled={layoutLocked}
                       className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
                     >
                       {t('delete')}

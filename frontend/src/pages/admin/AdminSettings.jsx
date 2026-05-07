@@ -5,6 +5,7 @@ import useAdminSettingsStore from '../../store/useAdminSettingsStore';
 import { createAdminApi } from '../../utils/adminApi';
 import ProfileSettingsCard from '../../components/admin/settings/ProfileSettingsCard';
 import SystemSettingsCard from '../../components/admin/settings/SystemSettingsCard';
+import { isFileTooLarge, MAX_UPLOAD_MB } from '../../utils/uploadLimits';
 
 function shallowEqual(a, b) {
   const ak = Object.keys(a);
@@ -191,12 +192,15 @@ export default function AdminSettings() {
     setSystemNotice({ kind: '', text: '' });
     setLogoUploading(true);
     try {
+      if (isFileTooLarge(file)) {
+        throw new Error(`File too large. Maximum file size is ${MAX_UPLOAD_MB}MB.`);
+      }
       const api = createAdminApi({ token });
       const form = new FormData();
       form.append('file', file);
       const res = await api.post('/uploads/media', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 60_000
+        timeout: 300_000
       });
       const created = res?.data?.data;
       const url = created?.url ? String(created.url) : '';

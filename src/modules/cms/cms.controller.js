@@ -33,6 +33,11 @@ const layoutSchema = z.object({
   language: z.string().optional()
 });
 
+const fillEmptySchema = z.object({
+  pageId: z.number().int(),
+  language: z.string().min(2)
+});
+
 const publishSchema = z.object({
   pageId: z.number().int()
 });
@@ -116,6 +121,20 @@ async function getPage(req, res) {
   }
 }
 
+async function fillEmptyTranslation(req, res) {
+  try {
+    const validatedData = fillEmptySchema.parse(req.body);
+    const result = await cmsService.fillEmptyTranslation({
+      organizationId: req.organization.id,
+      pageId: validatedData.pageId,
+      language: validatedData.language
+    });
+    res.success(result, 'Translation filled');
+  } catch (error) {
+    res.error(resolveMessage(error), resolveStatus(error, 400));
+  }
+}
+
 async function listPages(req, res) {
   try {
     const kind = typeof req.query?.kind === 'string' ? req.query.kind : undefined;
@@ -156,6 +175,7 @@ module.exports = {
   publish,
   updateMeta,
   getPage,
+  fillEmptyTranslation,
   listPages,
   removePage,
   reorderPages

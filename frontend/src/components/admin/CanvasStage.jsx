@@ -31,23 +31,24 @@ export default function CanvasStage({
   const dragRef = useRef(null);
   const itemsRef = useRef(items);
   const [activePointer, setActivePointer] = useState(false);
-  const interactive = mode === 'edit';
+  const canSelect = mode === 'edit' || mode === 'select';
+  const canTransform = mode === 'edit';
 
   const applyUpdate = useCallback((updater) => {
-    if (!interactive) return;
+    if (!canTransform) return;
     if (!setItems) return;
     const current = itemsRef.current || [];
     const next = typeof updater === 'function' ? updater(current) : updater;
     if (Object.is(next, current)) return;
     setItems(next);
-  }, [interactive, setItems]);
+  }, [canTransform, setItems]);
 
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
 
   useEffect(() => {
-    if (!interactive) return;
+    if (!canTransform) return;
     if (!setItems) return;
     applyUpdate((prev) => {
       if (!Array.isArray(prev)) return prev;
@@ -65,10 +66,10 @@ export default function CanvasStage({
       });
       return changed ? next : prev;
     });
-  }, [applyUpdate, grid, height, interactive, setItems, width]);
+  }, [applyUpdate, grid, height, canTransform, setItems, width]);
 
   useEffect(() => {
-    if (!interactive) return undefined;
+    if (!canTransform) return undefined;
     if (!setItems) return undefined;
     const onKeyDown = (e) => {
       if (!selectedId) return;
@@ -88,10 +89,10 @@ export default function CanvasStage({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [applyUpdate, interactive, selectedId, setItems, setSelectedId]);
+  }, [applyUpdate, canTransform, selectedId, setItems, setSelectedId]);
 
   useEffect(() => {
-    if (!interactive) return undefined;
+    if (!canTransform) return undefined;
     if (!activePointer) return;
 
     const onMove = (e) => {
@@ -136,13 +137,17 @@ export default function CanvasStage({
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
     };
-  }, [activePointer, applyUpdate, grid, height, interactive, scale, width]);
+  }, [activePointer, applyUpdate, grid, height, canTransform, scale, width]);
 
   const onItemPointerDown = (e, item, kind) => {
-    if (!interactive) return;
-    e.preventDefault();
-    e.stopPropagation();
+    if (!canSelect) return;
+    if (canTransform) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (setSelectedId) setSelectedId(item.id);
+
+    if (!canTransform) return;
 
     const rect = stageRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -178,7 +183,7 @@ export default function CanvasStage({
           className="relative rounded-xl border border-zinc-200 shadow-sm"
           style={{ width, height, transform: `scale(${scale})`, transformOrigin: 'top left', backgroundColor: String(backgroundColor || '#ffffff') }}
           onPointerDown={() => {
-            if (!interactive) return;
+            if (!canSelect) return;
             if (setSelectedId) setSelectedId(null);
           }}
         >
@@ -252,7 +257,7 @@ export default function CanvasStage({
           {(Array.isArray(items) ? items : []).map((raw, idx) => {
             const it = raw && typeof raw === 'object' ? raw : {};
             const key = it.id != null ? it.id : `item-${idx}`;
-            const selected = interactive && it.id === selectedId;
+            const selected = canSelect && it.id === selectedId;
             const resizeHandleClass = largeUi
               ? 'absolute -bottom-3 -right-3 h-6 w-6 rounded bg-brand-600 cursor-nwse-resize'
               : 'absolute -bottom-1 -right-1 h-3 w-3 rounded bg-brand-600 cursor-nwse-resize';
@@ -260,7 +265,7 @@ export default function CanvasStage({
               <div
                 key={key}
                 className={`absolute rounded-lg ${
-                  interactive
+                  canSelect
                     ? selected
                       ? 'ring-1 ring-brand-500 bg-white/50'
                       : 'ring-1 ring-zinc-200/60 bg-white/40'
@@ -276,7 +281,7 @@ export default function CanvasStage({
                 <div
                   role="button"
                   tabIndex={0}
-                  className={`${resizeHandleClass} ${interactive && selected ? '' : 'hidden'}`}
+                  className={`${resizeHandleClass} ${canTransform && selected ? '' : 'hidden'}`}
                   onPointerDown={(e) => onItemPointerDown(e, it, 'resize')}
                 />
               </div>

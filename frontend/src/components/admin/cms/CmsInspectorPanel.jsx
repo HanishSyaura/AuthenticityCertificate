@@ -1,10 +1,11 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useT } from '../../../i18n/useT';
 import useUploadsStore from '../../../store/useUploadsStore';
+import { isFileTooLarge, MAX_UPLOAD_MB } from '../../../utils/uploadLimits';
 import RichTextEditor from '../RichTextEditor';
 import ImageCropModal from './ImageCropModal';
 
-export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, clearSelection, templates }) {
+export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, clearSelection, templates, layoutLocked = false }) {
   const { t } = useT();
   const { uploadMedia } = useUploadsStore((s) => ({ uploadMedia: s.uploadMedia }));
   const [uploading, setUploading] = useState(false);
@@ -113,6 +114,9 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
         <div className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{t('selectBlock')}</div>
       ) : (
         <div className="space-y-3">
+          {layoutLocked ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{t('translateOnlyHint')}</div>
+          ) : null}
           <div className="rounded-lg border border-zinc-200 bg-white p-3">
             <div className="text-xs font-semibold text-zinc-700">Block</div>
             <div className="mt-1 text-sm font-semibold text-zinc-900">{selectedBlock.type}</div>
@@ -126,7 +130,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
               <button
                 type="button"
                 onClick={() => onReorderLayer('toBack')}
-                disabled={selectedIndex <= 0}
+                disabled={layoutLocked || selectedIndex <= 0}
                 className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
               >
                 {t('sendToBack')}
@@ -134,7 +138,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
               <button
                 type="button"
                 onClick={() => onReorderLayer('toFront')}
-                disabled={selectedIndex < 0 || selectedIndex >= (Array.isArray(layout) ? layout.length - 1 : 0)}
+                disabled={layoutLocked || selectedIndex < 0 || selectedIndex >= (Array.isArray(layout) ? layout.length - 1 : 0)}
                 className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
               >
                 {t('bringToFront')}
@@ -142,7 +146,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
               <button
                 type="button"
                 onClick={() => onReorderLayer('backward')}
-                disabled={selectedIndex <= 0}
+                disabled={layoutLocked || selectedIndex <= 0}
                 className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
               >
                 {t('sendBackward')}
@@ -150,7 +154,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
               <button
                 type="button"
                 onClick={() => onReorderLayer('forward')}
-                disabled={selectedIndex < 0 || selectedIndex >= (Array.isArray(layout) ? layout.length - 1 : 0)}
+                disabled={layoutLocked || selectedIndex < 0 || selectedIndex >= (Array.isArray(layout) ? layout.length - 1 : 0)}
                 className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
               >
                 {t('bringForward')}
@@ -161,28 +165,30 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
           {selectedBlock.type === 'text' ? (
             <div>
               <label className="block text-xs font-medium text-zinc-700">{t('content')}</label>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[11px] font-semibold text-zinc-600">{t('fontSize')}</label>
-                  <input
-                    type="number"
-                    min={8}
-                    max={96}
-                    value={Number(selectedBlock.content?.fontSize) > 0 ? Number(selectedBlock.content.fontSize) : 14}
-                    onChange={(e) => updateSelectedContent({ fontSize: Number(e.target.value) || 14 })}
-                    className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                  />
+              {!layoutLocked ? (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-zinc-600">{t('fontSize')}</label>
+                    <input
+                      type="number"
+                      min={8}
+                      max={96}
+                      value={Number(selectedBlock.content?.fontSize) > 0 ? Number(selectedBlock.content.fontSize) : 14}
+                      onChange={(e) => updateSelectedContent({ fontSize: Number(e.target.value) || 14 })}
+                      className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-zinc-600">{t('fontColor')}</label>
+                    <input
+                      type="color"
+                      value={String(selectedBlock.content?.fontColor || '#18181b')}
+                      onChange={(e) => updateSelectedContent({ fontColor: e.target.value })}
+                      className="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-2"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-zinc-600">{t('fontColor')}</label>
-                  <input
-                    type="color"
-                    value={String(selectedBlock.content?.fontColor || '#18181b')}
-                    onChange={(e) => updateSelectedContent({ fontColor: e.target.value })}
-                    className="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-2"
-                  />
-                </div>
-              </div>
+              ) : null}
               <div className="mt-1">
                 <label className="block text-[11px] font-semibold text-zinc-600">{t('insertPlaceholder')}</label>
                 <select
@@ -212,7 +218,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
             </div>
           ) : null}
 
-          {selectedBlock.type === 'container' ? (
+          {!layoutLocked && selectedBlock.type === 'container' ? (
             <div className="space-y-3">
               {(() => {
                 const fill = String(selectedBlock.content?.backgroundFill || 'solid');
@@ -348,7 +354,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
             </div>
           ) : null}
 
-          {selectedBlock.type === 'certificate' ? (
+          {!layoutLocked && selectedBlock.type === 'certificate' ? (
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-zinc-700">{t('certificateBlockType')}</label>
@@ -381,7 +387,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
             </div>
           ) : null}
 
-          {selectedBlock.type === 'image' || selectedBlock.type === 'video' ? (
+          {!layoutLocked && (selectedBlock.type === 'image' || selectedBlock.type === 'video') ? (
             <div>
               <label className="block text-xs font-medium text-zinc-700">{t('url')}</label>
               <input
@@ -414,6 +420,10 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
                     const file = e.target.files?.[0];
                     if (!file) return;
                     setFileKey((k) => k + 1);
+                    if (isFileTooLarge(file)) {
+                      setUploadError(`File too large. Maximum file size is ${MAX_UPLOAD_MB}MB.`);
+                      return;
+                    }
                     if (selectedBlock.type === 'image') {
                       setCropFile(file);
                       setCropBlockId(selectedBlock.id);
@@ -424,6 +434,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
                   }}
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
+                <div className="mt-1 text-[11px] text-zinc-500">Max file size: {MAX_UPLOAD_MB}MB</div>
                 {uploadError ? <div className="mt-2 text-xs text-rose-700">{uploadError}</div> : null}
                 {selectedBlock.type === 'image' && String(selectedBlock.content?.url || '').trim() ? (
                   <button
@@ -468,7 +479,8 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
                 clearSelection();
                 setLayout(next);
               }}
-              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+              disabled={layoutLocked}
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
             >
               {t('delete')}
             </button>
@@ -478,7 +490,8 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
                 const next = layout.map((b) => (b.id === selectedBlock.id ? { ...b, x: 20, y: 20 } : b));
                 setLayout(next);
               }}
-              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+              disabled={layoutLocked}
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
             >
               {t('resetPosition')}
             </button>

@@ -11,12 +11,88 @@ function normalizeLang(lang) {
   return 'en';
 }
 
+function mergePlaceholdersBaseWithTranslation(basePlaceholders, translatedPlaceholders) {
+  const baseArr = Array.isArray(basePlaceholders) ? basePlaceholders : [];
+  const trArr = Array.isArray(translatedPlaceholders) ? translatedPlaceholders : [];
+  if (baseArr.length === 0) return trArr;
+  if (trArr.length === 0) return baseArr;
+
+  const trByKey = new Map(trArr.map((p) => [String(p?.key || '').trim(), p]));
+  return baseArr.map((p) => {
+    const key = String(p?.key || '').trim();
+    if (!key) return p;
+    const tr = trByKey.get(key);
+    if (!tr) return p;
+    return {
+      ...(p || {}),
+      label: tr.label !== undefined ? tr.label : p.label,
+      labelHtml: tr.labelHtml !== undefined ? tr.labelHtml : p.labelHtml,
+      separator: tr.separator !== undefined ? tr.separator : p.separator,
+      separatorHtml: tr.separatorHtml !== undefined ? tr.separatorHtml : p.separatorHtml,
+      staticValue: tr.staticValue !== undefined ? tr.staticValue : p.staticValue
+    };
+  });
+}
+
+function hasText(v) {
+  if (v == null) return false;
+  const s = String(v);
+  const stripped = s
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return stripped.length > 0;
+}
+
+function sanitizeTranslationPlaceholders(basePlaceholders, nextPlaceholders) {
+  const baseArr = Array.isArray(basePlaceholders) ? basePlaceholders : [];
+  const nextArr = Array.isArray(nextPlaceholders) ? nextPlaceholders : [];
+  if (baseArr.length === 0) return [];
+  const nextByKey = new Map(nextArr.map((p) => [String(p?.key || '').trim(), p]));
+  const out = [];
+  for (const base of baseArr) {
+    const key = String(base?.key || '').trim();
+    if (!key) continue;
+    const n = nextByKey.get(key) || {};
+    const row = { key };
+    if (n.label !== undefined) row.label = n.label;
+    if (n.labelHtml !== undefined) row.labelHtml = n.labelHtml;
+    if (n.separator !== undefined) row.separator = n.separator;
+    if (n.separatorHtml !== undefined) row.separatorHtml = n.separatorHtml;
+    if (n.staticValue !== undefined) row.staticValue = n.staticValue;
+    out.push(row);
+  }
+  return out;
+}
+
+function fillEmptyTranslationPlaceholders({ basePlaceholders, existingTranslationPlaceholders }) {
+  const baseArr = Array.isArray(basePlaceholders) ? basePlaceholders : [];
+  const trArr = Array.isArray(existingTranslationPlaceholders) ? existingTranslationPlaceholders : [];
+  if (baseArr.length === 0) return [];
+  const trByKey = new Map(trArr.map((p) => [String(p?.key || '').trim(), p]));
+  const out = [];
+  for (const base of baseArr) {
+    const key = String(base?.key || '').trim();
+    if (!key) continue;
+    const tr = trByKey.get(key) || {};
+    const row = { key };
+    row.label = hasText(tr.labelHtml ?? tr.label) ? tr.label : base.label;
+    row.labelHtml = hasText(tr.labelHtml ?? tr.label) ? tr.labelHtml : base.labelHtml;
+    row.separator = hasText(tr.separatorHtml ?? tr.separator) ? tr.separator : base.separator;
+    row.separatorHtml = hasText(tr.separatorHtml ?? tr.separator) ? tr.separatorHtml : base.separatorHtml;
+    row.staticValue = hasText(tr.staticValue) ? tr.staticValue : base.staticValue;
+    out.push(row);
+  }
+  return out;
+}
+
 function applyTranslationRow(base, tRow) {
   if (!tRow) return base;
   return {
     ...(base || {}),
-    layoutJson: tRow.layoutJson ?? base?.layoutJson ?? [],
-    placeholders: tRow.placeholders ?? base?.placeholders ?? null
+    layoutJson: base?.layoutJson ?? [],
+    placeholders: mergePlaceholdersBaseWithTranslation(base?.placeholders ?? null, tRow.placeholders ?? null)
   };
 }
 
@@ -113,24 +189,24 @@ async function updateTemplate({ organizationId, id, patch, lang }) {
       1200
     );
     if (!base) throw new Error('Template not found');
-    const hasLayout = patch.layoutJson !== undefined;
     const hasPlaceholders = patch.placeholders !== undefined;
-    if (!hasLayout && !hasPlaceholders) return applyTranslationRow(base, null);
+    if (!hasPlaceholders) return applyTranslationRow(base, null);
+    const sanitized = sanitizeTranslationPlaceholders(base.placeholders ?? null, patch.placeholders);
 
     await withTimeout(
       prisma.certificateTemplateTranslation.upsert({
         where: { templateId_language: { templateId: Number(id), language } },
         update: {
           organizationId: Number(organizationId),
-          ...(hasLayout ? { layoutJson: patch.layoutJson || [] } : {}),
-          ...(hasPlaceholders ? { placeholders: patch.placeholders || null } : {})
+          layoutJson: base.layoutJson || [],
+          placeholders: sanitized.length ? sanitized : null
         },
         create: {
           organizationId: Number(organizationId),
           templateId: Number(id),
           language,
-          layoutJson: hasLayout ? patch.layoutJson || [] : base.layoutJson || [],
-          placeholders: hasPlaceholders ? patch.placeholders || null : base.placeholders || null
+          layoutJson: base.layoutJson || [],
+          placeholders: sanitized.length ? sanitized : null
         }
       }),
       1500
@@ -188,10 +264,53 @@ async function deleteTemplate({ organizationId, id }) {
   return { id: tplId };
 }
 
+async function fillEmptyTranslation({ organizationId, id, lang }) {
+  const language = normalizeLang(lang);
+  if (language === 'en') throw new Error('Language must not be EN');
+
+  const base = await withTimeout(
+    prisma.certificateTemplate.findFirst({
+      where: { id: Number(id), organizationId: Number(organizationId) }
+    }),
+    1200
+  );
+  if (!base) throw new Error('Template not found');
+
+  const existing = await withTimeout(
+    prisma.certificateTemplateTranslation.findFirst({
+      where: { templateId: Number(id), organizationId: Number(organizationId), language }
+    }),
+    1200
+  );
+
+  const filled = fillEmptyTranslationPlaceholders({
+    basePlaceholders: base.placeholders ?? null,
+    existingTranslationPlaceholders: existing?.placeholders ?? null
+  });
+
+  await withTimeout(
+    prisma.certificateTemplateTranslation.upsert({
+      where: { templateId_language: { templateId: Number(id), language } },
+      update: { organizationId: Number(organizationId), layoutJson: base.layoutJson || [], placeholders: filled.length ? filled : null },
+      create: {
+        organizationId: Number(organizationId),
+        templateId: Number(id),
+        language,
+        layoutJson: base.layoutJson || [],
+        placeholders: filled.length ? filled : null
+      }
+    }),
+    1500
+  );
+
+  return await getTemplateById({ organizationId, id, lang: language });
+}
+
 module.exports = {
   listTemplates,
   getTemplateById,
   createTemplate,
   updateTemplate,
+  fillEmptyTranslation,
   deleteTemplate
 };

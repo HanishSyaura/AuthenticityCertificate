@@ -4,6 +4,7 @@ import useAdminAuthStore from '../../store/useAdminAuthStore';
 import useAccessStore from '../../store/useAccessStore';
 import { useT } from '../../i18n/useT';
 import { hasPermission } from '../../utils/permissions';
+import { PERMISSION_GROUPS, VISIBLE_PERMISSION_KEYS } from '../../utils/permissionCatalog';
 import DataTable from '../../components/ui/DataTable';
 import RowActionsMenu from '../../components/ui/RowActionsMenu';
 
@@ -16,6 +17,7 @@ function formatDate(input) {
 
 export default function AdminUsers() {
   const { t } = useT();
+  const DEFAULT_PASSWORD = 'Password123!';
   const authUser = useAdminAuthStore((s) => s.user);
   const role = authUser?.role || 'admin';
   const perms = authUser?.permissions || [];
@@ -69,6 +71,7 @@ export default function AdminUsers() {
   const [selectedPermissionKeys, setSelectedPermissionKeys] = useState([]);
   const [newRoleName, setNewRoleName] = useState('');
   const [newRoleDesc, setNewRoleDesc] = useState('');
+  const [permQuery, setPermQuery] = useState('');
 
   const filtered = useMemo(() => {
     const q = String(query || '').trim().toLowerCase();
@@ -84,6 +87,42 @@ export default function AdminUsers() {
     if (!selectedRoleId) return null;
     return roles.find((r) => String(r.id) === String(selectedRoleId)) || null;
   }, [roles, selectedRoleId]);
+
+  const permissionsByKey = useMemo(() => {
+    const m = new Map();
+    for (const p of Array.isArray(permissions) ? permissions : []) {
+      if (p?.key) m.set(p.key, p);
+    }
+    return m;
+  }, [permissions]);
+
+  const visibleKeys = useMemo(() => {
+    const set = new Set();
+    for (const k of VISIBLE_PERMISSION_KEYS) {
+      if (permissionsByKey.has(k)) set.add(k);
+    }
+    return set;
+  }, [permissionsByKey]);
+
+  const permissionGroups = useMemo(() => {
+    const q = String(permQuery || '').trim().toLowerCase();
+    const groups = PERMISSION_GROUPS.map((g) => {
+      const items = (Array.isArray(g.keys) ? g.keys : [])
+        .filter((k) => visibleKeys.has(k))
+        .map((k) => permissionsByKey.get(k))
+        .filter(Boolean);
+      const filteredItems =
+        !q
+          ? items
+          : items.filter((p) => {
+              const key = String(p?.key || '').toLowerCase();
+              const desc = String(p?.description || '').toLowerCase();
+              return key.includes(q) || desc.includes(q);
+            });
+      return { id: g.id, titleKey: g.titleKey, items: filteredItems, allKeys: items.map((p) => p.key), totalItems: items.length };
+    });
+    return groups.filter((g) => g.totalItems > 0 && g.items.length > 0);
+  }, [permQuery, permissionsByKey, visibleKeys]);
 
   if (!canManageUsers) {
     return (
@@ -115,19 +154,29 @@ export default function AdminUsers() {
               type="button"
               className="ac-btn ac-btn-soft px-3 py-2 text-xs"
               onClick={async () => {
-                const [, fetchedRoles] = await Promise.all([fetchPermissions(), fetchRoles()]);
+                const [fetchedPermissions, fetchedRoles] = await Promise.all([fetchPermissions(), fetchRoles()]);
+                const fetchedKeys = new Set((Array.isArray(fetchedPermissions) ? fetchedPermissions : []).map((p) => p?.key).filter(Boolean));
                 const first = Array.isArray(fetchedRoles) && fetchedRoles.length > 0 ? fetchedRoles[0] : null;
                 if (first?.id) {
                   setSelectedRoleId(first.id);
-                  setSelectedPermissionKeys(Array.isArray(first.permissions) ? first.permissions : []);
+                  const next = (Array.isArray(first.permissions) ? first.permissions : []).filter((k) => VISIBLE_PERMISSION_KEYS.has(k) && fetchedKeys.has(k));
+                  setSelectedPermissionKeys(Array.from(new Set(next)));
                 }
+                setPermQuery('');
                 setShowAccess(true);
               }}
             >
-              Manage access
+              {t('manageAccess')}
             </button>
           ) : null}
-          <button type="button" className="ac-btn px-3 py-2 text-xs" onClick={() => setShowCreate(true)}>
+          <button
+            type="button"
+            className="ac-btn px-3 py-2 text-xs"
+            onClick={() => {
+              setPassword(DEFAULT_PASSWORD);
+              setShowCreate(true);
+            }}
+          >
             {t('createUser')}
           </button>
         </div>
@@ -240,7 +289,7 @@ export default function AdminUsers() {
                       disabled,
                       onSelect: () => {
                         setResetUser(u);
-                        setResetPassword('');
+                        setResetPassword(DEFAULT_PASSWORD);
                         setShowReset(true);
                       }
                     },
@@ -328,8 +377,9 @@ export default function AdminUsers() {
                 onClick={async () => {
                   const nm = String(name || '').trim();
                   const em = String(email || '').trim();
-                  const pw = String(password || '');
-                  if (!nm || !em || !pw) return;
+                  const pw = String(password || '').trim() ? String(password || '') : DEFAULT_PASSWORD;
+                  if (!nm || !em) return;
+                  if (pw.length < 8) return;
                   await createUser({ name: nm, email: em, password: pw, role: newRole });
                   setShowCreate(false);
                   setName('');
@@ -397,7 +447,7 @@ export default function AdminUsers() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-2xl bg-white p-5">
             <div className="mb-4">
-              <div className="text-sm font-semibold text-zinc-900">Edit access</div>
+              <div className="text-sm font-semibold text-zinc-900">{t('editAccess')}</div>
               <div className="mt-1 text-xs text-zinc-600">{rolesUser?.email}</div>
             </div>
             <div className="max-h-[50vh] overflow-auto rounded-xl border border-zinc-200 bg-white">
@@ -417,7 +467,7 @@ export default function AdminUsers() {
                       }}
                     />
                     <span className="font-medium text-zinc-900">{r.name}</span>
-                    {r.isSystem ? <span className="text-[11px] text-zinc-500">system</span> : null}
+                    {r.isSystem ? <span className="text-[11px] text-zinc-500">{t('systemTag')}</span> : null}
                   </label>
                 ))
               )}
@@ -458,8 +508,8 @@ export default function AdminUsers() {
           <div className="w-full max-w-3xl rounded-2xl bg-white p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <div className="text-sm font-semibold text-zinc-900">Access management</div>
-                <div className="mt-1 text-xs text-zinc-600">Edit role permissions</div>
+                <div className="text-sm font-semibold text-zinc-900">{t('accessManagement')}</div>
+                <div className="mt-1 text-xs text-zinc-600">{t('accessManagementHint')}</div>
               </div>
               <button
                 type="button"
@@ -474,19 +524,20 @@ export default function AdminUsers() {
 
             <div className="grid gap-4 md:grid-cols-[260px_1fr]">
               <div className="rounded-xl border border-zinc-200 p-3">
-                <div className="mb-2 text-xs font-semibold text-zinc-600">Roles</div>
+                <div className="mb-2 text-xs font-semibold text-zinc-600">{t('roles')}</div>
                 <select
                   value={selectedRoleId || ''}
                   onChange={(e) => {
                     const id = Number(e.target.value);
                     setSelectedRoleId(id);
                     const nextRole = roles.find((r) => String(r.id) === String(id));
-                    setSelectedPermissionKeys(Array.isArray(nextRole?.permissions) ? nextRole.permissions : []);
+                    const next = (Array.isArray(nextRole?.permissions) ? nextRole.permissions : []).filter((k) => visibleKeys.has(k));
+                    setSelectedPermissionKeys(Array.from(new Set(next)));
                   }}
                   className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400"
                 >
                   <option value="" disabled>
-                    Select a role
+                    {t('selectRole')}
                   </option>
                   {roles.map((r) => (
                     <option key={r.id} value={r.id}>
@@ -500,30 +551,31 @@ export default function AdminUsers() {
                     type="button"
                     className="mt-2 w-full rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700"
                     onClick={async () => {
-                      if (!window.confirm('Delete this role?')) return;
+                      if (!window.confirm(t('confirmDeleteRole'))) return;
                       await deleteAccessRole({ roleId: selectedRole.id });
                       const nextRoles = await fetchRoles();
                       const first = Array.isArray(nextRoles) && nextRoles.length > 0 ? nextRoles[0] : null;
                       setSelectedRoleId(first?.id || null);
-                      setSelectedPermissionKeys(Array.isArray(first?.permissions) ? first.permissions : []);
+                      const next = (Array.isArray(first?.permissions) ? first.permissions : []).filter((k) => visibleKeys.has(k));
+                      setSelectedPermissionKeys(Array.from(new Set(next)));
                     }}
                   >
-                    Delete role
+                    {t('deleteRole')}
                   </button>
                 ) : null}
 
                 <div className="mt-4 border-t border-zinc-200 pt-3">
-                  <div className="mb-2 text-xs font-semibold text-zinc-600">Create role</div>
+                  <div className="mb-2 text-xs font-semibold text-zinc-600">{t('createRole')}</div>
                   <input
                     value={newRoleName}
                     onChange={(e) => setNewRoleName(e.target.value)}
-                    placeholder="role.name"
+                    placeholder={t('roleNamePlaceholder')}
                     className="mb-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400"
                   />
                   <input
                     value={newRoleDesc}
                     onChange={(e) => setNewRoleDesc(e.target.value)}
-                    placeholder="Description (optional)"
+                    placeholder={t('descriptionOptional')}
                     className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400"
                   />
                   <button
@@ -547,43 +599,112 @@ export default function AdminUsers() {
               </div>
 
               <div className="rounded-xl border border-zinc-200 p-3">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <div className="text-xs font-semibold text-zinc-600">Permissions</div>
-                  <button
-                    type="button"
-                    className="ac-btn px-3 py-2 text-xs"
-                    disabled={!selectedRole?.id}
-                    onClick={async () => {
-                      await setRolePermissions({ roleId: selectedRole.id, permissionKeys: selectedPermissionKeys });
-                      await fetchRoles();
-                    }}
-                  >
-                    {t('save')}
-                  </button>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-semibold text-zinc-600">{t('permissions')}</div>
+                    <div className="mt-0.5 text-[11px] text-zinc-500">
+                      {selectedRole?.name ? t('selectedRole', { value: selectedRole.name }) : t('selectRole')}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                      disabled={!selectedRole?.id}
+                      onClick={() => setSelectedPermissionKeys([])}
+                    >
+                      {t('clearSelection')}
+                    </button>
+                    <button
+                      type="button"
+                      className="ac-btn px-3 py-2 text-xs"
+                      disabled={!selectedRole?.id}
+                      onClick={async () => {
+                        const next = selectedPermissionKeys.filter((k) => visibleKeys.has(k));
+                        await setRolePermissions({ roleId: selectedRole.id, permissionKeys: Array.from(new Set(next)) });
+                        await fetchRoles();
+                      }}
+                    >
+                      {t('save')}
+                    </button>
+                  </div>
                 </div>
-                <div className="max-h-[55vh] overflow-auto rounded-xl border border-zinc-200">
+
+                <input
+                  value={permQuery}
+                  onChange={(e) => setPermQuery(e.target.value)}
+                  placeholder={t('searchPermissions')}
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+                />
+
+                <div className="mt-3 max-h-[55vh] overflow-auto rounded-xl border border-zinc-200 bg-white">
                   {permissions.length === 0 ? (
                     <div className="p-4 text-sm text-zinc-600">{t('loading')}</div>
+                  ) : permissionGroups.length === 0 ? (
+                    <div className="p-4 text-sm text-zinc-600">{t('noPermissionsFound')}</div>
                   ) : (
-                    permissions.map((p) => (
-                      <label key={p.id} className="flex items-start gap-2 border-b border-zinc-100 px-4 py-3 last:border-b-0">
-                        <input
-                          type="checkbox"
-                          disabled={!selectedRole?.id}
-                          checked={selectedPermissionKeys.includes(p.key)}
-                          onChange={(e) => {
-                            const next = new Set(selectedPermissionKeys);
-                            if (e.target.checked) next.add(p.key);
-                            else next.delete(p.key);
-                            setSelectedPermissionKeys(Array.from(next));
-                          }}
-                        />
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-zinc-900">{p.key}</div>
-                          {p.description ? <div className="mt-0.5 text-[11px] text-zinc-500">{p.description}</div> : null}
+                    permissionGroups.map((g) => {
+                      const selectedCount = (Array.isArray(g.allKeys) ? g.allKeys : []).filter((k) => selectedPermissionKeys.includes(k)).length;
+                      return (
+                        <div key={g.id} className="border-b border-zinc-100 last:border-b-0">
+                          <div className="flex items-center justify-between gap-3 bg-zinc-50 px-4 py-3">
+                            <div className="text-xs font-semibold text-zinc-800">
+                              {t(g.titleKey)}
+                              <span className="ml-2 text-[11px] font-normal text-zinc-500">
+                                {selectedCount}/{g.totalItems}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-[11px]">
+                              <button
+                                type="button"
+                                className="underline text-zinc-700 disabled:text-zinc-400"
+                                disabled={!selectedRole?.id}
+                                onClick={() => {
+                                  const next = new Set(selectedPermissionKeys);
+                                  for (const k of Array.isArray(g.allKeys) ? g.allKeys : []) next.add(k);
+                                  setSelectedPermissionKeys(Array.from(next));
+                                }}
+                              >
+                                {t('selectAll')}
+                              </button>
+                              <button
+                                type="button"
+                                className="underline text-zinc-700 disabled:text-zinc-400"
+                                disabled={!selectedRole?.id}
+                                onClick={() => {
+                                  const next = new Set(selectedPermissionKeys);
+                                  for (const k of Array.isArray(g.allKeys) ? g.allKeys : []) next.delete(k);
+                                  setSelectedPermissionKeys(Array.from(next));
+                                }}
+                              >
+                                {t('clearSelection')}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="divide-y divide-zinc-100">
+                            {g.items.map((p) => (
+                              <label key={p.id} className="flex items-start gap-2 px-4 py-3">
+                                <input
+                                  type="checkbox"
+                                  disabled={!selectedRole?.id}
+                                  checked={selectedPermissionKeys.includes(p.key)}
+                                  onChange={(e) => {
+                                    const next = new Set(selectedPermissionKeys);
+                                    if (e.target.checked) next.add(p.key);
+                                    else next.delete(p.key);
+                                    setSelectedPermissionKeys(Array.from(next));
+                                  }}
+                                />
+                                <div className="min-w-0">
+                                  <div className="text-sm font-medium text-zinc-900">{p.description || p.key}</div>
+                                  <div className="mt-0.5 text-[11px] text-zinc-500">{p.key}</div>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
                         </div>
-                      </label>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>

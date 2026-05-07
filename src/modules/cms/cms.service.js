@@ -29,6 +29,59 @@ function coerceLayoutToArray(value) {
   return null;
 }
 
+function mergeCmsLayoutBaseWithTranslation(baseLayout, translatedLayout) {
+  const baseArr = Array.isArray(baseLayout) ? baseLayout : [];
+  const trArr = Array.isArray(translatedLayout) ? translatedLayout : [];
+  if (baseArr.length === 0) return trArr;
+  if (trArr.length === 0) return baseArr;
+
+  const trById = new Map(trArr.map((b) => [String(b?.id || ''), b]));
+  return baseArr.map((b) => {
+    const id = String(b?.id || '');
+    if (!id) return b;
+    const tr = trById.get(id);
+    if (!tr) return b;
+    const type = String(b?.type || '');
+    if (type === 'text') {
+      const trText = tr?.content?.text;
+      if (typeof trText === 'string') {
+        return { ...b, content: { ...(b.content || {}), text: trText } };
+      }
+    }
+    return b;
+  });
+}
+
+function isMeaningfulHtmlText(value) {
+  if (value == null) return false;
+  const s = String(value);
+  const stripped = s
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return stripped.length > 0;
+}
+
+function fillEmptyCmsTextFromBase(baseLayout, existingTranslationLayout) {
+  const baseArr = Array.isArray(baseLayout) ? baseLayout : [];
+  const trArr = Array.isArray(existingTranslationLayout) ? existingTranslationLayout : [];
+  if (baseArr.length === 0) return trArr;
+
+  const trById = new Map(trArr.map((b) => [String(b?.id || ''), b]));
+  return baseArr.map((b) => {
+    const id = String(b?.id || '');
+    if (!id) return b;
+    const type = String(b?.type || '');
+    if (type !== 'text') return b;
+    const tr = trById.get(id);
+    const trText = tr?.content?.text;
+    if (isMeaningfulHtmlText(trText)) return { ...b, content: { ...(b.content || {}), text: trText } };
+    const baseText = b?.content?.text;
+    return typeof baseText === 'string' ? { ...b, content: { ...(b.content || {}), text: baseText } } : b;
+  });
+}
+
 async function createPage(data) {
   const orgId = Number(data.organizationId);
   const kind = data.kind || 'landing';
@@ -70,12 +123,17 @@ async function getPageBySlug({ organizationId, slug, language }) {
       const translation = await prisma.cmsTranslation.findFirst({
         where: { organizationId: Number(organizationId), pageId: page.id, language: lang }
       });
-      const effectiveLayout =
-        coerceLayoutToArray(translation?.contentJson) ??
-        coerceLayoutToArray(page?.publishedVersion?.layoutJson) ??
+      const baseLayout =
         coerceLayoutToArray(page?.draftVersion?.layoutJson) ??
+        coerceLayoutToArray(page?.publishedVersion?.layoutJson) ??
         coerceLayoutToArray(page?.layout?.layoutJson) ??
         null;
+      const translatedLayout = coerceLayoutToArray(translation?.contentJson) ?? null;
+
+      const effectiveLayout =
+        lang !== 'en'
+          ? mergeCmsLayoutBaseWithTranslation(baseLayout, translatedLayout)
+          : translatedLayout ?? baseLayout ?? null;
       return { ...page, effectiveLayout, language: lang };
     })(),
     DEFAULT_TIMEOUT_MS
@@ -116,6 +174,47 @@ async function saveLayout({ organizationId, pageId, layoutJson, language }) {
   }
 
   return { pageId: pid, language: lang, saved: true };
+}
+
+async function fillEmptyTranslation({ organizationId, pageId, language }) {
+  const lang = normalizeLang(language);
+  if (lang === 'en') throw new Error('Language must not be EN');
+  const pid = parseInt(pageId);
+  const orgId = Number(organizationId);
+
+  const page = await withTimeout(
+    prisma.cmsPage.findFirst({
+      where: { organizationId: orgId, id: pid },
+      include: { layout: true, publishedVersion: true, draftVersion: true }
+    }),
+    DEFAULT_TIMEOUT_MS
+  );
+  if (!page) throw new Error('Page not found');
+
+  const baseLayout =
+    coerceLayoutToArray(page?.draftVersion?.layoutJson) ??
+    coerceLayoutToArray(page?.publishedVersion?.layoutJson) ??
+    coerceLayoutToArray(page?.layout?.layoutJson) ??
+    null;
+  if (!Array.isArray(baseLayout) || baseLayout.length === 0) throw new Error('No base layout');
+
+  const existing = await withTimeout(
+    prisma.cmsTranslation.findFirst({ where: { organizationId: orgId, pageId: pid, language: lang } }),
+    DEFAULT_TIMEOUT_MS
+  );
+  const existingLayout = coerceLayoutToArray(existing?.contentJson) ?? null;
+  const filled = fillEmptyCmsTextFromBase(baseLayout, existingLayout);
+
+  await withTimeout(
+    prisma.cmsTranslation.upsert({
+      where: { pageId_language: { pageId: pid, language: lang } },
+      update: { organizationId: orgId, contentJson: filled },
+      create: { organizationId: orgId, pageId: pid, language: lang, contentJson: filled }
+    }),
+    DEFAULT_TIMEOUT_MS
+  );
+
+  return { pageId: pid, language: lang, filled: true };
 }
 
 async function publishPage({ organizationId, pageId }) {
@@ -215,6 +314,7 @@ module.exports = {
   createPage,
   getPageBySlug,
   saveLayout,
+  fillEmptyTranslation,
   publishPage,
   updateMeta,
   getAllPages,

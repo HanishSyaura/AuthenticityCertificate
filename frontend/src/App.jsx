@@ -5,6 +5,7 @@ import CmsPreviewPage from './pages/CmsPreviewPage';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminShell from './components/admin/AdminShell';
 import AdminProtected from './components/admin/AdminProtected';
+import AdminRequirePermission from './components/admin/AdminRequirePermission';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminCmsBuilder from './pages/admin/AdminCmsBuilder';
 import AdminRecords from './pages/admin/AdminRecords';
@@ -40,17 +41,107 @@ function App() {
           <Route index element={<AdminDashboard />} />
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="guide" element={<AdminGuide />} />
-          <Route path="records" element={<AdminRecords />} />
-          <Route path="epc" element={<AdminEpc />} />
-          <Route path="epc/scan" element={<AdminEpcScan />} />
-          <Route path="records/:id" element={<AdminRecordDetail />} />
-          <Route path="cms" element={<AdminCmsBuilder />} />
-          <Route path="certificates" element={<AdminCertificateList />} />
-          <Route path="certificates/new" element={<AdminCertificateBuilder />} />
-          <Route path="certificates/:id" element={<AdminCertificateBuilder />} />
-          <Route path="certificates/:id/design" element={<AdminCertificateDesigner />} />
-          <Route path="users" element={<AdminUsers />} />
-          <Route path="settings" element={<AdminSettings />} />
+          <Route
+            path="records"
+            element={
+              <AdminRequirePermission anyOf={['products.read']}>
+                <AdminRecords />
+              </AdminRequirePermission>
+            }
+          />
+          <Route
+            path="records/:id"
+            element={
+              <AdminRequirePermission anyOf={['products.read']}>
+                <AdminRecordDetail />
+              </AdminRequirePermission>
+            }
+          />
+          <Route
+            path="epc"
+            element={
+              <AdminRequirePermission
+                anyOf={[
+                  'epc.batch.view',
+                  'epc.batch.create',
+                  'epc.scan.access',
+                  'epc.certificate.view',
+                  'epc.export.xlsx',
+                  'epc.encoding',
+                  'epc.sequence.reset',
+                  'epc.delete',
+                  'epc.production.access',
+                  'epc.override'
+                ]}
+              >
+                <AdminEpc />
+              </AdminRequirePermission>
+            }
+          />
+          <Route
+            path="epc/scan"
+            element={
+              <AdminRequirePermission anyOf={['epc.scan.access']}>
+                <AdminEpcScan />
+              </AdminRequirePermission>
+            }
+          />
+          <Route
+            path="cms"
+            element={
+              <AdminRequirePermission anyOf={['cms.read']}>
+                <AdminCmsBuilder />
+              </AdminRequirePermission>
+            }
+          />
+          <Route
+            path="certificates"
+            element={
+              <AdminRequirePermission anyOf={['certificates.read', 'certificates.write']}>
+                <AdminCertificateList />
+              </AdminRequirePermission>
+            }
+          />
+          <Route
+            path="certificates/new"
+            element={
+              <AdminRequirePermission anyOf={['certificates.write']}>
+                <AdminCertificateBuilder />
+              </AdminRequirePermission>
+            }
+          />
+          <Route
+            path="certificates/:id"
+            element={
+              <AdminRequirePermission anyOf={['certificates.read', 'certificates.write']}>
+                <AdminCertificateBuilder />
+              </AdminRequirePermission>
+            }
+          />
+          <Route
+            path="certificates/:id/design"
+            element={
+              <AdminRequirePermission anyOf={['templates.read', 'templates.write']}>
+                <AdminCertificateDesigner />
+              </AdminRequirePermission>
+            }
+          />
+          <Route
+            path="users"
+            element={
+              <AdminRequirePermission anyOf={['users.manage', 'access.manage']}>
+                <AdminUsers />
+              </AdminRequirePermission>
+            }
+          />
+          <Route
+            path="settings"
+            element={
+              <AdminRequirePermission anyOf={['settings.read', 'settings.write']}>
+                <AdminSettings />
+              </AdminRequirePermission>
+            }
+          />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>

@@ -174,6 +174,17 @@ const useCmsStore = create((set, get) => ({
     }
   },
 
+  fillEmptyFromEn: async ({ pageId, language }) => {
+    const lang = String(language || get().language || 'en');
+    const { token } = useAdminAuthStore.getState();
+    if (!token) throw new Error('Not authenticated');
+    if (!pageId) return null;
+    if (String(lang).toLowerCase() === 'en') return null;
+    const api = createAdminApi({ token });
+    const res = await api.post('/cms/fill-empty', { pageId: Number(pageId), language: lang });
+    return res?.data?.data || null;
+  },
+
   publishPage: async ({ pageId }) => {
     const { token } = useAdminAuthStore.getState();
     if (!token) throw new Error('Not authenticated');

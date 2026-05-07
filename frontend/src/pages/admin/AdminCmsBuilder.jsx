@@ -73,6 +73,7 @@ export default function AdminCmsBuilder() {
     loadLayoutForPage,
     saveLayout,
     publishPage,
+    fillEmptyFromEn,
     reorderPages,
     language,
     setLanguage,
@@ -88,6 +89,7 @@ export default function AdminCmsBuilder() {
     loadLayoutForPage: s.loadLayoutForPage,
     saveLayout: s.saveLayout,
     publishPage: s.publishPage,
+    fillEmptyFromEn: s.fillEmptyFromEn,
     reorderPages: s.reorderPages,
     language: s.language,
     setLanguage: s.setLanguage,
@@ -106,6 +108,7 @@ export default function AdminCmsBuilder() {
   const [saveError, setSaveError] = useState(null);
   const [, setLastSavedAt] = useState(null);
   const saveSeqRef = useRef(0);
+  const layoutLocked = String(language || 'en') !== 'en';
 
   const selectedPage = useMemo(
     () =>
@@ -226,6 +229,20 @@ export default function AdminCmsBuilder() {
             <option value="ms">BM</option>
             <option value="zh">中文</option>
           </select>
+          {layoutLocked ? (
+            <button
+              type="button"
+              onClick={async () => {
+                if (!selectedPageId) return;
+                await fillEmptyFromEn({ pageId: selectedPageId, language });
+                await loadLayoutForPage({ page: selectedPage });
+              }}
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+              disabled={!selectedPageId || saveStatus === 'saving'}
+            >
+              {t('copyEnFillEmpty')}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={async () => {
@@ -256,7 +273,7 @@ export default function AdminCmsBuilder() {
               await publishPage({ pageId: selectedPageId });
             }}
             className="ac-btn rounded-lg px-3 py-2 text-xs"
-            disabled={!selectedPageId}
+            disabled={!selectedPageId || layoutLocked}
           >
             Publish
           </button>
@@ -326,6 +343,7 @@ export default function AdminCmsBuilder() {
           setLayout={setLayout}
           selectedBlockId={selectedBlockId}
           setSelectedBlockId={setSelectedBlockId}
+          layoutLocked={layoutLocked}
         />
 
         <CmsInspectorPanel
@@ -334,6 +352,7 @@ export default function AdminCmsBuilder() {
           setLayout={setLayout}
           clearSelection={() => setSelectedBlockId(null)}
           templates={templates}
+          layoutLocked={layoutLocked}
         />
       </div>
     </div>

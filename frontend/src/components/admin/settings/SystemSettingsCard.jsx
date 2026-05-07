@@ -1,5 +1,6 @@
 import React from 'react';
 import { Field, Input, Select, Toggle } from './SettingsControls';
+import { MAX_UPLOAD_MB } from '../../../utils/uploadLimits';
 
 export default function SystemSettingsCard({
   title,
@@ -110,6 +111,7 @@ export default function SystemSettingsCard({
                   }}
                 />
               </label>
+              <div className="text-[11px] text-zinc-500">Max file size: {MAX_UPLOAD_MB}MB</div>
 
               <button
                 type="button"

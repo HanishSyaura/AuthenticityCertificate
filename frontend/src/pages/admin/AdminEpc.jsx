@@ -81,7 +81,6 @@ export default function AdminEpc() {
     markProductionDone,
     updateBatch,
     deleteBatch,
-    recalculateSequence,
     deleteAllBatches,
     importExistingXlsx,
     exportBatchXlsxCustom,
@@ -105,7 +104,6 @@ export default function AdminEpc() {
     markProductionDone: s.markProductionDone,
     updateBatch: s.updateBatch,
     deleteBatch: s.deleteBatch,
-    recalculateSequence: s.recalculateSequence,
     deleteAllBatches: s.deleteAllBatches,
     importExistingXlsx: s.importExistingXlsx,
     clearLastGenerated: s.clearLastGenerated
@@ -120,7 +118,6 @@ export default function AdminEpc() {
   const [batchQty, setBatchQty] = useState(1);
   const [remark, setRemark] = useState('');
   const [certificateId, setCertificateId] = useState('');
-  const [certificateIdMode, setCertificateIdMode] = useState('auto');
   const [certificateTemplateId, setCertificateTemplateId] = useState('');
   const [templateData, setTemplateData] = useState({});
   const [importProductId, setImportProductId] = useState('');
@@ -200,7 +197,6 @@ export default function AdminEpc() {
   const refreshCertificateId = useCallback(async () => {
     const nextId = await fetchPeekCertificateId();
     if (nextId) setCertificateId(nextId);
-    setCertificateIdMode('auto');
   }, [fetchPeekCertificateId]);
 
   useEffect(() => {
@@ -507,10 +503,8 @@ export default function AdminEpc() {
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('certificateId')}</div>
                 <input
                   value={certificateId}
-                  onChange={(e) => {
-                    setCertificateId(String(e.target.value || '').toUpperCase());
-                    setCertificateIdMode('manual');
-                  }}
+                  disabled
+                  readOnly
                   className="ac-input font-mono uppercase"
                   placeholder="CERTDDMMYY001"
                 />
@@ -553,7 +547,6 @@ export default function AdminEpc() {
                     setRemark('');
                     setProductionDate('');
                     setCertificateId('');
-                    setCertificateIdMode('auto');
                     setTemplateData({});
                     clearLastGenerated();
                     void refreshCertificateId();
@@ -573,15 +566,11 @@ export default function AdminEpc() {
                       batchName: String(batchName).trim(),
                       batchQty,
                       remark: String(remark || '').trim() || undefined,
-                      certificateId: certificateIdMode === 'manual' ? String(certificateId || '').trim() || undefined : undefined,
                       certificateTemplateId: certificateTemplateId ? Number(certificateTemplateId) : null,
                       templateData
                     });
                     const createdCertId = String(created?.batch?.certificateId || '').trim();
-                    if (createdCertId) {
-                      setCertificateId(createdCertId);
-                      setCertificateIdMode('auto');
-                    }
+                    if (createdCertId) setCertificateId(createdCertId);
                     const batchId = created?.batch?.id;
                     if (batchId && canExportXlsx) await exportBatchXlsx(batchId);
                     await fetchBatches({ limit: 50, offset: 0 });

@@ -76,7 +76,6 @@ const DEVICE_PRESETS = [
 function PreviewStage({
   compact = false,
   baseW,
-  baseH,
   frameH,
   viewportW,
   viewportH,
@@ -130,7 +129,7 @@ function PreviewStage({
   );
 }
 
-export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPage, layout, previewLayout, setLayout, selectedBlockId, setSelectedBlockId }) {
+export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPage, layout, previewLayout, setLayout, selectedBlockId, setSelectedBlockId, layoutLocked = false }) {
   const { t } = useT();
   const safeLayout = useMemo(() => (Array.isArray(layout) ? layout.filter((b) => b && typeof b === 'object') : []), [layout]);
   const layoutRef = useRef(safeLayout);
@@ -331,107 +330,111 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
               ))}
             </optgroup>
           </select>
-          <button
-            type="button"
-            onClick={() => {
-              const next = [
-                ...safeLayout,
-                {
-                  id: makeId('container'),
-                  type: 'container',
-                  x: 20,
-                  y: 20,
-                  w: 260,
-                  h: 120,
-                  content: { backgroundColor: '#ffffff', borderColor: '#e4e4e7', borderWidth: 1, borderRadius: 16, opacity: 1 }
-                },
-              ];
-              setLayout(next);
-            }}
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-          >
-            {t('addContainer')}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const next = [
-                ...safeLayout,
-                { id: makeId('text'), type: 'text', x: 20, y: 20, w: 240, h: 80, content: { text: 'New text', fontSize: 14, fontColor: '#18181b' } }
-              ];
-              setLayout(next);
-            }}
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-          >
-            {t('addText')}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const next = [
-                ...safeLayout,
-                {
-                  id: makeId('image'),
-                  type: 'image',
-                  x: 20,
-                  y: 120,
-                  w: 260,
-                  h: 160,
-                  content: {
-                    url: ''
-                  }
-                }
-              ];
-              setLayout(next);
-            }}
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-          >
-            {t('addImage')}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const next = [...safeLayout, { id: makeId('video'), type: 'video', x: 20, y: 300, w: 260, h: 80, content: { url: '' } }];
-              setLayout(next);
-            }}
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-          >
-            {t('addVideo')}
-          </button>
-          {kind === 'landing' && !hasAuthCertificateBlock ? (
-            <button
-              type="button"
-              onClick={() => {
-                const next = [...safeLayout, { id: makeId('cert'), type: 'certificate', x: 0, y: 0, w: baseW, h: baseH, content: { variant: 'auth' } }];
-                setLayout(next);
-              }}
-              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-            >
-              {t('addAuthCertificate')}
-            </button>
-          ) : null}
-          {kind === 'landing' ? (
-            <button
-              type="button"
-              onClick={() => {
-                const next = [
-                  ...safeLayout,
-                  {
-                    id: makeId('supporting-cert'),
-                    type: 'certificate',
-                    x: 20,
-                    y: 20,
-                    w: baseW - 40,
-                    h: 260,
-                    content: { variant: 'supporting', certificateTemplateId: null }
-                  }
-                ];
-                setLayout(next);
-              }}
-              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-            >
-              {t('addSupportingCertificate')}
-            </button>
+          {!layoutLocked ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = [
+                    ...safeLayout,
+                    {
+                      id: makeId('container'),
+                      type: 'container',
+                      x: 20,
+                      y: 20,
+                      w: 260,
+                      h: 120,
+                      content: { backgroundColor: '#ffffff', borderColor: '#e4e4e7', borderWidth: 1, borderRadius: 16, opacity: 1 }
+                    },
+                  ];
+                  setLayout(next);
+                }}
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+              >
+                {t('addContainer')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = [
+                    ...safeLayout,
+                    { id: makeId('text'), type: 'text', x: 20, y: 20, w: 240, h: 80, content: { text: 'New text', fontSize: 14, fontColor: '#18181b' } }
+                  ];
+                  setLayout(next);
+                }}
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+              >
+                {t('addText')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = [
+                    ...safeLayout,
+                    {
+                      id: makeId('image'),
+                      type: 'image',
+                      x: 20,
+                      y: 120,
+                      w: 260,
+                      h: 160,
+                      content: {
+                        url: ''
+                      }
+                    }
+                  ];
+                  setLayout(next);
+                }}
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+              >
+                {t('addImage')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = [...safeLayout, { id: makeId('video'), type: 'video', x: 20, y: 300, w: 260, h: 80, content: { url: '' } }];
+                  setLayout(next);
+                }}
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+              >
+                {t('addVideo')}
+              </button>
+              {kind === 'landing' && !hasAuthCertificateBlock ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = [...safeLayout, { id: makeId('cert'), type: 'certificate', x: 0, y: 0, w: baseW, h: baseH, content: { variant: 'auth' } }];
+                    setLayout(next);
+                  }}
+                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                >
+                  {t('addAuthCertificate')}
+                </button>
+              ) : null}
+              {kind === 'landing' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = [
+                      ...safeLayout,
+                      {
+                        id: makeId('supporting-cert'),
+                        type: 'certificate',
+                        x: 20,
+                        y: 20,
+                        w: baseW - 40,
+                        h: 260,
+                        content: { variant: 'supporting', certificateTemplateId: null }
+                      }
+                    ];
+                    setLayout(next);
+                  }}
+                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                >
+                  {t('addSupportingCertificate')}
+                </button>
+              ) : null}
+            </>
           ) : null}
         </div>
       </div>
@@ -458,6 +461,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
               width={baseW}
               height={baseH}
               scale={scale}
+              mode={layoutLocked ? 'select' : 'edit'}
               items={blocks}
               setItems={setCanvasItems}
               selectedId={selectedBlockId}
@@ -487,6 +491,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
           width={baseW}
           height={baseH}
           scale={scale}
+          mode={layoutLocked ? 'select' : 'edit'}
           items={blocks}
           setItems={setCanvasItems}
           selectedId={selectedBlockId}

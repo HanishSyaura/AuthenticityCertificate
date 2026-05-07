@@ -860,15 +860,27 @@ async function ensureAccessControlSchemaCompat() {
     operator: ['cms.read', 'cms.write']
   };
 
-  for (const [roleName, keys] of Object.entries(rolePerms)) {
-    for (const key of keys) {
-      await prisma.$executeRaw`
-        INSERT IGNORE INTO \`RolePermission\` (\`roleId\`, \`permissionId\`, \`createdAt\`)
-        SELECT r.id, p.id, NOW()
-        FROM \`Role\` r
-        JOIN \`Permission\` p ON p.\`key\` = ${key}
-        WHERE r.\`name\` = ${roleName}
-      `;
+  let totalRolePerms = 0;
+  try {
+    totalRolePerms = await prisma.rolePermission.count();
+  } catch {
+    totalRolePerms = 0;
+  }
+
+  if (totalRolePerms === 0) {
+    for (const [roleName, keys] of Object.entries(rolePerms)) {
+      const roleRow = await prisma.role.findUnique({ where: { name: roleName }, select: { id: true } });
+      if (!roleRow?.id) continue;
+
+      for (const key of keys) {
+        await prisma.$executeRaw`
+          INSERT IGNORE INTO \`RolePermission\` (\`roleId\`, \`permissionId\`, \`createdAt\`)
+          SELECT r.id, p.id, NOW()
+          FROM \`Role\` r
+          JOIN \`Permission\` p ON p.\`key\` = ${key}
+          WHERE r.\`name\` = ${roleName}
+        `;
+      }
     }
   }
 

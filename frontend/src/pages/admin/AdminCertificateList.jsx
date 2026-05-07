@@ -5,6 +5,7 @@ import useEpcStore from '../../store/useEpcStore';
 import useUploadsStore from '../../store/useUploadsStore';
 import { useT } from '../../i18n/useT';
 import DataTable from '../../components/ui/DataTable';
+import { MAX_UPLOAD_MB } from '../../utils/uploadLimits';
 
 function formatDate(input) {
   if (!input) return '';
@@ -201,6 +202,7 @@ export default function AdminCertificateList() {
                   }}
                   className="mt-2 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
+                <div className="mt-1 text-[11px] text-zinc-500">Max file size: {MAX_UPLOAD_MB}MB</div>
                 {newBgError ? <div className="mt-2 text-xs text-rose-700">{newBgError}</div> : null}
               </div>
             </div>
