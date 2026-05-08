@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useT } from '../../../i18n/useT';
 
-export default function CmsPagePanel({ pages, selectedPageId, onSelectPage, onCreatePage, onDeletePage, onReorderPages }) {
+export default function CmsPagePanel({ pages, selectedPageId, onSelectPage, onCreatePage, onDeletePage, onReorderPages, onCollapse }) {
   const { t } = useT();
   const [sectionName, setSectionName] = useState('');
 
@@ -26,7 +26,20 @@ export default function CmsPagePanel({ pages, selectedPageId, onSelectPage, onCr
 
   return (
     <div className="ac-card p-3">
-      <div className="mb-3 text-xs font-semibold text-zinc-500">{t('pages')}</div>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="text-xs font-semibold text-zinc-500">{t('pages')}</div>
+        {typeof onCollapse === 'function' ? (
+          <button
+            type="button"
+            onClick={() => onCollapse()}
+            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold text-zinc-900 hover:bg-zinc-50"
+            title={t('collapse')}
+          >
+            <span aria-hidden="true">{'<'}</span>
+            <span>{t('collapse')}</span>
+          </button>
+        ) : null}
+      </div>
       <div className="space-y-1">
         {(Array.isArray(pages) ? pages : []).filter((p) => p && typeof p === 'object').map((p, idx) => (
           <div

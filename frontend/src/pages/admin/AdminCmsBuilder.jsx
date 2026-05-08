@@ -316,36 +316,40 @@ export default function AdminCmsBuilder() {
           >
             {t('publish')}
           </button>
-          <button
-            type="button"
-            onClick={() => setPagesOpen((v) => !v)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-            title={`${pagesOpen ? t('collapse') : t('expand')} ${t('pages')}`}
-          >
-            <span className="hidden xl:inline">{t('pages')}</span>
-            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-              <path
-                fillRule="evenodd"
-                d="M4 3.5A1.5 1.5 0 0 0 2.5 5v10A1.5 1.5 0 0 0 4 16.5h12A1.5 1.5 0 0 0 17.5 15V5A1.5 1.5 0 0 0 16 3.5H4Zm2.5 1H4.5a.5.5 0 0 0-.5.5v10a.5.5 0 0 0 .5.5h2V4.5Zm1.5.5A.5.5 0 0 1 8.5 4.5h7A.5.5 0 0 1 16 5v10a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5V5Z"
-                clipRule="evenodd"
-              />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={() => setInspectorOpen((v) => !v)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-            title={`${inspectorOpen ? t('collapse') : t('expand')} ${t('inspector')}`}
-          >
-            <span className="hidden xl:inline">{t('inspector')}</span>
-            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-              <path
-                fillRule="evenodd"
-                d="M4 3.5A1.5 1.5 0 0 0 2.5 5v10A1.5 1.5 0 0 0 4 16.5h12A1.5 1.5 0 0 0 17.5 15V5A1.5 1.5 0 0 0 16 3.5H4Zm10.5 1H16a.5.5 0 0 1 .5.5v10a.5.5 0 0 1-.5.5h-1.5V4.5Zm-1.5.5A.5.5 0 0 0 12.5 4.5h-7A.5.5 0 0 0 5 5v10a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5V5Z"
-                clipRule="evenodd"
-              />
-            </svg>
-          </button>
+          {!pagesOpen ? (
+            <button
+              type="button"
+              onClick={() => setPagesOpen(true)}
+              className="lg:hidden inline-flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+              title={`${t('expand')} ${t('pages')}`}
+            >
+              <span className="hidden xl:inline">{t('pages')}</span>
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path
+                  fillRule="evenodd"
+                  d="M4 3.5A1.5 1.5 0 0 0 2.5 5v10A1.5 1.5 0 0 0 4 16.5h12A1.5 1.5 0 0 0 17.5 15V5A1.5 1.5 0 0 0 16 3.5H4Zm2.5 1H4.5a.5.5 0 0 0-.5.5v10a.5.5 0 0 0 .5.5h2V4.5Zm1.5.5A.5.5 0 0 1 8.5 4.5h7A.5.5 0 0 1 16 5v10a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5V5Z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+          ) : null}
+          {!inspectorOpen ? (
+            <button
+              type="button"
+              onClick={() => setInspectorOpen(true)}
+              className="lg:hidden inline-flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+              title={`${t('expand')} ${t('inspector')}`}
+            >
+              <span className="hidden xl:inline">{t('inspector')}</span>
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path
+                  fillRule="evenodd"
+                  d="M4 3.5A1.5 1.5 0 0 0 2.5 5v10A1.5 1.5 0 0 0 4 16.5h12A1.5 1.5 0 0 0 17.5 15V5A1.5 1.5 0 0 0 16 3.5H4Zm10.5 1H16a.5.5 0 0 1 .5.5v10a.5.5 0 0 1-.5.5h-1.5V4.5Zm-1.5.5A.5.5 0 0 0 12.5 4.5h-7A.5.5 0 0 0 5 5v10a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5V5Z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setViewMode('edit')}
@@ -378,7 +382,27 @@ export default function AdminCmsBuilder() {
         </div>
       </div>
 
-      <div className={`grid grid-cols-1 gap-3 ${gridCols}`}>
+      <div className={`relative grid grid-cols-1 gap-3 ${gridCols}`}>
+        {!pagesOpen ? (
+          <button
+            type="button"
+            onClick={() => setPagesOpen(true)}
+            className="hidden lg:inline-flex absolute left-0 top-1/2 z-10 -translate-y-1/2 items-center justify-center rounded-r-lg border border-zinc-200 bg-white px-2 py-3 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
+            title={`${t('expand')} ${t('pages')}`}
+          >
+            <span aria-hidden="true">{'>'}</span>
+          </button>
+        ) : null}
+        {!inspectorOpen ? (
+          <button
+            type="button"
+            onClick={() => setInspectorOpen(true)}
+            className="hidden lg:inline-flex absolute right-0 top-1/2 z-10 -translate-y-1/2 items-center justify-center rounded-l-lg border border-zinc-200 bg-white px-2 py-3 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
+            title={`${t('expand')} ${t('inspector')}`}
+          >
+            <span aria-hidden="true">{'<'}</span>
+          </button>
+        ) : null}
         {pagesOpen ? (
           <CmsPagePanel
             pages={pages}
@@ -387,6 +411,7 @@ export default function AdminCmsBuilder() {
               selectPage(id);
               setSelectedBlockId(null);
             }}
+            onCollapse={() => setPagesOpen(false)}
             onReorderPages={async (orderedIds) => {
               await reorderPages({ orderedIds });
             }}
@@ -425,6 +450,7 @@ export default function AdminCmsBuilder() {
             clearSelection={() => setSelectedBlockId(null)}
             templates={templates}
             layoutLocked={layoutLocked}
+            onCollapse={() => setInspectorOpen(false)}
           />
         ) : null}
       </div>

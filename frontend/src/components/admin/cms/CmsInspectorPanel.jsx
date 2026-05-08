@@ -5,7 +5,7 @@ import { isFileTooLarge, MAX_UPLOAD_MB } from '../../../utils/uploadLimits';
 import RichTextEditor from '../RichTextEditor';
 import ImageCropModal from './ImageCropModal';
 
-export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, clearSelection, templates, layoutLocked = false }) {
+export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, clearSelection, templates, layoutLocked = false, onCollapse }) {
   const { t } = useT();
   const { uploadMedia } = useUploadsStore((s) => ({ uploadMedia: s.uploadMedia }));
   const [uploading, setUploading] = useState(false);
@@ -109,7 +109,20 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
 
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-3">
-      <div className="mb-3 text-xs font-semibold text-zinc-500">{t('inspector')}</div>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="text-xs font-semibold text-zinc-500">{t('inspector')}</div>
+        {typeof onCollapse === 'function' ? (
+          <button
+            type="button"
+            onClick={() => onCollapse()}
+            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold text-zinc-900 hover:bg-zinc-50"
+            title={t('collapse')}
+          >
+            <span>{t('collapse')}</span>
+            <span aria-hidden="true">{'>'}</span>
+          </button>
+        ) : null}
+      </div>
       {!selectedBlock ? (
         <div className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{t('selectBlock')}</div>
       ) : (
