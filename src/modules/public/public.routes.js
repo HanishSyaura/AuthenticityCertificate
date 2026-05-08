@@ -19,6 +19,61 @@ function normalizeLang(lang) {
 
 router.use(attachOrganization);
 
+router.get('/settings', async (req, res) => {
+  try {
+    const orgId = Number(req.organization?.id || 0);
+    if (!Number.isFinite(orgId) || orgId <= 0) {
+      return res.success({ organization: null, settings: { logoUrl: null } }, 'OK');
+    }
+
+    if (!dbGate.shouldUseDb()) {
+      return res.success({ organization: null, settings: { logoUrl: null } }, 'OK');
+    }
+
+    const dbTimeoutMs = 350;
+    const [org, settingsRows] = await Promise.all([
+      Promise.race([
+        prisma.organization.findUnique({ where: { id: orgId } }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), dbTimeoutMs))
+      ]),
+      Promise.race([
+        prisma.$queryRaw`
+          SELECT logoUrl, defaultLocale, defaultTimezone, maintenanceMode
+          FROM OrganizationSettings
+          WHERE organizationId = ${orgId}
+          LIMIT 1
+        `,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), dbTimeoutMs))
+      ])
+    ]);
+
+    const row = settingsRows?.[0] || null;
+    dbGate.markDbSuccess();
+
+    return res.success(
+      {
+        organization: org
+          ? {
+              id: org.id,
+              name: org.name,
+              code: org.code
+            }
+          : null,
+        settings: {
+          defaultLocale: row?.defaultLocale ? String(row.defaultLocale) : null,
+          defaultTimezone: row?.defaultTimezone ? String(row.defaultTimezone) : null,
+          maintenanceMode: Boolean(row?.maintenanceMode),
+          logoUrl: row?.logoUrl ? String(row.logoUrl) : null
+        }
+      },
+      'OK'
+    );
+  } catch (e) {
+    if (e?.message === 'db_timeout') dbGate.markDbFailure({ cooldownMs: 10_000 });
+    return res.success({ organization: null, settings: { logoUrl: null } }, 'OK');
+  }
+});
+
 function chooseStatus({ effectiveStatus, overrideStatus }) {
   if (overrideStatus === 'REVOKED') return 'REVOKED';
   if (effectiveStatus === 'EXPIRED') return 'EXPIRED';

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useT } from '../i18n/useT';
+import { getPublicApiBaseUrl, resolveApiAssetUrl } from '../utils/apiBase';
 
 function IconShield(props) {
   return (
@@ -71,7 +72,20 @@ function formatMeta(meta) {
 const VerifyLoadingScreen = ({ meta, mode = 'auto' }) => {
   const { t } = useT();
   const reduceMotion = useReducedMotion();
-  const brandLogoUrl = String(import.meta.env.VITE_VERIFY_LOGO_URL || '/brand-logo.png').trim();
+  const fallbackLogoUrl = String(import.meta.env.VITE_VERIFY_LOGO_URL || '/brand-logo.png').trim();
+  const [brandLogoUrl, setBrandLogoUrl] = useState(() => {
+    try {
+      const raw = localStorage.getItem('ac_public_brand_v1');
+      const parsed = raw ? JSON.parse(raw) : null;
+      const ts = Number(parsed?.ts || 0);
+      const cached = typeof parsed?.logoUrl === 'string' ? parsed.logoUrl.trim() : '';
+      if (!cached) return fallbackLogoUrl;
+      if (!Number.isFinite(ts) || Date.now() - ts > 24 * 60 * 60 * 1000) return fallbackLogoUrl;
+      return cached;
+    } catch {
+      return fallbackLogoUrl;
+    }
+  });
   const [brandLogoOk, setBrandLogoOk] = useState(true);
   const steps = useMemo(() => {
     const base = [t('verifyStepResolve'), t('verifyStepValidate'), t('verifyStepPrepare')].filter(Boolean);
@@ -84,6 +98,45 @@ const VerifyLoadingScreen = ({ meta, mode = 'auto' }) => {
   useEffect(() => {
     setBrandLogoOk(true);
   }, [brandLogoUrl]);
+
+  useEffect(() => {
+    if (!brandLogoUrl) return;
+    if (brandLogoUrl === fallbackLogoUrl) return;
+    try {
+      localStorage.setItem('ac_public_brand_v1', JSON.stringify({ logoUrl: brandLogoUrl, ts: Date.now() }));
+    } catch {
+      void 0;
+    }
+  }, [brandLogoUrl, fallbackLogoUrl]);
+
+  useEffect(() => {
+    let alive = true;
+    const run = async () => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 1500);
+        const base = getPublicApiBaseUrl();
+        const res = await fetch(`${base}/settings`, { signal: controller.signal });
+        clearTimeout(timeout);
+        const json = await res.json();
+        const nextRaw = json?.success ? String(json?.data?.settings?.logoUrl || '').trim() : '';
+        const next = nextRaw ? resolveApiAssetUrl(nextRaw) : '';
+        if (!alive) return;
+        if (next) setBrandLogoUrl(next);
+        try {
+          localStorage.setItem('ac_public_brand_v1', JSON.stringify({ logoUrl: next || '', ts: Date.now() }));
+        } catch {
+          void 0;
+        }
+      } catch {
+        void 0;
+      }
+    };
+    run();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!steps.length) return;

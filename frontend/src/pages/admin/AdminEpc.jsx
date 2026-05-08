@@ -821,12 +821,20 @@ export default function AdminEpc() {
                 <button
                   type="button"
                   className="ac-btn ac-btn-primary px-3 py-2 text-xs"
-                  disabled={loading}
+                  disabled={loading || !canBatchCreate}
                   onClick={async () => {
                     const patch = {
                       remark: editRemark,
                       templateData: editTemplateData
                     };
+                    const allowTemplateChange = canBatchCreate && editBatch?.certificateTemplateId == null;
+                    if (allowTemplateChange) {
+                      const nextTpl = String(editCertificateTemplateId || '').trim();
+                      const prevTpl = editBatch?.certificateTemplateId != null ? String(editBatch.certificateTemplateId) : '';
+                      if (nextTpl !== prevTpl) {
+                        patch.certificateTemplateId = nextTpl ? Number(nextTpl) : null;
+                      }
+                    }
                     if (editProductionDate !== editProductionDateOrig) {
                       patch.productionDate = editProductionDate ? String(editProductionDate).trim() : null;
                     }
@@ -919,7 +927,12 @@ export default function AdminEpc() {
                     </div>
                     <div>
                       <div className="mb-1 text-xs font-semibold text-zinc-600">{t('certTemplate')}</div>
-                      <select value={editCertificateTemplateId} disabled className="ac-input">
+                      <select
+                        value={editCertificateTemplateId}
+                        disabled={!canBatchCreate || editBatch?.certificateTemplateId != null}
+                        onChange={(e) => setEditCertificateTemplateId(e.target.value)}
+                        className="ac-input"
+                      >
                         <option value="">{t('none')}</option>
                         {authTemplates.map((tpl) => (
                           <option key={tpl.id} value={String(tpl.id)}>
@@ -927,7 +940,32 @@ export default function AdminEpc() {
                           </option>
                         ))}
                       </select>
-                      <div className="mt-1 text-[11px] text-zinc-500">Certificate template dikunci selepas batch dijana.</div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                          disabled={!String(editCertificateTemplateId || '').trim()}
+                          onClick={() => {
+                            const id = String(editCertificateTemplateId || '').trim();
+                            if (!id) return;
+                            const url = `/admin/certificates/${encodeURIComponent(id)}`;
+                            const w = window.open(url, '_blank', 'noopener,noreferrer');
+                            if (w) w.opener = null;
+                          }}
+                        >
+                          {t('openCertificateTemplate')}
+                        </button>
+                        <button
+                          type="button"
+                          className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                          onClick={() => navigate('/admin/certificates', { state: { openCreate: true } })}
+                        >
+                          {t('createCertificateTemplate')}
+                        </button>
+                      </div>
+                      {editBatch?.certificateTemplateId != null ? (
+                        <div className="mt-1 text-[11px] text-zinc-500">Certificate template dikunci selepas batch dijana.</div>
+                      ) : null}
                     </div>
                     <div>
                       <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
