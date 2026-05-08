@@ -103,8 +103,6 @@ function PreviewStage({
 }) {
   const scrollRef = useRef(null);
   const lastScrollTopRef = useRef(0);
-  const scrollbarOutside = 16;
-  const outsidePx = (Number(scale) > 0 ? Number(scale) : 1) * scrollbarOutside;
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -115,8 +113,8 @@ function PreviewStage({
   }, [effectivePreviewLayout, previewData, scale]);
 
   return (
-    <div className={`w-full overflow-auto ${compact ? 'p-2' : 'p-3'}`}>
-      <div className="mx-auto" style={{ width: viewportW + outsidePx, height: viewportH }}>
+    <div className={`w-full overflow-x-visible overflow-y-auto ${compact ? 'p-2' : 'p-3'}`}>
+      <div className="mx-auto" style={{ width: viewportW, height: viewportH }}>
         <div
           className="relative rounded-xl border border-zinc-200 shadow-sm"
           style={{ width: baseW, height: frameH, transform: `scale(${scale})`, transformOrigin: 'top left' }}
@@ -530,7 +528,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
               setSelectedId={setSelectedBlockId}
             />
           </div>
-          <div className="min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white">
+          <div className="min-w-0 overflow-visible rounded-xl border border-zinc-200 bg-white">
             <PreviewStage
               compact
               baseW={baseW}
