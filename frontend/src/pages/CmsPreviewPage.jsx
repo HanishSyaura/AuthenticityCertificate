@@ -167,12 +167,12 @@ export default function CmsPreviewPage() {
   return (
     <div className="min-h-screen overflow-x-hidden bg-zinc-50">
       <div className="w-full overflow-auto p-4">
-        <div className="mx-auto" style={{ width: baseW * scale, height: baseH * scale }}>
+        <div className="mx-auto" style={{ width: baseW * scale + 16 * scale, height: baseH * scale }}>
           <div
             className="relative rounded-xl border border-zinc-200 bg-white shadow-sm"
             style={{ width: baseW, height: baseH, transform: `scale(${scale})`, transformOrigin: 'top left' }}
           >
-            <div className="ac-scrollbar-inside">
+            <div className="ac-scrollbar-outside">
               <PublicRenderer layout={storedLayout} data={data || sampleCert(t)} />
             </div>
           </div>

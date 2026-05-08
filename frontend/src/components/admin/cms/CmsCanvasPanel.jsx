@@ -103,6 +103,8 @@ function PreviewStage({
 }) {
   const scrollRef = useRef(null);
   const lastScrollTopRef = useRef(0);
+  const scrollbarOutside = 16;
+  const outsidePx = (Number(scale) > 0 ? Number(scale) : 1) * scrollbarOutside;
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -114,7 +116,7 @@ function PreviewStage({
 
   return (
     <div className={`w-full overflow-auto ${compact ? 'p-2' : 'p-3'}`}>
-      <div className="mx-auto" style={{ width: viewportW, height: viewportH }}>
+      <div className="mx-auto" style={{ width: viewportW + outsidePx, height: viewportH }}>
         <div
           className="relative rounded-xl border border-zinc-200 shadow-sm"
           style={{ width: baseW, height: frameH, transform: `scale(${scale})`, transformOrigin: 'top left' }}
@@ -124,7 +126,7 @@ function PreviewStage({
             onScroll={(e) => {
               lastScrollTopRef.current = e.currentTarget.scrollTop || 0;
             }}
-            className="ac-scrollbar-inside"
+            className="ac-scrollbar-outside"
           >
             <PublicRenderer layout={effectivePreviewLayout} data={previewData || sampleCert()} />
           </div>
