@@ -99,7 +99,8 @@ function PreviewStage({
   previewLoading,
   previewError,
   previewEpc,
-  t
+  t,
+  measureRef
 }) {
   const scrollRef = useRef(null);
   const lastScrollTopRef = useRef(0);
@@ -113,20 +114,20 @@ function PreviewStage({
   }, [effectivePreviewLayout, previewData, scale]);
 
   return (
-    <div className={`w-full overflow-x-visible overflow-y-auto ${compact ? 'p-2' : 'p-3'}`}>
+    <div ref={measureRef} className={`w-full overflow-x-visible overflow-y-auto ${compact ? 'p-2' : 'p-3'}`}>
       <div className="mx-auto" style={{ width: viewportW, height: viewportH }}>
-        <div
-          className="relative rounded-xl border border-zinc-200 shadow-sm"
-          style={{ width: baseW, height: frameH, transform: `scale(${scale})`, transformOrigin: 'top left' }}
-        >
-          <div
-            ref={scrollRef}
-            onScroll={(e) => {
-              lastScrollTopRef.current = e.currentTarget.scrollTop || 0;
-            }}
-            className="ac-scrollbar-outside"
-          >
-            <PublicRenderer layout={effectivePreviewLayout} data={previewData || sampleCert()} />
+        <div className="relative overflow-visible" style={{ width: viewportW, height: viewportH }}>
+          <div className="pointer-events-none absolute inset-0 rounded-xl border border-zinc-200 shadow-sm" />
+          <div style={{ width: baseW, height: frameH, transform: `scale(${scale})`, transformOrigin: 'top left' }} className="relative">
+            <div
+              ref={scrollRef}
+              onScroll={(e) => {
+                lastScrollTopRef.current = e.currentTarget.scrollTop || 0;
+              }}
+              className="ac-scrollbar-outside"
+            >
+              <PublicRenderer layout={effectivePreviewLayout} data={previewData || sampleCert()} />
+            </div>
           </div>
           {previewLoading ? (
             <div className="absolute inset-0 flex items-center justify-center bg-white/60 text-xs font-semibold text-zinc-700">{t('loading')}</div>
@@ -148,6 +149,8 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
   const safeLayout = useMemo(() => (Array.isArray(layout) ? layout.filter((b) => b && typeof b === 'object') : []), [layout]);
   const layoutRef = useRef(safeLayout);
   const supportingTplCacheRef = useRef(new Map());
+  const previewMeasureRef = useRef(null);
+  const [fitTargetW, setFitTargetW] = useState(null);
 
   const [previewEpc, setPreviewEpc] = useState('');
   const [previewData, setPreviewData] = useState(null);
@@ -159,12 +162,39 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
   const baseW = 390;
   const baseH = 844;
   const devicePreset = useMemo(() => DEVICE_PRESETS.find((d) => d.id === devicePresetId) || DEVICE_PRESETS[0], [devicePresetId]);
+  const fitPaddingX = viewMode === 'split' ? 16 : 24;
+
+  useEffect(() => {
+    if (viewMode !== 'preview' && viewMode !== 'split') return;
+    const el = previewMeasureRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = Number(el?.clientWidth || 0);
+      setFitTargetW(Number.isFinite(w) && w > 0 ? w : null);
+    };
+    measure();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => measure());
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
+
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [viewMode]);
+
   const scale = useMemo(() => {
     if (!devicePreset) return 1;
-    if (Number(devicePreset.scale) > 0) return Math.max(0.1, Math.min(2, Number(devicePreset.scale)));
+    if (String(devicePreset.id) === 'fit') {
+      const w = Math.max(0, Number(fitTargetW || 0) - fitPaddingX);
+      if (!Number.isFinite(w) || w <= 0) return 1;
+      return Math.max(0.1, Math.min(4, w / baseW));
+    }
+    if (Number(devicePreset.scale) > 0) return Math.max(0.1, Math.min(4, Number(devicePreset.scale)));
     if (!devicePreset.w) return 1;
-    return Math.max(0.1, Math.min(2, Number(devicePreset.w) / baseW));
-  }, [devicePreset]);
+    return Math.max(0.1, Math.min(4, Number(devicePreset.w) / baseW));
+  }, [baseW, devicePreset, fitPaddingX, fitTargetW]);
   const viewportW = useMemo(() => {
     if (Number(devicePreset?.w) > 0) return Number(devicePreset.w);
     return baseW * scale;
@@ -513,6 +543,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
           previewError={previewError}
           previewEpc={previewEpc}
           t={t}
+          measureRef={previewMeasureRef}
         />
       ) : viewMode === 'split' ? (
         <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
@@ -543,6 +574,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
               previewError={previewError}
               previewEpc={previewEpc}
               t={t}
+              measureRef={previewMeasureRef}
             />
           </div>
         </div>

@@ -234,4 +234,13 @@ curl -s http://127.0.0.1:5000/health
 echo
 ```
 
-login credentials:
+sync main and damadingji
+
+```Shell
+git push --force-with-lease origin damadingji
+
+git fetch origin
+git status
+git log --oneline --left-right origin/main...HEAD
+```
+
