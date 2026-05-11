@@ -4,8 +4,9 @@ Dokumen ini untuk update **backend + frontend** setiap kali anda buat perubahan 
 
 Asumsi:
 
-- Project folder: `/www/wwwroot/wmscertauth.clbgroups.com`
-- Backend jalan guna PM2 process name: `wmscertauth-api`
+- Project folder: `/www/wwwroot/birdnestauth.clbgroups.com`
+- Branch deploy: `damadingji`
+- Backend jalan guna PM2 process name: `birdnestauth-api` (ubah ikut PM2 actual name)
 - Backend port internal: `5000`
 - Nginx serve frontend build dari `frontend/dist`
 
@@ -20,10 +21,16 @@ Paste satu blok ini dalam SSH:
 ```bash
 set -e
 
-cd /www/wwwroot/wmscertauth.clbgroups.com
+cd /www/wwwroot/birdnestauth.clbgroups.com
 
 echo "== 1) Pull latest code =="
-git pull
+git fetch origin
+git checkout damadingji
+git pull origin damadingji
+
+echo "== 1b) Confirm branch + commit =="
+git rev-parse --abbrev-ref HEAD
+git log -1 --oneline
 
 echo "== 2) Backend deps + Prisma =="
 npm ci || npm install
@@ -37,29 +44,38 @@ else
 fi
 
 echo "== 3) Restart backend =="
-pm2 restart wmscertauth-api
+pm2 restart birdnestauth-api
 
 echo "== 4) Frontend deps + build =="
 cd frontend
 npm ci || npm install
 
 if [ ! -f ".env.production" ]; then
-  echo "VITE_API_BASE_URL=https://wmscertauth.clbgroups.com/api" > .env.production
+  echo "VITE_API_BASE_URL=https://birdnestauth.clbgroups.com/api" > .env.production
 fi
 
+rm -rf dist
 npm run build
 
 echo "== 5) Quick checks =="
 curl -s http://127.0.0.1:5000/health
 echo
-pm2 status wmscertauth-api
+pm2 status birdnestauth-api
 ```
 
 Lepas run, test di browser:
 
-- `https://wmscertauth.clbgroups.com/health`
-- `https://wmscertauth.clbgroups.com/admin/dashboard`
-- `https://wmscertauth.clbgroups.com/verify/<CERTIFICATE_ID>`
+- `https://birdnestauth.clbgroups.com/health`
+- `https://birdnestauth.clbgroups.com/admin/epc`
+- `https://birdnestauth.clbgroups.com/verify/<CERTIFICATE_ID>`
+
+Kalau UI masih “sama” (masih nampak page EPC lama):
+
+- Pastikan step `rm -rf dist` + `npm run build` memang jalan tanpa error.
+- Confirm file build baru wujud:
+  - `ls -la frontend/dist/index.html`
+  - `ls -la frontend/dist/assets/`
+- Buat hard refresh browser (Ctrl+F5) atau buka Incognito.
 
 ***
 
@@ -68,7 +84,7 @@ Lepas run, test di browser:
 1. Check apa yang berubah:
 
 ```bash
-cd /www/wwwroot/wmscertauth.clbgroups.com
+cd /www/wwwroot/birdnestauth.clbgroups.com
 git status
 ```
 
@@ -86,10 +102,13 @@ git pull
 
 ```bash
 set -e
-cd /www/wwwroot/wmscertauth.clbgroups.com
-git pull
+cd /www/wwwroot/birdnestauth.clbgroups.com
+git fetch origin
+git checkout damadingji
+git pull origin damadingji
 cd frontend
 npm ci || npm install
+rm -rf dist
 npm run build
 ```
 
@@ -98,11 +117,13 @@ npm run build
 ## D) Bila backend berubah sahaja
 
 ```bash
-cd /www/wwwroot/wmscertauth.clbgroups.com
-git pull
+cd /www/wwwroot/birdnestauth.clbgroups.com
+git fetch origin
+git checkout damadingji
+git pull origin damadingji
 npm ci || npm install
 npx prisma generate
-pm2 restart wmscertauth-api
+pm2 restart birdnestauth-api
 curl -s http://127.0.0.1:5000/health
 echo
 ```
@@ -114,17 +135,17 @@ echo
 - Check PM2 log:
 
 ```bash
-pm2 logs wmscertauth-api --lines 200
+pm2 logs birdnestauth-api --lines 200
 ```
 
 - Check Nginx error log:
 
 ```bash
-tail -n 200 /www/wwwlogs/wmscertauth.clbgroups.com.error.log
+tail -n 200 /www/wwwlogs/birdnestauth.clbgroups.com.error.log
 ```
 
 - Kalau `502 Bad Gateway`:
-  - Pastikan backend hidup: `pm2 status wmscertauth-api`
+  - Pastikan backend hidup: `pm2 status birdnestauth-api`
   - Pastikan port: `curl -s http://127.0.0.1:5000/health`
 - Kalau route admin refresh jadi 404:
   - Pastikan Nginx ada `try_files $uri $uri/ /index.html;` untuk `location /`
@@ -166,7 +187,7 @@ Lepas save:
 ```bash
 npx prisma validate
 npx prisma generate
-pm2 restart wmscertauth-api
+pm2 restart birdnestauth-api
 ```
 
 Contoh (Part Product Management — tambah `origin`, `description`, `certificateTemplateId` pada table `Product`):
@@ -213,23 +234,35 @@ CREATE TABLE MediaAsset (
 cara update semua:
 
 ```Shell
-cd /www/wwwroot/wmscertauth.clbgroups.com
+set -e
 
-rm -rf frontend/dist
+cd /www/wwwroot/birdnestauth.clbgroups.com/AuthenticityCertificate
+
+echo "== Clean local changes =="
 git reset --hard
-git pull origin main
+git clean -fd
 
-npm install
+echo "== Pull damadingji =="
+git fetch origin
+git checkout damadingji
+git reset --hard origin/damadingji
+git log -1 --oneline
 
-cd frontend
-rm -rf node_modules package-lock.json
-npm install
-npm run build
-
-cd ..
+echo "== Backend deps + prisma =="
+npm ci || npm install
 npx prisma generate
-pm2 restart wmscertauth-api
 
+echo "== Frontend build =="
+cd frontend
+rm -rf dist
+npm ci || npm install
+npm run build
+cd ..
+
+echo "== Restart =="
+pm2 restart birdnestauth-api
+
+echo "== Health check =="
 curl -s http://127.0.0.1:5000/health
 echo
 ```

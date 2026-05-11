@@ -28,6 +28,7 @@ model Organization {
   categories      Category[]
   batches         Batch[]
   corpSequences   CorpSequence[]
+  corpMonthSequences CorpMonthSequence[]
   epcBatches      EpcBatch[]
   epcItems        EpcItem[]
   productSupportingCertificates ProductSupportingCertificate[]

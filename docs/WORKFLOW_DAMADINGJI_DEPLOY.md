@@ -84,14 +84,16 @@ git push origin damadingji
 ### 1) SSH masuk server & pergi ke folder project
 Contoh (tukar ikut server sebenar):
 ```bash
-cd /www/wwwroot/<project-folder>
+cd /www/wwwroot/birdnestauth.clbgroups.com
 ```
 
 ### 2) Checkout & pull branch `damadingji`
 ```bash
-git fetch
+git fetch origin
 git checkout damadingji
 git pull origin damadingji
+git rev-parse --abbrev-ref HEAD
+git log -1 --oneline
 ```
 
 ### 3) Backend install + Prisma generate
@@ -105,6 +107,7 @@ npx prisma generate
 ```bash
 cd frontend
 npm install
+rm -rf dist
 npm run build
 cd ..
 ```
@@ -137,6 +140,52 @@ sudo systemctl status <service-name> --no-pager
 Kalau ada error berkaitan table/column DB:
 - Pastikan app start dan menjalankan patch DB (rujuk [dbPatches.js](file:///c:/Users/USER/Desktop/Damadingji_NFC/src/config/dbPatches.js)).
 
+## D) Jika UI masih “sama” (tak berubah lepas deploy)
+Biasanya sebab **server masih berada pada branch lain**, atau **frontend build lama masih diserve**.
+
+### 1) Confirm branch yang sedang diserve
+Di folder project:
+```bash
+git rev-parse --abbrev-ref HEAD
+git log -1 --oneline
+```
+
+Kalau bukan `damadingji`, buat:
+```bash
+git fetch origin
+git checkout damadingji
+git reset --hard origin/damadingji
+```
+
+### 2) Force rebuild frontend & confirm dist baru
+```bash
+cd frontend
+rm -rf dist
+npm install
+npm run build
+ls -la dist/index.html
+ls -la dist/assets/
+cd ..
+```
+
+### 3) Restart backend (kalau backend juga berubah)
+- PM2:
+```bash
+pm2 list
+pm2 restart <name_or_id>
+pm2 logs <name_or_id> --lines 200
+```
+
+### 4) Confirm Nginx serve folder yang betul
+Di aaPanel, config Nginx biasanya di:
+```bash
+ls -la /www/server/panel/vhost/nginx/
+```
+Cari file domain anda (contoh `birdnestauth.clbgroups.com.conf`) dan confirm `root` pointing ke folder yang ada `frontend/dist`.
+
+### 5) Browser cache
+- Buat hard refresh (Ctrl+F5) atau buka Incognito.
+
 ## D) Quick Rollback (Jika Deploy Bermasalah)
 ```bash
 cd /www/wwwroot/<project-folder>
@@ -149,4 +198,3 @@ cd frontend && npm install && npm run build && cd ..
 
 # restart ikut setup (aaPanel/pm2/systemd)
 ```
-
