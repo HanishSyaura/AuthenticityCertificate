@@ -40,6 +40,62 @@ const ImageLightbox = ({ src, onClose }) => {
   );
 };
 
+function LazyMedia({ kind, src }) {
+  const [enabled, setEnabled] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (enabled) return;
+    const el = ref.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === 'undefined') return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setEnabled(true);
+          obs.disconnect();
+        }
+      },
+      { root: null, rootMargin: '240px', threshold: 0.01 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [enabled]);
+
+  if (!src) return null;
+
+  if (!enabled) {
+    return (
+      <button
+        ref={ref}
+        type="button"
+        className="group flex h-full w-full items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 text-xs font-semibold text-zinc-700 hover:bg-zinc-100"
+        onClick={() => setEnabled(true)}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="opacity-80 transition group-hover:opacity-100">
+          <path d="M8.5 6.7v10.6c0 .6.7 1 1.2.7l9-5.3c.5-.3.5-1.1 0-1.4l-9-5.3c-.5-.3-1.2.1-1.2.7z" />
+        </svg>
+        <span>Load video</span>
+      </button>
+    );
+  }
+
+  if (kind === 'iframe') {
+    return (
+      <iframe
+        title="video"
+        src={src}
+        className="h-full w-full border-0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowFullScreen
+        loading="lazy"
+      />
+    );
+  }
+
+  return <video src={src} controls playsInline preload="metadata" className="h-full w-full object-cover" />;
+}
+
 function getValue(path, data) {
   const parts = String(path || '').split('.').filter(Boolean);
   let cur = data;
@@ -841,16 +897,8 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
           const resolved = raw ? resolveCmsVideoSource(raw, typeof window !== 'undefined' ? window.location.origin : 'https://example.invalid') : null;
           return (
             <div key={block.id} style={style}>
-              {resolved?.kind === 'iframe' ? (
-                <iframe
-                  title="video"
-                  src={resolved.src}
-                  className="h-full w-full border-0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
-              ) : resolved?.kind === 'video' ? (
-                <video src={resolved.src} controls playsInline preload="metadata" className="h-full w-full object-cover" />
+              {resolved?.kind === 'iframe' || resolved?.kind === 'video' ? (
+                <LazyMedia kind={resolved.kind} src={resolved.src} />
               ) : (
                 <div className="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 text-xs text-zinc-500">
                   {t('video')}
