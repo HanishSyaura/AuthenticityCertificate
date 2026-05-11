@@ -1243,6 +1243,26 @@ function pickByPrefix(obj, prefixes) {
   return null;
 }
 
+function pickRawByPrefix(obj, prefixes) {
+  const o = obj && typeof obj === 'object' ? obj : {};
+  const keys = Object.keys(o);
+  for (const p of Array.isArray(prefixes) ? prefixes : []) {
+    const pref = String(p || '').trim().toLowerCase();
+    if (!pref) continue;
+    const k = keys.find((kk) => String(kk || '').toLowerCase().startsWith(pref));
+    if (!k) continue;
+    const v = o[k];
+    if (v == null) continue;
+    if (typeof v === 'string') {
+      const s = v.trim();
+      if (s) return s;
+      continue;
+    }
+    return v;
+  }
+  return null;
+}
+
 function toDateOrNull(input) {
   if (!input) return null;
   if (input instanceof Date && !Number.isNaN(input.getTime())) return input;
@@ -1252,6 +1272,13 @@ function toDateOrNull(input) {
   }
   const s = String(input || '').trim();
   if (!s) return null;
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    const n = Number(s);
+    if (Number.isFinite(n)) {
+      const d = XLSX.SSF.parse_date_code(n);
+      if (d && d.y && d.m && d.d) return new Date(Date.UTC(d.y, d.m - 1, d.d));
+    }
+  }
   const d = new Date(s);
   if (!Number.isNaN(d.getTime())) return d;
   return null;
@@ -1358,7 +1385,7 @@ async function previewBatchImportXlsx({ organizationId, batchId, base64 }) {
       epcCode,
       batchNumber: pickByPrefix(n, ['batchnumber', 'batchno', 'batch']),
       swiftletHouseNumber: pickByPrefix(n, ['swiftlethousenumber', 'swiftlethouse', 'housenumber']),
-      productionDate: toDateOrNull(pickByPrefix(n, ['manufacturedate', 'productiondate', 'dateofproduction', 'production_date']))
+      productionDate: toDateOrNull(pickRawByPrefix(n, ['manufacturedate', 'productiondate', 'dateofproduction', 'production_date']))
     });
   }
   if (updates.length === 0) throw new Error('No EPC code found in the uploaded XLSX.');
@@ -1390,7 +1417,7 @@ async function createImportBatchFromXlsx({
       batchNumber: pickByPrefix(n, ['batchnumber', 'batchno', 'batch']),
       swiftletHouseNumber: pickByPrefix(n, ['swiftlethousenumber', 'swiftlethouse', 'housenumber']),
       netWeight: pickByPrefix(n, ['netweight', 'net_weight']),
-      productionDate: toDateOrNull(pickByPrefix(n, ['manufacturedate', 'productiondate', 'dateofproduction', 'production_date'])),
+      productionDate: toDateOrNull(pickRawByPrefix(n, ['manufacturedate', 'productiondate', 'dateofproduction', 'production_date'])),
       caiqNumber: pickByPrefix(n, ['individuallabel(caiq)', 'caiqnumber', 'caiq', 'caiqlabel', 'caiq_label'])
     });
   }
@@ -1573,7 +1600,7 @@ async function submitBatchImport({
       batchNumber: pickByPrefix(n, ['batchnumber', 'batchno', 'batch']),
       swiftletHouseNumber: pickByPrefix(n, ['swiftlethousenumber', 'swiftlethouse', 'housenumber']),
       netWeight: pickByPrefix(n, ['netweight', 'net_weight']),
-      productionDate: toDateOrNull(pickByPrefix(n, ['manufacturedate', 'productiondate', 'dateofproduction', 'production_date'])),
+      productionDate: toDateOrNull(pickRawByPrefix(n, ['manufacturedate', 'productiondate', 'dateofproduction', 'production_date'])),
       caiqNumber: pickByPrefix(n, ['individuallabel(caiq)', 'caiqnumber', 'caiq', 'caiqlabel', 'caiq_label'])
     });
   }

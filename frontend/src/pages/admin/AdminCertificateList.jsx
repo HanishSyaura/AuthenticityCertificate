@@ -23,10 +23,40 @@ function normalizeTemplateId(input) {
   return String(n);
 }
 
+function pickFirst(obj, keys) {
+  for (const k of keys) {
+    const v = obj?.[k];
+    if (v !== undefined && v !== null) return v;
+  }
+  return undefined;
+}
+
 function getTemplateId(tpl) {
-  const direct = normalizeTemplateId(tpl?.id);
+  const directValue = normalizeTemplateId(tpl);
+  if (directValue) return directValue;
+  const direct = normalizeTemplateId(
+    pickFirst(tpl, ['id', 'templateId', 'template_id', 'templateID', 'TemplateId', 'TemplateID', 'templateid', 'ID'])
+  );
   if (direct) return direct;
-  return normalizeTemplateId(tpl?.templateId ?? tpl?.template_id);
+  return null;
+}
+
+function getCertificateId(tpl) {
+  const v = pickFirst(tpl, ['certificateId', 'certificate_id', 'certificateID', 'CertificateId', 'CERTIFICATE_ID']);
+  const s = String(v ?? '').trim();
+  if (!s) return '';
+  const lc = s.toLowerCase();
+  if (lc === 'undefined' || lc === 'null') return '';
+  return s;
+}
+
+function getTemplateName(tpl) {
+  const v = pickFirst(tpl, ['name', 'templateName', 'template_name', 'certificateName', 'certificate_name']);
+  const s = String(v ?? '').trim();
+  if (!s) return '';
+  const lc = s.toLowerCase();
+  if (lc === 'undefined' || lc === 'null') return '';
+  return s;
 }
 
 export default function AdminCertificateList() {
@@ -141,11 +171,9 @@ export default function AdminCertificateList() {
             id: 'name',
             header: t('certificateName'),
             cell: (tpl) => {
-              const nmRaw = String(tpl?.name ?? '').trim();
-              const cidRaw = String(tpl?.certificateId ?? '').trim();
               const id = getTemplateId(tpl);
-              const nm = nmRaw && nmRaw.toLowerCase() !== 'undefined' && nmRaw.toLowerCase() !== 'null' ? nmRaw : '';
-              const cid = cidRaw && cidRaw.toLowerCase() !== 'undefined' && cidRaw.toLowerCase() !== 'null' ? cidRaw : '';
+              const nm = getTemplateName(tpl);
+              const cid = getCertificateId(tpl);
               const title = nm || cid || `#${id || ''}`;
               const subtitle = cid || `#${id || ''}`;
               return (

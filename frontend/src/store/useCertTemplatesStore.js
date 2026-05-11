@@ -16,12 +16,38 @@ function normalizeTemplateId(input) {
   return String(n);
 }
 
+function pickFirst(obj, keys) {
+  for (const k of keys) {
+    const v = obj?.[k];
+    if (v !== undefined && v !== null) return v;
+  }
+  return undefined;
+}
+
 function coerceTemplateId(row) {
-  const direct = normalizeTemplateId(row?.id);
-  if (direct) return direct;
-  const alt = normalizeTemplateId(row?.templateId ?? row?.template_id);
-  if (!alt) return row;
-  return { ...(row || {}), id: Number(alt) };
+  if (!row || typeof row !== 'object') return row;
+  const direct = normalizeTemplateId(
+    pickFirst(row, [
+      'id',
+      'templateId',
+      'template_id',
+      'templateID',
+      'TemplateId',
+      'TemplateID',
+      'templateid',
+      'ID'
+    ])
+  );
+  if (!direct) return row;
+  return { ...(row || {}), id: Number(direct) };
+}
+
+function getIdForAnyShape(item) {
+  if (item == null) return null;
+  if (typeof item === 'string' || typeof item === 'number') return normalizeTemplateId(item);
+  return normalizeTemplateId(
+    pickFirst(item, ['id', 'templateId', 'template_id', 'templateID', 'TemplateId', 'TemplateID', 'templateid', 'ID'])
+  );
 }
 
 const useCertTemplatesStore = create((set, get) => ({
@@ -58,8 +84,18 @@ const useCertTemplatesStore = create((set, get) => ({
       const res = await api.get(`/templates/${encodeURIComponent(tplId)}`, { params: l ? { lang: l } : undefined });
       const tpl = res?.data?.data || null;
       if (!tpl) return null;
-      const templates = get().templates.map((t) => (String(t.id) === String(tplId) ? tpl : t));
-      set({ templates, lastSyncAt: Date.now() });
+      const current = Array.isArray(get().templates) ? get().templates : [];
+      let replaced = false;
+      const templates = current.map((t) => {
+        const tid = getIdForAnyShape(t);
+        if (tid && String(tid) === String(tplId)) {
+          replaced = true;
+          return tpl;
+        }
+        return t;
+      });
+      const nextTemplates = replaced ? templates : [tpl, ...templates].filter(Boolean);
+      set({ templates: nextTemplates, lastSyncAt: Date.now() });
       return tpl;
     } catch (e) {
       const msg = e?.response?.data?.message || tRaw('operationFailed');
@@ -129,9 +165,19 @@ const useCertTemplatesStore = create((set, get) => ({
       const updated = res?.data?.data;
       const isLatest = (get().saveSeqById?.[key] || 0) === seq;
       if (isLatest) {
-        const templates = get().templates.map((t) => (String(t.id) === String(tplId) ? updated : t));
+        const current = Array.isArray(get().templates) ? get().templates : [];
+        let replaced = false;
+        const templates = current.map((t) => {
+          const tid = getIdForAnyShape(t);
+          if (tid && String(tid) === String(tplId)) {
+            replaced = true;
+            return updated;
+          }
+          return t;
+        });
+        const nextTemplates = replaced ? templates : [updated, ...templates].filter(Boolean);
         set((s) => ({
-          templates,
+          templates: nextTemplates,
           lastSyncAt: Date.now(),
           savingById: { ...(s.savingById || {}), [key]: false }
         }));
