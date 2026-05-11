@@ -5,6 +5,7 @@ import useEpcStore from '../../store/useEpcStore';
 import useUploadsStore from '../../store/useUploadsStore';
 import { useT } from '../../i18n/useT';
 import DataTable from '../../components/ui/DataTable';
+import RowActionsMenu from '../../components/ui/RowActionsMenu';
 import { MAX_UPLOAD_MB } from '../../utils/uploadLimits';
 
 function formatDate(input) {
@@ -29,12 +30,13 @@ export default function AdminCertificateList() {
   const [newBgFileKey, setNewBgFileKey] = useState(0);
   const [newError, setNewError] = useState(null);
 
-  const { templates, loading, error, fetchTemplates, createTemplate } = useCertTemplatesStore((s) => ({
+  const { templates, loading, error, fetchTemplates, createTemplate, duplicateTemplate } = useCertTemplatesStore((s) => ({
     templates: s.templates,
     loading: s.loading,
     error: s.error,
     fetchTemplates: s.fetchTemplates,
-    createTemplate: s.createTemplate
+    createTemplate: s.createTemplate,
+    duplicateTemplate: s.duplicateTemplate
   }));
 
   const { batches, fetchBatches } = useEpcStore((s) => ({
@@ -109,15 +111,23 @@ export default function AdminCertificateList() {
           {
             id: 'name',
             header: t('certificateName'),
-            cell: (tpl) => (
-              <div className="min-w-0">
-                <div className="truncate font-semibold text-zinc-900">{tpl.name}</div>
-                <div className="mt-0.5 truncate text-[11px] text-zinc-500">{String(tpl.certificateId || '').trim() || `#${tpl.id}`}</div>
+            cell: (tpl) => {
+              const nmRaw = String(tpl?.name ?? '').trim();
+              const cidRaw = String(tpl?.certificateId ?? '').trim();
+              const nm = nmRaw && nmRaw.toLowerCase() !== 'undefined' && nmRaw.toLowerCase() !== 'null' ? nmRaw : '';
+              const cid = cidRaw && cidRaw.toLowerCase() !== 'undefined' && cidRaw.toLowerCase() !== 'null' ? cidRaw : '';
+              const title = nm || cid || `#${tpl?.id ?? ''}`;
+              const subtitle = cid || `#${tpl?.id ?? ''}`;
+              return (
+                <div className="min-w-0">
+                  <div className="truncate font-semibold text-zinc-900">{title}</div>
+                  <div className="mt-0.5 truncate text-[11px] text-zinc-500">{subtitle}</div>
                 <div className="mt-1 text-[11px] font-semibold text-zinc-600">
                   {String(tpl?.templateType || 'auth') === 'supporting' ? t('supportingCertificate') : t('authCertificate')}
                 </div>
-              </div>
-            )
+                </div>
+              );
+            }
           },
           {
             id: 'fields',
@@ -129,7 +139,29 @@ export default function AdminCertificateList() {
             header: t('epcBatches'),
             cell: (tpl) => <span className="text-[11px] text-zinc-700">{assignedCountByTemplateId.get(String(tpl.id)) || 0}</span>
           },
-          { id: 'created', header: t('created'), cell: (tpl) => <span className="text-[11px] text-zinc-500">{formatDate(tpl.createdAt)}</span> }
+          { id: 'created', header: t('created'), cell: (tpl) => <span className="text-[11px] text-zinc-500">{formatDate(tpl.createdAt)}</span> },
+          {
+            id: 'actions',
+            header: t('actions'),
+            align: 'right',
+            headerStyle: { width: 1 },
+            cellStyle: { width: 1 },
+            cell: (tpl) => (
+              <RowActionsMenu
+                items={[
+                  {
+                    key: 'duplicate',
+                    label: t('duplicate'),
+                    onSelect: async () => {
+                      if (!tpl?.id) return;
+                      const created = await duplicateTemplate({ id: tpl.id });
+                      if (created?.id != null) navigate(`/admin/certificates/${created.id}`);
+                    }
+                  }
+                ]}
+              />
+            )
+          }
         ]}
       />
 

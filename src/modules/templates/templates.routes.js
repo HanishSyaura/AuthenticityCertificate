@@ -21,6 +21,11 @@ router.patch(
   templatesController.update
 );
 router.post(
+  '/:id/duplicate',
+  auditAction('DUPLICATE_TEMPLATE', { targetType: 'certificate_template', getTargetId: (req) => req.params.id }),
+  templatesController.duplicate
+);
+router.post(
   '/:id/fill-empty',
   auditAction('FILL_EMPTY_TEMPLATE_TRANSLATION', { targetType: 'certificate_template', getTargetId: (req) => req.params.id }),
   templatesController.fillEmptyTranslation

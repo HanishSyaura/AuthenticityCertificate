@@ -111,11 +111,22 @@ async function remove(req, res) {
   }
 }
 
+async function duplicate(req, res) {
+  try {
+    const { id } = req.params;
+    const created = await templatesService.duplicateTemplate({ organizationId: req.organization.id, id });
+    res.success(created, 'Template duplicated');
+  } catch (e) {
+    res.error(e.message, 400);
+  }
+}
+
 module.exports = {
   list,
   getOne,
   create,
   update,
   fillEmptyTranslation,
-  remove
+  remove,
+  duplicate
 };

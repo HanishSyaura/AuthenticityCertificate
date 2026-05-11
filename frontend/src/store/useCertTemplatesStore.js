@@ -86,6 +86,24 @@ const useCertTemplatesStore = create((set, get) => ({
     }
   },
 
+  duplicateTemplate: async ({ id } = {}) => {
+    const tplId = normalizeTemplateId(id);
+    if (!tplId) throw new Error(tRaw('operationFailed'));
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.post(`/templates/${encodeURIComponent(tplId)}/duplicate`);
+      const created = res?.data?.data || null;
+      const templates = created ? [created, ...get().templates].filter(Boolean) : get().templates;
+      set({ templates, loading: false, lastSyncAt: Date.now() });
+      return created;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
   updateTemplate: async ({ id, patch, lang } = {}) => {
     const tplId = normalizeTemplateId(id);
     if (!tplId) throw new Error(tRaw('operationFailed'));

@@ -11,6 +11,37 @@ function normalizeLang(lang) {
   return 'en';
 }
 
+function splitDupSuffix(input) {
+  const s = String(input ?? '').trim();
+  if (!s) return { root: '', n: null };
+  const m = s.match(/^(.*)\s\((\d+)\)$/);
+  if (!m) return { root: s, n: null };
+  const n = Number(m[2]);
+  if (!Number.isInteger(n) || n < 2) return { root: s, n: null };
+  const root = String(m[1] ?? '').trim();
+  return { root: root || s, n };
+}
+
+async function nextAvailableSuffixValue({ orgId, field, root, startAt = 2 }) {
+  const cleanRoot = String(root ?? '').trim();
+  if (!cleanRoot) throw new Error('Unable to generate unique value');
+  const rows = await withTimeout(
+    prisma.certificateTemplate.findMany({
+      where: { organizationId: Number(orgId), [field]: { startsWith: cleanRoot } },
+      select: { [field]: true }
+    }),
+    1500
+  );
+  const existing = new Set((rows || []).map((r) => String(r?.[field] ?? '').trim()).filter(Boolean));
+  let n = Math.max(2, Number(startAt) || 2);
+  for (let guard = 0; guard < 500; guard++) {
+    const candidate = `${cleanRoot} (${n})`;
+    if (!existing.has(candidate)) return { value: candidate, n };
+    n++;
+  }
+  throw new Error('Unable to generate unique value');
+}
+
 function toPositiveInt(name, value) {
   const n = Number(value);
   if (!Number.isInteger(n) || n <= 0) throw new Error(`${name} is invalid`);
@@ -319,11 +350,81 @@ async function fillEmptyTranslation({ organizationId, id, lang }) {
   return await getTemplateById({ organizationId: orgId, id: tplId, lang: language });
 }
 
+async function duplicateTemplate({ organizationId, id }) {
+  const orgId = toPositiveInt('Organization id', organizationId);
+  const tplId = toPositiveInt('Template id', id);
+
+  const base = await withTimeout(
+    prisma.certificateTemplate.findFirst({
+      where: { organizationId: orgId, id: tplId }
+    }),
+    1500
+  );
+  if (!base) throw new Error('Template not found');
+
+  const baseName = String(base.name ?? '').trim();
+  const baseCertId = String(base.certificateId ?? '').trim();
+  const nameRootRaw = baseName && baseName.toLowerCase() !== 'undefined' && baseName.toLowerCase() !== 'null' ? baseName : `Template ${tplId}`;
+  const certIdRootRaw = baseCertId && baseCertId.toLowerCase() !== 'undefined' && baseCertId.toLowerCase() !== 'null' ? baseCertId : `TEMPLATE-${tplId}`;
+  const nameRoot = splitDupSuffix(nameRootRaw).root || nameRootRaw;
+  const certIdRoot = splitDupSuffix(certIdRootRaw).root || certIdRootRaw;
+
+  const [{ value: nextName }, { value: nextCertificateId }] = await Promise.all([
+    nextAvailableSuffixValue({ orgId, field: 'name', root: nameRoot, startAt: 2 }),
+    nextAvailableSuffixValue({ orgId, field: 'certificateId', root: certIdRoot, startAt: 2 })
+  ]);
+
+  return await prisma.$transaction(async (tx) => {
+    const created = await withTimeout(
+      tx.certificateTemplate.create({
+        data: {
+          organizationId: orgId,
+          certificateId: nextCertificateId,
+          templateType: String(base.templateType || '').trim() || 'auth',
+          name: nextName,
+          background: base.background || '',
+          backgroundColor: String(base.backgroundColor || '').trim() || '#ffffff',
+          backgroundMode: String(base.backgroundMode || '').trim() || 'background',
+          layoutJson: base.layoutJson || [],
+          placeholders: base.placeholders ?? null,
+          canvasWidth: Number.isFinite(Number(base.canvasWidth)) && Number(base.canvasWidth) > 0 ? Number(base.canvasWidth) : 390,
+          canvasHeight: Number.isFinite(Number(base.canvasHeight)) && Number(base.canvasHeight) > 0 ? Number(base.canvasHeight) : 844
+        }
+      }),
+      1500
+    );
+
+    const trs = await withTimeout(
+      tx.certificateTemplateTranslation.findMany({
+        where: { organizationId: orgId, templateId: tplId }
+      }),
+      1500
+    );
+    if (Array.isArray(trs) && trs.length > 0) {
+      await withTimeout(
+        tx.certificateTemplateTranslation.createMany({
+          data: trs.map((r) => ({
+            organizationId: orgId,
+            templateId: created.id,
+            language: r.language,
+            layoutJson: r.layoutJson || [],
+            placeholders: r.placeholders ?? null
+          }))
+        }),
+        1500
+      );
+    }
+
+    return created;
+  });
+}
+
 module.exports = {
   listTemplates,
   getTemplateById,
   createTemplate,
   updateTemplate,
   fillEmptyTranslation,
-  deleteTemplate
+  deleteTemplate,
+  duplicateTemplate
 };

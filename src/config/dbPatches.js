@@ -633,6 +633,39 @@ async function ensureEpcSchemaCompat() {
     'ALTER TABLE `EpcBatchSequence` MODIFY `updatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP'
   );
 
+  const hasImportBatchSeq = await tableExists('ImportBatchSequence');
+  if (!hasImportBatchSeq) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`ImportBatchSequence\` (
+        \`dateKey\` VARCHAR(8) NOT NULL,
+        \`lastNo\` BIGINT NOT NULL DEFAULT 0,
+        \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`dateKey\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+  await ensureColumn(
+    'ImportBatchSequence',
+    'dateKey',
+    'ALTER TABLE `ImportBatchSequence` ADD COLUMN `dateKey` VARCHAR(8) NULL',
+    null,
+    'ALTER TABLE `ImportBatchSequence` MODIFY `dateKey` VARCHAR(8) NOT NULL'
+  );
+  await ensureColumn(
+    'ImportBatchSequence',
+    'lastNo',
+    'ALTER TABLE `ImportBatchSequence` ADD COLUMN `lastNo` BIGINT NULL',
+    'UPDATE `ImportBatchSequence` SET `lastNo` = 0 WHERE `lastNo` IS NULL',
+    'ALTER TABLE `ImportBatchSequence` MODIFY `lastNo` BIGINT NOT NULL DEFAULT 0'
+  );
+  await ensureColumn(
+    'ImportBatchSequence',
+    'updatedAt',
+    'ALTER TABLE `ImportBatchSequence` ADD COLUMN `updatedAt` DATETIME NULL',
+    'UPDATE `ImportBatchSequence` SET `updatedAt` = NOW() WHERE `updatedAt` IS NULL',
+    'ALTER TABLE `ImportBatchSequence` MODIFY `updatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP'
+  );
+
   const hasEpcBatch = await tableExists('EpcBatch');
   if (!hasEpcBatch) {
     await prisma.$executeRawUnsafe(`
@@ -641,6 +674,7 @@ async function ensureEpcSchemaCompat() {
         \`organizationId\` INT NOT NULL,
         \`corpPrefix\` VARCHAR(191) NOT NULL,
         \`periodKey\` VARCHAR(191) NULL,
+        \`origin\` VARCHAR(191) NOT NULL DEFAULT 'generated',
         \`productId\` INT NULL,
         \`sku\` VARCHAR(191) NULL,
         \`batchName\` VARCHAR(191) NOT NULL,
@@ -670,6 +704,13 @@ async function ensureEpcSchemaCompat() {
   }
 
   await ensureColumn('EpcBatch', 'periodKey', `ALTER TABLE \`EpcBatch\` ADD COLUMN \`periodKey\` VARCHAR(191) NULL`, null, null);
+  await ensureColumn(
+    'EpcBatch',
+    'origin',
+    `ALTER TABLE \`EpcBatch\` ADD COLUMN \`origin\` VARCHAR(191) NULL`,
+    `UPDATE \`EpcBatch\` SET \`origin\` = 'generated' WHERE \`origin\` IS NULL OR \`origin\` = ''`,
+    `ALTER TABLE \`EpcBatch\` MODIFY \`origin\` VARCHAR(191) NOT NULL DEFAULT 'generated'`
+  );
   try {
     const info = await getColumnInfo('EpcBatch', 'productId');
     const isNullable = String(info?.isNullable || '').toUpperCase() === 'YES';
@@ -733,6 +774,11 @@ async function ensureEpcSchemaCompat() {
   const idxCert = `EpcBatch_organizationId_certificateId_idx`;
   if (!(await indexExists('EpcBatch', idxCert)))
     await prisma.$executeRawUnsafe(`CREATE INDEX \`${idxCert}\` ON \`EpcBatch\` (\`organizationId\`, \`certificateId\`)`);
+
+  const idxOrigin = `EpcBatch_organizationId_origin_idx`;
+  if (!(await indexExists('EpcBatch', idxOrigin))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${idxOrigin}\` ON \`EpcBatch\` (\`organizationId\`, \`origin\`)`);
+  }
 
   const hasEpcItem = await tableExists('EpcItem');
   if (!hasEpcItem) {
