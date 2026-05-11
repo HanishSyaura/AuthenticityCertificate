@@ -12,8 +12,10 @@ router.use(attachOrganization);
 router.use(requireOrganization);
 router.use(requireAccess({ read: 'templates.read', write: 'templates.write' }));
 
+router.get('', templatesController.list);
 router.get('/', templatesController.list);
 router.get('/:id', templatesController.getOne);
+router.post('', auditAction('CREATE_TEMPLATE', { targetType: 'certificate_template' }), templatesController.create);
 router.post('/', auditAction('CREATE_TEMPLATE', { targetType: 'certificate_template' }), templatesController.create);
 router.patch(
   '/:id',

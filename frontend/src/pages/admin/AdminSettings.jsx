@@ -92,7 +92,7 @@ export default function AdminSettings() {
       setLoadError('');
       try {
         const api = createAdminApi({ token });
-        const [meRes, settingsRes] = await Promise.all([api.get('/auth/me'), api.get('/settings')]);
+        const [meRes, settingsRes] = await Promise.all([api.get('/auth/me'), api.get('/settings/')]);
 
         const me = meRes?.data?.data?.user;
         const org = settingsRes?.data?.data?.organization;

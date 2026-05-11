@@ -28,7 +28,7 @@ const useAdminSettingsStore = create((set) => ({
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const res = await api.get('/settings');
+      const res = await api.get('/settings/');
       const organization = res?.data?.data?.organization || null;
       const settings = res?.data?.data?.settings || null;
       set({ organization, settings, loading: false, lastSyncAt: Date.now() });

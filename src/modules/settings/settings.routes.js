@@ -10,7 +10,9 @@ router.use(verifyToken);
 router.use(attachAccessContext);
 router.use(attachOrganization);
 
+router.get('', requirePermission('settings.read'), settingsController.getSettings);
 router.get('/', requirePermission('settings.read'), settingsController.getSettings);
+router.put('', requirePermission('settings.write'), settingsController.updateSettings);
 router.put('/', requirePermission('settings.write'), settingsController.updateSettings);
 
 module.exports = router;

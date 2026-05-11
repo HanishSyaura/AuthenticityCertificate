@@ -86,6 +86,11 @@ export default function AdminCertificateList() {
   const trimmedNewCertificateName = String(newCertificateName || '').trim();
   const canCreate = Boolean(trimmedNewCertificateId && trimmedNewCertificateName) && !newBgUploading;
 
+  const invalidTemplateRows = useMemo(() => {
+    const list = Array.isArray(templates) ? templates : [];
+    return list.filter((tpl) => !getTemplateId(tpl));
+  }, [templates]);
+
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -108,6 +113,11 @@ export default function AdminCertificateList() {
       </div>
 
       {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
+      {!error && invalidTemplateRows.length > 0 ? (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+          {t('certificateTemplatesInvalidResponse', { count: invalidTemplateRows.length })}
+        </div>
+      ) : null}
 
       <DataTable
         minWidth={720}

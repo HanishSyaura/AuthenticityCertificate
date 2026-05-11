@@ -417,6 +417,8 @@ export const STRINGS = {
     certificateIdRequired: 'Certificate ID is required',
     certificateNameRequired: 'Certificate name is required',
     certificateIdAndNameRequired: 'Certificate ID and name are required',
+    certificateTemplatesInvalidResponse:
+      'Certificate templates API returned invalid data (missing id). Affected rows: {{count}}. Please check /api/templates/ response and server redirects.',
     overrideStatus: 'Override status',
     setSuspicious: 'Mark Suspicious',
     clearOverride: 'Clear override',
@@ -1091,6 +1093,8 @@ export const STRINGS = {
     certificateIdRequired: 'ID Sijil diperlukan',
     certificateNameRequired: 'Nama sijil diperlukan',
     certificateIdAndNameRequired: 'ID Sijil dan nama diperlukan',
+    certificateTemplatesInvalidResponse:
+      'API templat sijil pulangkan data tak sah (tiada id). Rekod terjejas: {{count}}. Sila semak response /api/templates/ dan redirect server.',
     overrideStatus: 'Status override',
     setSuspicious: 'Tanda Mencurigakan',
     clearOverride: 'Buang override',
@@ -1709,6 +1713,8 @@ export const STRINGS = {
     certificateIdRequired: '证书编号为必填项',
     certificateNameRequired: '证书名称为必填项',
     certificateIdAndNameRequired: '证书编号与名称为必填项',
+    certificateTemplatesInvalidResponse:
+      '证书模板接口返回数据无效（缺少 id）。受影响条目：{{count}}。请检查 /api/templates/ 响应与服务器重定向。',
     overrideStatus: '覆盖状态',
     setSuspicious: '标记为可疑',
     clearOverride: '清除覆盖',
