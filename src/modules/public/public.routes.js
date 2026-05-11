@@ -273,6 +273,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     let epcBatchTemplate = null;
     let templateData = null;
     let epcBatchName = null;
+    let epcBatchId = null;
     let epcProduct = null;
     if (resolvedOrgId && resolvedEpc) {
       try {
@@ -286,6 +287,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
               caiqNumber: true,
               batch: {
                 select: {
+                  id: true,
                   batchName: true,
                   templateData: true,
                   certificateTemplate: true,
@@ -307,6 +309,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         epcBatchTemplate = row?.batch?.certificateTemplate || null;
         templateData = row?.batch?.templateData || null;
         epcBatchName = row?.batch?.batchName ? String(row.batch.batchName) : null;
+        epcBatchId = row?.batch?.id != null ? Number(row.batch.id) : null;
         epcProduct = row?.batch?.product || null;
       } catch {
         dbGate.markDbFailure({ cooldownMs: 10_000 });
@@ -321,6 +324,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
             where: { organizationId: resolvedOrgId, certificateId: String(certificateId) },
             orderBy: { createdAt: 'desc' },
             select: {
+              id: true,
               batchName: true,
               templateData: true,
               certificateTemplate: true,
@@ -340,6 +344,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
           epcBatchTemplate = epcBatchTemplate || row.certificateTemplate || null;
           templateData = templateData || row.templateData || null;
           epcBatchName = epcBatchName || (row.batchName ? String(row.batchName) : null);
+          epcBatchId = epcBatchId || (row.id != null ? Number(row.id) : null);
           epcProduct = epcProduct || row.product || null;
         }
       } catch {
@@ -349,6 +354,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
 
     const resolvedProduct = epcProduct || cert.batch?.product || null;
     let supportingTemplates = [];
+    let batchDocuments = [];
     let layout = null;
     const pageId = resolvedProduct?.cmsPage?.id || null;
     const certificateLayout = null;
@@ -428,6 +434,23 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
       }
     }
 
+    if (resolvedOrgId && epcBatchId) {
+      try {
+        if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
+        const rows = await Promise.race([
+          prisma.epcBatchDocument.findMany({
+            where: { organizationId: resolvedOrgId, batchId: epcBatchId },
+            select: { docType: true, mediaUrl: true },
+            orderBy: { docType: 'asc' }
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
+        ]);
+        batchDocuments = Array.isArray(rows) ? rows : [];
+      } catch {
+        dbGate.markDbFailure({ cooldownMs: 10_000 });
+      }
+    }
+
     let certificateTemplate = epcBatchTemplate || resolvedProduct?.certificateTemplate || null;
     if (resolvedOrgId && lang !== 'en') {
       const ids = [];
@@ -497,6 +520,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
             }
           : null,
         templateData: templateData || null,
+        batchDocuments,
         supportingTemplates,
         layout,
         certificateLayout: null,

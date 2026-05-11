@@ -112,6 +112,20 @@ router.get('/batches/:id/export-verify-url-xlsx', requirePermission(['epc.write'
 router.get('/batches/:id/export-production-template-xlsx', requirePermission(['epc.write', 'epc.batch.create']), epcController.exportBatchProductionTemplate);
 
 router.post(
+  '/batches/:id/batch-import/preview-xlsx',
+  requirePermission(['epc.write', 'epc.production.access']),
+  auditAction('PREVIEW_EPC_BATCH_IMPORT_XLSX', { targetType: 'epc_batch', getTargetId: (req) => String(req.params?.id || '') }),
+  epcController.previewBatchImport
+);
+
+router.post(
+  '/batches/:id/batch-import/submit',
+  requirePermission(['epc.write', 'epc.production.access']),
+  auditAction('SUBMIT_EPC_BATCH_IMPORT', { targetType: 'epc_batch', getTargetId: (req) => String(req.params?.id || '') }),
+  epcController.submitBatchImport
+);
+
+router.post(
   '/corp-sequence/recalculate',
   requirePermission(['epc.write', 'epc.sequence.reset']),
   auditAction('RECALC_EPC_SEQUENCE', { targetType: 'corp_sequence' }),

@@ -887,7 +887,8 @@ async function listBatches({ organizationId, q, limit, offset }) {
         where,
         include: {
           product: { select: { id: true, sku: true, name: true, code: true } },
-          certificateTemplate: { select: { id: true, certificateId: true, name: true } }
+          certificateTemplate: { select: { id: true, certificateId: true, name: true } },
+          documents: { select: { docType: true, mediaUrl: true, uploadedAt: true } }
         },
         orderBy: { createdAt: 'desc' },
         take: limit,
@@ -1203,6 +1204,22 @@ function normalizeRowKeys(row) {
   return out;
 }
 
+function pickByPrefix(obj, prefixes) {
+  const o = obj && typeof obj === 'object' ? obj : {};
+  const keys = Object.keys(o);
+  for (const p of Array.isArray(prefixes) ? prefixes : []) {
+    const pref = String(p || '').trim().toLowerCase();
+    if (!pref) continue;
+    const k = keys.find((kk) => String(kk || '').toLowerCase().startsWith(pref));
+    if (!k) continue;
+    const v = o[k];
+    if (v == null) continue;
+    const s = String(v).trim();
+    if (s) return s;
+  }
+  return null;
+}
+
 function toDateOrNull(input) {
   if (!input) return null;
   if (input instanceof Date && !Number.isNaN(input.getTime())) return input;
@@ -1223,22 +1240,6 @@ async function importProductionXlsx({ organizationId, batchId, base64 }) {
   if (!Number.isFinite(id)) throw new Error('Invalid batch id');
   const { rows } = parseXlsxBase64(base64);
   if (!Array.isArray(rows) || rows.length === 0) throw new Error('Excel kosong');
-
-  const pickByPrefix = (obj, prefixes) => {
-    const o = obj && typeof obj === 'object' ? obj : {};
-    const keys = Object.keys(o);
-    for (const p of Array.isArray(prefixes) ? prefixes : []) {
-      const pref = String(p || '').trim().toLowerCase();
-      if (!pref) continue;
-      const k = keys.find((kk) => String(kk || '').toLowerCase().startsWith(pref));
-      if (!k) continue;
-      const v = o[k];
-      if (v == null) continue;
-      const s = String(v).trim();
-      if (s) return s;
-    }
-    return null;
-  };
 
   const updates = [];
   for (const r of rows) {
@@ -1279,6 +1280,198 @@ async function importProductionXlsx({ organizationId, batchId, base64 }) {
 
     await tx.epcBatch.update({ where: { id }, data: { productionUploadedAt: new Date() } });
     return { batchId: id, rows: updates.length, updated };
+  });
+
+  return result;
+}
+
+function extractUniqueBatchMetaFromUpdates(updates) {
+  const dates = new Set();
+  const batchNumbers = new Set();
+  const swiftletHouseNumbers = new Set();
+
+  for (const u of Array.isArray(updates) ? updates : []) {
+    if (u?.productionDate instanceof Date && !Number.isNaN(u.productionDate.getTime())) {
+      dates.add(u.productionDate.toISOString().slice(0, 10));
+    }
+    if (u?.batchNumber) batchNumbers.add(String(u.batchNumber).trim());
+    if (u?.swiftletHouseNumber) swiftletHouseNumbers.add(String(u.swiftletHouseNumber).trim());
+  }
+
+  const manufactureDate = dates.size === 1 ? Array.from(dates)[0] : null;
+  const batchNumber = batchNumbers.size === 1 ? Array.from(batchNumbers)[0] : null;
+  const swiftletHouseNumber = swiftletHouseNumbers.size === 1 ? Array.from(swiftletHouseNumbers)[0] : null;
+
+  if (!manufactureDate) throw new Error('Manufacture date must be present and unique in the uploaded XLSX.');
+  if (!batchNumber) throw new Error('Batch number must be present and unique in the uploaded XLSX.');
+  if (!swiftletHouseNumber) throw new Error('Swiftlet house number must be present and unique in the uploaded XLSX.');
+
+  return { manufactureDate, batchNumber, swiftletHouseNumber };
+}
+
+function getBatchImportDocTypes() {
+  return new Set(['moh_health_certificate', 'export_permit', 'dvs_health_certificate', 'dvs_coo_certificate']);
+}
+
+async function previewBatchImportXlsx({ organizationId, batchId, base64 }) {
+  const orgId = Number(organizationId);
+  const id = Number(batchId);
+  if (!Number.isFinite(id)) throw new Error('Invalid batch id');
+
+  const exists = await withTimeout(prisma.epcBatch.findFirst({ where: { id, organizationId: orgId }, select: { id: true } }), 1500);
+  if (!exists) throw new Error('Batch not found');
+
+  const { rows } = parseXlsxBase64(base64);
+  if (!Array.isArray(rows) || rows.length === 0) throw new Error('Excel is empty');
+
+  const updates = [];
+  for (const r of rows) {
+    const n = normalizeRowKeys(r);
+    const epcCode = String(n.epccode || n.epc || n.code || '').trim();
+    if (!epcCode) continue;
+    updates.push({
+      epcCode,
+      batchNumber: pickByPrefix(n, ['batchnumber', 'batchno', 'batch']),
+      swiftletHouseNumber: pickByPrefix(n, ['swiftlethousenumber', 'swiftlethouse', 'housenumber']),
+      productionDate: toDateOrNull(pickByPrefix(n, ['manufacturedate', 'productiondate', 'dateofproduction', 'production_date']))
+    });
+  }
+  if (updates.length === 0) throw new Error('No EPC code found in the uploaded XLSX.');
+
+  const meta = extractUniqueBatchMetaFromUpdates(updates);
+  return { ...meta, rows: updates.length };
+}
+
+async function submitBatchImport({
+  organizationId,
+  batchId,
+  base64,
+  productId,
+  sku,
+  certificateTemplateId,
+  documents
+}) {
+  const orgId = Number(organizationId);
+  const id = Number(batchId);
+  if (!Number.isFinite(id)) throw new Error('Invalid batch id');
+
+  const { rows } = parseXlsxBase64(base64);
+  if (!Array.isArray(rows) || rows.length === 0) throw new Error('Excel is empty');
+
+  const updates = [];
+  for (const r of rows) {
+    const n = normalizeRowKeys(r);
+    const epcCode = String(n.epccode || n.epc || n.code || '').trim();
+    if (!epcCode) continue;
+    updates.push({
+      epcCode,
+      barcode: pickByPrefix(n, ['barcode']),
+      batchNumber: pickByPrefix(n, ['batchnumber', 'batchno', 'batch']),
+      swiftletHouseNumber: pickByPrefix(n, ['swiftlethousenumber', 'swiftlethouse', 'housenumber']),
+      netWeight: pickByPrefix(n, ['netweight', 'net_weight']),
+      productionDate: toDateOrNull(pickByPrefix(n, ['manufacturedate', 'productiondate', 'dateofproduction', 'production_date'])),
+      caiqNumber: pickByPrefix(n, ['individuallabel(caiq)', 'caiqnumber', 'caiq', 'caiqlabel', 'caiq_label'])
+    });
+  }
+  if (updates.length === 0) throw new Error('No EPC code found in the uploaded XLSX.');
+
+  const meta = extractUniqueBatchMetaFromUpdates(updates);
+  const skuCode = String(sku || '').trim();
+  if (!skuCode) throw new Error('SKU code is required.');
+
+  const docTypes = getBatchImportDocTypes();
+  const docEntries = Object.entries(documents && typeof documents === 'object' ? documents : {}).map(([k, v]) => [String(k || '').trim(), String(v || '').trim()]);
+  for (const [k, v] of docEntries) {
+    if (!docTypes.has(k)) throw new Error('Invalid supporting certificate type.');
+    if (!v) throw new Error('Supporting certificate URL is required.');
+  }
+  for (const required of docTypes) {
+    const has = docEntries.some(([k]) => k === required);
+    if (!has) throw new Error('All 4 supporting certificates are required.');
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const batch = await tx.epcBatch.findFirst({
+      where: { id, organizationId: orgId },
+      select: { id: true, templateData: true }
+    });
+    if (!batch) throw new Error('Batch not found');
+
+    const pid = productId != null ? Number(productId) : null;
+    if (!pid || !Number.isFinite(pid) || pid <= 0) throw new Error('Product is required.');
+    const product = await tx.product.findFirst({ where: { id: pid, organizationId: orgId }, select: { id: true } });
+    if (!product) throw new Error('Product not found.');
+
+    let tplId = null;
+    if (certificateTemplateId !== undefined) {
+      tplId = certificateTemplateId == null ? null : Number(certificateTemplateId);
+      if (tplId != null) {
+        const tpl = await tx.certificateTemplate.findFirst({
+          where: { id: tplId, organizationId: orgId, deletedAt: null, templateType: 'auth' },
+          select: { id: true }
+        });
+        if (!tpl) throw new Error('Auth certificate template not found.');
+      }
+    }
+
+    const epcCodes = Array.from(new Set(updates.map((u) => String(u.epcCode || '').trim()).filter(Boolean)));
+    const inBatchCount = await tx.epcItem.count({ where: { organizationId: orgId, batchId: id, epcCode: { in: epcCodes } } });
+    if (inBatchCount !== epcCodes.length) {
+      throw new Error('The uploaded XLSX contains EPC codes that do not belong to the selected batch.');
+    }
+
+    let updated = 0;
+    for (const u of updates) {
+      const res = await tx.epcItem.updateMany({
+        where: { organizationId: orgId, batchId: id, epcCode: u.epcCode },
+        data: {
+          barcode: u.barcode,
+          batchNumber: u.batchNumber,
+          swiftletHouseNumber: u.swiftletHouseNumber,
+          netWeight: u.netWeight,
+          productionDate: u.productionDate,
+          caiqNumber: u.caiqNumber
+        }
+      });
+      updated += res.count || 0;
+    }
+
+    const prev = batch.templateData && typeof batch.templateData === 'object' && !Array.isArray(batch.templateData) ? batch.templateData : {};
+    const nextTemplateData = {
+      ...prev,
+      manufactureDate: meta.manufactureDate,
+      batchNumber: meta.batchNumber,
+      swiftletHouseNumber: meta.swiftletHouseNumber
+    };
+
+    await tx.epcBatch.update({
+      where: { id },
+      data: {
+        productId: pid,
+        sku: skuCode,
+        certificateTemplateId: tplId,
+        templateData: nextTemplateData,
+        productionUploadedAt: new Date()
+      }
+    });
+
+    for (const [docType, mediaUrl] of docEntries) {
+      await tx.epcBatchDocument.upsert({
+        where: { batchId_docType: { batchId: id, docType } },
+        update: { mediaUrl, uploadedAt: new Date() },
+        create: { organizationId: orgId, batchId: id, docType, mediaUrl }
+      });
+    }
+
+    const full = await tx.epcBatch.findFirst({
+      where: { id, organizationId: orgId },
+      include: {
+        product: { select: { id: true, sku: true, name: true, code: true } },
+        certificateTemplate: { select: { id: true, certificateId: true, name: true } },
+        documents: { select: { docType: true, mediaUrl: true, uploadedAt: true } }
+      }
+    });
+    return { batchId: id, rows: updates.length, updated, meta, batch: full };
   });
 
   return result;
@@ -1497,6 +1690,8 @@ module.exports = {
   resetItemsProduction,
   updateItemProduction,
   importProductionXlsx,
+  previewBatchImportXlsx,
+  submitBatchImport,
   markProductionDone,
   updateBatch,
   deleteBatch,

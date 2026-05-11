@@ -263,6 +263,52 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
+  previewBatchImportXlsx: async ({ batchId, base64 }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const id = Number(batchId);
+      const res = await api.post(`/epc/batches/${id}/batch-import/preview-xlsx`, { base64 });
+      set({ loading: false });
+      return res?.data?.data || null;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
+  submitBatchImport: async ({ batchId, base64, productId, sku, certificateTemplateId, documents }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const id = Number(batchId);
+      const body = {
+        base64,
+        productId: Number(productId),
+        sku: String(sku || '').trim(),
+        documents: documents || {}
+      };
+      if (certificateTemplateId !== undefined) {
+        body.certificateTemplateId = certificateTemplateId == null || String(certificateTemplateId).trim() === '' ? null : Number(certificateTemplateId);
+      }
+      const res = await api.post(`/epc/batches/${id}/batch-import/submit`, body);
+      const data = res?.data?.data || null;
+      const updatedBatch = data?.batch || null;
+      if (updatedBatch?.id != null) {
+        const batches = (get().batches || []).map((b) => (String(b.id) === String(updatedBatch.id) ? updatedBatch : b));
+        set({ batches, loading: false });
+      } else {
+        set({ loading: false });
+      }
+      return data;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
   markProductionDone: async ({ batchId }) => {
     set({ loading: true, error: null });
     try {

@@ -131,6 +131,8 @@ const VerifyPage = () => {
   }
 
   if (certificate) {
+    const batchDocs = Array.isArray(certificate?.batchDocuments) ? certificate.batchDocuments : [];
+    const docOrder = ['moh_health_certificate', 'export_permit', 'dvs_health_certificate', 'dvs_coo_certificate'];
     if (Array.isArray(certificate?.layout)) {
       const pageBg = String(certificate?.certificateTemplate?.backgroundColor || '').trim() || '#ffffff';
       const pageBgUrl = certificate?.certificateTemplate?.background ? String(certificate.certificateTemplate.background) : '';
@@ -152,6 +154,32 @@ const VerifyPage = () => {
           <div className="w-full">
             <PublicRenderer layout={certificate.layout} data={certificate} responsive responsiveMode="viewport" baseWidth={390} />
           </div>
+          {batchDocs.length ? (
+            <div className="mx-auto w-full max-w-screen-md px-4 pb-10 pt-6">
+              <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+                <div className="text-sm font-semibold text-zinc-900">{t('supportingCertificates')}</div>
+                <div className="mt-3 space-y-2 text-sm">
+                  {docOrder.map((docType) => {
+                    const row = batchDocs.find((d) => String(d?.docType || '').trim() === docType);
+                    const url = row?.mediaUrl ? String(row.mediaUrl).trim() : '';
+                    const label =
+                      docType === 'moh_health_certificate'
+                        ? t('mohHealthCertificate')
+                        : docType === 'export_permit'
+                          ? t('exportPermit')
+                          : docType === 'dvs_health_certificate'
+                            ? t('dvsHealthCertificate')
+                            : t('dvsCooCertificate');
+                    return url ? (
+                      <a key={docType} href={url} target="_blank" rel="noreferrer" className="block underline">
+                        {label}
+                      </a>
+                    ) : null;
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       );
     }
@@ -217,6 +245,32 @@ const VerifyPage = () => {
                       data={certificate}
                     />
                   </div>
+                  {batchDocs.length ? (
+                    <div className="mx-auto w-full max-w-screen-md px-4 pb-10 pt-6">
+                      <div className="rounded-2xl border border-zinc-200 bg-white p-4">
+                        <div className="text-sm font-semibold text-zinc-900">{t('supportingCertificates')}</div>
+                        <div className="mt-3 space-y-2 text-sm">
+                          {docOrder.map((docType) => {
+                            const row = batchDocs.find((d) => String(d?.docType || '').trim() === docType);
+                            const url = row?.mediaUrl ? String(row.mediaUrl).trim() : '';
+                            const label =
+                              docType === 'moh_health_certificate'
+                                ? t('mohHealthCertificate')
+                                : docType === 'export_permit'
+                                  ? t('exportPermit')
+                                  : docType === 'dvs_health_certificate'
+                                    ? t('dvsHealthCertificate')
+                                    : t('dvsCooCertificate');
+                            return url ? (
+                              <a key={docType} href={url} target="_blank" rel="noreferrer" className="block underline">
+                                {label}
+                              </a>
+                            ) : null;
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               );
             })()

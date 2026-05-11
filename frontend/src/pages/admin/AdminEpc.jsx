@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useEpcStore from '../../store/useEpcStore';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
+import useRecordsStore from '../../store/useRecordsStore';
+import useCertTemplatesStore from '../../store/useCertTemplatesStore';
+import useUploadsStore from '../../store/useUploadsStore';
 import { useT } from '../../i18n/useT';
 import { tRaw } from '../../i18n/tRaw';
 import DataTable from '../../components/ui/DataTable';
@@ -41,6 +44,7 @@ export default function AdminEpc() {
   const canEncoding = allow('epc.write', 'epc.encoding');
   const canDelete = allow('epc.write', 'epc.delete');
   const canProduction = allow('epc.write', 'epc.production.access');
+  const canBatchImport = allow('epc.write', 'epc.production.access');
 
   const {
     corpCodes,
@@ -56,6 +60,8 @@ export default function AdminEpc() {
     exportBatchVerifyUrlXlsx,
     exportBatchProductionTemplateXlsx,
     importProductionXlsx,
+    previewBatchImportXlsx,
+    submitBatchImport,
     markProductionDone,
     exportBatchXlsxCustom,
     exportItemsXlsx,
@@ -75,12 +81,20 @@ export default function AdminEpc() {
     exportBatchProductionTemplateXlsx: s.exportBatchProductionTemplateXlsx,
     exportBatchXlsxCustom: s.exportBatchXlsxCustom,
     importProductionXlsx: s.importProductionXlsx,
+    previewBatchImportXlsx: s.previewBatchImportXlsx,
+    submitBatchImport: s.submitBatchImport,
     markProductionDone: s.markProductionDone,
     exportItemsXlsx: s.exportItemsXlsx,
     deleteItems: s.deleteItems
   }));
 
+  const { products, fetchProducts } = useRecordsStore((s) => ({ products: s.products, fetchProducts: s.fetchProducts }));
+  const { templates, fetchTemplates } = useCertTemplatesStore((s) => ({ templates: s.templates, fetchTemplates: s.fetchTemplates }));
+  const { uploadMedia } = useUploadsStore((s) => ({ uploadMedia: s.uploadMedia }));
+
   const [tab, setTab] = useState('batches');
+
+  const authTemplates = useMemo(() => (Array.isArray(templates) ? templates : []).filter((tpl) => String(tpl?.templateType || '').toLowerCase() === 'auth'), [templates]);
 
   const [batchQty, setBatchQty] = useState(1);
   const [remark, setRemark] = useState('');
@@ -117,6 +131,37 @@ export default function AdminEpc() {
     caiqNumber: true
   });
 
+  const DOC_TYPES = useMemo(
+    () => [
+      'moh_health_certificate',
+      'export_permit',
+      'dvs_health_certificate',
+      'dvs_coo_certificate'
+    ],
+    []
+  );
+
+  const [importOpen, setImportOpen] = useState(false);
+  const [importBatch, setImportBatch] = useState(null);
+  const [importBase64, setImportBase64] = useState('');
+  const [importPreview, setImportPreview] = useState(null);
+  const [importProductId, setImportProductId] = useState('');
+  const [importSku, setImportSku] = useState('');
+  const [importAuthTemplateId, setImportAuthTemplateId] = useState('');
+  const [importDocUrls, setImportDocUrls] = useState(() => ({
+    moh_health_certificate: '',
+    export_permit: '',
+    dvs_health_certificate: '',
+    dvs_coo_certificate: ''
+  }));
+  const [importDocUploading, setImportDocUploading] = useState(() => ({
+    moh_health_certificate: false,
+    export_permit: false,
+    dvs_health_certificate: false,
+    dvs_coo_certificate: false
+  }));
+  const [importLocalError, setImportLocalError] = useState('');
+
   const closeExportCols = useCallback(() => {
     setExportColsOpen(false);
     setExportColsBatch(null);
@@ -139,18 +184,67 @@ export default function AdminEpc() {
     setExportColsOpen(true);
   }, []);
 
+  const closeImport = useCallback(() => {
+    setImportOpen(false);
+    setImportBatch(null);
+    setImportBase64('');
+    setImportPreview(null);
+    setImportProductId('');
+    setImportSku('');
+    setImportAuthTemplateId('');
+    setImportDocUrls({
+      moh_health_certificate: '',
+      export_permit: '',
+      dvs_health_certificate: '',
+      dvs_coo_certificate: ''
+    });
+    setImportDocUploading({
+      moh_health_certificate: false,
+      export_permit: false,
+      dvs_health_certificate: false,
+      dvs_coo_certificate: false
+    });
+    setImportLocalError('');
+  }, []);
+
+  const openImport = useCallback(
+    async (b) => {
+      const batch = b || null;
+      setImportBatch(batch);
+      setImportOpen(true);
+      setImportBase64('');
+      setImportPreview(null);
+      setImportLocalError('');
+      const nextProductId = batch?.product?.id != null ? String(batch.product.id) : '';
+      setImportProductId(nextProductId);
+      setImportSku(String(batch?.sku || batch?.product?.sku || '').trim());
+      setImportAuthTemplateId(batch?.certificateTemplate?.id != null ? String(batch.certificateTemplate.id) : '');
+      const byType = new Map((Array.isArray(batch?.documents) ? batch.documents : []).map((d) => [String(d?.docType || '').trim(), String(d?.mediaUrl || '').trim()]));
+      setImportDocUrls({
+        moh_health_certificate: byType.get('moh_health_certificate') || '',
+        export_permit: byType.get('export_permit') || '',
+        dvs_health_certificate: byType.get('dvs_health_certificate') || '',
+        dvs_coo_certificate: byType.get('dvs_coo_certificate') || ''
+      });
+      await Promise.all([fetchProducts({ status: 'active' }), fetchTemplates({ lang: 'en' })]);
+    },
+    [fetchProducts, fetchTemplates]
+  );
+
   useEffect(() => {
-    if (!canBatchCreate && !canBatchView && !canProduction) return;
+    if (!canBatchCreate && !canBatchView && !canBatchImport && !canProduction) return;
     void fetchCorpCodes();
     void fetchBatches({ limit: 50, offset: 0 });
-  }, [canBatchCreate, canBatchView, canProduction, fetchBatches, fetchCorpCodes]);
+  }, [canBatchCreate, canBatchImport, canBatchView, canProduction, fetchBatches, fetchCorpCodes]);
 
   useEffect(() => {
     if (tab === 'batches' && canBatchView) return;
+    if (tab === 'import' && canBatchImport) return;
     if (tab === 'production' && canProduction) return;
     if (canBatchView) setTab('batches');
+    else if (canBatchImport) setTab('import');
     else if (canProduction) setTab('production');
-  }, [canBatchView, canProduction, tab]);
+  }, [canBatchImport, canBatchView, canProduction, tab]);
 
   useEffect(() => {
     if (tab !== 'batches' || !canBatchView) return;
@@ -189,6 +283,17 @@ export default function AdminEpc() {
               {t('epcBatches')}
             </button>
           ) : null}
+          {canBatchImport ? (
+            <button
+              type="button"
+              onClick={() => setTab('import')}
+              className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+                tab === 'import' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
+              }`}
+            >
+              {t('batchImport')}
+            </button>
+          ) : null}
           {canProduction ? (
             <button
               type="button"
@@ -205,7 +310,7 @@ export default function AdminEpc() {
 
       {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
 
-      {!canBatchCreate && !canBatchView && !canProduction ? (
+      {!canBatchCreate && !canBatchView && !canBatchImport && !canProduction ? (
         <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-700">Insufficient permissions</div>
       ) : null}
 
@@ -266,26 +371,38 @@ export default function AdminEpc() {
                 placeholder={t('searchEpc')}
                 className="ac-input"
               />
-              <input
-                type="datetime-local"
-                value={createdFrom}
-                onChange={(e) => {
-                  setCreatedFrom(e.target.value);
-                  setListOffset(0);
-                }}
-                className="ac-input"
-                placeholder={t('createdFrom')}
-              />
-              <input
-                type="datetime-local"
-                value={createdTo}
-                onChange={(e) => {
-                  setCreatedTo(e.target.value);
-                  setListOffset(0);
-                }}
-                className="ac-input"
-                placeholder={t('createdTo')}
-              />
+              <div className="flex flex-col gap-1">
+                <label htmlFor="createdFrom" className="text-[11px] text-zinc-500">
+                  {t('createdFrom')}
+                </label>
+                <input
+                  id="createdFrom"
+                  type="datetime-local"
+                  value={createdFrom}
+                  onChange={(e) => {
+                    setCreatedFrom(e.target.value);
+                    setListOffset(0);
+                  }}
+                  className="ac-input"
+                  placeholder={t('createdFrom')}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label htmlFor="createdTo" className="text-[11px] text-zinc-500">
+                  {t('createdTo')}
+                </label>
+                <input
+                  id="createdTo"
+                  type="datetime-local"
+                  value={createdTo}
+                  onChange={(e) => {
+                    setCreatedTo(e.target.value);
+                    setListOffset(0);
+                  }}
+                  className="ac-input"
+                  placeholder={t('createdTo')}
+                />
+              </div>
               <button
                 type="button"
                 className="ac-btn ac-btn-soft px-3 py-2 text-xs"
@@ -741,6 +858,40 @@ export default function AdminEpc() {
         </div>
       ) : null}
 
+      {tab === 'import' && canBatchImport ? (
+        <div className="rounded-xl border border-zinc-200 bg-white">
+          <div className="border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-600">{t('batchImport')}</div>
+          <div className="divide-y divide-zinc-100">
+            {(Array.isArray(batches) ? batches : []).map((b) => {
+              const uploaded = Boolean(b.productionUploadedAt);
+              const docCount = Array.isArray(b.documents) ? b.documents.filter((d) => String(d?.mediaUrl || '').trim()).length : 0;
+              return (
+                <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-zinc-900">{b.batchName}</div>
+                    <div className="mt-1 text-[11px] text-zinc-500">
+                      {uploaded ? t('uploadedAt', { value: formatDateTime(b.productionUploadedAt) }) : t('notUploaded')} •{' '}
+                      {b.product?.name ? `${b.product.name} (${String(b.sku || b.product?.sku || '').trim() || '-'})` : t('noProductAssigned')} •{' '}
+                      {t('supportingCertsUploaded', { value: docCount })}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" disabled={loading} onClick={() => exportBatchProductionTemplateXlsx(b.id)}>
+                      {t('downloadTemplate')}
+                    </button>
+                    <button type="button" className="ac-btn ac-btn-primary px-3 py-2 text-xs" disabled={loading} onClick={() => openImport(b)}>
+                      {t('importBatchFile')}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            {(!batches || batches.length === 0) && !loading ? <div className="px-4 py-6 text-xs text-zinc-500">{t('noBatches')}</div> : null}
+          </div>
+        </div>
+      ) : null}
+
       {tab === 'production' && canProduction ? (
         <div className="rounded-xl border border-zinc-200 bg-white">
           <div className="border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-600">{t('productionOrders')}</div>
@@ -809,6 +960,204 @@ export default function AdminEpc() {
 
       {tab === 'production' && canProduction && canBatchCreate ? (
         null
+      ) : null}
+
+      {importOpen ? (
+        <div className="ac-modal-backdrop">
+          <div className="ac-modal">
+            <div className="mb-3 text-sm font-semibold text-zinc-900">
+              {t('importBatchFile')}
+              {importBatch?.batchName ? ` — ${importBatch.batchName}` : ''}
+            </div>
+
+            {importLocalError ? <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{importLocalError}</div> : null}
+
+            <div className="space-y-4">
+              <div>
+                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('uploadXlsx')}</div>
+                <label className="ac-btn ac-btn-soft inline-flex px-3 py-2 text-xs">
+                  {t('chooseFile')}
+                  <input
+                    type="file"
+                    accept=".xlsx"
+                    className="hidden"
+                    onChange={async (e) => {
+                      try {
+                        const file = e.target.files?.[0];
+                        if (!file || !importBatch?.id) return;
+                        setImportLocalError('');
+                        setImportPreview(null);
+                        const base64 = await toBase64(file);
+                        setImportBase64(base64);
+                        const preview = await previewBatchImportXlsx({ batchId: importBatch.id, base64 });
+                        setImportPreview(preview);
+                      } catch (err) {
+                        setImportPreview(null);
+                        setImportBase64('');
+                        setImportLocalError(err?.message || tRaw('operationFailed'));
+                      } finally {
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+                </label>
+                {importPreview ? (
+                  <div className="mt-2 grid grid-cols-1 gap-2 rounded-xl border border-zinc-200 bg-white p-3 text-xs text-zinc-800 sm:grid-cols-3">
+                    <div>
+                      <div className="text-[11px] font-semibold text-zinc-600">{t('manufactureDate')}</div>
+                      <div className="mt-0.5 font-mono">{String(importPreview.manufactureDate || '-')}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold text-zinc-600">{t('batchNumber')}</div>
+                      <div className="mt-0.5 font-mono">{String(importPreview.batchNumber || '-')}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold text-zinc-600">{t('swiftletHouseNumber')}</div>
+                      <div className="mt-0.5 font-mono">{String(importPreview.swiftletHouseNumber || '-')}</div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('product')}</div>
+                  <select
+                    value={importProductId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setImportProductId(id);
+                      const p = (Array.isArray(products) ? products : []).find((x) => String(x?.id) === String(id));
+                      if (p?.sku) setImportSku(String(p.sku).trim());
+                    }}
+                    className="ac-input"
+                  >
+                    <option value="">{t('selectProduct')}</option>
+                    {(Array.isArray(products) ? products : []).map((p) => (
+                      <option key={p.id} value={String(p.id)}>
+                        {p.name} ({p.sku})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('sku')}</div>
+                  <input value={importSku} onChange={(e) => setImportSku(e.target.value)} className="ac-input" />
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('authCertificate')}</div>
+                <select value={importAuthTemplateId} onChange={(e) => setImportAuthTemplateId(e.target.value)} className="ac-input">
+                  <option value="">{t('select')}</option>
+                  {authTemplates.map((tpl) => (
+                    <option key={tpl.id} value={String(tpl.id)}>
+                      {String(tpl?.certificateId || '').trim() ? `${tpl.certificateId} — ${tpl.name}` : tpl.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <div className="mb-2 text-[11px] font-semibold text-zinc-600">{t('supportingCertificates')}</div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {DOC_TYPES.map((docType) => {
+                    const uploading = Boolean(importDocUploading?.[docType]);
+                    const url = String(importDocUrls?.[docType] || '').trim();
+                    const label =
+                      docType === 'moh_health_certificate'
+                        ? t('mohHealthCertificate')
+                        : docType === 'export_permit'
+                          ? t('exportPermit')
+                          : docType === 'dvs_health_certificate'
+                            ? t('dvsHealthCertificate')
+                            : t('dvsCooCertificate');
+                    return (
+                      <div key={docType} className="rounded-xl border border-zinc-200 bg-white p-3">
+                        <div className="text-xs font-semibold text-zinc-900">{label}</div>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <label className="ac-btn ac-btn-soft px-3 py-2 text-xs">
+                            {uploading ? t('uploading') : t('uploadPdf')}
+                            <input
+                              type="file"
+                              accept="application/pdf,.pdf"
+                              className="hidden"
+                              disabled={uploading}
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                setImportLocalError('');
+                                setImportDocUploading((prev) => ({ ...prev, [docType]: true }));
+                                try {
+                                  const uploaded = await uploadMedia({ file });
+                                  const nextUrl = String(uploaded?.url || '').trim();
+                                  if (!nextUrl) throw new Error(tRaw('operationFailed'));
+                                  setImportDocUrls((prev) => ({ ...prev, [docType]: nextUrl }));
+                                } catch (err) {
+                                  setImportLocalError(err?.response?.data?.message || err?.message || tRaw('operationFailed'));
+                                } finally {
+                                  setImportDocUploading((prev) => ({ ...prev, [docType]: false }));
+                                  e.target.value = '';
+                                }
+                              }}
+                            />
+                          </label>
+                          {url ? (
+                            <a href={url} target="_blank" rel="noreferrer" className="text-[11px] font-semibold underline">
+                              {t('view')}
+                            </a>
+                          ) : (
+                            <div className="text-[11px] text-zinc-500">{t('notUploaded')}</div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={closeImport}>
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                className="ac-btn ac-btn-primary px-3 py-2 text-xs"
+                disabled={loading}
+                onClick={async () => {
+                  try {
+                    setImportLocalError('');
+                    const batchId = importBatch?.id != null ? Number(importBatch.id) : null;
+                    if (!Number.isFinite(batchId)) throw new Error(tRaw('operationFailed'));
+                    if (!importBase64) throw new Error(t('uploadXlsxFirst'));
+                    if (!importPreview) throw new Error(t('uploadXlsxFirst'));
+                    if (!String(importProductId || '').trim()) throw new Error(t('selectProduct'));
+                    if (!String(importSku || '').trim()) throw new Error(t('skuRequired'));
+                    if (!String(importAuthTemplateId || '').trim()) throw new Error(t('authCertRequired'));
+                    for (const dt of DOC_TYPES) {
+                      if (!String(importDocUrls?.[dt] || '').trim()) throw new Error(t('allSupportingCertsRequired'));
+                    }
+                    await submitBatchImport({
+                      batchId,
+                      base64: importBase64,
+                      productId: Number(importProductId),
+                      sku: String(importSku || '').trim(),
+                      certificateTemplateId: Number(importAuthTemplateId),
+                      documents: { ...importDocUrls }
+                    });
+                    await fetchBatches({ limit: 50, offset: 0 });
+                    closeImport();
+                  } catch (err) {
+                    setImportLocalError(err?.message || tRaw('operationFailed'));
+                  }
+                }}
+              >
+                {t('save')}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {generateOpen ? (

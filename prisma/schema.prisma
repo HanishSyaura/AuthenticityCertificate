@@ -273,6 +273,7 @@ model EpcBatch {
   createdAt DateTime @default(now())
 
   items EpcItem[]
+  documents EpcBatchDocument[]
 
   @@index([organizationId, createdAt])
   @@index([organizationId, corpPrefix])
@@ -300,6 +301,24 @@ model EpcItem {
 
   @@unique([organizationId, epcCode])
   @@index([organizationId, createdAt])
+  @@index([batchId])
+}
+
+model EpcBatchDocument {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  batchId Int
+  batch   EpcBatch @relation(fields: [batchId], references: [id])
+
+  docType  String
+  mediaUrl String
+
+  uploadedAt DateTime @default(now())
+
+  @@unique([batchId, docType])
+  @@index([organizationId, uploadedAt])
   @@index([batchId])
 }
 

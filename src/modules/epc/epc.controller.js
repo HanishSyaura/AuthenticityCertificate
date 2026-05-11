@@ -10,6 +10,18 @@ const importProductionSchema = z.object({
   base64: z.string().min(1)
 });
 
+const previewBatchImportSchema = z.object({
+  base64: z.string().min(1)
+});
+
+const submitBatchImportSchema = z.object({
+  base64: z.string().min(1),
+  productId: z.number().int().positive(),
+  sku: z.string().min(1),
+  certificateTemplateId: z.union([z.number().int().positive(), z.null()]).optional(),
+  documents: z.record(z.string().min(1), z.string().min(1))
+});
+
 const importExistingSchema = z.object({
   productId: z.number().int().positive(),
   batchName: z.string().optional(),
@@ -326,6 +338,37 @@ async function importProductionXlsx(req, res) {
   }
 }
 
+async function previewBatchImport(req, res) {
+  try {
+    const batchId = Number(req.params.id);
+    const data = previewBatchImportSchema.parse(req.body);
+    const result = await epcService.previewBatchImportXlsx({ organizationId: req.organization.id, batchId, base64: data.base64 });
+    res.success(result);
+  } catch (e) {
+    res.error(e.message, 400);
+  }
+}
+
+async function submitBatchImport(req, res) {
+  try {
+    const batchId = Number(req.params.id);
+    const data = submitBatchImportSchema.parse(req.body);
+    const result = await epcService.submitBatchImport({
+      organizationId: req.organization.id,
+      batchId,
+      base64: data.base64,
+      productId: data.productId,
+      sku: data.sku,
+      certificateTemplateId: Object.prototype.hasOwnProperty.call(data, 'certificateTemplateId') ? data.certificateTemplateId : undefined,
+      documents: data.documents
+    });
+    res.success(result, 'Batch import saved');
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.error('Invalid input. Please check the form and try again.', 400);
+    res.error(e.message, 400);
+  }
+}
+
 async function markProductionDone(req, res) {
   try {
     const batchId = Number(req.params.id);
@@ -412,6 +455,8 @@ module.exports = {
   exportBatchVerifyUrls,
   exportBatchProductionTemplate,
   importProductionXlsx,
+  previewBatchImport,
+  submitBatchImport,
   markProductionDone,
   updateBatch,
   deleteBatch,
