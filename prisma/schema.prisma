@@ -31,6 +31,7 @@ model Organization {
   corpMonthSequences CorpMonthSequence[]
   epcBatches      EpcBatch[]
   epcItems        EpcItem[]
+  epcBatchDocuments EpcBatchDocument[]
   productSupportingCertificates ProductSupportingCertificate[]
   certificates    Certificate[]
   scanLogs        ScanLog[]
