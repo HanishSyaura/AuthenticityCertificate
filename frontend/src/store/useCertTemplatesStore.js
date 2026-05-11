@@ -37,7 +37,7 @@ const useCertTemplatesStore = create((set, get) => ({
     try {
       const api = getApi();
       const lang = opts?.lang ? String(opts.lang) : null;
-      const res = await api.get('/templates', { params: lang ? { lang } : undefined });
+      const res = await api.get('/templates/', { params: lang ? { lang } : undefined });
       const templates = (Array.isArray(res?.data?.data) ? res.data.data : []).map(coerceTemplateId);
       set({ templates, loading: false, lastSyncAt: Date.now() });
       return templates;
@@ -72,7 +72,7 @@ const useCertTemplatesStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const res = await api.post('/templates', {
+      const res = await api.post('/templates/', {
         certificateId,
         templateType,
         name,
