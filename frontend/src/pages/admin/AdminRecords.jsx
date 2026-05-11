@@ -56,7 +56,9 @@ export default function AdminRecords() {
   const [activeTab, setActiveTab] = useState('products');
   const [query, setQuery] = useState('');
   const [productStatusFilter, setProductStatusFilter] = useState('all');
+  const [productCategoryFilter, setProductCategoryFilter] = useState('all');
   const [categoryQuery, setCategoryQuery] = useState('');
+  const [categoryStatusFilter, setCategoryStatusFilter] = useState('all');
   const [showCreate, setShowCreate] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showCreateCategory, setShowCreateCategory] = useState(false);
@@ -143,6 +145,7 @@ export default function AdminRecords() {
 
   const filteredProducts = useMemo(() => {
     const q = String(query || '').trim().toLowerCase();
+    const categoryFilter = String(productCategoryFilter || '').trim();
     const matchesQuery = (p) => {
       if (!q) return true;
       const skuStr = String(p?.sku || '').toLowerCase();
@@ -157,11 +160,12 @@ export default function AdminRecords() {
 
     return products.filter((p) => {
       if (!matchesQuery(p)) return false;
+      if (categoryFilter && categoryFilter !== 'all' && String(p?.category || '') !== categoryFilter) return false;
       if (productStatusFilter === 'all') return true;
       if (productStatusFilter === 'inactive') return isInactive(p);
       return !isInactive(p);
     });
-  }, [products, query, categoryByCode, productStatusFilter]);
+  }, [products, query, categoryByCode, productStatusFilter, productCategoryFilter]);
 
   const visibleProductIds = useMemo(() => filteredProducts.map((p) => p.id).filter((v) => v != null), [filteredProducts]);
   const visibleSelectedCount = useMemo(
@@ -200,19 +204,32 @@ export default function AdminRecords() {
 
   const filteredCategories = useMemo(() => {
     const q = String(categoryQuery || '').trim().toLowerCase();
-    if (!q) return categories;
+    const statusFilter = String(categoryStatusFilter || '').trim();
     return (Array.isArray(categories) ? categories : []).filter((c) => {
+      const isInactive = c?.isActive === false;
+      if (statusFilter === 'active' && isInactive) return false;
+      if (statusFilter === 'inactive' && !isInactive) return false;
+      if (!q) return true;
       const nameStr = String(c?.name || '').toLowerCase();
       const codeStr = String(c?.code || '').toLowerCase();
       return nameStr.includes(q) || codeStr.includes(q);
     });
-  }, [categories, categoryQuery]);
+  }, [categories, categoryQuery, categoryStatusFilter]);
+
+  const categoryOptions = useMemo(() => {
+    return (Array.isArray(categories) ? categories : [])
+      .filter((c) => c && c.code)
+      .slice()
+      .sort((a, b) => String(a?.name || a?.code || '').localeCompare(String(b?.name || b?.code || '')));
+  }, [categories]);
+
+  const pageTitle = activeTab === 'products' ? t('productsTab') : t('categoriesTab');
 
   return (
     <div className="ac-page">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-base font-semibold text-zinc-900">{t('records')}</h2>
+          <h2 className="text-base font-semibold text-zinc-900">{pageTitle}</h2>
           <p className="mt-1 text-sm text-zinc-600">{t('recordsSubtitle')}</p>
           <div className="mt-2 flex items-center gap-2 text-sm text-zinc-500">
             <button
@@ -268,38 +285,81 @@ export default function AdminRecords() {
               {t('categoriesTab')}
             </button>
           </div>
-
-          {activeTab === 'products' ? (
-            <div className="inline-flex rounded-xl border border-zinc-200 bg-white p-1">
-              <button
-                type="button"
-                className={productStatusFilter === 'active' ? 'rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white' : 'rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50'}
-                onClick={() => setProductStatusFilter('active')}
-              >
-                {t('activeProducts')}
-              </button>
-              <button
-                type="button"
-                className={productStatusFilter === 'inactive' ? 'rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white' : 'rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50'}
-                onClick={() => setProductStatusFilter('inactive')}
-              >
-                {t('inactiveProducts')}
-              </button>
-              <button
-                type="button"
-                className={productStatusFilter === 'all' ? 'rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white' : 'rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50'}
-                onClick={() => setProductStatusFilter('all')}
-              >
-                {t('allProducts')}
-              </button>
-            </div>
-          ) : null}
         </div>
 
         {activeTab === 'products' ? (
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('searchProducts')} className="ac-input" data-tour="records-search-products" />
+          <div className="rounded-xl border border-zinc-200 bg-white p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="min-w-[240px] flex-1">
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t('searchProducts')}
+                  className="ac-input"
+                  data-tour="records-search-products"
+                />
+              </div>
+              <select value={productStatusFilter} onChange={(e) => setProductStatusFilter(e.target.value)} className="ac-input w-[170px]">
+                <option value="all">{t('allStatuses')}</option>
+                <option value="active">{t('active')}</option>
+                <option value="inactive">{t('inactive')}</option>
+              </select>
+              <select value={productCategoryFilter} onChange={(e) => setProductCategoryFilter(e.target.value)} className="ac-input w-[260px]">
+                <option value="all">{t('allCategories')}</option>
+                {categoryOptions.map((c) => (
+                  <option key={c.id} value={String(c.code)}>
+                    {String(c?.name || c?.code)} ({String(c.code)}){c?.isActive === false ? ` — ${t('inactive')}` : ''}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2"
+                onClick={() => {
+                  setQuery('');
+                  setProductStatusFilter('all');
+                  setProductCategoryFilter('all');
+                }}
+              >
+                {t('clearFilters')}
+              </button>
+            </div>
+            <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
+              <div>{t('showingProducts', { shown: filteredProducts.length, total: Array.isArray(products) ? products.length : 0 })}</div>
+            </div>
+          </div>
         ) : (
-          <input value={categoryQuery} onChange={(e) => setCategoryQuery(e.target.value)} placeholder={t('searchCategories')} className="ac-input" data-tour="records-search-categories" />
+          <div className="rounded-xl border border-zinc-200 bg-white p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="min-w-[240px] flex-1">
+                <input
+                  value={categoryQuery}
+                  onChange={(e) => setCategoryQuery(e.target.value)}
+                  placeholder={t('searchCategories')}
+                  className="ac-input"
+                  data-tour="records-search-categories"
+                />
+              </div>
+              <select value={categoryStatusFilter} onChange={(e) => setCategoryStatusFilter(e.target.value)} className="ac-input w-[170px]">
+                <option value="all">{t('allStatuses')}</option>
+                <option value="active">{t('active')}</option>
+                <option value="inactive">{t('inactive')}</option>
+              </select>
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2"
+                onClick={() => {
+                  setCategoryQuery('');
+                  setCategoryStatusFilter('all');
+                }}
+              >
+                {t('clearFilters')}
+              </button>
+            </div>
+            <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
+              <div>{t('showingCategories', { shown: filteredCategories.length, total: Array.isArray(categories) ? categories.length : 0 })}</div>
+            </div>
+          </div>
         )}
       </div>
 
@@ -466,7 +526,12 @@ export default function AdminRecords() {
               header: t('status'),
               cell: (p) => {
                 const isInactive = String(p?.status || '').toLowerCase() === 'inactive';
-                return <span className="text-sm text-zinc-700">{isInactive ? t('inactive') : t('active')}</span>;
+                const tone = isInactive ? 'border-zinc-200 bg-zinc-50 text-zinc-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700';
+                return (
+                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${tone}`}>
+                    {isInactive ? t('inactive') : t('active')}
+                  </span>
+                );
               }
             },
             {
@@ -564,7 +629,19 @@ export default function AdminRecords() {
           columns={[
             { id: 'name', header: t('name'), cell: (c) => <span className="font-medium text-zinc-900">{c.name}</span> },
             { id: 'code', header: t('code'), cell: (c) => <span className="font-mono text-sm text-zinc-700">{c.code}</span> },
-            { id: 'status', header: t('status'), cell: (c) => <span className="text-sm text-zinc-700">{c.isActive === false ? t('inactive') : t('active')}</span> },
+            {
+              id: 'status',
+              header: t('status'),
+              cell: (c) => {
+                const isInactive = c.isActive === false;
+                const tone = isInactive ? 'border-zinc-200 bg-zinc-50 text-zinc-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700';
+                return (
+                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${tone}`}>
+                    {isInactive ? t('inactive') : t('active')}
+                  </span>
+                );
+              }
+            },
             { id: 'updated', header: t('updated'), cell: (c) => <span className="text-sm text-zinc-600">{formatDate(c.updatedAt || c.createdAt)}</span> },
             {
               id: 'actions',

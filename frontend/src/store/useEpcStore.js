@@ -73,11 +73,11 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
-  fetchBatches: async ({ q, limit = 50, offset = 0 } = {}) => {
+  fetchBatches: async ({ q, origin, limit = 50, offset = 0 } = {}) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const res = await api.get('/epc/batches', { params: { q: q || undefined, limit, offset } });
+      const res = await api.get('/epc/batches', { params: { q: q || undefined, origin: origin || undefined, limit, offset } });
       const data = res?.data?.data || {};
       set({
         batches: Array.isArray(data.items) ? data.items : [],
@@ -246,6 +246,21 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
+  exportBatchImportTemplateXlsx: async () => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.get('/epc/batch-import/template-xlsx', { responseType: 'arraybuffer' });
+      downloadArrayBufferResponse(res, 'batch_import_template.xlsx');
+      set({ loading: false });
+      return true;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      set({ loading: false, error: msg });
+      return false;
+    }
+  },
+
   clearLastGenerated: () => set({ lastGenerated: null }),
 
   importProductionXlsx: async ({ batchId, base64 }) => {
@@ -267,8 +282,11 @@ const useEpcStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const id = Number(batchId);
-      const res = await api.post(`/epc/batches/${id}/batch-import/preview-xlsx`, { base64 });
+      const id = batchId == null || String(batchId).trim() === '' ? null : Number(batchId);
+      const res =
+        id != null && Number.isFinite(id)
+          ? await api.post(`/epc/batches/${id}/batch-import/preview-xlsx`, { base64 })
+          : await api.post('/epc/batch-import/preview-xlsx', { base64 });
       set({ loading: false });
       return res?.data?.data || null;
     } catch (e) {
@@ -282,7 +300,7 @@ const useEpcStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const id = Number(batchId);
+      const id = batchId == null || String(batchId).trim() === '' ? null : Number(batchId);
       const body = {
         base64,
         productId: Number(productId),
@@ -292,7 +310,10 @@ const useEpcStore = create((set, get) => ({
       if (certificateTemplateId !== undefined) {
         body.certificateTemplateId = certificateTemplateId == null || String(certificateTemplateId).trim() === '' ? null : Number(certificateTemplateId);
       }
-      const res = await api.post(`/epc/batches/${id}/batch-import/submit`, body);
+      const res =
+        id != null && Number.isFinite(id)
+          ? await api.post(`/epc/batches/${id}/batch-import/submit`, body)
+          : await api.post('/epc/batch-import/submit', body);
       const data = res?.data?.data || null;
       const updatedBatch = data?.batch || null;
       if (updatedBatch?.id != null) {

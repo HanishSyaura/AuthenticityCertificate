@@ -28,7 +28,7 @@ function findActiveIdentityMem({ organizationId, nfcUid, epc }) {
   );
 }
 
-async function resolveCertificateId({ organizationId, nfcUid, epc }) {
+async function resolveCertificateId({ organizationId, nfcUid, epc, requireEpcBatchMeta = false }) {
   const orgId = Number(organizationId);
   const uid = norm(nfcUid);
   const e = norm(epc);
@@ -46,21 +46,45 @@ async function resolveCertificateId({ organizationId, nfcUid, epc }) {
       }),
       80
     );
-    if (found?.certificateId) return found.certificateId;
+    if (found?.certificateId) {
+      if (requireEpcBatchMeta && e) {
+        const meta = await withTimeout(
+          prisma.epcItem.findUnique({
+            where: { organizationId_epcCode: { organizationId: orgId, epcCode: e } },
+            select: { batchNumber: true, swiftletHouseNumber: true }
+          }),
+          80
+        );
+        const ok =
+          String(meta?.batchNumber || '').trim().length > 0 && String(meta?.swiftletHouseNumber || '').trim().length > 0;
+        if (!ok) throw new Error('epc_inactive_missing_batch_meta');
+      }
+      return found.certificateId;
+    }
 
     if (e) {
       const epcItem = await withTimeout(
         prisma.epcItem.findUnique({
           where: { organizationId_epcCode: { organizationId: orgId, epcCode: e } },
-          select: { batch: { select: { certificateId: true } } }
+          select: { batchNumber: true, swiftletHouseNumber: true, batch: { select: { certificateId: true } } }
         }),
         80
       );
-      if (epcItem?.batch?.certificateId) return epcItem.batch.certificateId;
+      if (epcItem?.batch?.certificateId) {
+        if (requireEpcBatchMeta) {
+          const ok =
+            String(epcItem?.batchNumber || '').trim().length > 0 &&
+            String(epcItem?.swiftletHouseNumber || '').trim().length > 0;
+          if (!ok) throw new Error('epc_inactive_missing_batch_meta');
+        }
+        return epcItem.batch.certificateId;
+      }
     }
 
     return null;
-  } catch {
+  } catch (err) {
+    if (err?.message === 'epc_inactive_missing_batch_meta') throw err;
+    if (requireEpcBatchMeta && e) return null;
     const mem = findActiveIdentityMem({ organizationId: orgId, nfcUid: uid, epc: e });
     return mem?.certificateId || null;
   }

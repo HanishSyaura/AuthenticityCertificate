@@ -59,6 +59,7 @@ export default function AdminEpc() {
     generateBatch,
     exportBatchVerifyUrlXlsx,
     exportBatchProductionTemplateXlsx,
+    exportBatchImportTemplateXlsx,
     importProductionXlsx,
     previewBatchImportXlsx,
     submitBatchImport,
@@ -79,6 +80,7 @@ export default function AdminEpc() {
     generateBatch: s.generateBatch,
     exportBatchVerifyUrlXlsx: s.exportBatchVerifyUrlXlsx,
     exportBatchProductionTemplateXlsx: s.exportBatchProductionTemplateXlsx,
+    exportBatchImportTemplateXlsx: s.exportBatchImportTemplateXlsx,
     exportBatchXlsxCustom: s.exportBatchXlsxCustom,
     importProductionXlsx: s.importProductionXlsx,
     previewBatchImportXlsx: s.previewBatchImportXlsx,
@@ -234,8 +236,15 @@ export default function AdminEpc() {
   useEffect(() => {
     if (!canBatchCreate && !canBatchView && !canBatchImport && !canProduction) return;
     void fetchCorpCodes();
-    void fetchBatches({ limit: 50, offset: 0 });
   }, [canBatchCreate, canBatchImport, canBatchView, canProduction, fetchBatches, fetchCorpCodes]);
+
+  useEffect(() => {
+    if (tab === 'import' && canBatchImport) {
+      void fetchBatches({ origin: 'import', limit: 50, offset: 0 });
+    } else if (tab === 'production' && canProduction) {
+      void fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
+    }
+  }, [canBatchImport, canProduction, fetchBatches, tab]);
 
   useEffect(() => {
     if (tab === 'batches' && canBatchView) return;
@@ -346,7 +355,6 @@ export default function AdminEpc() {
                     setSelectedItemIds(new Set());
                     setListOffset(0);
                     await fetchItems({ q: listQuery, limit: listLimit, offset: 0 });
-                    await fetchBatches({ limit: 50, offset: 0 });
                   }}
                 >
                   {t('delete')}
@@ -362,15 +370,21 @@ export default function AdminEpc() {
 
           <div className="p-4">
             <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_240px_240px_auto]">
-              <input
-                value={listQuery}
-                onChange={(e) => {
-                  setListQuery(e.target.value);
-                  setListOffset(0);
-                }}
-                placeholder={t('searchEpc')}
-                className="ac-input"
-              />
+              <div className="flex flex-col gap-1">
+                <label htmlFor="searchEpcCode" className="text-[11px] text-zinc-500">
+                  {t('searchEpcCode')}
+                </label>
+                <input
+                  id="searchEpcCode"
+                  value={listQuery}
+                  onChange={(e) => {
+                    setListQuery(e.target.value);
+                    setListOffset(0);
+                  }}
+                  placeholder={t('searchEpc')}
+                  className="ac-input"
+                />
+              </div>
               <div className="flex flex-col gap-1">
                 <label htmlFor="createdFrom" className="text-[11px] text-zinc-500">
                   {t('createdFrom')}
@@ -403,13 +417,20 @@ export default function AdminEpc() {
                   placeholder={t('createdTo')}
                 />
               </div>
-              <button
-                type="button"
-                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                onClick={() => fetchItems({ q: listQuery, createdFrom: createdFrom || undefined, createdTo: createdTo || undefined, limit: listLimit, offset: 0 })}
-              >
-                {t('inquire')}
-              </button>
+              <div className="flex flex-col gap-1">
+                <div aria-hidden className="select-none text-[11px] text-transparent">
+                  .
+                </div>
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-soft px-4 py-3 text-sm"
+                  onClick={() =>
+                    fetchItems({ q: listQuery, createdFrom: createdFrom || undefined, createdTo: createdTo || undefined, limit: listLimit, offset: 0 })
+                  }
+                >
+                  {t('inquire')}
+                </button>
+              </div>
             </div>
 
             <div className="mb-2 text-[11px] text-zinc-500">
@@ -860,7 +881,17 @@ export default function AdminEpc() {
 
       {tab === 'import' && canBatchImport ? (
         <div className="rounded-xl border border-zinc-200 bg-white">
-          <div className="border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-600">{t('batchImport')}</div>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 px-4 py-3">
+            <div className="text-xs font-semibold text-zinc-600">{t('batchImport')}</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" disabled={loading} onClick={exportBatchImportTemplateXlsx}>
+                {t('downloadTemplate')}
+              </button>
+              <button type="button" className="ac-btn ac-btn-primary px-3 py-2 text-xs" disabled={loading} onClick={() => openImport(null)}>
+                {t('importBatchFile')}
+              </button>
+            </div>
+          </div>
           <div className="divide-y divide-zinc-100">
             {(Array.isArray(batches) ? batches : []).map((b) => {
               const uploaded = Boolean(b.productionUploadedAt);
@@ -874,15 +905,6 @@ export default function AdminEpc() {
                       {b.product?.name ? `${b.product.name} (${String(b.sku || b.product?.sku || '').trim() || '-'})` : t('noProductAssigned')} •{' '}
                       {t('supportingCertsUploaded', { value: docCount })}
                     </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" disabled={loading} onClick={() => exportBatchProductionTemplateXlsx(b.id)}>
-                      {t('downloadTemplate')}
-                    </button>
-                    <button type="button" className="ac-btn ac-btn-primary px-3 py-2 text-xs" disabled={loading} onClick={() => openImport(b)}>
-                      {t('importBatchFile')}
-                    </button>
                   </div>
                 </div>
               );
@@ -933,7 +955,7 @@ export default function AdminEpc() {
                           if (!file) return;
                           const base64 = await toBase64(file);
                           await importProductionXlsx({ batchId: b.id, base64 });
-                          await fetchBatches({ limit: 50, offset: 0 });
+                          await fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
                           e.target.value = '';
                         }}
                       />
@@ -944,7 +966,7 @@ export default function AdminEpc() {
                       disabled={loading || done}
                       onClick={async () => {
                         await markProductionDone({ batchId: b.id });
-                        await fetchBatches({ limit: 50, offset: 0 });
+                        await fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
                       }}
                     >
                       {t('markDone')}
@@ -967,7 +989,6 @@ export default function AdminEpc() {
           <div className="ac-modal">
             <div className="mb-3 text-sm font-semibold text-zinc-900">
               {t('importBatchFile')}
-              {importBatch?.batchName ? ` — ${importBatch.batchName}` : ''}
             </div>
 
             {importLocalError ? <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{importLocalError}</div> : null}
@@ -984,12 +1005,12 @@ export default function AdminEpc() {
                     onChange={async (e) => {
                       try {
                         const file = e.target.files?.[0];
-                        if (!file || !importBatch?.id) return;
+                        if (!file) return;
                         setImportLocalError('');
                         setImportPreview(null);
                         const base64 = await toBase64(file);
                         setImportBase64(base64);
-                        const preview = await previewBatchImportXlsx({ batchId: importBatch.id, base64 });
+                        const preview = await previewBatchImportXlsx({ batchId: null, base64 });
                         setImportPreview(preview);
                       } catch (err) {
                         setImportPreview(null);
@@ -1128,8 +1149,6 @@ export default function AdminEpc() {
                 onClick={async () => {
                   try {
                     setImportLocalError('');
-                    const batchId = importBatch?.id != null ? Number(importBatch.id) : null;
-                    if (!Number.isFinite(batchId)) throw new Error(tRaw('operationFailed'));
                     if (!importBase64) throw new Error(t('uploadXlsxFirst'));
                     if (!importPreview) throw new Error(t('uploadXlsxFirst'));
                     if (!String(importProductId || '').trim()) throw new Error(t('selectProduct'));
@@ -1139,14 +1158,14 @@ export default function AdminEpc() {
                       if (!String(importDocUrls?.[dt] || '').trim()) throw new Error(t('allSupportingCertsRequired'));
                     }
                     await submitBatchImport({
-                      batchId,
+                      batchId: null,
                       base64: importBase64,
                       productId: Number(importProductId),
                       sku: String(importSku || '').trim(),
                       certificateTemplateId: Number(importAuthTemplateId),
                       documents: { ...importDocUrls }
                     });
-                    await fetchBatches({ limit: 50, offset: 0 });
+                    await fetchBatches({ origin: 'import', limit: 50, offset: 0 });
                     closeImport();
                   } catch (err) {
                     setImportLocalError(err?.message || tRaw('operationFailed'));
@@ -1212,7 +1231,7 @@ export default function AdminEpc() {
                   setRemark('');
                   setListOffset(0);
                   await fetchItems({ q: listQuery, limit: listLimit, offset: 0 });
-                  await fetchBatches({ limit: 50, offset: 0 });
+                  await fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
                 }}
               >
                 {loading ? t('generating') : t('generate')}

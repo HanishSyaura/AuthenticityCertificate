@@ -550,17 +550,33 @@ router.get('/resolve', async (req, res) => {
   const orgId = typeof req.organization?.id === 'number' ? req.organization.id : null;
   if (!orgId) return res.error('Organization not found', 404);
 
-  const certificateId = await identityService.resolveCertificateId({ organizationId: orgId, nfcUid, epc });
-  if (!certificateId) return res.error('Identity not found. Use QR code fallback.', 404);
+  try {
+    const certificateId = await identityService.resolveCertificateId({
+      organizationId: orgId,
+      nfcUid,
+      epc,
+      requireEpcBatchMeta: Boolean(epc) && !nfcUid
+    });
+    if (!certificateId) return res.error('Identity not found. Use QR code fallback.', 404);
 
-  const verifiedVia = nfcUid ? 'nfc_uid' : 'epc';
-  return respondByCertificateId({
-    req,
-    res,
-    certificateId,
-    verifiedVia,
-    identity: { nfcUid: nfcUid || null, epc: epc || null }
-  });
+    const verifiedVia = nfcUid ? 'nfc_uid' : 'epc';
+    return respondByCertificateId({
+      req,
+      res,
+      certificateId,
+      verifiedVia,
+      identity: { nfcUid: nfcUid || null, epc: epc || null }
+    });
+  } catch (e) {
+    if (e?.message === 'epc_inactive_missing_batch_meta') {
+      return res.error(
+        'EPC certification is not active yet. Please fill in Batch Number and Swiftlet House Number first.',
+        409
+      );
+    }
+    const msg = e?.message === 'db_timeout' ? 'Service temporarily unavailable' : 'Service unavailable';
+    return res.error(msg, 503);
+  }
 });
 
 module.exports = router;

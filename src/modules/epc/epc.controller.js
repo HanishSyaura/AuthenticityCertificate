@@ -125,7 +125,8 @@ async function listBatches(req, res) {
   try {
     const { limit, offset } = parseLimitOffset(req.query);
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
-    const data = await epcService.listBatches({ organizationId: req.organization.id, q, limit, offset });
+    const origin = typeof req.query.origin === 'string' ? req.query.origin.trim() : '';
+    const data = await epcService.listBatches({ organizationId: req.organization.id, q, origin, limit, offset });
     res.success(data);
   } catch (e) {
     res.error(e.message, 400);
@@ -327,6 +328,17 @@ async function exportBatchProductionTemplate(req, res) {
   }
 }
 
+async function exportBatchImportTemplate(req, res) {
+  try {
+    const { buffer, filename } = await epcService.exportBatchImportTemplateXlsx();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.status(200).send(buffer);
+  } catch (e) {
+    res.error(e.message, 400);
+  }
+}
+
 async function importProductionXlsx(req, res) {
   try {
     const batchId = Number(req.params.id);
@@ -349,6 +361,16 @@ async function previewBatchImport(req, res) {
   }
 }
 
+async function previewBatchImportNew(req, res) {
+  try {
+    const data = previewBatchImportSchema.parse(req.body);
+    const result = await epcService.previewBatchImportXlsx({ organizationId: req.organization.id, batchId: null, base64: data.base64 });
+    res.success(result);
+  } catch (e) {
+    res.error(e.message, 400);
+  }
+}
+
 async function submitBatchImport(req, res) {
   try {
     const batchId = Number(req.params.id);
@@ -356,6 +378,24 @@ async function submitBatchImport(req, res) {
     const result = await epcService.submitBatchImport({
       organizationId: req.organization.id,
       batchId,
+      base64: data.base64,
+      productId: data.productId,
+      sku: data.sku,
+      certificateTemplateId: Object.prototype.hasOwnProperty.call(data, 'certificateTemplateId') ? data.certificateTemplateId : undefined,
+      documents: data.documents
+    });
+    res.success(result, 'Batch import saved');
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.error('Invalid input. Please check the form and try again.', 400);
+    res.error(e.message, 400);
+  }
+}
+
+async function submitBatchImportNew(req, res) {
+  try {
+    const data = submitBatchImportSchema.parse(req.body);
+    const result = await epcService.createImportBatchFromXlsx({
+      organizationId: req.organization.id,
       base64: data.base64,
       productId: data.productId,
       sku: data.sku,
@@ -454,9 +494,12 @@ module.exports = {
   exportBatch,
   exportBatchVerifyUrls,
   exportBatchProductionTemplate,
+  exportBatchImportTemplate,
   importProductionXlsx,
   previewBatchImport,
+  previewBatchImportNew,
   submitBatchImport,
+  submitBatchImportNew,
   markProductionDone,
   updateBatch,
   deleteBatch,

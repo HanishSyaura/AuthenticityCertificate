@@ -111,6 +111,26 @@ router.get('/batches/:id/export-xlsx', requirePermission(['epc.write', 'epc.expo
 router.get('/batches/:id/export-verify-url-xlsx', requirePermission(['epc.write', 'epc.encoding']), epcController.exportBatchVerifyUrls);
 router.get('/batches/:id/export-production-template-xlsx', requirePermission(['epc.write', 'epc.batch.create']), epcController.exportBatchProductionTemplate);
 
+router.get(
+  '/batch-import/template-xlsx',
+  requirePermission(['epc.write', 'epc.production.access']),
+  epcController.exportBatchImportTemplate
+);
+
+router.post(
+  '/batch-import/preview-xlsx',
+  requirePermission(['epc.write', 'epc.production.access']),
+  auditAction('PREVIEW_EPC_BATCH_IMPORT_XLSX', { targetType: 'epc_batch' }),
+  epcController.previewBatchImportNew
+);
+
+router.post(
+  '/batch-import/submit',
+  requirePermission(['epc.write', 'epc.production.access']),
+  auditAction('SUBMIT_EPC_BATCH_IMPORT', { targetType: 'epc_batch' }),
+  epcController.submitBatchImportNew
+);
+
 router.post(
   '/batches/:id/batch-import/preview-xlsx',
   requirePermission(['epc.write', 'epc.production.access']),

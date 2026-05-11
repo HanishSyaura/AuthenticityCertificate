@@ -249,12 +249,20 @@ model EpcBatchSequence {
   updatedAt DateTime @updatedAt
 }
 
+model ImportBatchSequence {
+  dateKey   String   @id // YYYYMMDD (ikut timezone org)
+  lastNo    BigInt   @default(0)
+  updatedAt DateTime @updatedAt
+}
+
 model EpcBatch {
   id             Int          @id @default(autoincrement())
   organizationId Int
   organization   Organization @relation(fields: [organizationId], references: [id])
   corpPrefix     String
   periodKey      String?
+
+  origin String @default("generated") // generated | import
 
   productId Int?
   product   Product? @relation(fields: [productId], references: [id])
@@ -278,6 +286,7 @@ model EpcBatch {
 
   @@index([organizationId, createdAt])
   @@index([organizationId, corpPrefix])
+  @@index([organizationId, origin])
   @@index([organizationId, productId])
   @@index([organizationId, certificateId])
 }
