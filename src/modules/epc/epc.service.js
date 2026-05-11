@@ -647,19 +647,92 @@ async function exportBatchVerifyUrlXlsx({ organizationId, batchId, verifyUrlPref
   return { buffer, filename };
 }
 
-async function exportItemsXlsx({ organizationId, itemIds }) {
+async function exportBatchProductionTemplateXlsx({ organizationId, batchId }) {
   const orgId = Number(organizationId);
-  const ids = Array.from(new Set((Array.isArray(itemIds) ? itemIds : []).map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0)));
-  if (!ids.length) throw new Error('No items selected');
+  const id = Number(batchId);
+  if (!Number.isFinite(id)) throw new Error('Invalid batch id');
+
+  const batch = await withTimeout(
+    prisma.epcBatch.findFirst({
+      where: { id, organizationId: orgId },
+      include: { product: { select: { name: true } } }
+    }),
+    2500
+  );
+  if (!batch) throw new Error('Batch tidak dijumpai');
 
   const items = await withTimeout(
     prisma.epcItem.findMany({
-      where: { organizationId: orgId, id: { in: ids } },
-      include: { batch: { select: { remark: true } } },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }]
+      where: { organizationId: orgId, batchId: id },
+      orderBy: { runningNo: 'asc' },
+      select: { epcCode: true }
     }),
     12_000
   );
+
+  const header = [
+    'EPC',
+    'Barcode (Empty, key in by production)',
+    'Individual Label (CAIQ)(Empty, key in by production)',
+    'Net Weight (Empty, key in by production)',
+    'Manufacture Date(Empty, key in by production)',
+    'Batch Number(Empty, key in by production)',
+    'Swiftlet House Number(Empty, key in by production)'
+  ];
+
+  const ws = XLSX.utils.json_to_sheet(
+    items.map((it) => ({
+      [header[0]]: String(it.epcCode || '').trim(),
+      [header[1]]: '',
+      [header[2]]: '',
+      [header[3]]: '',
+      [header[4]]: '',
+      [header[5]]: '',
+      [header[6]]: ''
+    })),
+    { header }
+  );
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'template');
+  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+  const safePart = (v, fallback) => String(v || fallback).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 64) || fallback;
+  const safeProduct = safePart(batch.product?.name, 'product');
+  const safeBatch = safePart(batch.batchName, 'batch');
+  const safeQty = safePart(batch.batchQty, 'qty');
+  const filename = `${safeProduct}_${safeBatch}_${safeQty}_input_template.xlsx`;
+  return { buffer, filename };
+}
+
+async function exportItemsXlsx({ organizationId, itemIds, q, createdFrom, createdTo, columns }) {
+  const orgId = Number(organizationId);
+  const ids = Array.from(new Set((Array.isArray(itemIds) ? itemIds : []).map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0)));
+  const query = typeof q === 'string' ? q.trim() : '';
+
+  const where = {
+    organizationId: orgId,
+    ...(ids.length ? { id: { in: ids } } : {}),
+    ...((createdFrom || createdTo)
+      ? {
+          createdAt: {
+            ...(createdFrom ? { gte: createdFrom } : {}),
+            ...(createdTo ? { lte: createdTo } : {})
+          }
+        }
+      : {}),
+    ...(query ? { epcCode: { contains: query } } : {})
+  };
+
+  const items = await withTimeout(
+    prisma.epcItem.findMany({
+      where,
+      include: { batch: { select: { remark: true } } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: ids.length ? undefined : 10_000
+    }),
+    12_000
+  );
+  if (!Array.isArray(items) || items.length === 0) throw new Error('No data to export');
 
   const codes = (Array.isArray(items) ? items : [])
     .map((it) => String(it?.epcCode || '').trim())
@@ -680,14 +753,47 @@ async function exportItemsXlsx({ organizationId, itemIds }) {
     }
   }
 
-  const rows = (Array.isArray(items) ? items : []).map((it) => ({
-    epcCode: String(it.epcCode || '').trim(),
-    status: activeSet.has(String(it.epcCode || '').trim()) ? 'ACTIVE' : 'INACTIVE',
-    createdAt: it.createdAt ? new Date(it.createdAt).toISOString().slice(0, 19).replace('T', ' ') : '',
-    remark: it.batch?.remark == null ? '' : String(it.batch.remark)
-  }));
+  const allowedColumns = new Set([
+    'epcCode',
+    'status',
+    'barcode',
+    'caiqNumber',
+    'netWeight',
+    'manufactureDate',
+    'batchNumber',
+    'swiftletHouseNumber',
+    'createdAt',
+    'remark'
+  ]);
+  const requested = Array.isArray(columns) ? columns : [];
+  const unique = [];
+  for (const c of requested) {
+    const key = String(c || '').trim();
+    if (!key || !allowedColumns.has(key) || unique.includes(key)) continue;
+    unique.push(key);
+  }
+  const exportColumns =
+    unique.length > 0
+      ? unique
+      : ['epcCode', 'barcode', 'caiqNumber', 'netWeight', 'manufactureDate', 'batchNumber', 'swiftletHouseNumber'];
 
-  const ws = XLSX.utils.json_to_sheet(rows, { header: ['epcCode', 'status', 'createdAt', 'remark'] });
+  const rows = (Array.isArray(items) ? items : []).map((it) => {
+    const status = activeSet.has(String(it.epcCode || '').trim()) ? 'ACTIVE' : 'INACTIVE';
+    const row = {};
+    for (const col of exportColumns) {
+      if (col === 'status') row[col] = status;
+      else if (col === 'remark') row[col] = it.batch?.remark == null ? '' : String(it.batch.remark);
+      else if (col === 'createdAt') row[col] = it.createdAt ? new Date(it.createdAt).toISOString().slice(0, 19).replace('T', ' ') : '';
+      else if (col === 'manufactureDate') row[col] = it.productionDate ? new Date(it.productionDate).toISOString().slice(0, 10) : '';
+      else {
+        const v = it[col];
+        row[col] = v == null ? '' : String(v);
+      }
+    }
+    return row;
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows, { header: exportColumns });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'epc_items');
   const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
@@ -830,11 +936,19 @@ async function listBatches({ organizationId, q, limit, offset }) {
   return { items: itemsWithStats, total, limit, offset };
 }
 
-async function listItems({ organizationId, q, batchId, pendingOnly, limit, offset }) {
+async function listItems({ organizationId, q, batchId, pendingOnly, createdFrom, createdTo, limit, offset }) {
   const orgId = Number(organizationId);
   const where = {
     organizationId: orgId,
     ...(batchId ? { batchId: Number(batchId) } : {}),
+    ...((createdFrom || createdTo)
+      ? {
+          createdAt: {
+            ...(createdFrom ? { gte: createdFrom } : {}),
+            ...(createdTo ? { lte: createdTo } : {})
+          }
+        }
+      : {}),
     ...(pendingOnly
       ? {
           OR: [{ netWeight: null }, { netWeight: '' }]
@@ -842,7 +956,7 @@ async function listItems({ organizationId, q, batchId, pendingOnly, limit, offse
       : {}),
     ...(q
       ? {
-          OR: [{ epcCode: { contains: q } }, { batch: { batchName: { contains: q } } }]
+          OR: [{ epcCode: { contains: q } }]
         }
       : {})
   };
@@ -1110,6 +1224,22 @@ async function importProductionXlsx({ organizationId, batchId, base64 }) {
   const { rows } = parseXlsxBase64(base64);
   if (!Array.isArray(rows) || rows.length === 0) throw new Error('Excel kosong');
 
+  const pickByPrefix = (obj, prefixes) => {
+    const o = obj && typeof obj === 'object' ? obj : {};
+    const keys = Object.keys(o);
+    for (const p of Array.isArray(prefixes) ? prefixes : []) {
+      const pref = String(p || '').trim().toLowerCase();
+      if (!pref) continue;
+      const k = keys.find((kk) => String(kk || '').toLowerCase().startsWith(pref));
+      if (!k) continue;
+      const v = o[k];
+      if (v == null) continue;
+      const s = String(v).trim();
+      if (s) return s;
+    }
+    return null;
+  };
+
   const updates = [];
   for (const r of rows) {
     const n = normalizeRowKeys(r);
@@ -1117,9 +1247,12 @@ async function importProductionXlsx({ organizationId, batchId, base64 }) {
     if (!epcCode) continue;
     updates.push({
       epcCode,
-      netWeight: String(n.netweight || n.net_weight || '').trim() || null,
-      productionDate: toDateOrNull(n.productiondate || n.dateofproduction || n.production_date),
-      caiqNumber: String(n.caiqnumber || n.caiq || n.caiqlabel || n.caiq_label || '').trim() || null
+      barcode: pickByPrefix(n, ['barcode']),
+      batchNumber: pickByPrefix(n, ['batchnumber', 'batchno', 'batch']),
+      swiftletHouseNumber: pickByPrefix(n, ['swiftlethousenumber', 'swiftlethouse', 'housenumber']),
+      netWeight: pickByPrefix(n, ['netweight', 'net_weight']),
+      productionDate: toDateOrNull(pickByPrefix(n, ['manufacturedate', 'productiondate', 'dateofproduction', 'production_date'])),
+      caiqNumber: pickByPrefix(n, ['individuallabel(caiq)', 'caiqnumber', 'caiq', 'caiqlabel', 'caiq_label'])
     });
   }
   if (updates.length === 0) throw new Error('Tiada EPC code dalam Excel');
@@ -1132,7 +1265,14 @@ async function importProductionXlsx({ organizationId, batchId, base64 }) {
     for (const u of updates) {
       const res = await tx.epcItem.updateMany({
         where: { organizationId: orgId, batchId: id, epcCode: u.epcCode },
-        data: { netWeight: u.netWeight, productionDate: u.productionDate, caiqNumber: u.caiqNumber }
+        data: {
+          barcode: u.barcode,
+          batchNumber: u.batchNumber,
+          swiftletHouseNumber: u.swiftletHouseNumber,
+          netWeight: u.netWeight,
+          productionDate: u.productionDate,
+          caiqNumber: u.caiqNumber
+        }
       });
       updated += res.count || 0;
     }
@@ -1348,6 +1488,7 @@ module.exports = {
   generateEpcBatch,
   exportBatchXlsx,
   exportBatchVerifyUrlXlsx,
+  exportBatchProductionTemplateXlsx,
   exportItemsXlsx,
   listBatches,
   listItems,

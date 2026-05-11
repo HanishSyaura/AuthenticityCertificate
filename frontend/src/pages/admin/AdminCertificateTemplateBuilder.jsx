@@ -14,6 +14,14 @@ function makeId(prefix) {
   return `${prefix}-${Math.random().toString(16).slice(2)}-${Date.now()}`;
 }
 
+function normalizeTemplateId(input) {
+  const s = String(input ?? '').trim();
+  if (!s) return null;
+  const n = Number(s);
+  if (!Number.isInteger(n) || n <= 0) return null;
+  return String(n);
+}
+
 function getValue(path, data) {
   const parts = String(path).split('.');
   let cur = data;
@@ -166,7 +174,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   }));
 
   const isDesigner = String(uiMode || 'builder') === 'designer';
-  const [selectedId, setSelectedId] = useState(initialSelectedId);
+  const [selectedId, setSelectedId] = useState(() => normalizeTemplateId(initialSelectedId));
   const [selectedFieldId, setSelectedFieldId] = useState(null);
   const [bgUploading, setBgUploading] = useState(false);
   const [bgError, setBgError] = useState(null);
@@ -585,8 +593,9 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   }, [contentLang, fetchTemplates]);
 
   useEffect(() => {
-    if (!selectedId) return;
-    void fetchTemplate({ id: selectedId, lang: contentLang });
+    const id = normalizeTemplateId(selectedId);
+    if (!id) return;
+    void fetchTemplate({ id, lang: contentLang });
   }, [contentLang, fetchTemplate, selectedId]);
 
   const sanitizeLayout = (nextFields) =>
@@ -705,7 +714,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
 
   useEffect(() => {
     if (initialSelectedId == null) return;
-    setSelectedId(initialSelectedId);
+    setSelectedId(normalizeTemplateId(initialSelectedId));
     setSelectedFieldId(null);
   }, [initialSelectedId]);
 
@@ -715,7 +724,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
 
   useEffect(() => {
     if (selectedId != null) return;
-    if (templates.length > 0) setSelectedId(templates[0].id);
+    if (templates.length > 0) setSelectedId(String(templates[0].id));
   }, [templates, selectedId]);
 
   useEffect(() => {

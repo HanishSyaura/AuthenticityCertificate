@@ -8,6 +8,14 @@ function getApi() {
   return createAdminApi({ token });
 }
 
+function normalizeTemplateId(input) {
+  const s = String(input ?? '').trim();
+  if (!s) return null;
+  const n = Number(s);
+  if (!Number.isInteger(n) || n <= 0) return null;
+  return String(n);
+}
+
 const useCertTemplatesStore = create((set, get) => ({
   templates: [],
   loading: false,
@@ -33,15 +41,16 @@ const useCertTemplatesStore = create((set, get) => ({
   },
 
   fetchTemplate: async ({ id, lang } = {}) => {
-    if (!id) return null;
+    const tplId = normalizeTemplateId(id);
+    if (!tplId) return null;
     set({ error: null });
     try {
       const api = getApi();
       const l = lang ? String(lang) : null;
-      const res = await api.get(`/templates/${encodeURIComponent(id)}`, { params: l ? { lang: l } : undefined });
+      const res = await api.get(`/templates/${encodeURIComponent(tplId)}`, { params: l ? { lang: l } : undefined });
       const tpl = res?.data?.data || null;
       if (!tpl) return null;
-      const templates = get().templates.map((t) => (String(t.id) === String(id) ? tpl : t));
+      const templates = get().templates.map((t) => (String(t.id) === String(tplId) ? tpl : t));
       set({ templates, lastSyncAt: Date.now() });
       return tpl;
     } catch (e) {
@@ -78,7 +87,9 @@ const useCertTemplatesStore = create((set, get) => ({
   },
 
   updateTemplate: async ({ id, patch, lang } = {}) => {
-    const key = String(id);
+    const tplId = normalizeTemplateId(id);
+    if (!tplId) throw new Error(tRaw('operationFailed'));
+    const key = String(tplId);
     const seq = (get().saveSeqById?.[key] || 0) + 1;
     set((s) => ({
       error: null,
@@ -88,11 +99,11 @@ const useCertTemplatesStore = create((set, get) => ({
     try {
       const api = getApi();
       const l = lang ? String(lang) : null;
-      const res = await api.patch(`/templates/${encodeURIComponent(id)}`, patch, { params: l ? { lang: l } : undefined });
+      const res = await api.patch(`/templates/${encodeURIComponent(tplId)}`, patch, { params: l ? { lang: l } : undefined });
       const updated = res?.data?.data;
       const isLatest = (get().saveSeqById?.[key] || 0) === seq;
       if (isLatest) {
-        const templates = get().templates.map((t) => (String(t.id) === String(id) ? updated : t));
+        const templates = get().templates.map((t) => (String(t.id) === String(tplId) ? updated : t));
         set((s) => ({
           templates,
           lastSyncAt: Date.now(),
@@ -133,11 +144,13 @@ const useCertTemplatesStore = create((set, get) => ({
   },
 
   deleteTemplate: async ({ id }) => {
+    const tplId = normalizeTemplateId(id);
+    if (!tplId) throw new Error(tRaw('operationFailed'));
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      await api.delete(`/templates/${encodeURIComponent(id)}`);
-      const templates = get().templates.filter((t) => String(t.id) !== String(id));
+      await api.delete(`/templates/${encodeURIComponent(tplId)}`);
+      const templates = get().templates.filter((t) => String(t.id) !== String(tplId));
       set({ templates, loading: false, lastSyncAt: Date.now() });
     } catch (e) {
       const msg = e?.response?.data?.message || tRaw('operationFailed');

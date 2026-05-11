@@ -766,6 +766,15 @@ async function ensureEpcSchemaCompat() {
   await ensureColumn('EpcItem', 'netWeight', `ALTER TABLE \`EpcItem\` ADD COLUMN \`netWeight\` VARCHAR(191) NULL`, null, null);
   await ensureColumn('EpcItem', 'productionDate', `ALTER TABLE \`EpcItem\` ADD COLUMN \`productionDate\` DATETIME NULL`, null, null);
   await ensureColumn('EpcItem', 'caiqNumber', `ALTER TABLE \`EpcItem\` ADD COLUMN \`caiqNumber\` VARCHAR(191) NULL`, null, null);
+  await ensureColumn('EpcItem', 'barcode', `ALTER TABLE \`EpcItem\` ADD COLUMN \`barcode\` VARCHAR(191) NULL`, null, null);
+  await ensureColumn('EpcItem', 'batchNumber', `ALTER TABLE \`EpcItem\` ADD COLUMN \`batchNumber\` VARCHAR(191) NULL`, null, null);
+  await ensureColumn(
+    'EpcItem',
+    'swiftletHouseNumber',
+    `ALTER TABLE \`EpcItem\` ADD COLUMN \`swiftletHouseNumber\` VARCHAR(191) NULL`,
+    null,
+    null
+  );
 }
 
 async function ensureOrganizationSettingsSchemaCompat() {

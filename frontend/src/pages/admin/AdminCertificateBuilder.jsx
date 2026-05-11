@@ -3,18 +3,30 @@ import { useNavigate, useParams } from 'react-router-dom';
 import AdminCertificateTemplateBuilder from './AdminCertificateTemplateBuilder';
 import { useT } from '../../i18n/useT';
 
+function isValidTemplateId(input) {
+  const s = String(input ?? '').trim();
+  if (!s) return false;
+  const n = Number(s);
+  return Number.isInteger(n) && n > 0;
+}
+
 export default function AdminCertificateBuilder() {
   const { t } = useT();
   const navigate = useNavigate();
   const { id } = useParams();
+  const validId = isValidTemplateId(id);
 
   useEffect(() => {
     if (!id) {
       navigate('/admin/certificates', { replace: true, state: { openCreate: true } });
+      return;
     }
-  }, [id, navigate]);
+    if (!validId) {
+      navigate('/admin/certificates', { replace: true });
+    }
+  }, [id, navigate, validId]);
 
-  if (!id) return null;
+  if (!id || !validId) return null;
 
   return (
     <div>

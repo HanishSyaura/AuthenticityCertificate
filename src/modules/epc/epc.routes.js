@@ -109,6 +109,7 @@ router.get(
 
 router.get('/batches/:id/export-xlsx', requirePermission(['epc.write', 'epc.export.xlsx', 'epc.production.access']), epcController.exportBatch);
 router.get('/batches/:id/export-verify-url-xlsx', requirePermission(['epc.write', 'epc.encoding']), epcController.exportBatchVerifyUrls);
+router.get('/batches/:id/export-production-template-xlsx', requirePermission(['epc.write', 'epc.batch.create']), epcController.exportBatchProductionTemplate);
 
 router.post(
   '/corp-sequence/recalculate',

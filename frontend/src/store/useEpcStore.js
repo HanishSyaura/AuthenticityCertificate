@@ -92,12 +92,19 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
-  fetchItems: async ({ q, batchId, limit = 50, offset = 0 } = {}) => {
+  fetchItems: async ({ q, createdFrom, createdTo, batchId, limit = 50, offset = 0 } = {}) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
       const res = await api.get('/epc/items', {
-        params: { q: q || undefined, batchId: batchId != null ? Number(batchId) : undefined, limit, offset }
+        params: {
+          q: q || undefined,
+          createdFrom: createdFrom || undefined,
+          createdTo: createdTo || undefined,
+          batchId: batchId != null ? Number(batchId) : undefined,
+          limit,
+          offset
+        }
       });
       const data = res?.data?.data || {};
       set({
@@ -132,12 +139,20 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
-  exportItemsXlsx: async ({ itemIds } = {}) => {
+  exportItemsXlsx: async ({ itemIds, q, createdFrom, createdTo, columns } = {}) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
       const ids = Array.isArray(itemIds) ? itemIds.map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0) : [];
-      const res = await api.post('/epc/items/export-xlsx', { itemIds: ids }, { responseType: 'arraybuffer' });
+      const cols = Array.isArray(columns) ? columns.map((s) => String(s || '').trim()).filter(Boolean) : [];
+      const body = {
+        ...(ids.length ? { itemIds: ids } : {}),
+        ...(q ? { q: String(q) } : {}),
+        ...(createdFrom ? { createdFrom } : {}),
+        ...(createdTo ? { createdTo } : {}),
+        ...(cols.length ? { columns: cols } : {})
+      };
+      const res = await api.post('/epc/items/export-xlsx', body, { responseType: 'arraybuffer' });
       downloadArrayBufferResponse(res, 'epc_items.xlsx');
       set({ loading: false });
       return true;
@@ -206,6 +221,22 @@ const useEpcStore = create((set, get) => ({
       const id = Number(batchId);
       const res = await api.get(`/epc/batches/${id}/export-verify-url-xlsx`, { responseType: 'arraybuffer' });
       downloadArrayBufferResponse(res, `epc_urls_${id}.xlsx`);
+      set({ loading: false });
+      return true;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      set({ loading: false, error: msg });
+      return false;
+    }
+  },
+
+  exportBatchProductionTemplateXlsx: async (batchId) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const id = Number(batchId);
+      const res = await api.get(`/epc/batches/${id}/export-production-template-xlsx`, { responseType: 'arraybuffer' });
+      downloadArrayBufferResponse(res, `epc_input_template_${id}.xlsx`);
       set({ loading: false });
       return true;
     } catch (e) {

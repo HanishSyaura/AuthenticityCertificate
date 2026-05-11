@@ -290,6 +290,9 @@ model EpcItem {
 
   epcCode        String
   runningNo      BigInt
+  barcode        String?
+  batchNumber    String?
+  swiftletHouseNumber String?
   netWeight      String?
   productionDate DateTime?
   caiqNumber     String?

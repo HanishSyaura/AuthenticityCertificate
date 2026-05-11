@@ -101,7 +101,10 @@ export default function AdminCertificateList() {
             <div className="mt-1 text-xs text-zinc-600">{t('noCertificatesHint')}</div>
           </div>
         }
-        onRowClick={(tpl) => navigate(`/admin/certificates/${tpl.id}`)}
+        onRowClick={(tpl) => {
+          if (tpl?.id == null) return;
+          navigate(`/admin/certificates/${tpl.id}`);
+        }}
         columns={[
           {
             id: 'name',

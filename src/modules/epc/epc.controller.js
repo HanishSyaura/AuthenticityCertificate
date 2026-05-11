@@ -53,7 +53,11 @@ const deleteItemsSchema = z.object({
 });
 
 const exportItemsSchema = z.object({
-  itemIds: z.array(z.number().int().positive()).min(1).max(2000)
+  itemIds: z.array(z.number().int().positive()).min(1).max(2000).optional(),
+  q: z.string().optional(),
+  createdFrom: z.string().optional(),
+  createdTo: z.string().optional(),
+  columns: z.array(z.string().min(1)).max(50).optional()
 });
 
 function parseLimitOffset(q) {
@@ -122,7 +126,23 @@ async function listItems(req, res) {
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     const batchId = req.query.batchId ? Number(req.query.batchId) : null;
     const pendingOnly = String(req.query.pending || '').trim() === '1';
-    const data = await epcService.listItems({ organizationId: req.organization.id, q, batchId, pendingOnly, limit, offset });
+    const fromRaw = typeof req.query.createdFrom === 'string' ? req.query.createdFrom.trim() : '';
+    const toRaw = typeof req.query.createdTo === 'string' ? req.query.createdTo.trim() : '';
+    const createdFrom = fromRaw ? new Date(fromRaw) : null;
+    const createdTo = toRaw ? new Date(toRaw) : null;
+    if (createdFrom && Number.isNaN(createdFrom.getTime())) return res.error('Invalid createdFrom', 400);
+    if (createdTo && Number.isNaN(createdTo.getTime())) return res.error('Invalid createdTo', 400);
+
+    const data = await epcService.listItems({
+      organizationId: req.organization.id,
+      q,
+      batchId,
+      pendingOnly,
+      createdFrom,
+      createdTo,
+      limit,
+      offset
+    });
     res.success(data);
   } catch (e) {
     res.error(e.message, 400);
@@ -213,7 +233,24 @@ async function resetItemsProduction(req, res) {
 async function exportItems(req, res) {
   try {
     const data = exportItemsSchema.parse(req.body || {});
-    const { buffer, filename } = await epcService.exportItemsXlsx({ organizationId: req.organization.id, itemIds: data.itemIds });
+    const cols = Array.isArray(data.columns) ? data.columns.map((s) => String(s || '').trim()).filter(Boolean) : [];
+    const ids = Array.isArray(data.itemIds) ? data.itemIds : [];
+    const q = typeof data.q === 'string' ? data.q.trim() : '';
+    const fromRaw = typeof data.createdFrom === 'string' ? data.createdFrom.trim() : '';
+    const toRaw = typeof data.createdTo === 'string' ? data.createdTo.trim() : '';
+    const createdFrom = fromRaw ? new Date(fromRaw) : null;
+    const createdTo = toRaw ? new Date(toRaw) : null;
+    if (createdFrom && Number.isNaN(createdFrom.getTime())) return res.error('Invalid createdFrom', 400);
+    if (createdTo && Number.isNaN(createdTo.getTime())) return res.error('Invalid createdTo', 400);
+
+    const { buffer, filename } = await epcService.exportItemsXlsx({
+      organizationId: req.organization.id,
+      itemIds: ids.length ? ids : null,
+      q,
+      createdFrom,
+      createdTo,
+      columns: cols
+    });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.status(200).send(buffer);
@@ -258,6 +295,18 @@ async function exportBatchVerifyUrls(req, res) {
       batchId,
       verifyUrlPrefix
     });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.status(200).send(buffer);
+  } catch (e) {
+    res.error(e.message, 400);
+  }
+}
+
+async function exportBatchProductionTemplate(req, res) {
+  try {
+    const batchId = Number(req.params.id);
+    const { buffer, filename } = await epcService.exportBatchProductionTemplateXlsx({ organizationId: req.organization.id, batchId });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.status(200).send(buffer);
@@ -361,6 +410,7 @@ module.exports = {
   listBatchItems,
   exportBatch,
   exportBatchVerifyUrls,
+  exportBatchProductionTemplate,
   importProductionXlsx,
   markProductionDone,
   updateBatch,

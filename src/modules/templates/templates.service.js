@@ -11,6 +11,12 @@ function normalizeLang(lang) {
   return 'en';
 }
 
+function toPositiveInt(name, value) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n <= 0) throw new Error(`${name} is invalid`);
+  return n;
+}
+
 function mergePlaceholdersBaseWithTranslation(basePlaceholders, translatedPlaceholders) {
   const baseArr = Array.isArray(basePlaceholders) ? basePlaceholders : [];
   const trArr = Array.isArray(translatedPlaceholders) ? translatedPlaceholders : [];
@@ -98,10 +104,11 @@ function applyTranslationRow(base, tRow) {
 
 async function listTemplates({ organizationId, templateType, lang }) {
   const language = normalizeLang(lang);
+  const orgId = toPositiveInt('Organization id', organizationId);
   const rows = await withTimeout(
     prisma.certificateTemplate.findMany({
       where: {
-        organizationId: Number(organizationId),
+        organizationId: orgId,
         ...(templateType ? { templateType: String(templateType) } : {})
       },
       orderBy: { createdAt: 'desc' }
@@ -113,7 +120,7 @@ async function listTemplates({ organizationId, templateType, lang }) {
   if (!ids.length) return rows;
   const trs = await withTimeout(
     prisma.certificateTemplateTranslation.findMany({
-      where: { organizationId: Number(organizationId), language, templateId: { in: ids } }
+      where: { organizationId: orgId, language, templateId: { in: ids } }
     }),
     1200
   );
@@ -123,9 +130,11 @@ async function listTemplates({ organizationId, templateType, lang }) {
 
 async function getTemplateById({ organizationId, id, lang }) {
   const language = normalizeLang(lang);
+  const orgId = toPositiveInt('Organization id', organizationId);
+  const tplId = toPositiveInt('Template id', id);
   const base = await withTimeout(
     prisma.certificateTemplate.findFirst({
-      where: { organizationId: Number(organizationId), id: Number(id) }
+      where: { organizationId: orgId, id: tplId }
     }),
     1200
   );
@@ -133,7 +142,7 @@ async function getTemplateById({ organizationId, id, lang }) {
   if (language === 'en') return base;
   const tRow = await withTimeout(
     prisma.certificateTemplateTranslation.findFirst({
-      where: { organizationId: Number(organizationId), language, templateId: Number(id) }
+      where: { organizationId: orgId, language, templateId: tplId }
     }),
     1200
   );
@@ -180,11 +189,13 @@ async function createTemplate({
 
 async function updateTemplate({ organizationId, id, patch, lang }) {
   const language = normalizeLang(lang);
+  const orgId = toPositiveInt('Organization id', organizationId);
+  const tplId = toPositiveInt('Template id', id);
 
   if (language !== 'en') {
     const base = await withTimeout(
       prisma.certificateTemplate.findFirst({
-        where: { id: Number(id), organizationId: Number(organizationId) }
+        where: { id: tplId, organizationId: orgId }
       }),
       1200
     );
@@ -195,15 +206,15 @@ async function updateTemplate({ organizationId, id, patch, lang }) {
 
     await withTimeout(
       prisma.certificateTemplateTranslation.upsert({
-        where: { templateId_language: { templateId: Number(id), language } },
+        where: { templateId_language: { templateId: tplId, language } },
         update: {
-          organizationId: Number(organizationId),
+          organizationId: orgId,
           layoutJson: base.layoutJson || [],
           placeholders: sanitized.length ? sanitized : null
         },
         create: {
-          organizationId: Number(organizationId),
-          templateId: Number(id),
+          organizationId: orgId,
+          templateId: tplId,
           language,
           layoutJson: base.layoutJson || [],
           placeholders: sanitized.length ? sanitized : null
@@ -212,7 +223,7 @@ async function updateTemplate({ organizationId, id, patch, lang }) {
       1500
     );
 
-    return await getTemplateById({ organizationId, id, lang: language });
+    return await getTemplateById({ organizationId: orgId, id: tplId, lang: language });
   }
 
   const data = {};
@@ -231,7 +242,7 @@ async function updateTemplate({ organizationId, id, patch, lang }) {
   try {
     res = await withTimeout(
       prisma.certificateTemplate.updateMany({
-        where: { id: Number(id), organizationId: Number(organizationId) },
+        where: { id: tplId, organizationId: orgId },
         data
       }),
       1500
@@ -241,12 +252,12 @@ async function updateTemplate({ organizationId, id, patch, lang }) {
     throw e;
   }
   if (!res.count) throw new Error('Template not found');
-  return await getTemplateById({ organizationId, id, lang: 'en' });
+  return await getTemplateById({ organizationId: orgId, id: tplId, lang: 'en' });
 }
 
 async function deleteTemplate({ organizationId, id }) {
-  const tplId = Number(id);
-  const orgId = Number(organizationId);
+  const tplId = toPositiveInt('Template id', id);
+  const orgId = toPositiveInt('Organization id', organizationId);
 
   await prisma.$transaction(async (tx) => {
     const existing = await withTimeout(
@@ -267,10 +278,12 @@ async function deleteTemplate({ organizationId, id }) {
 async function fillEmptyTranslation({ organizationId, id, lang }) {
   const language = normalizeLang(lang);
   if (language === 'en') throw new Error('Language must not be EN');
+  const orgId = toPositiveInt('Organization id', organizationId);
+  const tplId = toPositiveInt('Template id', id);
 
   const base = await withTimeout(
     prisma.certificateTemplate.findFirst({
-      where: { id: Number(id), organizationId: Number(organizationId) }
+      where: { id: tplId, organizationId: orgId }
     }),
     1200
   );
@@ -278,7 +291,7 @@ async function fillEmptyTranslation({ organizationId, id, lang }) {
 
   const existing = await withTimeout(
     prisma.certificateTemplateTranslation.findFirst({
-      where: { templateId: Number(id), organizationId: Number(organizationId), language }
+      where: { templateId: tplId, organizationId: orgId, language }
     }),
     1200
   );
@@ -290,11 +303,11 @@ async function fillEmptyTranslation({ organizationId, id, lang }) {
 
   await withTimeout(
     prisma.certificateTemplateTranslation.upsert({
-      where: { templateId_language: { templateId: Number(id), language } },
-      update: { organizationId: Number(organizationId), layoutJson: base.layoutJson || [], placeholders: filled.length ? filled : null },
+      where: { templateId_language: { templateId: tplId, language } },
+      update: { organizationId: orgId, layoutJson: base.layoutJson || [], placeholders: filled.length ? filled : null },
       create: {
-        organizationId: Number(organizationId),
-        templateId: Number(id),
+        organizationId: orgId,
+        templateId: tplId,
         language,
         layoutJson: base.layoutJson || [],
         placeholders: filled.length ? filled : null
@@ -303,7 +316,7 @@ async function fillEmptyTranslation({ organizationId, id, lang }) {
     1500
   );
 
-  return await getTemplateById({ organizationId, id, lang: language });
+  return await getTemplateById({ organizationId: orgId, id: tplId, lang: language });
 }
 
 module.exports = {

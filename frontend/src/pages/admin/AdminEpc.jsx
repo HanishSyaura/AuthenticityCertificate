@@ -54,6 +54,7 @@ export default function AdminEpc() {
     fetchItems,
     generateBatch,
     exportBatchVerifyUrlXlsx,
+    exportBatchProductionTemplateXlsx,
     importProductionXlsx,
     markProductionDone,
     exportBatchXlsxCustom,
@@ -71,6 +72,7 @@ export default function AdminEpc() {
     fetchItems: s.fetchItems,
     generateBatch: s.generateBatch,
     exportBatchVerifyUrlXlsx: s.exportBatchVerifyUrlXlsx,
+    exportBatchProductionTemplateXlsx: s.exportBatchProductionTemplateXlsx,
     exportBatchXlsxCustom: s.exportBatchXlsxCustom,
     importProductionXlsx: s.importProductionXlsx,
     markProductionDone: s.markProductionDone,
@@ -84,9 +86,26 @@ export default function AdminEpc() {
   const [remark, setRemark] = useState('');
   const [generateOpen, setGenerateOpen] = useState(false);
   const [listQuery, setListQuery] = useState('');
+  const [createdFrom, setCreatedFrom] = useState('');
+  const [createdTo, setCreatedTo] = useState('');
   const [listOffset, setListOffset] = useState(0);
   const listLimit = 50;
   const [selectedItemIds, setSelectedItemIds] = useState(() => new Set());
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailItem, setDetailItem] = useState(null);
+  const [exportItemColsOpen, setExportItemColsOpen] = useState(false);
+  const [exportItemCols, setExportItemCols] = useState({
+    epcCode: true,
+    barcode: true,
+    caiqNumber: true,
+    netWeight: true,
+    manufactureDate: true,
+    batchNumber: true,
+    swiftletHouseNumber: true,
+    status: false,
+    createdAt: false,
+    remark: false
+  });
 
   const [exportColsOpen, setExportColsOpen] = useState(false);
   const [exportColsBatch, setExportColsBatch] = useState(null);
@@ -101,6 +120,11 @@ export default function AdminEpc() {
   const closeExportCols = useCallback(() => {
     setExportColsOpen(false);
     setExportColsBatch(null);
+  }, []);
+
+  const closeDetail = useCallback(() => {
+    setDetailOpen(false);
+    setDetailItem(null);
   }, []);
 
   const openExportCols = useCallback((b) => {
@@ -130,12 +154,12 @@ export default function AdminEpc() {
 
   useEffect(() => {
     if (tab !== 'batches' || !canBatchView) return;
-    void fetchItems({ q: listQuery, limit: listLimit, offset: listOffset });
-  }, [canBatchView, fetchItems, listLimit, listOffset, listQuery, tab]);
+    void fetchItems({ q: listQuery, createdFrom: createdFrom || undefined, createdTo: createdTo || undefined, limit: listLimit, offset: listOffset });
+  }, [canBatchView, createdFrom, createdTo, fetchItems, listLimit, listOffset, listQuery, tab]);
 
   useEffect(() => {
     setSelectedItemIds(new Set());
-  }, [items, listOffset, listQuery]);
+  }, [items, listOffset, listQuery, createdFrom, createdTo]);
 
   const pageItemIds = useMemo(
     () =>
@@ -199,8 +223,8 @@ export default function AdminEpc() {
                 <button
                   type="button"
                   className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                  disabled={loading || selectedItemIds.size === 0}
-                  onClick={() => exportItemsXlsx({ itemIds: Array.from(selectedItemIds) })}
+                  disabled={loading || (Number(itemTotal) || 0) === 0}
+                  onClick={() => setExportItemColsOpen(true)}
                 >
                   {t('exportXlsx')}
                 </button>
@@ -232,7 +256,7 @@ export default function AdminEpc() {
           </div>
 
           <div className="p-4">
-            <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_auto]">
+            <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_240px_240px_auto]">
               <input
                 value={listQuery}
                 onChange={(e) => {
@@ -242,10 +266,30 @@ export default function AdminEpc() {
                 placeholder={t('searchEpc')}
                 className="ac-input"
               />
+              <input
+                type="datetime-local"
+                value={createdFrom}
+                onChange={(e) => {
+                  setCreatedFrom(e.target.value);
+                  setListOffset(0);
+                }}
+                className="ac-input"
+                placeholder={t('createdFrom')}
+              />
+              <input
+                type="datetime-local"
+                value={createdTo}
+                onChange={(e) => {
+                  setCreatedTo(e.target.value);
+                  setListOffset(0);
+                }}
+                className="ac-input"
+                placeholder={t('createdTo')}
+              />
               <button
                 type="button"
                 className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                onClick={() => fetchItems({ q: listQuery, limit: listLimit, offset: 0 })}
+                onClick={() => fetchItems({ q: listQuery, createdFrom: createdFrom || undefined, createdTo: createdTo || undefined, limit: listLimit, offset: 0 })}
               >
                 {t('inquire')}
               </button>
@@ -302,7 +346,22 @@ export default function AdminEpc() {
                     );
                   }
                 },
-                { id: 'epcCode', header: t('epcCode'), cell: (it) => <span className="font-mono text-[11px]">{String(it.epcCode || '')}</span> },
+                {
+                  id: 'epcCode',
+                  header: t('epcCode'),
+                  cell: (it) => (
+                    <button
+                      type="button"
+                      className="font-mono text-[11px] text-brand-700 underline decoration-brand-300 underline-offset-2 hover:text-brand-800"
+                      onClick={() => {
+                        setDetailItem(it || null);
+                        setDetailOpen(true);
+                      }}
+                    >
+                      {String(it.epcCode || '')}
+                    </button>
+                  )
+                },
                 {
                   id: 'status',
                   header: t('status'),
@@ -341,6 +400,215 @@ export default function AdminEpc() {
                 onClick={() => setListOffset((o) => o + listLimit)}
               >
                 {t('next')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {detailOpen && detailItem ? (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          onClick={closeDetail}
+        >
+          <div
+            className="w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-zinc-900">{t('epcDetails')}</div>
+                <div className="mt-1 truncate font-mono text-[11px] text-zinc-600">{String(detailItem.epcCode || '')}</div>
+              </div>
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={closeDetail}>
+                {t('close')}
+              </button>
+            </div>
+            <div className="p-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('epcCode')}</div>
+                  <div className="mt-1 font-mono text-xs text-zinc-900">{String(detailItem.epcCode || '-')}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('barcode')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">{detailItem.barcode ? String(detailItem.barcode) : '-'}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('individualLabelCaiq')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">{detailItem.caiqNumber ? String(detailItem.caiqNumber) : '-'}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('netWeight')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">{detailItem.netWeight ? String(detailItem.netWeight) : '-'}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('manufactureDate')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">
+                    {detailItem.productionDate ? new Date(detailItem.productionDate).toISOString().slice(0, 10) : '-'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('batchNumber')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">{detailItem.batchNumber ? String(detailItem.batchNumber) : '-'}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('swiftletHouseNumber')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">
+                    {detailItem.swiftletHouseNumber ? String(detailItem.swiftletHouseNumber) : '-'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('createdAt')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">{formatDateTime(detailItem.createdAt) || '-'}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {exportItemColsOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setExportItemColsOpen(false)}
+        >
+          <div
+            className="w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-zinc-900">{t('exportColumnsTitleEpcList')}</div>
+                <div className="mt-1 text-[11px] text-zinc-500">{t('total', { value: Number(itemTotal) || 0 })}</div>
+              </div>
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => setExportItemColsOpen(false)}>
+                {t('close')}
+              </button>
+            </div>
+
+            <div className="p-4">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                  onClick={() =>
+                    setExportItemCols({
+                      epcCode: true,
+                      barcode: true,
+                      caiqNumber: true,
+                      netWeight: true,
+                      manufactureDate: true,
+                      batchNumber: true,
+                      swiftletHouseNumber: true,
+                      status: true,
+                      createdAt: true,
+                      remark: true
+                    })
+                  }
+                >
+                  {t('select')}
+                </button>
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                  onClick={() =>
+                    setExportItemCols({
+                      epcCode: false,
+                      barcode: false,
+                      caiqNumber: false,
+                      netWeight: false,
+                      manufactureDate: false,
+                      batchNumber: false,
+                      swiftletHouseNumber: false,
+                      status: false,
+                      createdAt: false,
+                      remark: false
+                    })
+                  }
+                >
+                  {t('clear')}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <label className="flex items-center gap-2 text-xs text-zinc-800">
+                  <input type="checkbox" checked={Boolean(exportItemCols.epcCode)} onChange={(e) => setExportItemCols((p) => ({ ...p, epcCode: e.target.checked }))} />
+                  {t('epcCode')}
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-800">
+                  <input type="checkbox" checked={Boolean(exportItemCols.barcode)} onChange={(e) => setExportItemCols((p) => ({ ...p, barcode: e.target.checked }))} />
+                  {t('barcode')}
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-800">
+                  <input type="checkbox" checked={Boolean(exportItemCols.caiqNumber)} onChange={(e) => setExportItemCols((p) => ({ ...p, caiqNumber: e.target.checked }))} />
+                  {t('individualLabelCaiq')}
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-800">
+                  <input type="checkbox" checked={Boolean(exportItemCols.netWeight)} onChange={(e) => setExportItemCols((p) => ({ ...p, netWeight: e.target.checked }))} />
+                  {t('netWeight')}
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-800">
+                  <input type="checkbox" checked={Boolean(exportItemCols.manufactureDate)} onChange={(e) => setExportItemCols((p) => ({ ...p, manufactureDate: e.target.checked }))} />
+                  {t('manufactureDate')}
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-800">
+                  <input type="checkbox" checked={Boolean(exportItemCols.batchNumber)} onChange={(e) => setExportItemCols((p) => ({ ...p, batchNumber: e.target.checked }))} />
+                  {t('batchNumber')}
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-800">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(exportItemCols.swiftletHouseNumber)}
+                    onChange={(e) => setExportItemCols((p) => ({ ...p, swiftletHouseNumber: e.target.checked }))}
+                  />
+                  {t('swiftletHouseNumber')}
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-800">
+                  <input type="checkbox" checked={Boolean(exportItemCols.status)} onChange={(e) => setExportItemCols((p) => ({ ...p, status: e.target.checked }))} />
+                  {t('status')}
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-800">
+                  <input type="checkbox" checked={Boolean(exportItemCols.createdAt)} onChange={(e) => setExportItemCols((p) => ({ ...p, createdAt: e.target.checked }))} />
+                  {t('createdAt')}
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-800">
+                  <input type="checkbox" checked={Boolean(exportItemCols.remark)} onChange={(e) => setExportItemCols((p) => ({ ...p, remark: e.target.checked }))} />
+                  {t('remark')}
+                </label>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-zinc-200 bg-white px-4 py-3">
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => setExportItemColsOpen(false)}>
+                {t('close')}
+              </button>
+              <button
+                type="button"
+                className="ac-btn ac-btn-primary px-3 py-2 text-xs"
+                disabled={loading || (Number(itemTotal) || 0) === 0 || Object.values(exportItemCols || {}).filter(Boolean).length === 0}
+                onClick={async () => {
+                  const cols = [
+                    'epcCode',
+                    'barcode',
+                    'caiqNumber',
+                    'netWeight',
+                    'manufactureDate',
+                    'batchNumber',
+                    'swiftletHouseNumber',
+                    'status',
+                    'createdAt',
+                    'remark'
+                  ].filter((k) => Boolean(exportItemCols?.[k]));
+                  await exportItemsXlsx({ q: listQuery, createdFrom: createdFrom || undefined, createdTo: createdTo || undefined, columns: cols });
+                  setExportItemColsOpen(false);
+                }}
+              >
+                {t('exportXlsx')}
               </button>
             </div>
           </div>
@@ -585,7 +853,11 @@ export default function AdminEpc() {
                 className="ac-btn ac-btn-primary px-3 py-2 text-xs"
                 disabled={loading || !batchQty}
                 onClick={async () => {
-                  await generateBatch({ batchQty, remark: String(remark || '').trim() || undefined });
+                  const created = await generateBatch({ batchQty, remark: String(remark || '').trim() || undefined });
+                  const batchId = created?.batch?.id != null ? Number(created.batch.id) : null;
+                  if (Number.isFinite(batchId)) {
+                    await exportBatchProductionTemplateXlsx(batchId);
+                  }
                   setGenerateOpen(false);
                   setBatchQty(1);
                   setRemark('');
