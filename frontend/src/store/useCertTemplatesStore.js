@@ -16,6 +16,14 @@ function normalizeTemplateId(input) {
   return String(n);
 }
 
+function coerceTemplateId(row) {
+  const direct = normalizeTemplateId(row?.id);
+  if (direct) return direct;
+  const alt = normalizeTemplateId(row?.templateId ?? row?.template_id);
+  if (!alt) return row;
+  return { ...(row || {}), id: Number(alt) };
+}
+
 const useCertTemplatesStore = create((set, get) => ({
   templates: [],
   loading: false,
@@ -30,7 +38,7 @@ const useCertTemplatesStore = create((set, get) => ({
       const api = getApi();
       const lang = opts?.lang ? String(opts.lang) : null;
       const res = await api.get('/templates', { params: lang ? { lang } : undefined });
-      const templates = Array.isArray(res?.data?.data) ? res.data.data : [];
+      const templates = (Array.isArray(res?.data?.data) ? res.data.data : []).map(coerceTemplateId);
       set({ templates, loading: false, lastSyncAt: Date.now() });
       return templates;
     } catch (e) {

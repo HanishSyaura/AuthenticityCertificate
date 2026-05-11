@@ -15,6 +15,20 @@ function formatDate(input) {
   return d.toISOString().slice(0, 10);
 }
 
+function normalizeTemplateId(input) {
+  const s = String(input ?? '').trim();
+  if (!s) return null;
+  const n = Number(s);
+  if (!Number.isInteger(n) || n <= 0) return null;
+  return String(n);
+}
+
+function getTemplateId(tpl) {
+  const direct = normalizeTemplateId(tpl?.id);
+  if (direct) return direct;
+  return normalizeTemplateId(tpl?.templateId ?? tpl?.template_id);
+}
+
 export default function AdminCertificateList() {
   const { t } = useT();
   const navigate = useNavigate();
@@ -98,7 +112,7 @@ export default function AdminCertificateList() {
       <DataTable
         minWidth={720}
         rows={Array.isArray(templates) ? templates : []}
-        rowKey={(tpl) => tpl.id}
+        rowKey={(tpl) => getTemplateId(tpl) || tpl?.id || tpl?.templateId || tpl?.template_id}
         loading={loading}
         loadingContent={t('loading')}
         emptyContent={
@@ -108,8 +122,9 @@ export default function AdminCertificateList() {
           </div>
         }
         onRowClick={(tpl) => {
-          if (tpl?.id == null) return;
-          navigate(`/admin/certificates/${tpl.id}`);
+          const id = getTemplateId(tpl);
+          if (!id) return;
+          navigate(`/admin/certificates/${id}`);
         }}
         columns={[
           {
@@ -118,10 +133,11 @@ export default function AdminCertificateList() {
             cell: (tpl) => {
               const nmRaw = String(tpl?.name ?? '').trim();
               const cidRaw = String(tpl?.certificateId ?? '').trim();
+              const id = getTemplateId(tpl);
               const nm = nmRaw && nmRaw.toLowerCase() !== 'undefined' && nmRaw.toLowerCase() !== 'null' ? nmRaw : '';
               const cid = cidRaw && cidRaw.toLowerCase() !== 'undefined' && cidRaw.toLowerCase() !== 'null' ? cidRaw : '';
-              const title = nm || cid || `#${tpl?.id ?? ''}`;
-              const subtitle = cid || `#${tpl?.id ?? ''}`;
+              const title = nm || cid || `#${id || ''}`;
+              const subtitle = cid || `#${id || ''}`;
               return (
                 <div className="min-w-0">
                   <div className="truncate font-semibold text-zinc-900">{title}</div>
@@ -157,24 +173,27 @@ export default function AdminCertificateList() {
                     key: 'open',
                     label: t('open'),
                     onSelect: async () => {
-                      if (tpl?.id == null) return;
-                      navigate(`/admin/certificates/${tpl.id}`);
+                      const id = getTemplateId(tpl);
+                      if (!id) return;
+                      navigate(`/admin/certificates/${id}`);
                     }
                   },
                   {
                     key: 'openDesigner',
                     label: t('openDesigner'),
                     onSelect: async () => {
-                      if (tpl?.id == null) return;
-                      navigate(`/admin/certificates/${tpl.id}/design`);
+                      const id = getTemplateId(tpl);
+                      if (!id) return;
+                      navigate(`/admin/certificates/${id}/design`);
                     }
                   },
                   {
                     key: 'duplicate',
                     label: t('duplicate'),
                     onSelect: async () => {
-                      if (!tpl?.id) return;
-                      const created = await duplicateTemplate({ id: tpl.id });
+                      const id = getTemplateId(tpl);
+                      if (!id) return;
+                      const created = await duplicateTemplate({ id });
                       if (created?.id != null) navigate(`/admin/certificates/${created.id}`);
                     }
                   }

@@ -97,7 +97,7 @@ function App() {
           <Route
             path="certificates"
             element={
-              <AdminRequirePermission anyOf={['certificates.read', 'certificates.write']}>
+              <AdminRequirePermission anyOf={['templates.read', 'templates.write']}>
                 <AdminCertificateList />
               </AdminRequirePermission>
             }
@@ -105,7 +105,7 @@ function App() {
           <Route
             path="certificates/new"
             element={
-              <AdminRequirePermission anyOf={['certificates.write']}>
+              <AdminRequirePermission anyOf={['templates.write']}>
                 <AdminCertificateBuilder />
               </AdminRequirePermission>
             }
@@ -113,7 +113,7 @@ function App() {
           <Route
             path="certificates/:id"
             element={
-              <AdminRequirePermission anyOf={['certificates.read', 'certificates.write']}>
+              <AdminRequirePermission anyOf={['templates.read', 'templates.write']}>
                 <AdminCertificateBuilder />
               </AdminRequirePermission>
             }
