@@ -68,6 +68,10 @@ export default function AdminCertificateList() {
     return map;
   }, [batches]);
 
+  const trimmedNewCertificateId = String(newCertificateId || '').trim();
+  const trimmedNewCertificateName = String(newCertificateName || '').trim();
+  const canCreate = Boolean(trimmedNewCertificateId && trimmedNewCertificateName) && !newBgUploading;
+
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -149,6 +153,22 @@ export default function AdminCertificateList() {
             cell: (tpl) => (
               <RowActionsMenu
                 items={[
+                  {
+                    key: 'open',
+                    label: t('open'),
+                    onSelect: async () => {
+                      if (tpl?.id == null) return;
+                      navigate(`/admin/certificates/${tpl.id}`);
+                    }
+                  },
+                  {
+                    key: 'openDesigner',
+                    label: t('openDesigner'),
+                    onSelect: async () => {
+                      if (tpl?.id == null) return;
+                      navigate(`/admin/certificates/${tpl.id}/design`);
+                    }
+                  },
                   {
                     key: 'duplicate',
                     label: t('duplicate'),
@@ -251,11 +271,16 @@ export default function AdminCertificateList() {
               </button>
               <button
                 type="button"
-                className="ac-btn rounded-lg px-3 py-2 text-xs"
+                disabled={!canCreate}
+                className={`ac-btn rounded-lg px-3 py-2 text-xs ${!canCreate ? 'cursor-not-allowed opacity-50' : ''}`.trim()}
                 onClick={async () => {
-                  const cid = String(newCertificateId || '').trim();
-                  const nm = String(newCertificateName || '').trim();
-                  if (!cid || !nm) return;
+                  const cid = trimmedNewCertificateId;
+                  const nm = trimmedNewCertificateName;
+                  if (!cid || !nm) {
+                    const msg = !cid && !nm ? t('certificateIdAndNameRequired') : !cid ? t('certificateIdRequired') : t('certificateNameRequired');
+                    setNewError(msg);
+                    return;
+                  }
                   setNewError(null);
                   try {
                     const created = await createTemplate({

@@ -673,12 +673,12 @@ async function exportBatchProductionTemplateXlsx({ organizationId, batchId }) {
 
   const header = [
     'EPC',
-    'Barcode (Empty, key in by production)',
-    'Individual Label (CAIQ)(Empty, key in by production)',
-    'Net Weight (Empty, key in by production)',
-    'Manufacture Date(Empty, key in by production)',
-    'Batch Number(Empty, key in by production)',
-    'Swiftlet House Number(Empty, key in by production)'
+    'Barcode',
+    'Individual Label (CAIQ)',
+    'Net Weight',
+    'Manufacture Date',
+    'Batch Number',
+    'Swiftlet House Number'
   ];
 
   const ws = XLSX.utils.json_to_sheet(
@@ -708,12 +708,12 @@ async function exportBatchProductionTemplateXlsx({ organizationId, batchId }) {
 async function exportBatchImportTemplateXlsx() {
   const header = [
     'EPC',
-    'Barcode (Empty, key in by production)',
-    'Individual Label (CAIQ)(Empty, key in by production)',
-    'Net Weight (Empty, key in by production)',
-    'Manufacture Date(Empty, key in by production)',
-    'Batch Number(Empty, key in by production)',
-    'Swiftlet House Number(Empty, key in by production)'
+    'Barcode',
+    'Individual Label (CAIQ)',
+    'Net Weight',
+    'Manufacture Date',
+    'Batch Number',
+    'Swiftlet House Number'
   ];
 
   const ws = XLSX.utils.aoa_to_sheet([header]);
