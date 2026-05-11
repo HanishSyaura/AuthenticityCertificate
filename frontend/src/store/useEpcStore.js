@@ -113,20 +113,14 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
-  generateBatch: async ({ corpPrefix, productId, productionDate, batchName, batchQty, remark, certificateId, certificateTemplateId, templateData }) => {
+  generateBatch: async ({ corpPrefix, batchQty, remark }) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
       const body = {
         corpPrefix,
-        productId: Number(productId),
-        productionDate: productionDate || undefined,
-        batchName,
         batchQty: Number(batchQty),
-        remark: remark || undefined,
-        certificateId: certificateId ? String(certificateId).trim() : undefined,
-        certificateTemplateId: certificateTemplateId != null && String(certificateTemplateId).trim() !== '' ? Number(certificateTemplateId) : null,
-        templateData: templateData || undefined
+        remark: remark || undefined
       };
       const res = await api.post('/epc/batches/generate', body);
       const created = res?.data?.data;

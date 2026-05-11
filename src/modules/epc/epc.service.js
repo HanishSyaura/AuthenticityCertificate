@@ -1,4 +1,5 @@
 const prisma = require('../../config/prisma');
+const { Prisma } = require('@prisma/client');
 const XLSX = require('xlsx');
 const { generateCertificateId, peekNextCertificateId } = require('../../utils/id-generator');
 const { matchPermission } = require('../../middleware/access.middleware');
@@ -34,6 +35,76 @@ function formatMMyy(d = new Date()) {
   return `${month}${year}`;
 }
 
+function formatDdMmYy(d = new Date(), timeZone = null) {
+  const tz = typeof timeZone === 'string' && timeZone.trim() ? timeZone.trim() : null;
+  if (tz) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, day: '2-digit', month: '2-digit', year: '2-digit' }).formatToParts(d);
+      const dd = parts.find((p) => p.type === 'day')?.value;
+      const mm = parts.find((p) => p.type === 'month')?.value;
+      const yy = parts.find((p) => p.type === 'year')?.value;
+      if (dd && mm && yy) return `${dd}${mm}${yy}`;
+    } catch {
+    }
+  }
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear() % 100).padStart(2, '0');
+  return `${dd}${mm}${yy}`;
+}
+
+function formatDdMmYyyy(d = new Date(), timeZone = null) {
+  const tz = typeof timeZone === 'string' && timeZone.trim() ? timeZone.trim() : null;
+  if (tz) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, day: '2-digit', month: '2-digit', year: 'numeric' }).formatToParts(d);
+      const dd = parts.find((p) => p.type === 'day')?.value;
+      const mm = parts.find((p) => p.type === 'month')?.value;
+      const yyyy = parts.find((p) => p.type === 'year')?.value;
+      if (dd && mm && yyyy) return `${dd}${mm}${yyyy}`;
+    } catch {
+    }
+  }
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = String(d.getFullYear()).padStart(4, '0');
+  return `${dd}${mm}${yyyy}`;
+}
+
+function formatYyyyMm(d = new Date(), timeZone = null) {
+  const tz = typeof timeZone === 'string' && timeZone.trim() ? timeZone.trim() : null;
+  if (tz) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, month: '2-digit', year: 'numeric' }).formatToParts(d);
+      const mm = parts.find((p) => p.type === 'month')?.value;
+      const yyyy = parts.find((p) => p.type === 'year')?.value;
+      if (mm && yyyy) return `${yyyy}${mm}`;
+    } catch {
+    }
+  }
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = String(d.getFullYear()).padStart(4, '0');
+  return `${yyyy}${mm}`;
+}
+
+function formatYyyyMmDd(d = new Date(), timeZone = null) {
+  const tz = typeof timeZone === 'string' && timeZone.trim() ? timeZone.trim() : null;
+  if (tz) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, day: '2-digit', month: '2-digit', year: 'numeric' }).formatToParts(d);
+      const dd = parts.find((p) => p.type === 'day')?.value;
+      const mm = parts.find((p) => p.type === 'month')?.value;
+      const yyyy = parts.find((p) => p.type === 'year')?.value;
+      if (dd && mm && yyyy) return `${yyyy}${mm}${dd}`;
+    } catch {
+    }
+  }
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = String(d.getFullYear()).padStart(4, '0');
+  return `${yyyy}${mm}${dd}`;
+}
+
 function normalizeSkuCode(product) {
   const skuLen = getSkuLen();
   const rawSku = String(product?.sku || '').trim();
@@ -61,10 +132,10 @@ function normalizeSkuCode(product) {
   return cleaned.padEnd(skuLen, '0');
 }
 
-function buildEpcCode({ corpPrefix, runningNo, skuCode, mmyy }) {
+function buildEpcCode({ corpPrefix, runningNo, ddmmyy }) {
   const padLen = getRunningPadLen();
   const run = padRunningNo(runningNo, padLen);
-  return `${corpPrefix}${skuCode}${mmyy}${run}`;
+  return `${corpPrefix}${ddmmyy}${run}`;
 }
 
 function parseRunningNoFromEpcCode({ epcCode, corpPrefix }) {
@@ -75,16 +146,26 @@ function parseRunningNoFromEpcCode({ epcCode, corpPrefix }) {
 
   const padLen = getRunningPadLen();
   const skuLen = getSkuLen();
-  const expectedMinLen = prefix.length + skuLen + 4 + padLen;
-  if (code.length < expectedMinLen) throw new Error('EPC code too short');
+  const expectedNewLen = prefix.length + 6 + padLen;
+  const expectedLegacyLen = prefix.length + skuLen + 4 + padLen;
+  if (code.length !== expectedNewLen && code.length !== expectedLegacyLen) throw new Error('EPC code length not supported');
 
   const run = code.slice(code.length - padLen);
   if (!/^\d+$/.test(run)) throw new Error('Invalid running number in EPC code');
 
-  const mmyy = code.slice(code.length - (padLen + 4), code.length - padLen);
-  if (!/^\d{4}$/.test(mmyy)) throw new Error('Invalid MMYY in EPC code');
-  const mm = Number(mmyy.slice(0, 2));
-  if (!Number.isFinite(mm) || mm < 1 || mm > 12) throw new Error('Invalid month in EPC code');
+  if (code.length === expectedNewLen) {
+    const ddmmyy = code.slice(code.length - (padLen + 6), code.length - padLen);
+    if (!/^\d{6}$/.test(ddmmyy)) throw new Error('Invalid DDMMYY in EPC code');
+    const dd = Number(ddmmyy.slice(0, 2));
+    const mm = Number(ddmmyy.slice(2, 4));
+    if (!Number.isFinite(dd) || dd < 1 || dd > 31) throw new Error('Invalid day in EPC code');
+    if (!Number.isFinite(mm) || mm < 1 || mm > 12) throw new Error('Invalid month in EPC code');
+  } else {
+    const mmyy = code.slice(code.length - (padLen + 4), code.length - padLen);
+    if (!/^\d{4}$/.test(mmyy)) throw new Error('Invalid MMYY in EPC code');
+    const mm = Number(mmyy.slice(0, 2));
+    if (!Number.isFinite(mm) || mm < 1 || mm > 12) throw new Error('Invalid month in EPC code');
+  }
 
   return BigInt(run);
 }
@@ -97,8 +178,10 @@ function parseSkuCodeFromEpcCode({ epcCode, corpPrefix }) {
 
   const padLen = getRunningPadLen();
   const skuLen = getSkuLen();
-  const expectedMinLen = prefix.length + skuLen + 4 + padLen;
-  if (code.length < expectedMinLen) throw new Error('EPC code too short');
+  const expectedNewLen = prefix.length + 6 + padLen;
+  const expectedLegacyLen = prefix.length + skuLen + 4 + padLen;
+  if (code.length === expectedNewLen) throw new Error('SKU code not present in EPC code');
+  if (code.length !== expectedLegacyLen) throw new Error('EPC code length not supported');
 
   const skuCode = code.slice(prefix.length, prefix.length + skuLen);
   if (!/^[a-z0-9]+$/i.test(skuCode)) throw new Error('Invalid SKU code in EPC code');
@@ -115,11 +198,11 @@ function looksLikeEpcCodeFormat(raw) {
   for (const p of prefixes) {
     const prefix = String(p || '').trim().toUpperCase();
     if (!prefix) continue;
-    const expectedLen = prefix.length + skuLen + 4 + padLen;
-    if (code.length !== expectedLen) continue;
+    const expectedLegacyLen = prefix.length + skuLen + 4 + padLen;
+    const expectedNewLen = prefix.length + 6 + padLen;
+    if (code.length !== expectedLegacyLen && code.length !== expectedNewLen) continue;
     if (!code.startsWith(prefix)) continue;
     try {
-      parseSkuCodeFromEpcCode({ epcCode: code, corpPrefix: prefix });
       parseRunningNoFromEpcCode({ epcCode: code, corpPrefix: prefix });
       return true;
     } catch {
@@ -169,6 +252,9 @@ async function deleteAllBatches({ organizationId, corpPrefix }) {
       await tx.corpSequence.deleteMany({
         where: { organizationId: orgId, corpPrefix: { in: prefixes } }
       });
+      await tx.corpMonthSequence.deleteMany({
+        where: { organizationId: orgId, corpPrefix: { in: prefixes } }
+      });
     }
 
     return { deletedBatches, deletedItems, corpPrefixes: prefixes };
@@ -211,22 +297,14 @@ async function peekCertificateId({ organizationId } = {}) {
   });
 }
 
-async function generateEpcBatch({ organizationId, corpPrefix, productId, productionDate, batchName, batchQty, remark, certificateId, certificateTemplateId, templateData }) {
+async function generateEpcBatch({ organizationId, corpPrefix, batchQty, remark }) {
   const allowed = getAllowedCorpPrefixes();
   if (!allowed.includes(corpPrefix)) throw new Error('Corp code tidak dibenarkan');
 
   const orgId = Number(organizationId);
-  const prodId = Number(productId);
+  const qty = Number(batchQty);
+  if (!Number.isFinite(qty) || qty < 1 || qty > 5000) throw new Error('Invalid batch quantity');
 
-  const product = await withTimeout(
-    prisma.product.findFirst({ where: { id: prodId, organizationId: orgId } }),
-    1200
-  );
-  if (!product) throw new Error('Product tidak dijumpai');
-  const skuCode = normalizeSkuCode(product);
-  const pd = productionDate ? toDateOrNull(productionDate) : null;
-  if (productionDate && !pd) throw new Error('Invalid production date');
-  const mmyy = formatMMyy(pd || new Date());
   let timeZone = null;
   try {
     const settings = await settingsService.ensureOrganizationSettings(orgId);
@@ -234,86 +312,63 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, product
   } catch {
   }
 
+  const now = new Date();
+  const ddmmyy = formatDdMmYy(now, timeZone);
+  const ddmmyyyy = formatDdMmYyyy(now, timeZone);
+  const periodKey = formatYyyyMm(now, timeZone);
+  const batchDateKey = formatYyyyMmDd(now, timeZone);
+
   const result = await prisma.$transaction(
     async (tx) => {
-      const appBatch = await tx.batch.upsert({
-        where: { organizationId_batchNo: { organizationId: orgId, batchNo: batchName } },
-        update: { productId: prodId },
-        create: { organizationId: orgId, batchNo: batchName, productId: prodId },
-        select: { id: true }
-      });
-
-      await tx.corpSequence.upsert({
-        where: { organizationId_corpPrefix_skuCode: { organizationId: orgId, corpPrefix, skuCode } },
+      await tx.epcBatchSequence.upsert({
+        where: { dateKey: batchDateKey },
         update: {},
-        create: { organizationId: orgId, corpPrefix, skuCode, lastNo: 0n }
+        create: { dateKey: batchDateKey, lastNo: 0n }
       });
 
-      const desiredCertIdRaw = String(certificateId || '').trim();
-      const desiredCertId = desiredCertIdRaw ? desiredCertIdRaw.toUpperCase() : '';
-
-      const batchCertId = desiredCertId || (await generateCertificateId(tx, { timeZone }));
-      const existingCert = await tx.certificate.findUnique({
-        where: { certificateId: batchCertId },
-        select: { certificateId: true, organizationId: true }
+      await tx.corpMonthSequence.upsert({
+        where: { organizationId_corpPrefix_periodKey: { organizationId: orgId, corpPrefix, periodKey } },
+        update: {},
+        create: { organizationId: orgId, corpPrefix, periodKey, lastNo: 0n }
       });
-      if (existingCert) {
-        if (Number(existingCert.organizationId) !== orgId) throw new Error('Certificate ID belongs to a different organization');
-      } else {
-        await tx.certificate.create({
-          data: {
-            certificateId: batchCertId,
-            organizationId: orgId,
-            type: 'shared',
-            batchId: null,
-            status: 'VALID',
-            issuedAt: new Date()
-          }
-        });
-      }
+
+      const batchSeqRows = await tx.$queryRaw`
+        SELECT lastNo FROM \`EpcBatchSequence\`
+        WHERE dateKey = ${batchDateKey}
+        FOR UPDATE
+      `;
+      const batchSeqCurrent = batchSeqRows && batchSeqRows[0] && batchSeqRows[0].lastNo !== undefined ? BigInt(batchSeqRows[0].lastNo) : 0n;
+      const batchSeqNext = batchSeqCurrent + 1n;
+      await tx.epcBatchSequence.update({ where: { dateKey: batchDateKey }, data: { lastNo: batchSeqNext } });
+      const batchName = `B-${ddmmyyyy}${String(batchSeqNext).padStart(6, '0')}`;
 
       const rows = await tx.$queryRaw`
-        SELECT lastNo FROM \`CorpSequence\`
-        WHERE organizationId = ${orgId} AND corpPrefix = ${corpPrefix} AND skuCode = ${skuCode}
+        SELECT lastNo FROM \`CorpMonthSequence\`
+        WHERE organizationId = ${orgId} AND corpPrefix = ${corpPrefix} AND periodKey = ${periodKey}
         FOR UPDATE
       `;
 
       const current = rows && rows[0] && rows[0].lastNo !== undefined ? BigInt(rows[0].lastNo) : 0n;
-      const maxExisting = await tx.epcItem.findFirst({
-        where: { organizationId: orgId, epcCode: { startsWith: `${corpPrefix}${skuCode}` } },
-        orderBy: { runningNo: 'desc' },
-        select: { runningNo: true }
-      });
-      const maxExistingNo = maxExisting?.runningNo != null ? BigInt(maxExisting.runningNo) : 0n;
-      const baseNo = current > maxExistingNo ? current : maxExistingNo;
-      const startNo = baseNo + 1n;
-      const endNo = baseNo + BigInt(batchQty);
-      await tx.corpSequence.update({
-        where: { organizationId_corpPrefix_skuCode: { organizationId: orgId, corpPrefix, skuCode } },
+      const startNo = current + 1n;
+      const endNo = current + BigInt(qty);
+      await tx.corpMonthSequence.update({
+        where: { organizationId_corpPrefix_periodKey: { organizationId: orgId, corpPrefix, periodKey } },
         data: { lastNo: endNo }
       });
-
-      const tplId = typeof certificateTemplateId === 'number' ? certificateTemplateId : null;
-      if (tplId != null) {
-        const tpl = await tx.certificateTemplate.findFirst({
-          where: { id: tplId, organizationId: orgId, deletedAt: null, templateType: 'auth' },
-          select: { id: true }
-        });
-        if (!tpl) throw new Error('Certificate template mesti jenis Auth');
-      }
 
       const batch = await tx.epcBatch.create({
         data: {
           organizationId: orgId,
           corpPrefix,
-          productId: prodId,
-          sku: product.sku,
+          periodKey,
+          productId: null,
+          sku: null,
           batchName,
-          batchQty,
+          batchQty: qty,
           remark: remark || null,
-          certificateId: batchCertId,
-          certificateTemplateId: tplId,
-          templateData: templateData || null,
+          certificateId: null,
+          certificateTemplateId: null,
+          templateData: null,
           productionUploadedAt: null,
           productionDoneAt: null
         },
@@ -324,16 +379,16 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, product
       });
 
       const items = [];
-      for (let i = 0; i < batchQty; i += 1) {
+      for (let i = 0; i < qty; i += 1) {
         const runningNo = startNo + BigInt(i);
-        const epcCode = buildEpcCode({ corpPrefix, runningNo: runningNo.toString(), skuCode, mmyy });
+        const epcCode = buildEpcCode({ corpPrefix, runningNo: runningNo.toString(), ddmmyy });
         items.push({
           organizationId: orgId,
           batchId: batch.id,
           epcCode,
           runningNo,
           netWeight: null,
-          productionDate: pd || null,
+          productionDate: null,
           caiqNumber: null
         });
       }
@@ -342,7 +397,7 @@ async function generateEpcBatch({ organizationId, corpPrefix, productId, product
         await tx.epcItem.createMany({ data: c });
       }
 
-      return { batch, created: batchQty, startNo: startNo.toString(), endNo: endNo.toString() };
+      return { batch, created: qty, startNo: startNo.toString(), endNo: endNo.toString() };
     },
     { timeout: 12_000, maxWait: 5_000 }
   );
@@ -626,7 +681,43 @@ async function listBatches({ organizationId, q, limit, offset }) {
     2500
   );
 
-  return { items, total, limit, offset };
+  const batchIds = (Array.isArray(items) ? items : []).map((b) => Number(b.id)).filter((n) => Number.isFinite(n));
+  const activeByBatchId = new Map();
+  if (batchIds.length) {
+    const rows = await withTimeout(
+      prisma.$queryRaw(
+        Prisma.sql`
+          SELECT
+            i.batchId AS batchId,
+            COUNT(t.id) AS activeCount
+          FROM \`EpcItem\` i
+          LEFT JOIN \`TagIdentity\` t
+            ON t.organizationId = i.organizationId
+           AND t.epc = i.epcCode
+           AND t.unassignedAt IS NULL
+          WHERE i.organizationId = ${orgId}
+            AND i.batchId IN (${Prisma.join(batchIds)})
+          GROUP BY i.batchId
+        `
+      ),
+      2500
+    );
+    for (const r of Array.isArray(rows) ? rows : []) {
+      const id = Number(r.batchId);
+      if (!Number.isFinite(id)) continue;
+      activeByBatchId.set(id, Number(r.activeCount) || 0);
+    }
+  }
+
+  const itemsWithStats = (Array.isArray(items) ? items : []).map((b) => {
+    const id = Number(b.id);
+    const activeCount = activeByBatchId.get(id) || 0;
+    const generatedQty = Number(b.batchQty) || 0;
+    const inactiveCount = Math.max(0, generatedQty - activeCount);
+    return { ...b, activeCount, inactiveCount };
+  });
+
+  return { items: itemsWithStats, total, limit, offset };
 }
 
 async function listItems({ organizationId, q, batchId, pendingOnly, limit, offset }) {
@@ -949,10 +1040,27 @@ async function deleteBatch({ organizationId, batchId }) {
     const batch = await tx.epcBatch.findFirst({ where: { id, organizationId: orgId } });
     if (!batch) throw new Error('Batch tidak dijumpai');
     const corpPrefix = String(batch.corpPrefix || '').trim();
+    const periodKey = batch.periodKey ? String(batch.periodKey || '').trim() : '';
     const skuCode = normalizeSkuCode({ sku: batch.sku || '' });
     await tx.epcItem.deleteMany({ where: { organizationId: orgId, batchId: id } });
     await tx.epcBatch.delete({ where: { id } });
-    if (corpPrefix && skuCode) {
+    if (corpPrefix && periodKey) {
+      await tx.corpMonthSequence.upsert({
+        where: { organizationId_corpPrefix_periodKey: { organizationId: orgId, corpPrefix, periodKey } },
+        update: {},
+        create: { organizationId: orgId, corpPrefix, periodKey, lastNo: 0n }
+      });
+      const maxExisting = await tx.epcItem.findFirst({
+        where: { organizationId: orgId, batch: { corpPrefix, periodKey } },
+        orderBy: { runningNo: 'desc' },
+        select: { runningNo: true }
+      });
+      const nextLastNo = maxExisting?.runningNo != null ? BigInt(maxExisting.runningNo) : 0n;
+      await tx.corpMonthSequence.update({
+        where: { organizationId_corpPrefix_periodKey: { organizationId: orgId, corpPrefix, periodKey } },
+        data: { lastNo: nextLastNo }
+      });
+    } else if (corpPrefix && skuCode) {
       await tx.corpSequence.upsert({
         where: { organizationId_corpPrefix_skuCode: { organizationId: orgId, corpPrefix, skuCode } },
         update: {},

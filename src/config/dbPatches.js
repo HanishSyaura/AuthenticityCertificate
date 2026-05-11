@@ -540,6 +540,99 @@ async function ensureEpcSchemaCompat() {
     );
   }
 
+  const hasCorpMonthSeq = await tableExists('CorpMonthSequence');
+  if (!hasCorpMonthSeq) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`CorpMonthSequence\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`organizationId\` INT NOT NULL,
+        \`corpPrefix\` VARCHAR(191) NOT NULL,
+        \`periodKey\` VARCHAR(191) NOT NULL,
+        \`lastNo\` BIGINT NOT NULL DEFAULT 0,
+        \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+  await ensureColumn(
+    'CorpMonthSequence',
+    'organizationId',
+    'ALTER TABLE `CorpMonthSequence` ADD COLUMN `organizationId` INT NULL',
+    'UPDATE `CorpMonthSequence` SET `organizationId` = 0 WHERE `organizationId` IS NULL',
+    'ALTER TABLE `CorpMonthSequence` MODIFY `organizationId` INT NOT NULL'
+  );
+  await ensureColumn(
+    'CorpMonthSequence',
+    'corpPrefix',
+    'ALTER TABLE `CorpMonthSequence` ADD COLUMN `corpPrefix` VARCHAR(191) NULL',
+    "UPDATE `CorpMonthSequence` SET `corpPrefix` = '' WHERE `corpPrefix` IS NULL",
+    "ALTER TABLE `CorpMonthSequence` MODIFY `corpPrefix` VARCHAR(191) NOT NULL DEFAULT ''"
+  );
+  await ensureColumn(
+    'CorpMonthSequence',
+    'periodKey',
+    'ALTER TABLE `CorpMonthSequence` ADD COLUMN `periodKey` VARCHAR(191) NULL',
+    "UPDATE `CorpMonthSequence` SET `periodKey` = '' WHERE `periodKey` IS NULL",
+    "ALTER TABLE `CorpMonthSequence` MODIFY `periodKey` VARCHAR(191) NOT NULL DEFAULT ''"
+  );
+  await ensureColumn(
+    'CorpMonthSequence',
+    'lastNo',
+    'ALTER TABLE `CorpMonthSequence` ADD COLUMN `lastNo` BIGINT NULL',
+    'UPDATE `CorpMonthSequence` SET `lastNo` = 0 WHERE `lastNo` IS NULL',
+    'ALTER TABLE `CorpMonthSequence` MODIFY `lastNo` BIGINT NOT NULL DEFAULT 0'
+  );
+  await ensureColumn(
+    'CorpMonthSequence',
+    'updatedAt',
+    'ALTER TABLE `CorpMonthSequence` ADD COLUMN `updatedAt` DATETIME NULL',
+    'UPDATE `CorpMonthSequence` SET `updatedAt` = NOW() WHERE `updatedAt` IS NULL',
+    'ALTER TABLE `CorpMonthSequence` MODIFY `updatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP'
+  );
+  const corpMonthUnique = `CorpMonthSequence_organizationId_corpPrefix_periodKey_key`;
+  if (!(await indexExists('CorpMonthSequence', corpMonthUnique))) {
+    await prisma.$executeRawUnsafe(
+      `CREATE UNIQUE INDEX \`${corpMonthUnique}\` ON \`CorpMonthSequence\` (\`organizationId\`, \`corpPrefix\`, \`periodKey\`)`
+    );
+  }
+  const corpMonthIdxOrg = `CorpMonthSequence_organizationId_idx`;
+  if (!(await indexExists('CorpMonthSequence', corpMonthIdxOrg))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${corpMonthIdxOrg}\` ON \`CorpMonthSequence\` (\`organizationId\`)`);
+  }
+
+  const hasBatchSeq = await tableExists('EpcBatchSequence');
+  if (!hasBatchSeq) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`EpcBatchSequence\` (
+        \`dateKey\` VARCHAR(8) NOT NULL,
+        \`lastNo\` BIGINT NOT NULL DEFAULT 0,
+        \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`dateKey\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+  await ensureColumn(
+    'EpcBatchSequence',
+    'dateKey',
+    'ALTER TABLE `EpcBatchSequence` ADD COLUMN `dateKey` VARCHAR(8) NULL',
+    null,
+    'ALTER TABLE `EpcBatchSequence` MODIFY `dateKey` VARCHAR(8) NOT NULL'
+  );
+  await ensureColumn(
+    'EpcBatchSequence',
+    'lastNo',
+    'ALTER TABLE `EpcBatchSequence` ADD COLUMN `lastNo` BIGINT NULL',
+    'UPDATE `EpcBatchSequence` SET `lastNo` = 0 WHERE `lastNo` IS NULL',
+    'ALTER TABLE `EpcBatchSequence` MODIFY `lastNo` BIGINT NOT NULL DEFAULT 0'
+  );
+  await ensureColumn(
+    'EpcBatchSequence',
+    'updatedAt',
+    'ALTER TABLE `EpcBatchSequence` ADD COLUMN `updatedAt` DATETIME NULL',
+    'UPDATE `EpcBatchSequence` SET `updatedAt` = NOW() WHERE `updatedAt` IS NULL',
+    'ALTER TABLE `EpcBatchSequence` MODIFY `updatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP'
+  );
+
   const hasEpcBatch = await tableExists('EpcBatch');
   if (!hasEpcBatch) {
     await prisma.$executeRawUnsafe(`
@@ -547,8 +640,9 @@ async function ensureEpcSchemaCompat() {
         \`id\` INT NOT NULL AUTO_INCREMENT,
         \`organizationId\` INT NOT NULL,
         \`corpPrefix\` VARCHAR(191) NOT NULL,
-        \`productId\` INT NOT NULL,
-        \`sku\` VARCHAR(191) NOT NULL,
+        \`periodKey\` VARCHAR(191) NULL,
+        \`productId\` INT NULL,
+        \`sku\` VARCHAR(191) NULL,
         \`batchName\` VARCHAR(191) NOT NULL,
         \`batchQty\` INT NOT NULL,
         \`remark\` VARCHAR(191) NULL,
@@ -573,6 +667,20 @@ async function ensureEpcSchemaCompat() {
     const idx3 = `EpcBatch_organizationId_productId_idx`;
     if (!(await indexExists('EpcBatch', idx3)))
       await prisma.$executeRawUnsafe(`CREATE INDEX \`${idx3}\` ON \`EpcBatch\` (\`organizationId\`, \`productId\`)`);
+  }
+
+  await ensureColumn('EpcBatch', 'periodKey', `ALTER TABLE \`EpcBatch\` ADD COLUMN \`periodKey\` VARCHAR(191) NULL`, null, null);
+  try {
+    const info = await getColumnInfo('EpcBatch', 'productId');
+    const isNullable = String(info?.isNullable || '').toUpperCase() === 'YES';
+    if (info && !isNullable) await prisma.$executeRawUnsafe('ALTER TABLE `EpcBatch` MODIFY `productId` INT NULL');
+  } catch {
+  }
+  try {
+    const info = await getColumnInfo('EpcBatch', 'sku');
+    const isNullable = String(info?.isNullable || '').toUpperCase() === 'YES';
+    if (info && !isNullable) await prisma.$executeRawUnsafe('ALTER TABLE `EpcBatch` MODIFY `sku` VARCHAR(191) NULL');
+  } catch {
   }
 
   await ensureColumn(

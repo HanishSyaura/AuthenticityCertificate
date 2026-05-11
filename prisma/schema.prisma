@@ -222,8 +222,27 @@ model CorpSequence {
   @@index([organizationId])
 }
 
+model CorpMonthSequence {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  corpPrefix     String
+  periodKey      String // YYYYMM (ikut timezone org)
+  lastNo         BigInt       @default(0)
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, corpPrefix, periodKey])
+  @@index([organizationId])
+}
+
 model CertificateSequence {
   dateKey   String   @id
+  lastNo    BigInt   @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+model EpcBatchSequence {
+  dateKey   String   @id // YYYYMMDD (ikut timezone org)
   lastNo    BigInt   @default(0)
   updatedAt DateTime @updatedAt
 }
@@ -233,10 +252,11 @@ model EpcBatch {
   organizationId Int
   organization   Organization @relation(fields: [organizationId], references: [id])
   corpPrefix     String
+  periodKey      String?
 
-  productId Int
-  product   Product @relation(fields: [productId], references: [id])
-  sku       String
+  productId Int?
+  product   Product? @relation(fields: [productId], references: [id])
+  sku       String?
 
   batchName             String
   batchQty              Int

@@ -3,17 +3,8 @@ const epcService = require('./epc.service');
 
 const generateSchema = z.object({
   corpPrefix: z.string().min(1),
-  productId: z.number().int().positive(),
-  productionDate: z
-    .string()
-    .optional()
-    .refine((v) => v == null || !Number.isNaN(new Date(v).getTime()), 'Invalid productionDate'),
-  batchName: z.string().min(1),
   batchQty: z.number().int().positive().max(5000),
-  remark: z.string().optional(),
-  certificateId: z.string().trim().min(1).optional(),
-  certificateTemplateId: z.number().int().nullable().optional(),
-  templateData: z.record(z.string(), z.unknown()).optional()
+  remark: z.string().optional()
 });
 
 const importProductionSchema = z.object({
@@ -98,14 +89,8 @@ async function generateBatch(req, res) {
     const result = await epcService.generateEpcBatch({
       organizationId: req.organization.id,
       corpPrefix: validated.corpPrefix,
-      productId: validated.productId,
-      productionDate: validated.productionDate,
-      batchName: validated.batchName,
       batchQty: validated.batchQty,
-      remark: validated.remark,
-      certificateId: validated.certificateId,
-      certificateTemplateId: validated.certificateTemplateId,
-      templateData: validated.templateData
+      remark: validated.remark
     });
     res.success(result, 'EPC batch generated');
   } catch (e) {

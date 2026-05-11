@@ -1,12 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import useRecordsStore from '../../store/useRecordsStore';
 import useEpcStore from '../../store/useEpcStore';
-import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
 import { useT } from '../../i18n/useT';
 import { tRaw } from '../../i18n/tRaw';
-import RichTextEditor from '../../components/admin/RichTextEditor';
 import DataTable from '../../components/ui/DataTable';
 import { hasPermission } from '../../utils/permissions';
 
@@ -24,13 +21,6 @@ function toBase64(file) {
     reader.onerror = () => reject(new Error(tRaw('failedToReadFile')));
     reader.readAsDataURL(file);
   });
-}
-
-function getValue(path, data) {
-  const parts = String(path || '').split('.');
-  let cur = data;
-  for (const p of parts) cur = cur?.[p];
-  return cur ?? '';
 }
 
 export default function AdminEpc() {
@@ -54,25 +44,14 @@ export default function AdminEpc() {
   const canProduction = allow('epc.write', 'epc.production.access');
   const canOverride = role === 'super_admin' || role === 'admin' || allow('epc.override');
 
-  const { products, fetchProducts } = useRecordsStore((s) => ({
-    products: s.products,
-    fetchProducts: s.fetchProducts
-  }));
-
-  const { templates, fetchTemplates } = useCertTemplatesStore((s) => ({
-    templates: s.templates,
-    fetchTemplates: s.fetchTemplates
-  }));
-
   const {
+    corpCodes,
     batches,
     items,
     itemTotal,
     loading,
     error,
-    lastGenerated,
     fetchCorpCodes,
-    fetchPeekCertificateId,
     fetchBatches,
     fetchItems,
     generateBatch,
@@ -80,21 +59,17 @@ export default function AdminEpc() {
     exportBatchVerifyUrlXlsx,
     importProductionXlsx,
     markProductionDone,
-    updateBatch,
     deleteBatch,
     deleteAllBatches,
-    importExistingXlsx,
-    exportBatchXlsxCustom,
-    clearLastGenerated
+    exportBatchXlsxCustom
   } = useEpcStore((s) => ({
+    corpCodes: s.corpCodes,
     batches: s.batches,
     items: s.items,
     itemTotal: s.itemTotal,
     loading: s.loading,
     error: s.error,
-    lastGenerated: s.lastGenerated,
     fetchCorpCodes: s.fetchCorpCodes,
-    fetchPeekCertificateId: s.fetchPeekCertificateId,
     fetchBatches: s.fetchBatches,
     fetchItems: s.fetchItems,
     generateBatch: s.generateBatch,
@@ -103,38 +78,20 @@ export default function AdminEpc() {
     exportBatchXlsxCustom: s.exportBatchXlsxCustom,
     importProductionXlsx: s.importProductionXlsx,
     markProductionDone: s.markProductionDone,
-    updateBatch: s.updateBatch,
     deleteBatch: s.deleteBatch,
-    deleteAllBatches: s.deleteAllBatches,
-    importExistingXlsx: s.importExistingXlsx,
-    clearLastGenerated: s.clearLastGenerated
+    deleteAllBatches: s.deleteAllBatches
   }));
 
-  const [tab, setTab] = useState('create');
+  const [tab, setTab] = useState('batches');
 
-  const [corpPrefix] = useState('DA01');
-  const [productId, setProductId] = useState('');
-  const [productionDate, setProductionDate] = useState('');
-  const [batchName, setBatchName] = useState('');
+  const [corpPrefix, setCorpPrefix] = useState('DA01');
   const [batchQty, setBatchQty] = useState(1);
   const [remark, setRemark] = useState('');
-  const [certificateId, setCertificateId] = useState('');
-  const [certificateTemplateId, setCertificateTemplateId] = useState('');
-  const [templateData, setTemplateData] = useState({});
-  const [importProductId, setImportProductId] = useState('');
-  const [importBatchName, setImportBatchName] = useState('');
+  const [generateOpen, setGenerateOpen] = useState(false);
   const [itemsOpen, setItemsOpen] = useState(false);
   const [itemsBatch, setItemsBatch] = useState(null);
   const [itemsOffset, setItemsOffset] = useState(0);
   const itemsLimit = 20;
-
-  const [editOpen, setEditOpen] = useState(false);
-  const [editBatch, setEditBatch] = useState(null);
-  const [editCertificateTemplateId, setEditCertificateTemplateId] = useState('');
-  const [editRemark, setEditRemark] = useState('');
-  const [editTemplateData, setEditTemplateData] = useState({});
-  const [editProductionDate, setEditProductionDate] = useState('');
-  const [editProductionDateOrig, setEditProductionDateOrig] = useState('');
 
   const [exportColsOpen, setExportColsOpen] = useState(false);
   const [exportColsBatch, setExportColsBatch] = useState(null);
@@ -149,11 +106,6 @@ export default function AdminEpc() {
   const closeItems = useCallback(() => {
     setItemsOpen(false);
     setItemsBatch(null);
-  }, []);
-
-  const closeEdit = useCallback(() => {
-    setEditOpen(false);
-    setEditBatch(null);
   }, []);
 
   const closeExportCols = useCallback(() => {
@@ -195,83 +147,18 @@ export default function AdminEpc() {
     openVerifyUrl(`/verify/${encodeURIComponent(certId)}`);
   };
 
-  const refreshCertificateId = useCallback(async () => {
-    const nextId = await fetchPeekCertificateId();
-    if (nextId) setCertificateId(nextId);
-  }, [fetchPeekCertificateId]);
-
   useEffect(() => {
     if (!canBatchCreate && !canBatchView && !canProduction) return;
-    if (canBatchCreate) {
-      void fetchProducts();
-      void fetchTemplates();
-      void refreshCertificateId();
-    }
     void fetchCorpCodes();
     void fetchBatches({ limit: 50, offset: 0 });
-  }, [canBatchCreate, canBatchView, canProduction, fetchBatches, fetchCorpCodes, fetchProducts, fetchTemplates, refreshCertificateId]);
+  }, [canBatchCreate, canBatchView, canProduction, fetchBatches, fetchCorpCodes]);
 
   useEffect(() => {
-    if (tab === 'create' && canBatchCreate) return;
     if (tab === 'batches' && canBatchView) return;
     if (tab === 'production' && canProduction) return;
-    if (canBatchCreate) setTab('create');
-    else if (canBatchView) setTab('batches');
+    if (canBatchView) setTab('batches');
     else if (canProduction) setTab('production');
-  }, [canBatchCreate, canBatchView, canProduction, tab]);
-
-  const selectedProduct = useMemo(() => (Array.isArray(products) ? products : []).find((p) => String(p.id) === String(productId)) || null, [products, productId]);
-
-  const authTemplates = useMemo(
-    () => (Array.isArray(templates) ? templates : []).filter((tpl) => String(tpl?.templateType || 'auth') !== 'supporting'),
-    [templates]
-  );
-
-  useEffect(() => {
-    if (!selectedProduct) return;
-    if (selectedProduct.certificateTemplateId != null) {
-      setCertificateTemplateId(String(selectedProduct.certificateTemplateId));
-    }
-  }, [selectedProduct]);
-
-  const selectedTemplate = useMemo(
-    () => authTemplates.find((x) => String(x.id) === String(certificateTemplateId)) || null,
-    [authTemplates, certificateTemplateId]
-  );
-
-  const placeholders = useMemo(() => {
-    const raw = selectedTemplate?.placeholders;
-    return Array.isArray(raw) ? raw : [];
-  }, [selectedTemplate]);
-
-  useEffect(() => {
-    setTemplateData((prev) => {
-      const next = {};
-      const ctx = {
-        product: selectedProduct,
-        batch: { batchName, batchQty, productionDate, remark },
-        corpPrefix
-      };
-      for (const p of placeholders) {
-        const key = String(p?.key || '').trim();
-        if (!key) continue;
-        const source = String(p?.source || 'static');
-        if (source === 'static' || source === 'title') {
-          next[key] = String(p?.staticValue || '');
-          continue;
-        }
-        if (source === 'product') {
-          const bindPath = String(p?.bindPath || '').trim();
-          const v = bindPath ? getValue(bindPath, ctx) : '';
-          next[key] = v == null ? '' : String(v);
-          continue;
-        }
-        const existing = prev?.[key];
-        next[key] = existing == null ? '' : String(existing);
-      }
-      return next;
-    });
-  }, [batchName, batchQty, certificateTemplateId, corpPrefix, placeholders, productionDate, remark, selectedProduct]);
+  }, [canBatchView, canProduction, tab]);
 
   const openBatchItems = async (b) => {
     if (!b?.id) return;
@@ -280,29 +167,6 @@ export default function AdminEpc() {
     setItemsOpen(true);
     await fetchItems({ batchId: b.id, limit: itemsLimit, offset: 0 });
   };
-
-  const openEditBatch = useCallback(
-    async (b) => {
-      if (!b?.id) return;
-      setEditBatch(b);
-      setEditCertificateTemplateId(b?.certificateTemplateId != null ? String(b.certificateTemplateId) : '');
-      setEditRemark(String(b?.remark || ''));
-      setEditTemplateData(typeof b?.templateData === 'object' && b?.templateData && !Array.isArray(b.templateData) ? b.templateData : {});
-      setEditProductionDate('');
-      setEditProductionDateOrig('');
-      setEditOpen(true);
-      try {
-        const data = await fetchItems({ batchId: b.id, limit: 1, offset: 0 });
-        const pd = data?.items?.[0]?.productionDate;
-        const next = pd ? new Date(pd).toISOString().slice(0, 10) : '';
-        setEditProductionDate(next);
-        setEditProductionDateOrig(next);
-      } catch (e) {
-        void e;
-      }
-    },
-    [fetchItems]
-  );
 
   useEffect(() => {
     if (!itemsOpen) return;
@@ -317,69 +181,11 @@ export default function AdminEpc() {
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [closeItems, itemsOpen]);
-
   useEffect(() => {
-    if (!editOpen) return;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const onKeyDown = (e) => {
-      if (e.key === 'Escape') closeEdit();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [closeEdit, editOpen]);
-
-  const editProduct = useMemo(() => {
-    const pid = editBatch?.product?.id != null ? editBatch.product.id : editBatch?.productId;
-    return (
-      (Array.isArray(products) ? products : []).find((p) => String(p?.id) === String(pid)) ||
-      editBatch?.product ||
-      null
-    );
-  }, [editBatch, products]);
-
-  const editSelectedTemplate = useMemo(
-    () => authTemplates.find((x) => String(x.id) === String(editCertificateTemplateId)) || null,
-    [authTemplates, editCertificateTemplateId]
-  );
-
-  const editPlaceholders = useMemo(() => {
-    const raw = editSelectedTemplate?.placeholders;
-    return Array.isArray(raw) ? raw : [];
-  }, [editSelectedTemplate]);
-
-  useEffect(() => {
-    if (!editOpen || !editBatch) return;
-    setEditTemplateData((prev) => {
-      const next = {};
-      const ctx = {
-        product: editProduct,
-        batch: { batchName: editBatch.batchName, batchQty: editBatch.batchQty, productionDate: '', remark: editRemark },
-        corpPrefix: editBatch.corpPrefix || corpPrefix
-      };
-      for (const p of editPlaceholders) {
-        const key = String(p?.key || '').trim();
-        if (!key) continue;
-        const source = String(p?.source || 'static');
-        if (source === 'static' || source === 'title') {
-          next[key] = String(p?.staticValue || '');
-          continue;
-        }
-        if (source === 'product') {
-          const bindPath = String(p?.bindPath || '').trim();
-          const v = bindPath ? getValue(bindPath, ctx) : '';
-          next[key] = v == null ? '' : String(v);
-          continue;
-        }
-        const existing = prev?.[key];
-        next[key] = existing == null ? '' : String(existing);
-      }
-      return next;
-    });
-  }, [corpPrefix, editBatch, editOpen, editPlaceholders, editProduct, editRemark]);
+    if (!Array.isArray(corpCodes) || corpCodes.length === 0) return;
+    if (corpCodes.includes(corpPrefix)) return;
+    setCorpPrefix(String(corpCodes[0] || '').trim() || 'DA01');
+  }, [corpCodes, corpPrefix]);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -389,17 +195,6 @@ export default function AdminEpc() {
           <div className="mt-1 text-sm text-zinc-600">{t('guideStepBatchesBody')}</div>
         </div>
         <div className="flex items-center gap-2">
-          {canBatchCreate ? (
-            <button
-              type="button"
-              onClick={() => setTab('create')}
-              className={`rounded-lg px-3 py-2 text-xs font-semibold ${
-                tab === 'create' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
-              }`}
-            >
-              {t('epcBatchCreation')}
-            </button>
-          ) : null}
           {canBatchView ? (
             <button
               type="button"
@@ -431,171 +226,16 @@ export default function AdminEpc() {
         <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-700">Insufficient permissions</div>
       ) : null}
 
-      {tab === 'create' && canBatchCreate ? (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_420px]">
-          <div className="rounded-xl border border-zinc-200 bg-white p-4">
-            <div className="mb-3 text-xs font-semibold text-zinc-600">{t('certificateData')}</div>
-            {placeholders.length === 0 ? <div className="text-xs text-zinc-500">{t('selectField')}</div> : null}
-            <div className="space-y-3">
-              {placeholders.map((p) => {
-                const key = String(p?.key || '').trim();
-                const label = String(p?.label || key);
-                const source = String(p?.source || 'static');
-                const bindPath = String(p?.bindPath || '').trim();
-                if (!key) return null;
-                return (
-                  <div key={key}>
-                    <div className="mb-1 text-[11px] font-semibold text-zinc-600">{label}</div>
-                    {source === 'product' && bindPath ? (
-                      <div className="-mt-1 mb-2 text-[11px] text-zinc-500">
-                        {t('bindTo')}: {bindPath}
-                      </div>
-                    ) : null}
-                    {source === 'product' ? (
-                      <input value={String(templateData?.[key] || '')} disabled className="ac-input" />
-                    ) : source === 'batch' ? (
-                      <RichTextEditor
-                        value={String(templateData?.[key] || '')}
-                        onChange={(v) => setTemplateData((prev) => ({ ...(prev || {}), [key]: v }))}
-                        minHeight="4rem"
-                        maxHeight="10rem"
-                      />
-                    ) : (
-                      <div
-                        className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm"
-                        dangerouslySetInnerHTML={{ __html: String(templateData?.[key] || '') }}
-                      />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-zinc-200 bg-white p-4">
-            <div className="mb-3 text-xs font-semibold text-zinc-600">{t('epcBatchCreation')}</div>
-            <div className="space-y-3">
-              <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('corpCode')}</div>
-                <input value={corpPrefix} disabled className="ac-input" />
-              </div>
-
-              <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('product')}</div>
-                <select value={productId} onChange={(e) => setProductId(e.target.value)} className="ac-input">
-                  <option value="">{t('selectProduct')}</option>
-                  {(Array.isArray(products) ? products : [])
-                    .slice()
-                    .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')))
-                    .map((p) => (
-                      <option key={p.id} value={String(p.id)}>
-                        {p.name} ({p.sku})
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('productionDate')}</div>
-                <input type="date" value={productionDate} onChange={(e) => setProductionDate(e.target.value)} className="ac-input" />
-              </div>
-
-              <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('certificateId')}</div>
-                <input
-                  value={certificateId}
-                  disabled
-                  readOnly
-                  className="ac-input font-mono uppercase"
-                  placeholder="CERTDDMMYY001"
-                />
-              </div>
-
-              <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('certTemplate')}</div>
-                <select value={certificateTemplateId} onChange={(e) => setCertificateTemplateId(e.target.value)} className="ac-input">
-                  <option value="">{t('none')}</option>
-                  {authTemplates.map((tpl) => (
-                    <option key={tpl.id} value={String(tpl.id)}>
-                      {String(tpl?.certificateId || '').trim() ? `${tpl.certificateId} — ${tpl.name}` : tpl.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('batchName')}</div>
-                <input value={batchName} onChange={(e) => setBatchName(e.target.value)} className="ac-input" />
-              </div>
-
-              <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('batchQty')}</div>
-                <input type="number" min={1} max={5000} value={batchQty} onChange={(e) => setBatchQty(Number(e.target.value) || 1)} className="ac-input" />
-              </div>
-
-              <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
-                <textarea value={remark} onChange={(e) => setRemark(e.target.value)} className="h-20 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-400" />
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                  onClick={() => {
-                    setBatchName('');
-                    setBatchQty(1);
-                    setRemark('');
-                    setProductionDate('');
-                    setCertificateId('');
-                    setTemplateData({});
-                    clearLastGenerated();
-                    void refreshCertificateId();
-                  }}
-                >
-                  {t('clear')}
-                </button>
-                <button
-                  type="button"
-                  className="ac-btn ac-btn-primary px-3 py-2 text-xs"
-                  disabled={loading || !corpPrefix || !productId || !batchName || !batchQty}
-                  onClick={async () => {
-                    const created = await generateBatch({
-                      corpPrefix,
-                      productId,
-                      productionDate: String(productionDate || '').trim() || undefined,
-                      batchName: String(batchName).trim(),
-                      batchQty,
-                      remark: String(remark || '').trim() || undefined,
-                      certificateTemplateId: certificateTemplateId ? Number(certificateTemplateId) : null,
-                      templateData
-                    });
-                    const createdCertId = String(created?.batch?.certificateId || '').trim();
-                    if (createdCertId) setCertificateId(createdCertId);
-                    const batchId = created?.batch?.id;
-                    if (batchId && canExportXlsx) await exportBatchXlsx(batchId);
-                    await fetchBatches({ limit: 50, offset: 0 });
-                  }}
-                >
-                  {loading ? t('generating') : t('generate')}
-                </button>
-              </div>
-
-              {lastGenerated?.batch ? (
-                <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
-                  {t('latestBatch')}: <span className="font-mono">{lastGenerated.batch.batchName}</span>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       {tab === 'batches' && canBatchView ? (
         <div className="rounded-xl border border-zinc-200 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 px-4 py-3">
             <div className="text-xs font-semibold text-zinc-600">{t('epcBatches')}</div>
             <div className="flex items-center gap-2">
+              {canBatchCreate ? (
+                <button type="button" className="ac-btn ac-btn-primary px-3 py-2 text-xs" onClick={() => setGenerateOpen(true)}>
+                  {t('generate')}
+                </button>
+              ) : null}
               {canDelete ? (
                 <button
                   type="button"
@@ -614,67 +254,87 @@ export default function AdminEpc() {
               ) : null}
             </div>
           </div>
-          <div className="divide-y divide-zinc-100">
-            {(Array.isArray(batches) ? batches : []).map((b) => (
-              <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-zinc-900">
-                    {b.batchName}
-                  </div>
-                  <div className="mt-1 text-[11px] text-zinc-500">
-                    {b.product?.name || '-'} • {b.batchQty} • {formatDateTime(b.createdAt)} • {t('certificateId')}:{' '}
-                    {b.certificateId ? <span className="font-mono">{String(b.certificateId)}</span> : '-'}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openBatchItems(b)}>
-                    {t('viewEpc')}
-                  </button>
-                  <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openEditBatch(b)}>
-                    {t('edit')}
-                  </button>
-                  {canScan ? (
-                    <button
-                      type="button"
-                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                      disabled={!b?.id}
-                      onClick={() => navigate(`/admin/epc/scan?batchId=${encodeURIComponent(String(b.id))}`)}
-                    >
-                      {t('scanInput')}
-                    </button>
-                  ) : null}
-                  {canViewCertificate ? (
-                    <button
-                      type="button"
-                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                      disabled={!b?.id}
-                      onClick={() => void openCertificate(b)}
-                    >
-                      {t('viewCertificate')}
-                    </button>
-                  ) : null}
-                  {canExportXlsx ? (
-                    <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openExportCols(b)}>
-                      {t('exportXlsx')}
-                    </button>
-                  ) : null}
-                  {canDelete ? (
-                    <button
-                      type="button"
-                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                      onClick={async () => {
-                        if (!window.confirm(t('confirmDelete'))) return;
-                        await deleteBatch({ batchId: b.id });
-                        await fetchBatches({ limit: 50, offset: 0 });
-                      }}
-                    >
-                      {t('delete')}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-            {(!batches || batches.length === 0) && !loading ? <div className="px-4 py-6 text-xs text-zinc-500">{t('noBatches')}</div> : null}
+          <div className="p-4">
+            <DataTable
+              density="compact"
+              minWidth={980}
+              rows={Array.isArray(batches) ? batches : []}
+              rowKey={(b) => b.id}
+              loading={loading}
+              emptyContent={t('noBatches')}
+              columns={[
+                {
+                  id: 'batch',
+                  header: 'Batch',
+                  cell: (b) => <span className="whitespace-nowrap font-mono text-[11px] text-zinc-900">{String(b.batchName || '')}</span>
+                },
+                {
+                  id: 'qty',
+                  header: 'Qty Generated',
+                  align: 'right',
+                  cell: (b) => <span className="whitespace-nowrap text-zinc-800">{Number(b.batchQty) || 0}</span>
+                },
+                {
+                  id: 'activated',
+                  header: 'Qty Activated',
+                  align: 'right',
+                  cell: (b) => <span className="whitespace-nowrap text-zinc-800">{Number(b.activeCount) || 0}</span>
+                },
+                {
+                  id: 'inactive',
+                  header: 'Qty Inactive',
+                  align: 'right',
+                  cell: (b) => <span className="whitespace-nowrap text-zinc-800">{Number(b.inactiveCount) || 0}</span>
+                },
+                {
+                  id: 'createdAt',
+                  header: t('createdAt'),
+                  cell: (b) => <span className="whitespace-nowrap text-zinc-700">{formatDateTime(b.createdAt)}</span>
+                },
+                {
+                  id: 'actions',
+                  header: '',
+                  align: 'right',
+                  headerClassName: 'pr-3',
+                  className: 'pr-3',
+                  cell: (b) => (
+                    <div className="flex justify-end gap-2">
+                      <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openBatchItems(b)}>
+                        {t('viewEpc')}
+                      </button>
+                      {canScan ? (
+                        <button
+                          type="button"
+                          className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                          disabled={!b?.id}
+                          onClick={() => navigate(`/admin/epc/scan?batchId=${encodeURIComponent(String(b.id))}`)}
+                        >
+                          {t('scanInput')}
+                        </button>
+                      ) : null}
+                      {canExportXlsx ? (
+                        <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openExportCols(b)}>
+                          {t('exportXlsx')}
+                        </button>
+                      ) : null}
+                      {canDelete ? (
+                        <button
+                          type="button"
+                          className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                          onClick={async () => {
+                            if (!window.confirm(t('confirmDelete'))) return;
+                            await deleteBatch({ batchId: b.id });
+                            await fetchBatches({ limit: 50, offset: 0 });
+                          }}
+                        >
+                          {t('delete')}
+                        </button>
+                      ) : null}
+                    </div>
+                  )
+                }
+              ]}
+            />
           </div>
         </div>
       ) : null}
@@ -700,16 +360,6 @@ export default function AdminEpc() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {canViewCertificate ? (
-                  <button
-                    type="button"
-                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                    disabled={!itemsBatch?.id}
-                    onClick={() => void openCertificate(itemsBatch)}
-                  >
-                    {t('viewCertificate')}
-                  </button>
-                ) : null}
                 {canEncoding ? (
                   <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchVerifyUrlXlsx(itemsBatch.id)}>
                     {t('exportVerifyUrlXlsx')}
@@ -790,193 +440,6 @@ export default function AdminEpc() {
                 >
                   {t('next')}
                 </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {editOpen && editBatch ? (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
-          role="dialog"
-          aria-modal="true"
-          onClick={closeEdit}
-        >
-          <div
-            className="flex max-h-[calc(100vh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-zinc-900">
-                  {t('edit')} {t('certificateData')}: {editBatch.batchName}
-                </div>
-                <div className="mt-1 text-[11px] text-zinc-500">
-                  {editProduct?.name || editBatch.product?.name || '-'} • {t('certificateId')}:{' '}
-                  {editBatch.certificateId ? <span className="font-mono">{String(editBatch.certificateId)}</span> : '-'}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="ac-btn ac-btn-primary px-3 py-2 text-xs"
-                  disabled={loading || !canBatchCreate}
-                  onClick={async () => {
-                    const patch = {
-                      remark: editRemark,
-                      templateData: editTemplateData
-                    };
-                    const allowTemplateChange = canBatchCreate && editBatch?.certificateTemplateId == null;
-                    if (allowTemplateChange) {
-                      const nextTpl = String(editCertificateTemplateId || '').trim();
-                      const prevTpl = editBatch?.certificateTemplateId != null ? String(editBatch.certificateTemplateId) : '';
-                      if (nextTpl !== prevTpl) {
-                        patch.certificateTemplateId = nextTpl ? Number(nextTpl) : null;
-                      }
-                    }
-                    if (editProductionDate !== editProductionDateOrig) {
-                      patch.productionDate = editProductionDate ? String(editProductionDate).trim() : null;
-                    }
-                    await updateBatch({
-                      batchId: editBatch.id,
-                      patch
-                    });
-                    await fetchBatches({ limit: 50, offset: 0 });
-                    closeEdit();
-                  }}
-                >
-                  {t('save')}
-                </button>
-                <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={closeEdit}>
-                  {t('close')}
-                </button>
-              </div>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-auto p-4">
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_420px]">
-                <div className="rounded-xl border border-zinc-200 bg-white p-4">
-                  <div className="mb-3 text-xs font-semibold text-zinc-600">{t('certificateData')}</div>
-                  {editPlaceholders.length === 0 ? <div className="text-xs text-zinc-500">{t('selectField')}</div> : null}
-                  <div className="space-y-3">
-                    {editPlaceholders.map((p) => {
-                      const key = String(p?.key || '').trim();
-                      const label = String(p?.label || key);
-                      const source = String(p?.source || 'static');
-                      const bindPath = String(p?.bindPath || '').trim();
-                      if (!key) return null;
-                      return (
-                        <div key={key}>
-                          <div className="mb-1 text-[11px] font-semibold text-zinc-600">{label}</div>
-                          {source === 'product' && bindPath ? (
-                            <div className="-mt-1 mb-2 text-[11px] text-zinc-500">
-                              {t('bindTo')}: {bindPath}
-                            </div>
-                          ) : null}
-                          {source === 'product' ? (
-                            <input value={String(editTemplateData?.[key] || '')} disabled className="ac-input" />
-                          ) : source === 'batch' ? (
-                            <RichTextEditor
-                              value={String(editTemplateData?.[key] || '')}
-                              onChange={(v) => setEditTemplateData((prev) => ({ ...(prev || {}), [key]: v }))}
-                              minHeight="4rem"
-                              maxHeight="10rem"
-                            />
-                          ) : (
-                            <div
-                              className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm"
-                              dangerouslySetInnerHTML={{ __html: String(editTemplateData?.[key] || '') }}
-                            />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-zinc-200 bg-white p-4">
-                  <div className="mb-3 text-xs font-semibold text-zinc-600">{t('epcBatchCreation')}</div>
-                  <div className="space-y-3">
-                    <div>
-                      <div className="mb-1 text-xs font-semibold text-zinc-600">{t('corpCode')}</div>
-                      <input value={String(editBatch.corpPrefix || '')} disabled className="ac-input" />
-                    </div>
-                    <div>
-                      <div className="mb-1 text-xs font-semibold text-zinc-600">{t('product')}</div>
-                      <input value={String(editProduct?.name || editBatch.product?.name || '')} disabled className="ac-input" />
-                    </div>
-                    <div>
-                      <div className="mb-1 text-xs font-semibold text-zinc-600">{t('batchName')}</div>
-                      <input value={String(editBatch.batchName || '')} disabled className="ac-input" />
-                    </div>
-                    <div>
-                      <div className="mb-1 text-xs font-semibold text-zinc-600">{t('batchQty')}</div>
-                      <input value={String(editBatch.batchQty || '')} disabled className="ac-input" />
-                    </div>
-                    <div>
-                      <div className="mb-1 text-xs font-semibold text-zinc-600">{t('productionDate')}</div>
-                      <input
-                        type="date"
-                        value={editProductionDate}
-                        onChange={(e) => setEditProductionDate(e.target.value)}
-                        className="ac-input"
-                        disabled={!canOverride}
-                      />
-                      {!canOverride ? <div className="mt-1 text-[11px] text-rose-700">Tiada kebenaran untuk ubah production date.</div> : null}
-                    </div>
-                    <div>
-                      <div className="mb-1 text-xs font-semibold text-zinc-600">{t('certTemplate')}</div>
-                      <select
-                        value={editCertificateTemplateId}
-                        disabled={!canBatchCreate || editBatch?.certificateTemplateId != null}
-                        onChange={(e) => setEditCertificateTemplateId(e.target.value)}
-                        className="ac-input"
-                      >
-                        <option value="">{t('none')}</option>
-                        {authTemplates.map((tpl) => (
-                          <option key={tpl.id} value={String(tpl.id)}>
-                            {String(tpl?.certificateId || '').trim() ? `${tpl.certificateId} — ${tpl.name}` : tpl.name}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                          disabled={!String(editCertificateTemplateId || '').trim()}
-                          onClick={() => {
-                            const id = String(editCertificateTemplateId || '').trim();
-                            if (!id) return;
-                            const url = `/admin/certificates/${encodeURIComponent(id)}`;
-                            const w = window.open(url, '_blank', 'noopener,noreferrer');
-                            if (w) w.opener = null;
-                          }}
-                        >
-                          {t('openCertificateTemplate')}
-                        </button>
-                        <button
-                          type="button"
-                          className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                          onClick={() => navigate('/admin/certificates', { state: { openCreate: true } })}
-                        >
-                          {t('createCertificateTemplate')}
-                        </button>
-                      </div>
-                      {editBatch?.certificateTemplateId != null ? (
-                        <div className="mt-1 text-[11px] text-zinc-500">Certificate template dikunci selepas batch dijana.</div>
-                      ) : null}
-                    </div>
-                    <div>
-                      <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
-                      <textarea
-                        value={editRemark}
-                        onChange={(e) => setEditRemark(e.target.value)}
-                        className="h-24 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-400"
-                      />
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -1176,49 +639,64 @@ export default function AdminEpc() {
       ) : null}
 
       {tab === 'production' && canProduction && canBatchCreate ? (
-        <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-4">
-          <div className="mb-3 text-xs font-semibold text-zinc-600">{t('importExistingEpc')}</div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
-            <div>
-              <div className="mb-1 text-xs font-semibold text-zinc-600">{t('product')}</div>
-              <select value={importProductId} onChange={(e) => setImportProductId(e.target.value)} className="ac-input">
-                <option value="">{t('selectProduct')}</option>
-                {(Array.isArray(products) ? products : [])
-                  .slice()
-                  .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')))
-                  .map((p) => (
-                    <option key={p.id} value={String(p.id)}>
-                      {p.name} ({p.sku})
+        null
+      ) : null}
+
+      {generateOpen ? (
+        <div className="ac-modal-backdrop">
+          <div className="ac-modal">
+            <div className="mb-3 text-sm font-semibold text-zinc-900">{t('generate')} EPC</div>
+            <div className="space-y-3">
+              <div>
+                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('corpCode')}</div>
+                <select value={corpPrefix} onChange={(e) => setCorpPrefix(e.target.value)} className="ac-input px-3 py-2 text-xs">
+                  {(Array.isArray(corpCodes) ? corpCodes : [corpPrefix]).map((c) => (
+                    <option key={c} value={String(c)}>
+                      {String(c)}
                     </option>
                   ))}
-              </select>
+                </select>
+              </div>
+              <div>
+                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('batchQty')}</div>
+                <input
+                  type="number"
+                  min={1}
+                  max={5000}
+                  value={batchQty}
+                  onChange={(e) => setBatchQty(Math.min(5000, Math.max(1, Number(e.target.value) || 1)))}
+                  className="ac-input px-3 py-2 text-xs"
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('remark')}</div>
+                <textarea
+                  value={remark}
+                  onChange={(e) => setRemark(e.target.value)}
+                  className="h-20 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs outline-none focus:border-zinc-400"
+                />
+              </div>
             </div>
-            <div>
-              <div className="mb-1 text-xs font-semibold text-zinc-600">{t('batchName')}</div>
-              <input value={importBatchName} onChange={(e) => setImportBatchName(e.target.value)} className="ac-input" placeholder="import-epc" />
-            </div>
-            <label className={`ac-btn ac-btn-soft px-3 py-2 text-xs ${!importProductId ? 'opacity-50 pointer-events-none' : ''}`}>
-              {t('importXlsx')}
-              <input
-                type="file"
-                accept=".xlsx"
-                className="hidden"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const base64 = await toBase64(file);
-                  await importExistingXlsx({
-                    productId: Number(importProductId),
-                    batchName: String(importBatchName || '').trim() || undefined,
-                    base64
-                  });
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => setGenerateOpen(false)}>
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                className="ac-btn ac-btn-primary px-3 py-2 text-xs"
+                disabled={loading || !String(corpPrefix || '').trim() || !batchQty}
+                onClick={async () => {
+                  await generateBatch({ corpPrefix: String(corpPrefix).trim(), batchQty, remark: String(remark || '').trim() || undefined });
+                  setGenerateOpen(false);
+                  setBatchQty(1);
+                  setRemark('');
                   await fetchBatches({ limit: 50, offset: 0 });
-                  e.target.value = '';
                 }}
-              />
-            </label>
+              >
+                {loading ? t('generating') : t('generate')}
+              </button>
+            </div>
           </div>
-          <div className="mt-2 text-[11px] text-zinc-500">{t('importExistingEpcHint')}</div>
         </div>
       ) : null}
     </div>
