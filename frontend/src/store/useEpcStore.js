@@ -113,12 +113,11 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
-  generateBatch: async ({ corpPrefix, batchQty, remark }) => {
+  generateBatch: async ({ batchQty, remark } = {}) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
       const body = {
-        corpPrefix,
         batchQty: Number(batchQty),
         remark: remark || undefined
       };
@@ -130,6 +129,37 @@ const useEpcStore = create((set, get) => ({
       const msg = e?.response?.data?.message || tRaw('operationFailed');
       set({ loading: false, error: msg });
       throw e;
+    }
+  },
+
+  exportItemsXlsx: async ({ itemIds } = {}) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const ids = Array.isArray(itemIds) ? itemIds.map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0) : [];
+      const res = await api.post('/epc/items/export-xlsx', { itemIds: ids }, { responseType: 'arraybuffer' });
+      downloadArrayBufferResponse(res, 'epc_items.xlsx');
+      set({ loading: false });
+      return true;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      set({ loading: false, error: msg });
+      return false;
+    }
+  },
+
+  deleteItems: async ({ itemIds } = {}) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const ids = Array.isArray(itemIds) ? itemIds.map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0) : [];
+      const res = await api.post('/epc/items/delete', { itemIds: ids });
+      set({ loading: false });
+      return res?.data?.data || { deletedItems: 0, deletedBatches: 0 };
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      set({ loading: false, error: msg });
+      return null;
     }
   },
 

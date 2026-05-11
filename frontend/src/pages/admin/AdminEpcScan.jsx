@@ -112,14 +112,7 @@ export default function AdminEpcScan() {
     []
   );
 
-  const isItemInSelectedBatch = useCallback(
-    (item) => {
-      if (!selectedBatchId) return true;
-      if (!item?.batchId) return false;
-      return String(item.batchId) === String(selectedBatchId);
-    },
-    [selectedBatchId]
-  );
+  const isItemInSelectedBatch = useCallback(() => true, []);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -184,20 +177,6 @@ export default function AdminEpcScan() {
   };
 
   const selectRow = (item) => {
-    if (selectedBatchId && item?.batchId && String(item.batchId) !== String(selectedBatchId)) {
-      setTopError(
-        t('scanBatchMismatch', {
-          epc: item?.epcCode ? String(item.epcCode) : '',
-          otherBatch: formatBatchLabel(item)
-        })
-      );
-      setTopHint('');
-      setCurrent(null);
-      setSelectedId(null);
-      setStep('epc');
-      inputRef.current?.focus();
-      return;
-    }
     setSelectedId(item?.id ?? null);
     setCurrent(item || null);
     setEditNetWeight(item?.netWeight ? String(item.netWeight) : '');
@@ -243,7 +222,6 @@ export default function AdminEpcScan() {
 
   const patchItem = async (itemId, patch) => {
     const body = { ...(patch || {}) };
-    if (selectedBatchId) body.batchId = Number(selectedBatchId);
     const res = await api.patch(`/epc/items/${Number(itemId)}/production`, body);
     return res?.data?.data || null;
   };

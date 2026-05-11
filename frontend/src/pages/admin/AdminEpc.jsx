@@ -37,12 +37,10 @@ export default function AdminEpc() {
   const canBatchCreate = allow('epc.write', 'epc.batch.create');
   const canBatchView = allow('epc.read', 'epc.write', 'epc.batch.view', 'epc.scan.access', 'epc.production.access');
   const canScan = allow('epc.write', 'epc.scan.access');
-  const canViewCertificate = allow('epc.read', 'epc.write', 'epc.certificate.view');
   const canExportXlsx = allow('epc.write', 'epc.export.xlsx', 'epc.production.access');
   const canEncoding = allow('epc.write', 'epc.encoding');
   const canDelete = allow('epc.write', 'epc.delete');
   const canProduction = allow('epc.write', 'epc.production.access');
-  const canOverride = role === 'super_admin' || role === 'admin' || allow('epc.override');
 
   const {
     corpCodes,
@@ -55,13 +53,12 @@ export default function AdminEpc() {
     fetchBatches,
     fetchItems,
     generateBatch,
-    exportBatchXlsx,
     exportBatchVerifyUrlXlsx,
     importProductionXlsx,
     markProductionDone,
-    deleteBatch,
-    deleteAllBatches,
-    exportBatchXlsxCustom
+    exportBatchXlsxCustom,
+    exportItemsXlsx,
+    deleteItems
   } = useEpcStore((s) => ({
     corpCodes: s.corpCodes,
     batches: s.batches,
@@ -73,25 +70,23 @@ export default function AdminEpc() {
     fetchBatches: s.fetchBatches,
     fetchItems: s.fetchItems,
     generateBatch: s.generateBatch,
-    exportBatchXlsx: s.exportBatchXlsx,
     exportBatchVerifyUrlXlsx: s.exportBatchVerifyUrlXlsx,
     exportBatchXlsxCustom: s.exportBatchXlsxCustom,
     importProductionXlsx: s.importProductionXlsx,
     markProductionDone: s.markProductionDone,
-    deleteBatch: s.deleteBatch,
-    deleteAllBatches: s.deleteAllBatches
+    exportItemsXlsx: s.exportItemsXlsx,
+    deleteItems: s.deleteItems
   }));
 
   const [tab, setTab] = useState('batches');
 
-  const [corpPrefix, setCorpPrefix] = useState('DA01');
   const [batchQty, setBatchQty] = useState(1);
   const [remark, setRemark] = useState('');
   const [generateOpen, setGenerateOpen] = useState(false);
-  const [itemsOpen, setItemsOpen] = useState(false);
-  const [itemsBatch, setItemsBatch] = useState(null);
-  const [itemsOffset, setItemsOffset] = useState(0);
-  const itemsLimit = 20;
+  const [listQuery, setListQuery] = useState('');
+  const [listOffset, setListOffset] = useState(0);
+  const listLimit = 50;
+  const [selectedItemIds, setSelectedItemIds] = useState(() => new Set());
 
   const [exportColsOpen, setExportColsOpen] = useState(false);
   const [exportColsBatch, setExportColsBatch] = useState(null);
@@ -102,11 +97,6 @@ export default function AdminEpc() {
     productionDate: true,
     caiqNumber: true
   });
-
-  const closeItems = useCallback(() => {
-    setItemsOpen(false);
-    setItemsBatch(null);
-  }, []);
 
   const closeExportCols = useCallback(() => {
     setExportColsOpen(false);
@@ -125,28 +115,6 @@ export default function AdminEpc() {
     setExportColsOpen(true);
   }, []);
 
-  const openVerifyUrl = (url) => {
-    const u = String(url || '').trim();
-    if (!u) return;
-    const w = window.open(u, '_blank', 'noopener,noreferrer');
-    if (w) w.opener = null;
-  };
-
-  const openCertificate = async (b) => {
-    const certId = String(b?.certificateId || '').trim();
-    const batchId = b?.id != null ? Number(b.id) : null;
-    if (Number.isFinite(batchId)) {
-      const data = await fetchItems({ batchId, limit: 1, offset: 0 });
-      const firstEpc = String(data?.items?.[0]?.epcCode || '').trim();
-      if (firstEpc) {
-        openVerifyUrl(`/verify?epc=${encodeURIComponent(firstEpc)}`);
-        return;
-      }
-    }
-    if (!certId) return;
-    openVerifyUrl(`/verify/${encodeURIComponent(certId)}`);
-  };
-
   useEffect(() => {
     if (!canBatchCreate && !canBatchView && !canProduction) return;
     void fetchCorpCodes();
@@ -160,32 +128,23 @@ export default function AdminEpc() {
     else if (canProduction) setTab('production');
   }, [canBatchView, canProduction, tab]);
 
-  const openBatchItems = async (b) => {
-    if (!b?.id) return;
-    setItemsBatch(b);
-    setItemsOffset(0);
-    setItemsOpen(true);
-    await fetchItems({ batchId: b.id, limit: itemsLimit, offset: 0 });
-  };
+  useEffect(() => {
+    if (tab !== 'batches' || !canBatchView) return;
+    void fetchItems({ q: listQuery, limit: listLimit, offset: listOffset });
+  }, [canBatchView, fetchItems, listLimit, listOffset, listQuery, tab]);
 
   useEffect(() => {
-    if (!itemsOpen) return;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const onKeyDown = (e) => {
-      if (e.key === 'Escape') closeItems();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [closeItems, itemsOpen]);
-  useEffect(() => {
-    if (!Array.isArray(corpCodes) || corpCodes.length === 0) return;
-    if (corpCodes.includes(corpPrefix)) return;
-    setCorpPrefix(String(corpCodes[0] || '').trim() || 'DA01');
-  }, [corpCodes, corpPrefix]);
+    setSelectedItemIds(new Set());
+  }, [items, listOffset, listQuery]);
+
+  const pageItemIds = useMemo(
+    () =>
+      (Array.isArray(items) ? items : [])
+        .map((it) => Number(it?.id))
+        .filter((n) => Number.isFinite(n) && n > 0),
+    [items]
+  );
+  const allPageSelected = useMemo(() => pageItemIds.length > 0 && pageItemIds.every((id) => selectedItemIds.has(id)), [pageItemIds, selectedItemIds]);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -229,218 +188,160 @@ export default function AdminEpc() {
       {tab === 'batches' && canBatchView ? (
         <div className="rounded-xl border border-zinc-200 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 px-4 py-3">
-            <div className="text-xs font-semibold text-zinc-600">{t('epcBatches')}</div>
-            <div className="flex items-center gap-2">
-              {canBatchCreate ? (
-                <button type="button" className="ac-btn ac-btn-primary px-3 py-2 text-xs" onClick={() => setGenerateOpen(true)}>
-                  {t('generate')}
+            <div className="text-xs font-semibold text-zinc-600">{t('epcItems')}</div>
+            <div className="flex flex-wrap items-center gap-2">
+              {canScan ? (
+                <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => navigate('/admin/epc/scan')}>
+                  {t('scanInput')}
+                </button>
+              ) : null}
+              {canExportXlsx ? (
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                  disabled={loading || selectedItemIds.size === 0}
+                  onClick={() => exportItemsXlsx({ itemIds: Array.from(selectedItemIds) })}
+                >
+                  {t('exportXlsx')}
                 </button>
               ) : null}
               {canDelete ? (
                 <button
                   type="button"
-                  className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
-                  disabled={loading}
+                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                  disabled={loading || selectedItemIds.size === 0}
                   onClick={async () => {
-                    if (!window.confirm(t('confirmDeleteAllEpc'))) return;
-                    const res = await deleteAllBatches({ corpPrefix });
-                    if (res) {
-                      await fetchBatches({ limit: 50, offset: 0 });
-                    }
+                    if (!window.confirm(t('confirmDelete'))) return;
+                    const res = await deleteItems({ itemIds: Array.from(selectedItemIds) });
+                    if (!res) return;
+                    setSelectedItemIds(new Set());
+                    setListOffset(0);
+                    await fetchItems({ q: listQuery, limit: listLimit, offset: 0 });
+                    await fetchBatches({ limit: 50, offset: 0 });
                   }}
                 >
-                  {t('deleteAll')}
+                  {t('delete')}
+                </button>
+              ) : null}
+              {canBatchCreate ? (
+                <button type="button" className="ac-btn ac-btn-primary px-3 py-2 text-xs" onClick={() => setGenerateOpen(true)}>
+                  {t('generate')}
                 </button>
               ) : null}
             </div>
           </div>
+
           <div className="p-4">
+            <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_auto]">
+              <input
+                value={listQuery}
+                onChange={(e) => {
+                  setListQuery(e.target.value);
+                  setListOffset(0);
+                }}
+                placeholder={t('searchEpc')}
+                className="ac-input"
+              />
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                onClick={() => fetchItems({ q: listQuery, limit: listLimit, offset: 0 })}
+              >
+                {t('inquire')}
+              </button>
+            </div>
+
+            <div className="mb-2 text-[11px] text-zinc-500">
+              {t('total', { value: Number(itemTotal) || 0 })}{' '}
+              <span className="text-zinc-400">
+                • Page {Math.floor(listOffset / listLimit) + 1} / {Math.max(1, Math.ceil((Number(itemTotal) || 0) / listLimit))}
+              </span>
+            </div>
+
             <DataTable
               density="compact"
               minWidth={980}
-              rows={Array.isArray(batches) ? batches : []}
-              rowKey={(b) => b.id}
+              rows={Array.isArray(items) ? items : []}
+              rowKey={(it) => it.id}
               loading={loading}
-              emptyContent={t('noBatches')}
+              emptyContent={t('noEpc')}
               columns={[
                 {
-                  id: 'batch',
-                  header: 'Batch',
-                  cell: (b) => <span className="whitespace-nowrap font-mono text-[11px] text-zinc-900">{String(b.batchName || '')}</span>
+                  id: 'select',
+                  header: (
+                    <input
+                      type="checkbox"
+                      checked={allPageSelected}
+                      onChange={() => {
+                        setSelectedItemIds((prev) => {
+                          const next = new Set(prev);
+                          if (allPageSelected) pageItemIds.forEach((id) => next.delete(id));
+                          else pageItemIds.forEach((id) => next.add(id));
+                          return next;
+                        });
+                      }}
+                    />
+                  ),
+                  cell: (it) => {
+                    const id = Number(it?.id);
+                    const checked = Number.isFinite(id) && selectedItemIds.has(id);
+                    return (
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          if (!Number.isFinite(id)) return;
+                          setSelectedItemIds((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(id)) next.delete(id);
+                            else next.add(id);
+                            return next;
+                          });
+                        }}
+                      />
+                    );
+                  }
                 },
+                { id: 'epcCode', header: t('epcCode'), cell: (it) => <span className="font-mono text-[11px]">{String(it.epcCode || '')}</span> },
                 {
-                  id: 'qty',
-                  header: 'Qty Generated',
-                  align: 'right',
-                  cell: (b) => <span className="whitespace-nowrap text-zinc-800">{Number(b.batchQty) || 0}</span>
+                  id: 'status',
+                  header: t('status'),
+                  cell: (it) => {
+                    const s = String(it?.status || '').toUpperCase();
+                    const active = s === 'ACTIVE';
+                    return (
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                          active ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200' : 'bg-zinc-50 text-zinc-700 ring-1 ring-inset ring-zinc-200'
+                        }`}
+                      >
+                        {active ? t('active') : t('inactive')}
+                      </span>
+                    );
+                  }
                 },
-                {
-                  id: 'activated',
-                  header: 'Qty Activated',
-                  align: 'right',
-                  cell: (b) => <span className="whitespace-nowrap text-zinc-800">{Number(b.activeCount) || 0}</span>
-                },
-                {
-                  id: 'inactive',
-                  header: 'Qty Inactive',
-                  align: 'right',
-                  cell: (b) => <span className="whitespace-nowrap text-zinc-800">{Number(b.inactiveCount) || 0}</span>
-                },
-                {
-                  id: 'createdAt',
-                  header: t('createdAt'),
-                  cell: (b) => <span className="whitespace-nowrap text-zinc-700">{formatDateTime(b.createdAt)}</span>
-                },
-                {
-                  id: 'actions',
-                  header: '',
-                  align: 'right',
-                  headerClassName: 'pr-3',
-                  className: 'pr-3',
-                  cell: (b) => (
-                    <div className="flex justify-end gap-2">
-                      <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openBatchItems(b)}>
-                        {t('viewEpc')}
-                      </button>
-                      {canScan ? (
-                        <button
-                          type="button"
-                          className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                          disabled={!b?.id}
-                          onClick={() => navigate(`/admin/epc/scan?batchId=${encodeURIComponent(String(b.id))}`)}
-                        >
-                          {t('scanInput')}
-                        </button>
-                      ) : null}
-                      {canExportXlsx ? (
-                        <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openExportCols(b)}>
-                          {t('exportXlsx')}
-                        </button>
-                      ) : null}
-                      {canDelete ? (
-                        <button
-                          type="button"
-                          className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                          onClick={async () => {
-                            if (!window.confirm(t('confirmDelete'))) return;
-                            await deleteBatch({ batchId: b.id });
-                            await fetchBatches({ limit: 50, offset: 0 });
-                          }}
-                        >
-                          {t('delete')}
-                        </button>
-                      ) : null}
-                    </div>
-                  )
-                }
+                { id: 'createdAt', header: t('createdAt'), cell: (it) => <span className="whitespace-nowrap text-zinc-700">{formatDateTime(it.createdAt)}</span> },
+                { id: 'remark', header: t('remark'), cell: (it) => <span className="text-zinc-800">{it?.batch?.remark ? String(it.batch.remark) : '-'}</span> }
               ]}
             />
-          </div>
-        </div>
-      ) : null}
 
-      {itemsOpen && itemsBatch ? (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
-          role="dialog"
-          aria-modal="true"
-          onClick={closeItems}
-        >
-          <div
-            className="flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-zinc-900">
-                  {t('epcItems')}: {itemsBatch.batchName}
-                </div>
-                <div className="mt-1 text-[11px] text-zinc-500">
-                  {itemsBatch.product?.name || '-'} • {t('certificateId')}: {itemsBatch.certificateId ? <span className="font-mono">{String(itemsBatch.certificateId)}</span> : '-'}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {canEncoding ? (
-                  <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchVerifyUrlXlsx(itemsBatch.id)}>
-                    {t('exportVerifyUrlXlsx')}
-                  </button>
-                ) : null}
-                <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={closeItems}>
-                  {t('close')}
-                </button>
-              </div>
-            </div>
-
-            <div className="min-h-0 flex-1 p-4">
-              <div className="h-full overflow-auto">
-                <DataTable
-                  density="compact"
-                  containerClassName="rounded-lg border border-zinc-200 shadow-none"
-                  minWidth={720}
-                  rows={Array.isArray(items) ? items : []}
-                  rowKey={(it) => it.id}
-                  loading={loading}
-                  loadingContent={t('loading')}
-                  emptyContent={t('noEpc')}
-                  columns={[
-                    {
-                      id: 'epc',
-                      header: t('epcCode'),
-                      cell: (it) => <span className="whitespace-nowrap font-mono text-[11px] text-zinc-900">{String(it.epcCode || '')}</span>
-                    },
-                    {
-                      id: 'runningNo',
-                      header: t('runningNo'),
-                      cell: (it) => <span className="whitespace-nowrap text-zinc-800">{it.runningNo == null ? '-' : String(it.runningNo)}</span>
-                    },
-                    {
-                      id: 'netWeight',
-                      header: t('netWeight'),
-                      cell: (it) => <span className="whitespace-nowrap text-zinc-800">{it.netWeight == null ? '-' : String(it.netWeight)}</span>
-                    },
-                    {
-                      id: 'caiqNumber',
-                      header: t('caiqNumber'),
-                      cell: (it) => <span className="whitespace-nowrap text-zinc-800">{it.caiqNumber == null ? '-' : String(it.caiqNumber)}</span>
-                    }
-                  ]}
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 bg-white px-4 py-3">
-              <div className="text-[11px] text-zinc-500">
-                {t('total', { value: Number(itemTotal) || 0 })}{' '}
-                <span className="text-zinc-400">
-                  • Page {Math.floor(itemsOffset / itemsLimit) + 1} / {Math.max(1, Math.ceil((Number(itemTotal) || 0) / itemsLimit))}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                  disabled={loading || itemsOffset <= 0}
-                  onClick={async () => {
-                    const nextOffset = Math.max(0, itemsOffset - itemsLimit);
-                    setItemsOffset(nextOffset);
-                    await fetchItems({ batchId: itemsBatch.id, limit: itemsLimit, offset: nextOffset });
-                  }}
-                >
-                  {t('prev')}
-                </button>
-                <button
-                  type="button"
-                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                  disabled={loading || itemsOffset + itemsLimit >= (Number(itemTotal) || 0)}
-                  onClick={async () => {
-                    const nextOffset = itemsOffset + itemsLimit;
-                    setItemsOffset(nextOffset);
-                    await fetchItems({ batchId: itemsBatch.id, limit: itemsLimit, offset: nextOffset });
-                  }}
-                >
-                  {t('next')}
-                </button>
-              </div>
+            <div className="mt-3 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                disabled={loading || listOffset <= 0}
+                onClick={() => setListOffset((o) => Math.max(0, o - listLimit))}
+              >
+                {t('prev')}
+              </button>
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                disabled={loading || listOffset + listLimit >= (Number(itemTotal) || 0)}
+                onClick={() => setListOffset((o) => o + listLimit)}
+              >
+                {t('next')}
+              </button>
             </div>
           </div>
         </div>
@@ -649,13 +550,11 @@ export default function AdminEpc() {
             <div className="space-y-3">
               <div>
                 <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('corpCode')}</div>
-                <select value={corpPrefix} onChange={(e) => setCorpPrefix(e.target.value)} className="ac-input px-3 py-2 text-xs">
-                  {(Array.isArray(corpCodes) ? corpCodes : [corpPrefix]).map((c) => (
-                    <option key={c} value={String(c)}>
-                      {String(c)}
-                    </option>
-                  ))}
-                </select>
+                <input
+                  value={String((Array.isArray(corpCodes) && corpCodes[0]) || 'DA01')}
+                  readOnly
+                  className="ac-input px-3 py-2 text-xs"
+                />
               </div>
               <div>
                 <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('batchQty')}</div>
@@ -684,12 +583,14 @@ export default function AdminEpc() {
               <button
                 type="button"
                 className="ac-btn ac-btn-primary px-3 py-2 text-xs"
-                disabled={loading || !String(corpPrefix || '').trim() || !batchQty}
+                disabled={loading || !batchQty}
                 onClick={async () => {
-                  await generateBatch({ corpPrefix: String(corpPrefix).trim(), batchQty, remark: String(remark || '').trim() || undefined });
+                  await generateBatch({ batchQty, remark: String(remark || '').trim() || undefined });
                   setGenerateOpen(false);
                   setBatchQty(1);
                   setRemark('');
+                  setListOffset(0);
+                  await fetchItems({ q: listQuery, limit: listLimit, offset: 0 });
                   await fetchBatches({ limit: 50, offset: 0 });
                 }}
               >

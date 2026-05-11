@@ -74,6 +74,20 @@ router.get(
 );
 
 router.post(
+  '/items/export-xlsx',
+  requirePermission(['epc.write', 'epc.export.xlsx', 'epc.production.access']),
+  auditAction('EXPORT_EPC_ITEMS_XLSX', { targetType: 'epc_item' }),
+  epcController.exportItems
+);
+
+router.post(
+  '/items/delete',
+  requirePermission(['epc.write', 'epc.delete']),
+  auditAction('DELETE_EPC_ITEMS', { targetType: 'epc_item' }),
+  epcController.deleteItems
+);
+
+router.post(
   '/items/production/reset',
   requirePermission(['epc.write', 'epc.scan.access']),
   auditAction('RESET_EPC_ITEM_PRODUCTION', { targetType: 'epc_item' }),

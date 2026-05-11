@@ -647,6 +647,116 @@ async function exportBatchVerifyUrlXlsx({ organizationId, batchId, verifyUrlPref
   return { buffer, filename };
 }
 
+async function exportItemsXlsx({ organizationId, itemIds }) {
+  const orgId = Number(organizationId);
+  const ids = Array.from(new Set((Array.isArray(itemIds) ? itemIds : []).map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0)));
+  if (!ids.length) throw new Error('No items selected');
+
+  const items = await withTimeout(
+    prisma.epcItem.findMany({
+      where: { organizationId: orgId, id: { in: ids } },
+      include: { batch: { select: { remark: true } } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }]
+    }),
+    12_000
+  );
+
+  const codes = (Array.isArray(items) ? items : [])
+    .map((it) => String(it?.epcCode || '').trim())
+    .filter((s) => s);
+
+  const activeSet = new Set();
+  if (codes.length) {
+    const actives = await withTimeout(
+      prisma.tagIdentity.findMany({
+        where: { organizationId: orgId, epc: { in: codes }, unassignedAt: null },
+        select: { epc: true }
+      }),
+      12_000
+    );
+    for (const r of Array.isArray(actives) ? actives : []) {
+      const epc = String(r?.epc || '').trim();
+      if (epc) activeSet.add(epc);
+    }
+  }
+
+  const rows = (Array.isArray(items) ? items : []).map((it) => ({
+    epcCode: String(it.epcCode || '').trim(),
+    status: activeSet.has(String(it.epcCode || '').trim()) ? 'ACTIVE' : 'INACTIVE',
+    createdAt: it.createdAt ? new Date(it.createdAt).toISOString().slice(0, 19).replace('T', ' ') : '',
+    remark: it.batch?.remark == null ? '' : String(it.batch.remark)
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(rows, { header: ['epcCode', 'status', 'createdAt', 'remark'] });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'epc_items');
+  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const filename = `epc_items_${formatYyyyMmDd(new Date())}.xlsx`;
+  return { buffer, filename };
+}
+
+async function deleteItems({ organizationId, itemIds }) {
+  const orgId = Number(organizationId);
+  const ids = Array.from(new Set((Array.isArray(itemIds) ? itemIds : []).map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0)));
+  if (!ids.length) return { deletedItems: 0, deletedBatches: 0 };
+
+  const result = await prisma.$transaction(async (tx) => {
+    const existing = await tx.epcItem.findMany({
+      where: { organizationId: orgId, id: { in: ids } },
+      select: { id: true, batchId: true }
+    });
+    if (!existing.length) return { deletedItems: 0, deletedBatches: 0 };
+
+    const deletedByBatch = new Map();
+    for (const it of existing) {
+      const bid = Number(it.batchId);
+      if (!Number.isFinite(bid)) continue;
+      deletedByBatch.set(bid, (deletedByBatch.get(bid) || 0) + 1);
+    }
+
+    const res = await tx.epcItem.deleteMany({ where: { organizationId: orgId, id: { in: existing.map((r) => Number(r.id)) } } });
+    const deletedItems = Number(res.count) || 0;
+
+    for (const [batchId, dec] of deletedByBatch.entries()) {
+      const d = Number(dec) || 0;
+      if (!d) continue;
+      await tx.$executeRaw(
+        Prisma.sql`UPDATE \`EpcBatch\` SET batchQty = GREATEST(0, batchQty - ${d}) WHERE organizationId = ${orgId} AND id = ${batchId}`
+      );
+    }
+
+    const batchIds = Array.from(deletedByBatch.keys());
+    let deletedBatches = 0;
+    if (batchIds.length) {
+      const rows = await tx.$queryRaw(
+        Prisma.sql`
+          SELECT batchId AS batchId, COUNT(id) AS cnt
+          FROM \`EpcItem\`
+          WHERE organizationId = ${orgId}
+            AND batchId IN (${Prisma.join(batchIds)})
+          GROUP BY batchId
+        `
+      );
+      const remainingByBatch = new Map();
+      for (const r of Array.isArray(rows) ? rows : []) {
+        const bid = Number(r.batchId);
+        if (!Number.isFinite(bid)) continue;
+        remainingByBatch.set(bid, Number(r.cnt) || 0);
+      }
+
+      const emptyBatchIds = batchIds.filter((bid) => (remainingByBatch.get(bid) || 0) <= 0);
+      if (emptyBatchIds.length) {
+        const del = await tx.epcBatch.deleteMany({ where: { organizationId: orgId, id: { in: emptyBatchIds } } });
+        deletedBatches = Number(del.count) || 0;
+      }
+    }
+
+    return { deletedItems, deletedBatches };
+  });
+
+  return result;
+}
+
 async function listBatches({ organizationId, q, limit, offset }) {
   const orgId = Number(organizationId);
   const where = {
@@ -749,6 +859,7 @@ async function listItems({ organizationId, q, batchId, pendingOnly, limit, offse
               corpPrefix: true,
               batchName: true,
               batchQty: true,
+              remark: true,
               certificateId: true,
               sku: true,
               createdAt: true,
@@ -764,7 +875,31 @@ async function listItems({ organizationId, q, batchId, pendingOnly, limit, offse
     2500
   );
 
-  return { items, total, limit, offset };
+  const codes = (Array.isArray(items) ? items : [])
+    .map((it) => String(it?.epcCode || '').trim())
+    .filter((s) => s);
+
+  const activeSet = new Set();
+  if (codes.length) {
+    const actives = await withTimeout(
+      prisma.tagIdentity.findMany({
+        where: { organizationId: orgId, epc: { in: codes }, unassignedAt: null },
+        select: { epc: true }
+      }),
+      2500
+    );
+    for (const r of Array.isArray(actives) ? actives : []) {
+      const epc = String(r?.epc || '').trim();
+      if (epc) activeSet.add(epc);
+    }
+  }
+
+  const itemsWithStatus = (Array.isArray(items) ? items : []).map((it) => ({
+    ...it,
+    status: activeSet.has(String(it?.epcCode || '').trim()) ? 'ACTIVE' : 'INACTIVE'
+  }));
+
+  return { items: itemsWithStatus, total, limit, offset };
 }
 
 const EPC_ITEM_INCLUDE = {
@@ -774,6 +909,7 @@ const EPC_ITEM_INCLUDE = {
       corpPrefix: true,
       batchName: true,
       batchQty: true,
+      remark: true,
       certificateId: true,
       sku: true,
       createdAt: true,
@@ -829,15 +965,6 @@ async function updateItemProduction({ organizationId, itemId, patch, actor, expe
     const err = new Error('EPC item tidak dijumpai');
     err.status = 404;
     throw err;
-  }
-
-  if (expectedBatchId != null) {
-    const expected = Number(expectedBatchId);
-    if (Number.isFinite(expected) && expected > 0 && Number(existing.batchId) !== expected) {
-      const err = new Error('This EPC is recorded in the system, but it is not under the selected batch.');
-      err.status = 409;
-      throw err;
-    }
   }
 
   const data = {};
@@ -1221,8 +1348,10 @@ module.exports = {
   generateEpcBatch,
   exportBatchXlsx,
   exportBatchVerifyUrlXlsx,
+  exportItemsXlsx,
   listBatches,
   listItems,
+  deleteItems,
   getItemByEpc,
   resetItemsProduction,
   updateItemProduction,
