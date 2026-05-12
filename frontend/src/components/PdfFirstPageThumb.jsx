@@ -6,9 +6,15 @@ import useAdminAuthStore from '../store/useAdminAuthStore';
 const cache = new Map();
 
 async function renderFirstPagePngDataUrl({ arrayBuffer, widthPx }) {
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const pdfjs = await import('pdfjs-dist/build/pdf.mjs');
+  if (!pdfjs.GlobalWorkerOptions?.workerSrc) {
+    try {
+      pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+    } catch {
+    }
+  }
   const buf = arrayBuffer instanceof ArrayBuffer ? arrayBuffer : new ArrayBuffer(0);
-  const doc = await pdfjs.getDocument({ data: new Uint8Array(buf), disableWorker: true }).promise;
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise;
   const page = await doc.getPage(1);
   const baseViewport = page.getViewport({ scale: 1 });
   const targetW = Number.isFinite(widthPx) && widthPx > 0 ? widthPx : 520;
@@ -30,7 +36,7 @@ async function renderFirstPagePngDataUrl({ arrayBuffer, widthPx }) {
   return out;
 }
 
-export default function PdfFirstPageThumb({ src, title = 'PDF', className = '', style }) {
+export default function PdfFirstPageThumb({ src, title = 'PDF', className = '', style, fit = 'cover', silent = true }) {
   const { t } = useT();
   const token = useAdminAuthStore((s) => s.token);
   const resolvedSrc = useMemo(() => resolvePublicMediaUrl(src), [src]);
@@ -86,15 +92,16 @@ export default function PdfFirstPageThumb({ src, title = 'PDF', className = '', 
   }, [resolvedSrc, t, token]);
 
   if (!resolvedSrc) {
-    return (
-      <div style={style} className={`flex items-center justify-center rounded-lg border border-dashed border-zinc-200 bg-white/60 text-[11px] text-zinc-500 ${className}`}>
-        {t('notUploaded')}
-      </div>
-    );
+    return <div style={style} className={`h-full w-full ${className}`} />;
   }
 
   if (dataUrl) {
-    return <img src={dataUrl} alt={title} style={style} className={`block h-full w-full rounded-lg object-contain ${className}`} draggable={false} />;
+    const objectFit = fit === 'contain' ? 'object-contain' : 'object-cover';
+    return <img src={dataUrl} alt={title} style={style} className={`block h-full w-full ${objectFit} ${className}`} draggable={false} />;
+  }
+
+  if (silent) {
+    return <div style={style} className={`h-full w-full ${className}`} />;
   }
 
   return (

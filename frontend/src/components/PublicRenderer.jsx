@@ -580,6 +580,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
               key={block.id}
               type="button"
               disabled={!canOpen}
+              aria-label={label}
               onClick={() => {
                 if (!canOpen) return;
                 setPdfTitle(label || 'PDF');
@@ -595,24 +596,9 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                 borderRadius: Number.isFinite(radius) ? radius : 16,
                 opacity
               }}
-              className={`group overflow-hidden text-left ${canOpen ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}
+              className={`group overflow-hidden ${canOpen ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}
             >
-              <div className="flex h-full w-full flex-col p-3">
-                <div className="text-xs font-semibold text-zinc-900">{label}</div>
-                <div className="mt-2 min-h-0 flex-1">
-                  <PdfFirstPageThumb src={resolvedUrl} title={label || 'PDF'} className="h-full w-full" />
-                </div>
-                <div className="mt-2 flex items-center justify-between gap-2">
-                  <div className={`text-[11px] font-semibold ${canOpen ? 'underline' : 'text-zinc-500'}`}>{canOpen ? t('view') : t('notUploaded')}</div>
-                  <div
-                    className={`rounded-full px-2 py-1 text-[10px] font-semibold ${
-                      canOpen ? 'bg-zinc-900/5 text-zinc-700' : 'bg-zinc-900/5 text-zinc-500'
-                    }`}
-                  >
-                    PDF
-                  </div>
-                </div>
-              </div>
+              <PdfFirstPageThumb src={resolvedUrl} title={label || 'PDF'} className="h-full w-full" fit="contain" silent />
             </button>
           );
         }
