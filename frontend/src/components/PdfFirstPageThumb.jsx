@@ -6,11 +6,47 @@ import useAdminAuthStore from '../store/useAdminAuthStore';
 const cache = new Map();
 const CACHE_OK_TTL_MS = 10 * 60 * 1000;
 const CACHE_ERR_TTL_MS = 2000;
+let workerSrcPromise = null;
+let workerSrcBlobUrl = '';
+
+async function ensurePdfWorkerSrc(pdfjs) {
+  const existing = pdfjs?.GlobalWorkerOptions?.workerSrc;
+  if (typeof existing === 'string' && existing.trim()) return existing.trim();
+  if (workerSrcBlobUrl) {
+    try {
+      pdfjs.GlobalWorkerOptions.workerSrc = workerSrcBlobUrl;
+    } catch {
+    }
+    return workerSrcBlobUrl;
+  }
+  if (!workerSrcPromise) {
+    workerSrcPromise = (async () => {
+      const workerUrl = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString();
+      const res = await fetch(workerUrl);
+      if (!res.ok) throw new Error(`Failed to load pdf.worker (${res.status})`);
+      const code = await res.text();
+      const blob = new Blob([code], { type: 'text/javascript' });
+      const blobUrl = URL.createObjectURL(blob);
+      workerSrcBlobUrl = blobUrl;
+      return blobUrl;
+    })().catch((e) => {
+      workerSrcPromise = null;
+      throw e;
+    });
+  }
+  const src = await workerSrcPromise;
+  try {
+    pdfjs.GlobalWorkerOptions.workerSrc = src;
+  } catch {
+  }
+  return src;
+}
 
 async function renderFirstPagePngDataUrl({ arrayBuffer, widthPx }) {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  await ensurePdfWorkerSrc(pdfjs);
   const buf = arrayBuffer instanceof ArrayBuffer ? arrayBuffer : new ArrayBuffer(0);
-  const doc = await pdfjs.getDocument({ data: new Uint8Array(buf), disableWorker: true }).promise;
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise;
   const page = await doc.getPage(1);
   const baseViewport = page.getViewport({ scale: 1 });
   const targetW = Number.isFinite(widthPx) && widthPx > 0 ? widthPx : 520;
