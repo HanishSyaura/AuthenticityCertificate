@@ -755,7 +755,7 @@ async function exportItemsXlsx({ organizationId, itemIds, q, createdFrom, create
   if (!Array.isArray(items) || items.length === 0) throw new Error('No data to export');
 
   const codes = (Array.isArray(items) ? items : [])
-    .map((it) => String(it?.epcCode || '').trim())
+    .map((it) => String(it?.epcCode || '').trim().toUpperCase())
     .filter((s) => s);
 
   const activeSet = new Set();
@@ -1223,14 +1223,14 @@ async function listItems({ organizationId, q, batchId, pendingOnly, createdFrom,
       2500
     );
     for (const r of Array.isArray(actives) ? actives : []) {
-      const epc = String(r?.epc || '').trim();
+      const epc = String(r?.epc || '').trim().toUpperCase();
       if (epc) activeSet.add(epc);
     }
   }
 
   const itemsWithStatus = (Array.isArray(items) ? items : []).map((it) => ({
     ...it,
-    status: activeSet.has(String(it?.epcCode || '').trim()) ? 'ACTIVE' : 'INACTIVE'
+    status: activeSet.has(String(it?.epcCode || '').trim().toUpperCase()) ? 'ACTIVE' : 'INACTIVE'
   }));
 
   return { items: itemsWithStatus, total, limit, offset };
@@ -1490,7 +1490,7 @@ async function importProductionXlsx({ organizationId, batchId, base64 }) {
   const updates = [];
   for (const r of rows) {
     const n = normalizeRowKeys(r);
-    const epcCode = String(n.epccode || n.epc || n.code || '').trim();
+    const epcCode = String(n.epccode || n.epc || n.code || '').trim().toUpperCase();
     if (!epcCode) continue;
     updates.push({
       epcCode,
@@ -1499,7 +1499,14 @@ async function importProductionXlsx({ organizationId, batchId, base64 }) {
       swiftletHouseNumber: pickByPrefix(n, ['swiftlethousenumber', 'swiftlethouse', 'housenumber']),
       netWeight: pickByPrefix(n, ['netweight', 'net_weight']),
       productionDate: toDateOrNull(pickByPrefix(n, ['manufacturedate', 'productiondate', 'dateofproduction', 'production_date'])),
-      caiqNumber: pickByPrefix(n, ['individuallabel(caiq)', 'caiqnumber', 'caiq', 'caiqlabel', 'caiq_label'])
+      caiqNumber: pickByPrefix(n, [
+        'individuallabel(caiq)',
+        'individuallabel',
+        'caiqnumber',
+        'caiq',
+        'caiqlabel',
+        'caiq_label'
+      ])
     });
   }
   if (updates.length === 0) throw new Error('Tiada EPC code dalam Excel');
@@ -1575,7 +1582,7 @@ async function previewBatchImportXlsx({ organizationId, batchId, base64 }) {
   const updates = [];
   for (const r of rows) {
     const n = normalizeRowKeys(r);
-    const epcCode = String(n.epccode || n.epc || n.code || '').trim();
+    const epcCode = String(n.epccode || n.epc || n.code || '').trim().toUpperCase();
     if (!epcCode) continue;
     updates.push({
       epcCode,
@@ -1605,7 +1612,7 @@ async function createImportBatchFromXlsx({
   const updates = [];
   for (const r of rows) {
     const n = normalizeRowKeys(r);
-    const epcCode = String(n.epccode || n.epc || n.code || '').trim();
+    const epcCode = String(n.epccode || n.epc || n.code || '').trim().toUpperCase();
     if (!epcCode) continue;
     updates.push({
       epcCode,
@@ -1614,7 +1621,14 @@ async function createImportBatchFromXlsx({
       swiftletHouseNumber: pickByPrefix(n, ['swiftlethousenumber', 'swiftlethouse', 'housenumber']),
       netWeight: pickByPrefix(n, ['netweight', 'net_weight']),
       productionDate: toDateOrNull(pickRawByPrefix(n, ['manufacturedate', 'productiondate', 'dateofproduction', 'production_date'])),
-      caiqNumber: pickByPrefix(n, ['individuallabel(caiq)', 'caiqnumber', 'caiq', 'caiqlabel', 'caiq_label'])
+      caiqNumber: pickByPrefix(n, [
+        'individuallabel(caiq)',
+        'individuallabel',
+        'caiqnumber',
+        'caiq',
+        'caiqlabel',
+        'caiq_label'
+      ])
     });
   }
   if (updates.length === 0) throw new Error('No EPC code found in the uploaded XLSX.');
@@ -1849,16 +1863,17 @@ async function submitBatchImport({
 
     let updated = 0;
     for (const u of updates) {
+      const data = {};
+      if (u.barcode != null) data.barcode = u.barcode;
+      if (u.batchNumber != null) data.batchNumber = u.batchNumber;
+      if (u.swiftletHouseNumber != null) data.swiftletHouseNumber = u.swiftletHouseNumber;
+      if (u.netWeight != null) data.netWeight = u.netWeight;
+      if (u.productionDate != null) data.productionDate = u.productionDate;
+      if (u.caiqNumber != null) data.caiqNumber = u.caiqNumber;
+      if (Object.keys(data).length === 0) continue;
       const res = await tx.epcItem.updateMany({
         where: { organizationId: orgId, batchId: id, epcCode: u.epcCode },
-        data: {
-          barcode: u.barcode,
-          batchNumber: u.batchNumber,
-          swiftletHouseNumber: u.swiftletHouseNumber,
-          netWeight: u.netWeight,
-          productionDate: u.productionDate,
-          caiqNumber: u.caiqNumber
-        }
+        data
       });
       updated += res.count || 0;
     }
