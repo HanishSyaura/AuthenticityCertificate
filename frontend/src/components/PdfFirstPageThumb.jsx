@@ -1,14 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { resolvePublicMediaUrl } from '../utils/apiBase';
 import { useT } from '../i18n/useT';
+import useAdminAuthStore from '../store/useAdminAuthStore';
 
 const cache = new Map();
 
-async function renderFirstPagePngDataUrl({ url, widthPx }) {
+async function renderFirstPagePngDataUrl({ arrayBuffer, widthPx }) {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to fetch PDF (${res.status})`);
-  const buf = await res.arrayBuffer();
+  const buf = arrayBuffer instanceof ArrayBuffer ? arrayBuffer : new ArrayBuffer(0);
   const doc = await pdfjs.getDocument({ data: new Uint8Array(buf), disableWorker: true }).promise;
   const page = await doc.getPage(1);
   const baseViewport = page.getViewport({ scale: 1 });
@@ -33,6 +32,7 @@ async function renderFirstPagePngDataUrl({ url, widthPx }) {
 
 export default function PdfFirstPageThumb({ src, title = 'PDF', className = '', style }) {
   const { t } = useT();
+  const token = useAdminAuthStore((s) => s.token);
   const resolvedSrc = useMemo(() => resolvePublicMediaUrl(src), [src]);
   const [dataUrl, setDataUrl] = useState('');
   const [error, setError] = useState('');
@@ -40,11 +40,13 @@ export default function PdfFirstPageThumb({ src, title = 'PDF', className = '', 
 
   useEffect(() => {
     let alive = true;
+    const ctrl = new AbortController();
     setError('');
     setDataUrl('');
     if (!resolvedSrc) return () => void 0;
 
-    const cached = cache.get(resolvedSrc);
+    const cacheKey = `${resolvedSrc}|auth:${token ? '1' : '0'}`;
+    const cached = cache.get(cacheKey);
     if (cached && typeof cached === 'object') {
       if (cached.dataUrl) setDataUrl(cached.dataUrl);
       if (cached.error) setError(cached.error);
@@ -54,13 +56,20 @@ export default function PdfFirstPageThumb({ src, title = 'PDF', className = '', 
     setLoading(true);
     const run = async () => {
       try {
-        const out = await renderFirstPagePngDataUrl({ url: resolvedSrc, widthPx: 520 });
-        cache.set(resolvedSrc, { dataUrl: out, error: '' });
+        const res = await fetch(resolvedSrc, {
+          signal: ctrl.signal,
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined
+        });
+        if (!res.ok) throw new Error(`Failed to fetch PDF (${res.status})`);
+        const buf = await res.arrayBuffer();
+        const out = await renderFirstPagePngDataUrl({ arrayBuffer: buf, widthPx: 520 });
+        cache.set(cacheKey, { dataUrl: out, error: '' });
         if (!alive) return;
         setDataUrl(out);
       } catch (e) {
+        if (e?.name === 'AbortError') return;
         const msg = e?.message ? String(e.message) : t('operationFailed');
-        cache.set(resolvedSrc, { dataUrl: '', error: msg });
+        cache.set(cacheKey, { dataUrl: '', error: msg });
         if (!alive) return;
         setError(msg);
       } finally {
@@ -72,8 +81,9 @@ export default function PdfFirstPageThumb({ src, title = 'PDF', className = '', 
 
     return () => {
       alive = false;
+      ctrl.abort();
     };
-  }, [resolvedSrc, t]);
+  }, [resolvedSrc, t, token]);
 
   if (!resolvedSrc) {
     return (
@@ -93,4 +103,3 @@ export default function PdfFirstPageThumb({ src, title = 'PDF', className = '', 
     </div>
   );
 }
-
