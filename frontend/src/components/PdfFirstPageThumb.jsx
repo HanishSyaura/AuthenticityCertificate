@@ -82,12 +82,26 @@ export default function PdfFirstPageThumb({ src, title = 'PDF', className = '', 
         const buf = await res.arrayBuffer();
         const out = await renderFirstPagePngDataUrl({ arrayBuffer: buf, widthPx: 520 });
         cache.set(cacheKey, { dataUrl: out, error: '', ts: Date.now() });
+        try {
+          if (typeof window !== 'undefined') {
+            window.__acPdfThumb = window.__acPdfThumb || {};
+            window.__acPdfThumb[resolvedSrc] = { ok: true, error: '', ts: Date.now() };
+          }
+        } catch {
+        }
         if (!alive) return;
         setDataUrl(out);
       } catch (e) {
         if (e?.name === 'AbortError') return;
         const msg = e?.message ? String(e.message) : t('operationFailed');
         cache.set(cacheKey, { dataUrl: '', error: msg, ts: Date.now() });
+        try {
+          if (typeof window !== 'undefined') {
+            window.__acPdfThumb = window.__acPdfThumb || {};
+            window.__acPdfThumb[resolvedSrc] = { ok: false, error: msg, ts: Date.now() };
+          }
+        } catch {
+        }
         if (!alive) return;
         setError(msg);
       } finally {
@@ -118,7 +132,11 @@ export default function PdfFirstPageThumb({ src, title = 'PDF', className = '', 
     }
     if (error) {
       return (
-        <div style={style} className={`flex h-full w-full items-center justify-center rounded-lg bg-white/60 text-zinc-400 ${className}`}>
+        <div
+          style={style}
+          className={`flex h-full w-full items-center justify-center rounded-lg bg-white/60 text-zinc-400 ${className}`}
+          title={error}
+        >
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path
               d="M7 3h7l3 3v15a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"
