@@ -681,6 +681,32 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     queueTemplatePatch({ layoutJson: nextLayout });
   };
 
+  const alignSelectedFieldX = useCallback(
+    (where) => {
+      if (layoutLocked) return;
+      if (!selectedField) return;
+      const w = Number(selectedField.w) || 0;
+      const maxX = Number(canvasW) - w;
+      const v = String(where || 'left');
+      const x = v === 'right' ? maxX : v === 'center' ? maxX / 2 : 0;
+      updateField({ x: Math.round(x) });
+    },
+    [canvasW, layoutLocked, selectedField, updateField]
+  );
+
+  const alignSelectedFieldY = useCallback(
+    (where) => {
+      if (layoutLocked) return;
+      if (!selectedField) return;
+      const h = Number(selectedField.h) || 0;
+      const maxY = Number(canvasH) - h;
+      const v = String(where || 'top');
+      const y = v === 'bottom' ? maxY : v === 'middle' ? maxY / 2 : 0;
+      updateField({ y: Math.round(y) });
+    },
+    [canvasH, layoutLocked, selectedField, updateField]
+  );
+
   const replacePlaceholders = useCallback((next) => {
     const arr = Array.isArray(next) ? next : [];
     markLocalEdit();
@@ -1103,6 +1129,62 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                   disabled={layoutLocked}
                                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"
                                 />
+                              </div>
+                            </div>
+
+                            <div className="mt-3">
+                              <div className="text-xs font-medium text-zinc-700">{t('alignToPage')}</div>
+                              <div className="mt-1 grid grid-cols-3 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => alignSelectedFieldX('left')}
+                                  disabled={layoutLocked}
+                                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-60"
+                                >
+                                  {t('alignLeft')}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => alignSelectedFieldX('center')}
+                                  disabled={layoutLocked}
+                                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-60"
+                                >
+                                  {t('alignCenter')}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => alignSelectedFieldX('right')}
+                                  disabled={layoutLocked}
+                                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-60"
+                                >
+                                  {t('alignRight')}
+                                </button>
+                              </div>
+                              <div className="mt-2 grid grid-cols-3 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => alignSelectedFieldY('top')}
+                                  disabled={layoutLocked}
+                                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-60"
+                                >
+                                  {t('alignTop')}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => alignSelectedFieldY('middle')}
+                                  disabled={layoutLocked}
+                                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-60"
+                                >
+                                  {t('alignMiddle')}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => alignSelectedFieldY('bottom')}
+                                  disabled={layoutLocked}
+                                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-60"
+                                >
+                                  {t('alignBottom')}
+                                </button>
                               </div>
                             </div>
 
@@ -1959,6 +2041,62 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           disabled={layoutLocked}
                           className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs"
                         />
+                      </div>
+                    </div>
+
+                    <div className="mt-3">
+                      <div className="text-xs font-medium text-zinc-700">{t('alignToPage')}</div>
+                      <div className="mt-1 grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => alignSelectedFieldX('left')}
+                          disabled={layoutLocked}
+                          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-60"
+                        >
+                          {t('alignLeft')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => alignSelectedFieldX('center')}
+                          disabled={layoutLocked}
+                          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-60"
+                        >
+                          {t('alignCenter')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => alignSelectedFieldX('right')}
+                          disabled={layoutLocked}
+                          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-60"
+                        >
+                          {t('alignRight')}
+                        </button>
+                      </div>
+                      <div className="mt-2 grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => alignSelectedFieldY('top')}
+                          disabled={layoutLocked}
+                          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-60"
+                        >
+                          {t('alignTop')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => alignSelectedFieldY('middle')}
+                          disabled={layoutLocked}
+                          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-60"
+                        >
+                          {t('alignMiddle')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => alignSelectedFieldY('bottom')}
+                          disabled={layoutLocked}
+                          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-60"
+                        >
+                          {t('alignBottom')}
+                        </button>
                       </div>
                     </div>
                   </div>
