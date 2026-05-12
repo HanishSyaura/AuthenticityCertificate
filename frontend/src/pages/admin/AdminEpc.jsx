@@ -172,6 +172,22 @@ export default function AdminEpc() {
     dvs_coo_certificate: false
   }));
   const [importLocalError, setImportLocalError] = useState('');
+  const [viewBatchOpen, setViewBatchOpen] = useState(false);
+  const [viewBatch, setViewBatch] = useState(null);
+
+  const getDocTypeLabel = useCallback(
+    (docType) =>
+      docType === 'moh_health_certificate'
+        ? t('mohHealthCertificate')
+        : docType === 'export_permit'
+          ? t('exportPermit')
+          : docType === 'dvs_health_certificate'
+            ? t('dvsHealthCertificate')
+            : docType === 'dvs_coo_certificate'
+              ? t('dvsCooCertificate')
+              : String(docType || '-'),
+    [t]
+  );
 
   const closeExportCols = useCallback(() => {
     setExportColsOpen(false);
@@ -216,6 +232,17 @@ export default function AdminEpc() {
       dvs_coo_certificate: false
     });
     setImportLocalError('');
+  }, []);
+
+  const closeViewBatch = useCallback(() => {
+    setViewBatchOpen(false);
+    setViewBatch(null);
+  }, []);
+
+  const openViewBatch = useCallback((b) => {
+    if (!b) return;
+    setViewBatch(b);
+    setViewBatchOpen(true);
   }, []);
 
   const openImport = useCallback(
@@ -932,10 +959,89 @@ export default function AdminEpc() {
                       {t('supportingCertsUploaded', { value: docCount })}
                     </div>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openViewBatch(b)}>
+                      {t('viewBatch')}
+                    </button>
+                  </div>
                 </div>
               );
             })}
             {(!batches || batches.length === 0) && !loading ? <div className="px-4 py-6 text-xs text-zinc-500">{t('noBatches')}</div> : null}
+          </div>
+        </div>
+      ) : null}
+
+      {viewBatchOpen && viewBatch ? (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          onClick={closeViewBatch}
+        >
+          <div
+            className="w-full max-w-3xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-zinc-900">{t('batchInformation')}</div>
+                <div className="mt-1 truncate text-xs text-zinc-500">{String(viewBatch?.batchName || '-')}</div>
+              </div>
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={closeViewBatch}>
+                {t('close')}
+              </button>
+            </div>
+            <div className="space-y-4 p-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('batchName')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">{String(viewBatch?.batchName || '-')}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('uploadedAt')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">
+                    {viewBatch?.productionUploadedAt ? formatDateTime(viewBatch.productionUploadedAt) : t('notUploaded')}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('product')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">{String(viewBatch?.product?.name || '-')}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('sku')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">{String(viewBatch?.sku || viewBatch?.product?.sku || '-')}</div>
+                </div>
+                <div className="sm:col-span-2">
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('authCertificate')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">{String(viewBatch?.certificateTemplate?.name || '-')}</div>
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-2 text-[11px] font-semibold text-zinc-600">{t('supportingCertificates')}</div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {DOC_TYPES.map((docType) => {
+                    const matching = (Array.isArray(viewBatch?.documents) ? viewBatch.documents : []).find((d) => String(d?.docType || '').trim() === docType);
+                    const url = String(matching?.mediaUrl || '').trim();
+                    return (
+                      <div key={docType} className="rounded-xl border border-zinc-200 bg-white p-3">
+                        <div className="text-xs font-semibold text-zinc-900">{getDocTypeLabel(docType)}</div>
+                        <div className="mt-2">
+                          {url ? (
+                            <a href={url} target="_blank" rel="noreferrer" className="text-[11px] font-semibold underline">
+                              {t('view')}
+                            </a>
+                          ) : (
+                            <div className="text-[11px] text-zinc-500">{t('notUploaded')}</div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       ) : null}
@@ -1111,14 +1217,7 @@ export default function AdminEpc() {
                   {DOC_TYPES.map((docType) => {
                     const uploading = Boolean(importDocUploading?.[docType]);
                     const url = String(importDocUrls?.[docType] || '').trim();
-                    const label =
-                      docType === 'moh_health_certificate'
-                        ? t('mohHealthCertificate')
-                        : docType === 'export_permit'
-                          ? t('exportPermit')
-                          : docType === 'dvs_health_certificate'
-                            ? t('dvsHealthCertificate')
-                            : t('dvsCooCertificate');
+                    const label = getDocTypeLabel(docType);
                     return (
                       <div key={docType} className="rounded-xl border border-zinc-200 bg-white p-3">
                         <div className="text-xs font-semibold text-zinc-900">{label}</div>

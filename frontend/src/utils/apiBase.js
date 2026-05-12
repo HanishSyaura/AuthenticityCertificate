@@ -74,16 +74,29 @@ export function resolvePublicMediaUrl(urlOrPath) {
   const raw = String(urlOrPath || '').trim();
   if (!raw) return '';
 
+  const normalizeUploadsPath = (inputPath) => {
+    const p = String(inputPath || '').trim();
+    if (!p) return '';
+    if (p.startsWith('/api/uploads/')) return p.replace(/^\/api\/uploads\//, '/uploads/');
+    if (p.startsWith('/admin/api/uploads/')) return p.replace(/^\/admin\/api\/uploads\//, '/uploads/');
+    if (p.startsWith('/admin/uploads/')) return p.replace(/^\/admin\/uploads\//, '/uploads/');
+    if (p.startsWith('api/uploads/')) return `/${p.replace(/^api\/uploads\//, 'uploads/')}`;
+    if (p.startsWith('admin/api/uploads/')) return `/${p.replace(/^admin\/api\/uploads\//, 'uploads/')}`;
+    if (p.startsWith('admin/uploads/')) return `/${p.replace(/^admin\/uploads\//, 'uploads/')}`;
+    if (p.startsWith('uploads/')) return `/${p}`;
+    return p;
+  };
+
   if (isAbsoluteUrl(raw)) {
     try {
       const u = new URL(raw);
-      if (u.pathname.startsWith('/api/uploads/')) u.pathname = u.pathname.replace(/^\/api\/uploads\//, '/uploads/');
+      u.pathname = normalizeUploadsPath(u.pathname);
       return maybeUpgradeToHttps(u.toString());
     } catch {
       return maybeUpgradeToHttps(raw);
     }
   }
 
-  const normalized = raw.startsWith('/api/uploads/') ? raw.replace(/^\/api\/uploads\//, '/uploads/') : raw;
+  const normalized = normalizeUploadsPath(raw);
   return resolveApiAssetUrl(normalized);
 }
