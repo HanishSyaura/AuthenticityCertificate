@@ -69,3 +69,21 @@ export function resolveApiAssetUrl(urlOrPath) {
     return raw;
   }
 }
+
+export function resolvePublicMediaUrl(urlOrPath) {
+  const raw = String(urlOrPath || '').trim();
+  if (!raw) return '';
+
+  if (isAbsoluteUrl(raw)) {
+    try {
+      const u = new URL(raw);
+      if (u.pathname.startsWith('/api/uploads/')) u.pathname = u.pathname.replace(/^\/api\/uploads\//, '/uploads/');
+      return maybeUpgradeToHttps(u.toString());
+    } catch {
+      return maybeUpgradeToHttps(raw);
+    }
+  }
+
+  const normalized = raw.startsWith('/api/uploads/') ? raw.replace(/^\/api\/uploads\//, '/uploads/') : raw;
+  return resolveApiAssetUrl(normalized);
+}

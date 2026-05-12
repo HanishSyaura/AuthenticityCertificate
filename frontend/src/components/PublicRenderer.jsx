@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n/useT';
 import { stripHtmlToText } from '../utils/richText';
 import { buildUploadsWebpSrcSet } from '../utils/mediaVariants';
+import { resolvePublicMediaUrl } from '../utils/apiBase';
 import { resolveCmsVideoSource } from '../utils/videoEmbed';
 import PdfLightbox from './PdfLightbox';
+import PdfFirstPageThumb from './PdfFirstPageThumb';
 
 const ImageLightbox = ({ src, onClose }) => {
   useEffect(() => {
@@ -547,6 +549,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
           const batchDocs = Array.isArray(data?.batchDocuments) ? data.batchDocuments : [];
           const row = batchDocs.find((d) => String(d?.docType || '').trim() === docType) || null;
           const url = row?.mediaUrl ? String(row.mediaUrl).trim() : '';
+          const resolvedUrl = resolvePublicMediaUrl(url);
           const labelRaw = String(block.content?.label || '').trim();
           const label =
             labelRaw ||
@@ -571,7 +574,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
           const radius = Number(block.content?.borderRadius ?? 16);
           const opacity = Math.max(0, Math.min(1, Number(block.content?.opacity ?? 1)));
 
-          const canOpen = Boolean(url);
+          const canOpen = Boolean(resolvedUrl);
           return (
             <button
               key={block.id}
@@ -580,7 +583,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
               onClick={() => {
                 if (!canOpen) return;
                 setPdfTitle(label || 'PDF');
-                setPdfSrc(url);
+                setPdfSrc(resolvedUrl);
               }}
               style={{
                 ...style,
@@ -594,8 +597,11 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
               }}
               className={`group overflow-hidden text-left ${canOpen ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}
             >
-              <div className="flex h-full w-full flex-col justify-between p-3">
+              <div className="flex h-full w-full flex-col p-3">
                 <div className="text-xs font-semibold text-zinc-900">{label}</div>
+                <div className="mt-2 min-h-0 flex-1">
+                  <PdfFirstPageThumb src={resolvedUrl} title={label || 'PDF'} className="h-full w-full" />
+                </div>
                 <div className="mt-2 flex items-center justify-between gap-2">
                   <div className={`text-[11px] font-semibold ${canOpen ? 'underline' : 'text-zinc-500'}`}>{canOpen ? t('view') : t('notUploaded')}</div>
                   <div
