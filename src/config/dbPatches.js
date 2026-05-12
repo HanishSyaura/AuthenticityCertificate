@@ -953,6 +953,8 @@ async function ensureAccessControlSchemaCompat() {
     ['epc.encoding', 'Encoding'],
     ['epc.sequence.reset', 'Reset running number'],
     ['epc.delete', 'Delete EPC'],
+    ['epc.cleanup.delete', 'Delete EPC (cleanup related data)'],
+    ['epc.cleanup.delete_all_generated', 'Delete all generated EPC (cleanup related data)'],
     ['epc.production.access', 'Production orders access'],
     ['epc.override', 'Override production fields'],
     ['certificates.read', 'Read certificates'],

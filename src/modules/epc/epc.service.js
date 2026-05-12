@@ -826,11 +826,6 @@ async function deleteItems({ organizationId, itemIds, cleanup }) {
   const ids = Array.from(new Set((Array.isArray(itemIds) ? itemIds : []).map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0)));
   if (!ids.length) return { deletedItems: 0, deletedBatches: 0 };
   const cleanupRequested = Boolean(cleanup);
-  if (cleanupRequested && String(process.env.EPC_DELETE_CLEANUP_ENABLED || '').trim().toLowerCase() !== 'true') {
-    const err = new Error('Cleanup delete is disabled');
-    err.status = 403;
-    throw err;
-  }
 
   const result = await prisma.$transaction(async (tx) => {
     const existing = await tx.epcItem.findMany({
@@ -961,6 +956,127 @@ async function deleteItems({ organizationId, itemIds, cleanup }) {
   });
 
   return result;
+}
+
+async function deleteAllGeneratedBatches({ organizationId, corpPrefix }) {
+  const orgId = Number(organizationId);
+  const prefix = corpPrefix == null ? null : String(corpPrefix || '').trim();
+  if (prefix) {
+    const allowed = getAllowedCorpPrefixes();
+    if (!allowed.includes(prefix)) throw new Error('Corp code tidak dibenarkan');
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const batches = await tx.epcBatch.findMany({
+      where: { organizationId: orgId, origin: 'generated', ...(prefix ? { corpPrefix: prefix } : {}) },
+      select: { id: true, corpPrefix: true, periodKey: true, sku: true }
+    });
+    if (!batches.length) return { deletedBatches: 0, deletedItems: 0, corpPrefixes: prefix ? [prefix] : [] };
+
+    const ids = batches.map((b) => Number(b.id)).filter((n) => Number.isFinite(n));
+    const prefixes = Array.from(new Set(batches.map((b) => String(b.corpPrefix || '').trim()).filter((p) => p)));
+
+    const monthKeys = new Map();
+    const skuKeys = new Map();
+    for (const b of batches) {
+      const corp = String(b.corpPrefix || '').trim();
+      if (!corp) continue;
+      const pk = b.periodKey ? String(b.periodKey || '').trim() : '';
+      if (pk) {
+        monthKeys.set(`${corp}|${pk}`, { corpPrefix: corp, periodKey: pk });
+        continue;
+      }
+      const skuCode = normalizeSkuCode({ sku: b.sku || '' });
+      if (skuCode) skuKeys.set(`${corp}|${skuCode}`, { corpPrefix: corp, skuCode });
+    }
+
+    for (const group of chunkArray(ids, 1000)) {
+      await tx.$executeRaw(
+        Prisma.sql`
+          UPDATE \`TagIdentity\` t
+          JOIN \`EpcItem\` i
+            ON i.organizationId = t.organizationId
+           AND i.epcCode = t.epc
+          JOIN \`EpcBatch\` b
+            ON b.id = i.batchId
+          SET t.epc = NULL, t.unassignedAt = NOW()
+          WHERE t.organizationId = ${orgId}
+            AND b.organizationId = ${orgId}
+            AND b.origin = 'generated'
+            AND i.batchId IN (${Prisma.join(group)})
+        `
+      );
+      await tx.$executeRaw(
+        Prisma.sql`
+          UPDATE \`ScanLog\` s
+          JOIN \`EpcItem\` i
+            ON i.epcCode = s.epc
+          JOIN \`EpcBatch\` b
+            ON b.id = i.batchId
+          SET s.epc = NULL
+          WHERE b.organizationId = ${orgId}
+            AND b.origin = 'generated'
+            AND i.batchId IN (${Prisma.join(group)})
+        `
+      );
+    }
+
+    let deletedItems = 0;
+    for (const group of chunkArray(ids, 1000)) {
+      const res = await tx.epcItem.deleteMany({ where: { organizationId: orgId, batchId: { in: group } } });
+      deletedItems += Number(res.count) || 0;
+    }
+
+    let deletedBatches = 0;
+    for (const group of chunkArray(ids, 1000)) {
+      const res = await tx.epcBatch.deleteMany({ where: { organizationId: orgId, id: { in: group } } });
+      deletedBatches += Number(res.count) || 0;
+    }
+
+    for (const { corpPrefix, periodKey } of monthKeys.values()) {
+      await tx.corpMonthSequence.upsert({
+        where: { organizationId_corpPrefix_periodKey: { organizationId: orgId, corpPrefix, periodKey } },
+        update: {},
+        create: { organizationId: orgId, corpPrefix, periodKey, lastNo: 0n }
+      });
+      const maxExisting = await tx.epcItem.findFirst({
+        where: { organizationId: orgId, batch: { corpPrefix, periodKey } },
+        orderBy: { runningNo: 'desc' },
+        select: { runningNo: true }
+      });
+      const nextLastNo = maxExisting?.runningNo != null ? BigInt(maxExisting.runningNo) : 0n;
+      await tx.corpMonthSequence.update({
+        where: { organizationId_corpPrefix_periodKey: { organizationId: orgId, corpPrefix, periodKey } },
+        data: { lastNo: nextLastNo }
+      });
+    }
+
+    for (const { corpPrefix, skuCode } of skuKeys.values()) {
+      await tx.corpSequence.upsert({
+        where: { organizationId_corpPrefix_skuCode: { organizationId: orgId, corpPrefix, skuCode } },
+        update: {},
+        create: { organizationId: orgId, corpPrefix, skuCode, lastNo: 0n }
+      });
+      const maxExisting = await tx.epcItem.findFirst({
+        where: { organizationId: orgId, epcCode: { startsWith: `${corpPrefix}${skuCode}` } },
+        orderBy: { runningNo: 'desc' },
+        select: { runningNo: true }
+      });
+      const nextLastNo = maxExisting?.runningNo != null ? BigInt(maxExisting.runningNo) : 0n;
+      await tx.corpSequence.update({
+        where: { organizationId_corpPrefix_skuCode: { organizationId: orgId, corpPrefix, skuCode } },
+        data: { lastNo: nextLastNo }
+      });
+    }
+
+    return { deletedBatches, deletedItems, corpPrefixes: prefixes };
+  });
+
+  return {
+    deletedBatches: Number(result.deletedBatches) || 0,
+    deletedItems: Number(result.deletedItems) || 0,
+    corpPrefixes: Array.isArray(result.corpPrefixes) ? result.corpPrefixes : []
+  };
 }
 
 async function listBatches({ organizationId, q, origin, limit, offset }) {
@@ -2010,5 +2126,6 @@ module.exports = {
   deleteBatch,
   importExistingEpc,
   recalculateCorpSequence,
-  deleteAllBatches
+  deleteAllBatches,
+  deleteAllGeneratedBatches
 };

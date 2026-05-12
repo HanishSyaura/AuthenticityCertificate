@@ -390,6 +390,20 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
+  deleteAllGeneratedBatches: async ({ corpPrefix } = {}) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.post('/epc/batches/delete-generated-all', { corpPrefix: corpPrefix || undefined });
+      set({ loading: false, batches: [], batchTotal: 0, items: [], itemTotal: 0, lastGenerated: null });
+      return res?.data?.data;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      set({ loading: false, error: msg });
+      return null;
+    }
+  },
+
   updateBatch: async ({ batchId, patch }) => {
     set({ loading: true, error: null });
     try {

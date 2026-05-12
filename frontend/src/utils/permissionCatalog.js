@@ -31,6 +31,8 @@ export const PERMISSION_GROUPS = [
       'epc.encoding',
       'epc.sequence.reset',
       'epc.delete',
+      'epc.cleanup.delete',
+      'epc.cleanup.delete_all_generated',
       'epc.production.access',
       'epc.override'
     ]

@@ -61,6 +61,13 @@ router.post(
   epcController.deleteAll
 );
 
+router.post(
+  '/batches/delete-generated-all',
+  requirePermission(['epc.write', 'epc.delete']),
+  auditAction('DELETE_EPC_BATCH_GENERATED_ALL', { targetType: 'epc_batch' }),
+  epcController.deleteAllGenerated
+);
+
 router.get(
   '/items',
   requirePermission(['epc.read', 'epc.write', 'epc.batch.view', 'epc.batch.create', 'epc.scan.access', 'epc.production.access']),

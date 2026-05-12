@@ -1,5 +1,6 @@
 const { z } = require('zod');
 const epcService = require('./epc.service');
+const { matchPermission } = require('../../middleware/access.middleware');
 
 const generateSchema = z.object({
   batchQty: z.number().int().positive().max(5000),
@@ -277,6 +278,9 @@ async function exportItems(req, res) {
 async function deleteItems(req, res) {
   try {
     const data = deleteItemsSchema.parse(req.body || {});
+    const owned = req.user?.permissions || [];
+    if (!matchPermission(owned, 'epc.delete')) return res.error('Insufficient permissions', 403);
+    if (data.cleanup === true && !matchPermission(owned, 'epc.cleanup.delete')) return res.error('Insufficient permissions', 403);
     const result = await epcService.deleteItems({ organizationId: req.organization.id, itemIds: data.itemIds, cleanup: data.cleanup });
     res.success(result, 'EPC items deleted');
   } catch (e) {
@@ -480,6 +484,20 @@ async function deleteAll(req, res) {
   }
 }
 
+async function deleteAllGenerated(req, res) {
+  try {
+    const data = deleteAllSchema.parse(req.body || {});
+    const owned = req.user?.permissions || [];
+    if (!matchPermission(owned, 'epc.delete')) return res.error('Insufficient permissions', 403);
+    if (!matchPermission(owned, 'epc.cleanup.delete_all_generated')) return res.error('Insufficient permissions', 403);
+    const result = await epcService.deleteAllGeneratedBatches({ organizationId: req.organization.id, corpPrefix: data.corpPrefix });
+    res.success(result, 'All generated EPC batches deleted');
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    res.error(e.message, 400);
+  }
+}
+
 module.exports = {
   getCorpCodes,
   getNextCertificateId,
@@ -507,5 +525,6 @@ module.exports = {
   deleteBatch,
   importExisting,
   recalculateSequence,
-  deleteAll
+  deleteAll,
+  deleteAllGenerated
 };

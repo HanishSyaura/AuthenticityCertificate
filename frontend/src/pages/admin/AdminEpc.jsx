@@ -42,7 +42,14 @@ export default function AdminEpc() {
   const canScan = allow('epc.write', 'epc.scan.access');
   const canExportXlsx = allow('epc.write', 'epc.export.xlsx', 'epc.production.access');
   const canEncoding = allow('epc.write', 'epc.encoding');
-  const canDelete = allow('epc.write', 'epc.delete');
+  const canDelete = useMemo(() => {
+    if (role === 'super_admin' || hasPermission(perms, '*')) return true;
+    return hasPermission(perms, 'epc.delete') && hasPermission(perms, 'epc.cleanup.delete');
+  }, [perms, role]);
+  const canClearGenerated = useMemo(() => {
+    if (role === 'super_admin' || hasPermission(perms, '*')) return true;
+    return hasPermission(perms, 'epc.delete') && hasPermission(perms, 'epc.cleanup.delete_all_generated');
+  }, [perms, role]);
   const canProduction = allow('epc.write', 'epc.production.access');
   const canBatchImport = allow('epc.write', 'epc.production.access');
 
@@ -66,7 +73,8 @@ export default function AdminEpc() {
     markProductionDone,
     exportBatchXlsxCustom,
     exportItemsXlsx,
-    deleteItems
+    deleteItems,
+    deleteAllGeneratedBatches
   } = useEpcStore((s) => ({
     corpCodes: s.corpCodes,
     batches: s.batches,
@@ -87,7 +95,8 @@ export default function AdminEpc() {
     submitBatchImport: s.submitBatchImport,
     markProductionDone: s.markProductionDone,
     exportItemsXlsx: s.exportItemsXlsx,
-    deleteItems: s.deleteItems
+    deleteItems: s.deleteItems,
+    deleteAllGeneratedBatches: s.deleteAllGeneratedBatches
   }));
 
   const { products, fetchProducts } = useRecordsStore((s) => ({ products: s.products, fetchProducts: s.fetchProducts }));
@@ -107,7 +116,6 @@ export default function AdminEpc() {
   const [listOffset, setListOffset] = useState(0);
   const listLimit = 50;
   const [selectedItemIds, setSelectedItemIds] = useState(() => new Set());
-  const [cleanupDelete, setCleanupDelete] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState(null);
   const [exportItemColsOpen, setExportItemColsOpen] = useState(false);
@@ -345,28 +353,37 @@ export default function AdminEpc() {
                 </button>
               ) : null}
               {canDelete ? (
-                <label className="flex items-center gap-2 text-xs text-zinc-700">
-                  <input type="checkbox" checked={cleanupDelete} onChange={(e) => setCleanupDelete(Boolean(e.target.checked))} />
-                  {t('cleanupRelatedData')}
-                </label>
-              ) : null}
-              {canDelete ? (
                 <button
                   type="button"
                   className="ac-btn ac-btn-soft px-3 py-2 text-xs"
                   disabled={loading || selectedItemIds.size === 0}
                   onClick={async () => {
-                    const ok = cleanupDelete ? window.confirm(t('confirmDeleteEpcCleanup')) : window.confirm(t('confirmDelete'));
-                    if (!ok) return;
-                    const res = await deleteItems({ itemIds: Array.from(selectedItemIds), cleanup: cleanupDelete });
+                    if (!window.confirm(t('confirmDeleteEpcCleanup'))) return;
+                    const res = await deleteItems({ itemIds: Array.from(selectedItemIds), cleanup: true });
                     if (!res) return;
                     setSelectedItemIds(new Set());
-                    setCleanupDelete(false);
                     setListOffset(0);
                     await fetchItems({ q: listQuery, limit: listLimit, offset: 0 });
                   }}
                 >
                   {t('delete')}
+                </button>
+              ) : null}
+              {canClearGenerated ? (
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-soft px-3 py-2 text-xs text-rose-700"
+                  disabled={loading}
+                  onClick={async () => {
+                    if (!window.confirm(t('confirmClearAllGeneratedEpc'))) return;
+                    const res = await deleteAllGeneratedBatches({});
+                    if (!res) return;
+                    setSelectedItemIds(new Set());
+                    setListOffset(0);
+                    await fetchItems({ q: listQuery, limit: listLimit, offset: 0 });
+                  }}
+                >
+                  {t('clearAllGeneratedEpc')}
                 </button>
               ) : null}
               {canBatchCreate ? (
