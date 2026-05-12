@@ -4,6 +4,8 @@ import { useT } from '../i18n/useT';
 import useAdminAuthStore from '../store/useAdminAuthStore';
 
 const cache = new Map();
+const CACHE_OK_TTL_MS = 10 * 60 * 1000;
+const CACHE_ERR_TTL_MS = 2000;
 
 async function renderFirstPagePngDataUrl({ arrayBuffer, widthPx }) {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
@@ -34,6 +36,15 @@ export default function PdfFirstPageThumb({ src, title = 'PDF', className = '', 
   const { t } = useT();
   const token = useAdminAuthStore((s) => s.token);
   const resolvedSrc = useMemo(() => resolvePublicMediaUrl(src), [src]);
+  const debug = useMemo(() => {
+    try {
+      if (typeof window === 'undefined') return false;
+      return new URLSearchParams(window.location.search).get('debugPdfThumb') === '1';
+    } catch {
+      return false;
+    }
+  }, []);
+  const silentEffective = silent && !debug;
   const [dataUrl, setDataUrl] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -47,10 +58,17 @@ export default function PdfFirstPageThumb({ src, title = 'PDF', className = '', 
 
     const cacheKey = `${resolvedSrc}|auth:${token ? '1' : '0'}`;
     const cached = cache.get(cacheKey);
+    const now = Date.now();
     if (cached && typeof cached === 'object') {
-      if (cached.dataUrl) setDataUrl(cached.dataUrl);
-      if (cached.error) setError(cached.error);
-      return () => void 0;
+      const ts = typeof cached.ts === 'number' ? cached.ts : 0;
+      const hasOk = Boolean(cached.dataUrl);
+      const hasErr = Boolean(cached.error);
+      const ttl = hasOk ? CACHE_OK_TTL_MS : hasErr ? CACHE_ERR_TTL_MS : 0;
+      if (ttl > 0 && now - ts < ttl) {
+        if (cached.dataUrl) setDataUrl(cached.dataUrl);
+        if (cached.error) setError(cached.error);
+        return () => void 0;
+      }
     }
 
     setLoading(true);
@@ -63,13 +81,13 @@ export default function PdfFirstPageThumb({ src, title = 'PDF', className = '', 
         if (!res.ok) throw new Error(`Failed to fetch PDF (${res.status})`);
         const buf = await res.arrayBuffer();
         const out = await renderFirstPagePngDataUrl({ arrayBuffer: buf, widthPx: 520 });
-        cache.set(cacheKey, { dataUrl: out, error: '' });
+        cache.set(cacheKey, { dataUrl: out, error: '', ts: Date.now() });
         if (!alive) return;
         setDataUrl(out);
       } catch (e) {
         if (e?.name === 'AbortError') return;
         const msg = e?.message ? String(e.message) : t('operationFailed');
-        cache.set(cacheKey, { dataUrl: '', error: msg });
+        cache.set(cacheKey, { dataUrl: '', error: msg, ts: Date.now() });
         if (!alive) return;
         setError(msg);
       } finally {
@@ -94,7 +112,7 @@ export default function PdfFirstPageThumb({ src, title = 'PDF', className = '', 
     return <img src={dataUrl} alt={title} style={style} className={`block h-full w-full ${objectFit} ${className}`} draggable={false} />;
   }
 
-  if (silent) {
+  if (silentEffective) {
     return <div style={style} className={`h-full w-full ${className}`} />;
   }
 
