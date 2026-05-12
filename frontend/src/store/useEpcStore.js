@@ -163,12 +163,13 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
-  deleteItems: async ({ itemIds } = {}) => {
+  deleteItems: async ({ itemIds, cleanup } = {}) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
       const ids = Array.isArray(itemIds) ? itemIds.map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0) : [];
-      const res = await api.post('/epc/items/delete', { itemIds: ids });
+      const body = { itemIds: ids, ...(cleanup ? { cleanup: true } : {}) };
+      const res = await api.post('/epc/items/delete', body);
       set({ loading: false });
       return res?.data?.data || { deletedItems: 0, deletedBatches: 0 };
     } catch (e) {

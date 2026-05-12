@@ -83,7 +83,10 @@ router.post(
 router.post(
   '/items/delete',
   requirePermission(['epc.write', 'epc.delete']),
-  auditAction('DELETE_EPC_ITEMS', { targetType: 'epc_item' }),
+  auditAction('DELETE_EPC_ITEMS', {
+    targetType: 'epc_item',
+    getMetadata: (req) => ({ cleanup: Boolean(req.body?.cleanup) })
+  }),
   epcController.deleteItems
 );
 

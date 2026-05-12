@@ -360,6 +360,27 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
             </div>
           );
         }
+        if (it.type === 'supporting_document') {
+          const docType = String(it.content?.docType || '').trim();
+          const label =
+            docType === 'moh_health_certificate'
+              ? t('mohHealthCertificate')
+              : docType === 'export_permit'
+                ? t('exportPermit')
+                : docType === 'dvs_health_certificate'
+                  ? t('dvsHealthCertificate')
+                  : docType === 'dvs_coo_certificate'
+                    ? t('dvsCooCertificate')
+                    : t('supportingCertificates');
+          return (
+            <div className="flex h-full w-full items-center justify-center p-2">
+              <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-center">
+                <div className="text-xs font-semibold text-zinc-800">{t('supportingDocument')}</div>
+                <div className="mt-0.5 text-[11px] font-semibold text-zinc-600">{label}</div>
+              </div>
+            </div>
+          );
+        }
         return (
           <div className="flex h-full w-full items-center justify-center text-xs text-zinc-600">{t('unknown')}</div>
         );
@@ -494,6 +515,74 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
                   className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
                 >
                   {t('addSupportingCertificate')}
+                </button>
+              ) : null}
+              {kind === 'landing' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = [
+                      ...safeLayout,
+                      {
+                        id: makeId('supporting-doc'),
+                        type: 'supporting_document',
+                        x: 20,
+                        y: 120,
+                        w: 170,
+                        h: 240,
+                        content: {
+                          docType: 'moh_health_certificate',
+                          label: '',
+                          backgroundColor: '#ffffff',
+                          borderColor: '#e4e4e7',
+                          borderWidth: 1,
+                          borderRadius: 16,
+                          opacity: 1
+                        }
+                      }
+                    ];
+                    setLayout(next);
+                  }}
+                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                >
+                  {t('addSupportingDocument')}
+                </button>
+              ) : null}
+              {kind === 'landing' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const items = [
+                      { docType: 'moh_health_certificate', x: 20, y: 120 },
+                      { docType: 'export_permit', x: 200, y: 120 },
+                      { docType: 'dvs_health_certificate', x: 20, y: 370 },
+                      { docType: 'dvs_coo_certificate', x: 200, y: 370 }
+                    ];
+                    const next = [
+                      ...safeLayout,
+                      ...items.map((it) => ({
+                        id: makeId('supporting-doc'),
+                        type: 'supporting_document',
+                        x: it.x,
+                        y: it.y,
+                        w: 170,
+                        h: 240,
+                        content: {
+                          docType: it.docType,
+                          label: '',
+                          backgroundColor: '#ffffff',
+                          borderColor: '#e4e4e7',
+                          borderWidth: 1,
+                          borderRadius: 16,
+                          opacity: 1
+                        }
+                      }))
+                    ];
+                    setLayout(next);
+                  }}
+                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                >
+                  {t('addSupportingDocuments4')}
                 </button>
               ) : null}
             </>

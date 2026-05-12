@@ -821,15 +821,21 @@ async function exportItemsXlsx({ organizationId, itemIds, q, createdFrom, create
   return { buffer, filename };
 }
 
-async function deleteItems({ organizationId, itemIds }) {
+async function deleteItems({ organizationId, itemIds, cleanup }) {
   const orgId = Number(organizationId);
   const ids = Array.from(new Set((Array.isArray(itemIds) ? itemIds : []).map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0)));
   if (!ids.length) return { deletedItems: 0, deletedBatches: 0 };
+  const cleanupRequested = Boolean(cleanup);
+  if (cleanupRequested && String(process.env.EPC_DELETE_CLEANUP_ENABLED || '').trim().toLowerCase() !== 'true') {
+    const err = new Error('Cleanup delete is disabled');
+    err.status = 403;
+    throw err;
+  }
 
   const result = await prisma.$transaction(async (tx) => {
     const existing = await tx.epcItem.findMany({
       where: { organizationId: orgId, id: { in: ids } },
-      select: { id: true, batchId: true }
+      select: { id: true, batchId: true, epcCode: true }
     });
     if (!existing.length) return { deletedItems: 0, deletedBatches: 0 };
 
@@ -838,6 +844,29 @@ async function deleteItems({ organizationId, itemIds }) {
       const bid = Number(it.batchId);
       if (!Number.isFinite(bid)) continue;
       deletedByBatch.set(bid, (deletedByBatch.get(bid) || 0) + 1);
+    }
+
+    const batchIds = Array.from(deletedByBatch.keys());
+    const batches =
+      cleanupRequested && batchIds.length
+        ? await tx.epcBatch.findMany({
+            where: { organizationId: orgId, id: { in: batchIds } },
+            select: { id: true, corpPrefix: true, periodKey: true, sku: true }
+          })
+        : [];
+
+    if (cleanupRequested) {
+      const epcCodes = Array.from(new Set(existing.map((r) => String(r.epcCode || '').trim()).filter((s) => s)));
+      if (epcCodes.length) {
+        await tx.tagIdentity.updateMany({
+          where: { organizationId: orgId, epc: { in: epcCodes } },
+          data: { epc: null, unassignedAt: new Date() }
+        });
+        await tx.scanLog.updateMany({
+          where: { epc: { in: epcCodes } },
+          data: { epc: null }
+        });
+      }
     }
 
     const res = await tx.epcItem.deleteMany({ where: { organizationId: orgId, id: { in: existing.map((r) => Number(r.id)) } } });
@@ -851,7 +880,6 @@ async function deleteItems({ organizationId, itemIds }) {
       );
     }
 
-    const batchIds = Array.from(deletedByBatch.keys());
     let deletedBatches = 0;
     if (batchIds.length) {
       const rows = await tx.$queryRaw(
@@ -874,6 +902,58 @@ async function deleteItems({ organizationId, itemIds }) {
       if (emptyBatchIds.length) {
         const del = await tx.epcBatch.deleteMany({ where: { organizationId: orgId, id: { in: emptyBatchIds } } });
         deletedBatches = Number(del.count) || 0;
+      }
+    }
+
+    if (cleanupRequested && Array.isArray(batches) && batches.length) {
+      const monthKeys = new Map();
+      const skuKeys = new Map();
+      for (const b of batches) {
+        const corpPrefix = String(b.corpPrefix || '').trim();
+        if (!corpPrefix) continue;
+        const periodKey = b.periodKey ? String(b.periodKey || '').trim() : '';
+        if (periodKey) {
+          monthKeys.set(`${corpPrefix}|${periodKey}`, { corpPrefix, periodKey });
+          continue;
+        }
+        const skuCode = normalizeSkuCode({ sku: b.sku || '' });
+        if (skuCode) skuKeys.set(`${corpPrefix}|${skuCode}`, { corpPrefix, skuCode });
+      }
+
+      for (const { corpPrefix, periodKey } of monthKeys.values()) {
+        await tx.corpMonthSequence.upsert({
+          where: { organizationId_corpPrefix_periodKey: { organizationId: orgId, corpPrefix, periodKey } },
+          update: {},
+          create: { organizationId: orgId, corpPrefix, periodKey, lastNo: 0n }
+        });
+        const maxExisting = await tx.epcItem.findFirst({
+          where: { organizationId: orgId, batch: { corpPrefix, periodKey } },
+          orderBy: { runningNo: 'desc' },
+          select: { runningNo: true }
+        });
+        const nextLastNo = maxExisting?.runningNo != null ? BigInt(maxExisting.runningNo) : 0n;
+        await tx.corpMonthSequence.update({
+          where: { organizationId_corpPrefix_periodKey: { organizationId: orgId, corpPrefix, periodKey } },
+          data: { lastNo: nextLastNo }
+        });
+      }
+
+      for (const { corpPrefix, skuCode } of skuKeys.values()) {
+        await tx.corpSequence.upsert({
+          where: { organizationId_corpPrefix_skuCode: { organizationId: orgId, corpPrefix, skuCode } },
+          update: {},
+          create: { organizationId: orgId, corpPrefix, skuCode, lastNo: 0n }
+        });
+        const maxExisting = await tx.epcItem.findFirst({
+          where: { organizationId: orgId, epcCode: { startsWith: `${corpPrefix}${skuCode}` } },
+          orderBy: { runningNo: 'desc' },
+          select: { runningNo: true }
+        });
+        const nextLastNo = maxExisting?.runningNo != null ? BigInt(maxExisting.runningNo) : 0n;
+        await tx.corpSequence.update({
+          where: { organizationId_corpPrefix_skuCode: { organizationId: orgId, corpPrefix, skuCode } },
+          data: { lastNo: nextLastNo }
+        });
       }
     }
 

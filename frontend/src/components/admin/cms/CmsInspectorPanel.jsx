@@ -231,8 +231,34 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
             </div>
           ) : null}
 
-          {!layoutLocked && selectedBlock.type === 'container' ? (
+          {!layoutLocked && (selectedBlock.type === 'container' || selectedBlock.type === 'supporting_document') ? (
             <div className="space-y-3">
+              {selectedBlock.type === 'supporting_document' ? (
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-700">{t('supportingDocumentType')}</label>
+                    <select
+                      value={String(selectedBlock.content?.docType || 'moh_health_certificate')}
+                      onChange={(e) => updateSelectedContent({ docType: e.target.value })}
+                      className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                    >
+                      <option value="moh_health_certificate">{t('mohHealthCertificate')}</option>
+                      <option value="export_permit">{t('exportPermit')}</option>
+                      <option value="dvs_health_certificate">{t('dvsHealthCertificate')}</option>
+                      <option value="dvs_coo_certificate">{t('dvsCooCertificate')}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-700">{t('title')}</label>
+                    <input
+                      value={String(selectedBlock.content?.label || '')}
+                      onChange={(e) => updateSelectedContent({ label: e.target.value })}
+                      className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                      placeholder=""
+                    />
+                  </div>
+                </div>
+              ) : null}
               {(() => {
                 const fill = String(selectedBlock.content?.backgroundFill || 'solid');
                 const bg = String(selectedBlock.content?.backgroundColor || '#ffffff');
@@ -410,7 +436,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
                 placeholder="https://..."
               />
               {selectedBlock.type === 'video' ? (
-                <div className="mt-1 text-[11px] text-zinc-500">YouTube/Vimeo link akan auto-embed. Untuk HTML5 video, guna URL fail .mp4/.webm atau upload file.</div>
+                <div className="mt-1 text-[11px] text-zinc-500">{t('videoUrlHint')}</div>
               ) : null}
               {selectedBlock.type === 'image' ? (
                 <div className="mt-2">

@@ -61,7 +61,8 @@ const resetItemsProductionSchema = z.object({
 });
 
 const deleteItemsSchema = z.object({
-  itemIds: z.array(z.number().int().positive()).min(1).max(1000)
+  itemIds: z.array(z.number().int().positive()).min(1).max(1000),
+  cleanup: z.boolean().optional()
 });
 
 const exportItemsSchema = z.object({
@@ -276,11 +277,12 @@ async function exportItems(req, res) {
 async function deleteItems(req, res) {
   try {
     const data = deleteItemsSchema.parse(req.body || {});
-    const result = await epcService.deleteItems({ organizationId: req.organization.id, itemIds: data.itemIds });
+    const result = await epcService.deleteItems({ organizationId: req.organization.id, itemIds: data.itemIds, cleanup: data.cleanup });
     res.success(result, 'EPC items deleted');
   } catch (e) {
     if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
-    res.error(e.message, 400);
+    const status = Number(e.status) || 400;
+    res.error(e.message, status);
   }
 }
 

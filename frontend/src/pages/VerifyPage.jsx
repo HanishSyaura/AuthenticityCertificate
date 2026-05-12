@@ -133,6 +133,9 @@ const VerifyPage = () => {
   if (certificate) {
     const batchDocs = Array.isArray(certificate?.batchDocuments) ? certificate.batchDocuments : [];
     const docOrder = ['moh_health_certificate', 'export_permit', 'dvs_health_certificate', 'dvs_coo_certificate'];
+    const hasSupportingDocBlocks = Array.isArray(certificate?.layout)
+      ? certificate.layout.some((b) => b && typeof b === 'object' && b.type === 'supporting_document')
+      : false;
     if (Array.isArray(certificate?.layout)) {
       const pageBg = String(certificate?.certificateTemplate?.backgroundColor || '').trim() || '#ffffff';
       const pageBgUrl = certificate?.certificateTemplate?.background ? String(certificate.certificateTemplate.background) : '';
@@ -154,7 +157,7 @@ const VerifyPage = () => {
           <div className="w-full">
             <PublicRenderer layout={certificate.layout} data={certificate} responsive responsiveMode="viewport" baseWidth={390} />
           </div>
-          {batchDocs.length ? (
+          {!hasSupportingDocBlocks && batchDocs.length ? (
             <div className="mx-auto w-full max-w-screen-md px-4 pb-10 pt-6">
               <div className="rounded-2xl border border-zinc-200 bg-white p-4">
                 <div className="text-sm font-semibold text-zinc-900">{t('supportingCertificates')}</div>
@@ -245,7 +248,7 @@ const VerifyPage = () => {
                       data={certificate}
                     />
                   </div>
-                  {batchDocs.length ? (
+                  {!hasSupportingDocBlocks && batchDocs.length ? (
                     <div className="mx-auto w-full max-w-screen-md px-4 pb-10 pt-6">
                       <div className="rounded-2xl border border-zinc-200 bg-white p-4">
                         <div className="text-sm font-semibold text-zinc-900">{t('supportingCertificates')}</div>

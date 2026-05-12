@@ -107,6 +107,7 @@ export default function AdminEpc() {
   const [listOffset, setListOffset] = useState(0);
   const listLimit = 50;
   const [selectedItemIds, setSelectedItemIds] = useState(() => new Set());
+  const [cleanupDelete, setCleanupDelete] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState(null);
   const [exportItemColsOpen, setExportItemColsOpen] = useState(false);
@@ -344,15 +345,23 @@ export default function AdminEpc() {
                 </button>
               ) : null}
               {canDelete ? (
+                <label className="flex items-center gap-2 text-xs text-zinc-700">
+                  <input type="checkbox" checked={cleanupDelete} onChange={(e) => setCleanupDelete(Boolean(e.target.checked))} />
+                  {t('cleanupRelatedData')}
+                </label>
+              ) : null}
+              {canDelete ? (
                 <button
                   type="button"
                   className="ac-btn ac-btn-soft px-3 py-2 text-xs"
                   disabled={loading || selectedItemIds.size === 0}
                   onClick={async () => {
-                    if (!window.confirm(t('confirmDelete'))) return;
-                    const res = await deleteItems({ itemIds: Array.from(selectedItemIds) });
+                    const ok = cleanupDelete ? window.confirm(t('confirmDeleteEpcCleanup')) : window.confirm(t('confirmDelete'));
+                    if (!ok) return;
+                    const res = await deleteItems({ itemIds: Array.from(selectedItemIds), cleanup: cleanupDelete });
                     if (!res) return;
                     setSelectedItemIds(new Set());
+                    setCleanupDelete(false);
                     setListOffset(0);
                     await fetchItems({ q: listQuery, limit: listLimit, offset: 0 });
                   }}

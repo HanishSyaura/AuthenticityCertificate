@@ -3,6 +3,7 @@ import { useT } from '../i18n/useT';
 import { stripHtmlToText } from '../utils/richText';
 import { buildUploadsWebpSrcSet } from '../utils/mediaVariants';
 import { resolveCmsVideoSource } from '../utils/videoEmbed';
+import PdfLightbox from './PdfLightbox';
 
 const ImageLightbox = ({ src, onClose }) => {
   useEffect(() => {
@@ -334,6 +335,8 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
   const containerRef = useRef(null);
   const [targetW, setTargetW] = useState(null);
   const [lightboxSrc, setLightboxSrc] = useState(null);
+  const [pdfSrc, setPdfSrc] = useState(null);
+  const [pdfTitle, setPdfTitle] = useState('');
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 640px)');
@@ -527,6 +530,75 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                 </div>
               )}
             </div>
+          );
+        }
+      case 'supporting_document':
+        {
+          const docType = String(block.content?.docType || '').trim();
+          const batchDocs = Array.isArray(data?.batchDocuments) ? data.batchDocuments : [];
+          const row = batchDocs.find((d) => String(d?.docType || '').trim() === docType) || null;
+          const url = row?.mediaUrl ? String(row.mediaUrl).trim() : '';
+          const labelRaw = String(block.content?.label || '').trim();
+          const label =
+            labelRaw ||
+            (docType === 'moh_health_certificate'
+              ? t('mohHealthCertificate')
+              : docType === 'export_permit'
+                ? t('exportPermit')
+                : docType === 'dvs_health_certificate'
+                  ? t('dvsHealthCertificate')
+                  : docType === 'dvs_coo_certificate'
+                    ? t('dvsCooCertificate')
+                    : t('supportingCertificates'));
+
+          const fill = String(block.content?.backgroundFill || 'solid');
+          const bg = String(block.content?.backgroundColor || '#ffffff');
+          const from = String(block.content?.gradientFrom || bg || '#ffffff');
+          const to = String(block.content?.gradientTo || '#ffffff');
+          const angleRaw = Number(block.content?.gradientAngle ?? 180);
+          const angle = Number.isFinite(angleRaw) ? Math.max(0, Math.min(360, angleRaw)) : 180;
+          const borderColor = String(block.content?.borderColor || '#e4e4e7');
+          const borderWidth = Number(block.content?.borderWidth ?? 1);
+          const radius = Number(block.content?.borderRadius ?? 16);
+          const opacity = Math.max(0, Math.min(1, Number(block.content?.opacity ?? 1)));
+
+          const canOpen = Boolean(url);
+          return (
+            <button
+              key={block.id}
+              type="button"
+              disabled={!canOpen}
+              onClick={() => {
+                if (!canOpen) return;
+                setPdfTitle(label || 'PDF');
+                setPdfSrc(url);
+              }}
+              style={{
+                ...style,
+                backgroundColor: fill === 'gradient' ? undefined : bg,
+                backgroundImage: fill === 'gradient' ? `linear-gradient(${angle}deg, ${from}, ${to})` : undefined,
+                borderColor,
+                borderWidth: Number.isFinite(borderWidth) ? borderWidth : 1,
+                borderStyle: 'solid',
+                borderRadius: Number.isFinite(radius) ? radius : 16,
+                opacity
+              }}
+              className={`group overflow-hidden text-left ${canOpen ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}
+            >
+              <div className="flex h-full w-full flex-col justify-between p-3">
+                <div className="text-xs font-semibold text-zinc-900">{label}</div>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <div className={`text-[11px] font-semibold ${canOpen ? 'underline' : 'text-zinc-500'}`}>{canOpen ? t('view') : t('notUploaded')}</div>
+                  <div
+                    className={`rounded-full px-2 py-1 text-[10px] font-semibold ${
+                      canOpen ? 'bg-zinc-900/5 text-zinc-700' : 'bg-zinc-900/5 text-zinc-500'
+                    }`}
+                  >
+                    PDF
+                  </div>
+                </div>
+              </div>
+            </button>
           );
         }
       case 'certificate':
@@ -903,6 +975,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
     <>
       {content}
       {lightboxSrc ? <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} /> : null}
+      {pdfSrc ? <PdfLightbox src={pdfSrc} title={pdfTitle || 'PDF'} onClose={() => setPdfSrc(null)} /> : null}
     </>
   );
 };
