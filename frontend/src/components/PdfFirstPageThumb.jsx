@@ -6,15 +6,9 @@ import useAdminAuthStore from '../store/useAdminAuthStore';
 const cache = new Map();
 
 async function renderFirstPagePngDataUrl({ arrayBuffer, widthPx }) {
-  const pdfjs = await import('pdfjs-dist/build/pdf.mjs');
-  if (!pdfjs.GlobalWorkerOptions?.workerSrc) {
-    try {
-      pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
-    } catch {
-    }
-  }
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const buf = arrayBuffer instanceof ArrayBuffer ? arrayBuffer : new ArrayBuffer(0);
-  const doc = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise;
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(buf), disableWorker: true }).promise;
   const page = await doc.getPage(1);
   const baseViewport = page.getViewport({ scale: 1 });
   const targetW = Number.isFinite(widthPx) && widthPx > 0 ? widthPx : 520;
