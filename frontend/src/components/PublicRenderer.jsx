@@ -275,6 +275,15 @@ function formatYmdValue(input) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
+function formatNetWeightValue(input) {
+  if (input == null) return '';
+  const s = String(input ?? '').trim();
+  if (!s) return '';
+  const m = s.match(/^([0-9]+(?:\.[0-9]+)?)\s*(g)?$/i);
+  if (m) return `${m[1]} g`;
+  return s;
+}
+
 function applyFormatter(token, value, locale) {
   const raw = String(token || '').trim();
   if (!raw) return value;
@@ -620,7 +629,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
           const netWeightRaw = data?.epcItem?.netWeight ?? null;
           const caiqNumberRaw = data?.epcItem?.caiqNumber ?? null;
           const productionDateRaw = data?.epcItem?.productionDate ?? null;
-          const netWeightText = netWeightRaw == null ? '' : String(netWeightRaw).trim();
+          const netWeightText = formatNetWeightValue(netWeightRaw);
           const caiqNumberText = caiqNumberRaw == null ? '' : String(caiqNumberRaw).trim();
           const productionDateText = formatYmdValue(productionDateRaw);
           const showEpcDetails = Boolean(netWeightText || caiqNumberText || productionDateText);
@@ -783,8 +792,9 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                         if (source === 'product') {
                           const bindPath = String(ph?.bindPath || '').trim();
                           if (bindPath) {
-                            effectivePath = bindPath;
-                            const v = getValue(bindPath, {
+                            const normalizedBindPath = bindPath.startsWith('templateData.') ? `certificate.${bindPath}` : bindPath;
+                            effectivePath = normalizedBindPath;
+                            const v = getValue(normalizedBindPath, {
                               product: dataForTemplate?.product || null,
                               batch: dataForTemplate?.batch || null,
                               certificate: dataForTemplate || null,
@@ -796,18 +806,23 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                       }
                       const effectivePathLower = String(effectivePath || '').trim().toLowerCase();
                       const isEpcProductionDate = effectivePathLower === 'epcitem.productiondate';
+                      const isEpcNetWeight = effectivePathLower === 'epcitem.netweight';
                       const isEpcDash =
-                        effectivePathLower === 'epcitem.netweight' ||
+                        isEpcNetWeight ||
                         effectivePathLower === 'epcitem.caiqnumber' ||
                         isEpcProductionDate;
                       if (isEpcProductionDate) {
                         val = formatYmdValue(val);
                       }
+                      if (isEpcNetWeight) {
+                        val = formatNetWeightValue(val);
+                      }
                       if (!String(val || '').trim() && isEpcDash) {
                         val = '-';
                       }
                       const hasValue = String(val || '').trim().length > 0;
-                      if (!hasValue && source !== 'static' && source !== 'title') return null;
+                      const hasPrefix = String(prefixHtml || '').trim().length > 0;
+                      if (!hasValue && !hasPrefix && source !== 'static' && source !== 'title') return null;
                       const valueHtmlRaw =
                         source === 'static' || source === 'manual' || source === 'batch' || source === 'title' ? sanitizeLimitedHtml(val) : escapeTextToHtml(val);
                       const valueHtml = inlineizeHtml(valueHtmlRaw);

@@ -300,6 +300,36 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
 
   const safePreview = useMemo(() => {
     const list = Array.isArray(placeholders) ? placeholders : [];
+    const assigned = assignedBatchIds instanceof Set ? assignedBatchIds : new Set();
+    const previewBatch =
+      (Array.isArray(batches) ? batches : []).find((b) => assigned.has(String(b?.id ?? ''))) || null;
+    const batchTemplateDataRaw = previewBatch?.templateData;
+    const batchTemplateDataBase =
+      batchTemplateDataRaw && typeof batchTemplateDataRaw === 'object' && !Array.isArray(batchTemplateDataRaw) ? batchTemplateDataRaw : {};
+    const batchTemplateData = {
+      ...batchTemplateDataBase,
+      ...(batchTemplateDataBase.swiftletHouseNumb == null && batchTemplateDataBase.swiftletHouseNumber != null
+        ? { swiftletHouseNumb: batchTemplateDataBase.swiftletHouseNumber }
+        : {}),
+      ...(batchTemplateDataBase.swiftletHouseNumber == null && batchTemplateDataBase.swiftletHouseNumb != null
+        ? { swiftletHouseNumber: batchTemplateDataBase.swiftletHouseNumb }
+        : {})
+    };
+    const getBatchTemplateValue = (key) => {
+      const k = String(key || '').trim();
+      if (!k) return '';
+      const v = batchTemplateData?.[k];
+      if (v != null && String(v).trim()) return String(v);
+      if (k === 'swiftletHouseNumb') {
+        const alt = batchTemplateData?.swiftletHouseNumber;
+        if (alt != null && String(alt).trim()) return String(alt);
+      }
+      if (k === 'swiftletHouseNumber') {
+        const alt = batchTemplateData?.swiftletHouseNumb;
+        if (alt != null && String(alt).trim()) return String(alt);
+      }
+      return '';
+    };
     const fallback = {
       certificateId: String(selected?.certificateId || '').trim() || (selected?.id != null ? `CERT-${selected.id}` : 'CERT-0001'),
       status: 'valid',
@@ -323,13 +353,21 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     };
     const base = fallback;
     const templateData = {};
+    const evalRoot = {
+      product: base.product || null,
+      batch: { ...(base.batch || {}), templateData: batchTemplateData },
+      certificate: { ...(base || {}), templateData: batchTemplateData },
+      epcItem: base.epcItem || null,
+      templateData: batchTemplateData
+    };
     for (const p of list) {
       const key = String(p?.key || '').trim();
       if (!key) continue;
       const source = String(p?.source || '').trim();
       const bindPath = String(p?.bindPath || '').trim();
       if (source === 'product') {
-        templateData[key] = bindPath ? getValue(bindPath, base) : '';
+        const normalizedBindPath = bindPath.startsWith('templateData.') ? `certificate.${bindPath}` : bindPath;
+        templateData[key] = normalizedBindPath ? getValue(normalizedBindPath, evalRoot) : '';
         continue;
       }
       if (source === 'static' || source === 'title') {
@@ -341,13 +379,13 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         continue;
       }
       if (source === 'batch') {
-        templateData[key] = sampleBatchValueByKey(key);
+        templateData[key] = getBatchTemplateValue(key) || sampleBatchValueByKey(key);
         continue;
       }
       templateData[key] = '';
     }
     return { ...base, templateData: { ...(base.templateData || {}), ...templateData } };
-  }, [placeholders, selected?.certificateId, selected?.id]);
+  }, [assignedBatchIds, batches, placeholders, selected?.certificateId, selected?.id]);
 
   const canvasItems = useMemo(() => {
     const layout = Array.isArray(draftLayout) ? draftLayout : [];

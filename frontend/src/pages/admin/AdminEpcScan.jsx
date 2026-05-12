@@ -25,6 +25,15 @@ function hasAnyDigit(s) {
   return /\d/.test(String(s || ''));
 }
 
+function formatNetWeightValue(input) {
+  if (input == null) return '';
+  const s = String(input ?? '').trim();
+  if (!s) return '';
+  const m = s.match(/^([0-9]+(?:\.[0-9]+)?)\s*(g)?$/i);
+  if (m) return `${m[1]} g`;
+  return s;
+}
+
 function isSkipToken(raw) {
   const s = String(raw || '').trim().toUpperCase();
   return s === 'SKIP' || s === 'NEXT' || s === 'NA' || s === 'N/A';
@@ -349,8 +358,9 @@ export default function AdminEpcScan() {
           setTopError(t('scanInvalidNetWeight'));
           return;
         }
+        const normalized = formatNetWeightValue(value);
         upsertRow(current, { saving: true, rowError: '' });
-        const updated = await patchItem(current.id, { netWeight: value });
+        const updated = await patchItem(current.id, { netWeight: normalized });
         upsertRow(updated, { saving: false, rowError: '' });
         setCurrent(updated);
         const nxt = nextMissingStep(updated);
@@ -485,7 +495,7 @@ export default function AdminEpcScan() {
     try {
       upsertRow(selectedRow, { saving: true, rowError: '' });
       const patch = {
-        netWeight: editNetWeight ? String(editNetWeight).trim() : null,
+        netWeight: editNetWeight ? formatNetWeightValue(editNetWeight) : null,
         caiqNumber: editCaiq ? String(editCaiq).trim() : null,
         productionDate: editProductionDate ? String(editProductionDate).trim() : null
       };
@@ -685,7 +695,7 @@ export default function AdminEpcScan() {
               </div>
               <div>
                 <div className="text-[11px] text-zinc-500">{t('netWeight')}</div>
-                <div className="truncate text-xs text-zinc-900">{current?.netWeight ? String(current.netWeight) : '-'}</div>
+                <div className="truncate text-xs text-zinc-900">{current?.netWeight ? formatNetWeightValue(current.netWeight) : '-'}</div>
               </div>
               <div>
                 <div className="text-[11px] text-zinc-500">{t('caiqNo')}</div>
@@ -756,7 +766,7 @@ export default function AdminEpcScan() {
                     )
                   },
                   { id: 'epcCode', header: t('epcCode'), cell: (it) => <span className="font-mono text-xs">{it.epcCode}</span> },
-                  { id: 'netWeight', header: t('netWeight'), cell: (it) => <span className="text-sm">{it.netWeight || '-'}</span> },
+                  { id: 'netWeight', header: t('netWeight'), cell: (it) => <span className="text-sm">{it.netWeight ? formatNetWeightValue(it.netWeight) : '-'}</span> },
                   { id: 'caiqNumber', header: t('caiqNo'), cell: (it) => <span className="text-sm">{it.caiqNumber || '-'}</span> },
                   {
                     id: 'fillStatus',
@@ -804,7 +814,7 @@ export default function AdminEpcScan() {
                 },
                 { id: 'epcCode', header: t('epcCode'), cell: (it) => <span className="font-mono text-xs">{it.epcCode}</span> },
                 { id: 'batchName', header: t('batchName'), cell: (it) => <span className="text-sm">{it.batch?.batchName || '-'}</span> },
-                { id: 'netWeight', header: t('netWeight'), cell: (it) => <span className="text-sm">{it.netWeight || '-'}</span> },
+                { id: 'netWeight', header: t('netWeight'), cell: (it) => <span className="text-sm">{it.netWeight ? formatNetWeightValue(it.netWeight) : '-'}</span> },
                 { id: 'caiqNumber', header: t('caiqNo'), cell: (it) => <span className="text-sm">{it.caiqNumber || '-'}</span> },
                 {
                   id: 'productionDate',

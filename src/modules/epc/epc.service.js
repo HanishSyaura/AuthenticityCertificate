@@ -1587,6 +1587,7 @@ function mergeTemplateMetaAliases(input) {
   const next = { ...base };
   const batchNumber = base.batchNumber != null ? String(base.batchNumber).trim() : '';
   const swiftletHouseNumber = base.swiftletHouseNumber != null ? String(base.swiftletHouseNumber).trim() : '';
+  const swiftletHouseNumb = base.swiftletHouseNumb != null ? String(base.swiftletHouseNumb).trim() : '';
   const manufactureDate = base.manufactureDate != null ? String(base.manufactureDate).trim() : '';
   if (batchNumber && (next.batch_number == null || String(next.batch_number).trim() === '')) next.batch_number = batchNumber;
   if (batchNumber && (next.batchnumber == null || String(next.batchnumber).trim() === '')) next.batchnumber = batchNumber;
@@ -1599,6 +1600,8 @@ function mergeTemplateMetaAliases(input) {
   if (swiftletHouseNumber && (next.swiftletHouseNo == null || String(next.swiftletHouseNo).trim() === '')) next.swiftletHouseNo = swiftletHouseNumber;
   if (swiftletHouseNumber && (next.swiftlet_house_no == null || String(next.swiftlet_house_no).trim() === ''))
     next.swiftlet_house_no = swiftletHouseNumber;
+  if (swiftletHouseNumber && (next.swiftletHouseNumb == null || String(next.swiftletHouseNumb).trim() === '')) next.swiftletHouseNumb = swiftletHouseNumber;
+  if (swiftletHouseNumb && (next.swiftletHouseNumber == null || String(next.swiftletHouseNumber).trim() === '')) next.swiftletHouseNumber = swiftletHouseNumb;
   if (manufactureDate && (next.manufacture_date == null || String(next.manufacture_date).trim() === '')) next.manufacture_date = manufactureDate;
   if (manufactureDate && (next.manufacturedate == null || String(next.manufacturedate).trim() === '')) next.manufacturedate = manufactureDate;
 
@@ -1616,6 +1619,7 @@ function mergeTemplateMetaAliases(input) {
   if (swiftletHouseNumber2 && (next.swiftletHouseNo == null || String(next.swiftletHouseNo).trim() === '')) next.swiftletHouseNo = swiftletHouseNumber2;
   if (swiftletHouseNumber2 && (next.swiftlet_house_no == null || String(next.swiftlet_house_no).trim() === ''))
     next.swiftlet_house_no = swiftletHouseNumber2;
+  if (swiftletHouseNumber2 && (next.swiftletHouseNumb == null || String(next.swiftletHouseNumb).trim() === '')) next.swiftletHouseNumb = swiftletHouseNumber2;
   if (manufactureDate2 && (next.manufactureDate == null || String(next.manufactureDate).trim() === '')) next.manufactureDate = manufactureDate2;
   if (manufactureDate2 && (next.manufacturedate == null || String(next.manufacturedate).trim() === '')) next.manufacturedate = manufactureDate2;
   return next;
