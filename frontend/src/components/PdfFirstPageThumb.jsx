@@ -113,7 +113,30 @@ export default function PdfFirstPageThumb({ src, title = 'PDF', className = '', 
   }
 
   if (silentEffective) {
-    return <div style={style} className={`h-full w-full ${className}`} />;
+    if (loading) {
+      return <div style={style} className={`h-full w-full animate-pulse rounded-lg bg-white/60 ${className}`} />;
+    }
+    if (error) {
+      return (
+        <div style={style} className={`flex h-full w-full items-center justify-center rounded-lg bg-white/60 text-zinc-400 ${className}`}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M7 3h7l3 3v15a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            />
+            <path d="M14 3v4a1 1 0 0 0 1 1h4" stroke="currentColor" strokeWidth="1.5" />
+            <path
+              d="M8.5 14.5h7M8.5 17.5h5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
+        </div>
+      );
+    }
+    return <div style={style} className={`h-full w-full rounded-lg bg-white/40 ${className}`} />;
   }
 
   return (
