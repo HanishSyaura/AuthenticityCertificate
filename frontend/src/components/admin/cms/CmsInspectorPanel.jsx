@@ -5,7 +5,27 @@ import { isFileTooLarge, MAX_UPLOAD_MB } from '../../../utils/uploadLimits';
 import RichTextEditor from '../RichTextEditor';
 import ImageCropModal from './ImageCropModal';
 
-export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, clearSelection, templates, layoutLocked = false, onCollapse }) {
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function snap(n, grid) {
+  if (!grid) return n;
+  return Math.round(n / grid) * grid;
+}
+
+export default function CmsInspectorPanel({
+  selectedBlock,
+  layout,
+  setLayout,
+  clearSelection,
+  templates,
+  layoutLocked = false,
+  canvasWidth = 390,
+  canvasHeight = 844,
+  grid = 4,
+  onCollapse
+}) {
   const { t } = useT();
   const { uploadMedia } = useUploadsStore((s) => ({ uploadMedia: s.uploadMedia }));
   const [uploading, setUploading] = useState(false);
@@ -69,6 +89,39 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
       setLayout(next);
     },
     [layout, selectedBlock?.id, setLayout]
+  );
+
+  const alignSelectedToPage = useCallback(
+    ({ hAlign, vAlign }) => {
+      if (layoutLocked) return;
+      if (!selectedBlock?.id) return;
+      const cw = Number(canvasWidth) > 0 ? Number(canvasWidth) : 390;
+      const ch = Number(canvasHeight) > 0 ? Number(canvasHeight) : 844;
+      const w = Number(selectedBlock.w) || 0;
+      const h = Number(selectedBlock.h) || 0;
+      let x = Number(selectedBlock.x) || 0;
+      let y = Number(selectedBlock.y) || 0;
+
+      const ha = hAlign ? String(hAlign) : null;
+      const va = vAlign ? String(vAlign) : null;
+
+      if (ha === 'left') x = 0;
+      else if (ha === 'center') x = (cw - w) / 2;
+      else if (ha === 'right') x = cw - w;
+
+      if (va === 'top') y = 0;
+      else if (va === 'middle') y = (ch - h) / 2;
+      else if (va === 'bottom') y = ch - h;
+
+      const maxX = Math.max(0, cw - w);
+      const maxY = Math.max(0, ch - h);
+      x = clamp(snap(x, grid), 0, maxX);
+      y = clamp(snap(y, grid), 0, maxY);
+
+      const next = (Array.isArray(layout) ? layout : []).map((b) => (b.id === selectedBlock.id ? { ...b, x, y } : b));
+      setLayout(next);
+    },
+    [canvasHeight, canvasWidth, grid, layout, layoutLocked, selectedBlock?.h, selectedBlock?.id, selectedBlock?.w, selectedBlock?.x, selectedBlock?.y, setLayout]
   );
 
   const updateBlockContentById = useCallback(
@@ -172,6 +225,62 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
               >
                 {t('bringForward')}
               </button>
+            </div>
+
+            <div className="mt-3">
+              <div className="text-[11px] font-semibold text-zinc-600">{t('alignToPage')}</div>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => alignSelectedToPage({ hAlign: 'left' })}
+                  disabled={layoutLocked}
+                  className="rounded-lg border border-zinc-200 bg-white px-2 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
+                >
+                  {t('alignLeft')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => alignSelectedToPage({ hAlign: 'center' })}
+                  disabled={layoutLocked}
+                  className="rounded-lg border border-zinc-200 bg-white px-2 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
+                >
+                  {t('alignCenter')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => alignSelectedToPage({ hAlign: 'right' })}
+                  disabled={layoutLocked}
+                  className="rounded-lg border border-zinc-200 bg-white px-2 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
+                >
+                  {t('alignRight')}
+                </button>
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => alignSelectedToPage({ vAlign: 'top' })}
+                  disabled={layoutLocked}
+                  className="rounded-lg border border-zinc-200 bg-white px-2 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
+                >
+                  {t('alignTop')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => alignSelectedToPage({ vAlign: 'middle' })}
+                  disabled={layoutLocked}
+                  className="rounded-lg border border-zinc-200 bg-white px-2 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
+                >
+                  {t('alignMiddle')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => alignSelectedToPage({ vAlign: 'bottom' })}
+                  disabled={layoutLocked}
+                  className="rounded-lg border border-zinc-200 bg-white px-2 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
+                >
+                  {t('alignBottom')}
+                </button>
+              </div>
             </div>
           </div>
 

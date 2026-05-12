@@ -104,6 +104,8 @@ export default function AdminCmsBuilder() {
 
   const [selectedBlockId, setSelectedBlockId] = useState(null);
   const [viewMode, setViewMode] = useState('split');
+  const canvasWidth = 390;
+  const canvasHeight = 844;
   const [pagesOpen, setPagesOpen] = useState(() => {
     try {
       return localStorage.getItem('ac_cms_pages_open_v1') !== '0';
@@ -450,6 +452,9 @@ export default function AdminCmsBuilder() {
             clearSelection={() => setSelectedBlockId(null)}
             templates={templates}
             layoutLocked={layoutLocked}
+            canvasWidth={canvasWidth}
+            canvasHeight={canvasHeight}
+            grid={4}
             onCollapse={() => setInspectorOpen(false)}
           />
         ) : null}
