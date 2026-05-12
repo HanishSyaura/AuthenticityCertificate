@@ -101,6 +101,15 @@ function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
+function sampleBatchValueByKey(key) {
+  const k = String(key || '').trim().toLowerCase();
+  if (!k) return '';
+  if (k.includes('swiftlet') || k.includes('house')) return '160212';
+  if (k.includes('manufacture') || k.includes('production') || k.includes('date')) return '2025-07-11';
+  if (k.includes('batch')) return 'MSAL 24LT';
+  return 'SAMPLE';
+}
+
 function useElementSize(ref) {
   const [size, setSize] = useState({ w: 0, h: 0 });
 
@@ -332,7 +341,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         continue;
       }
       if (source === 'batch') {
-        templateData[key] = '';
+        templateData[key] = sampleBatchValueByKey(key);
         continue;
       }
       templateData[key] = '';

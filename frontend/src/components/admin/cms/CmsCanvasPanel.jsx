@@ -152,6 +152,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
   const supportingTplCacheRef = useRef(new Map());
 
   const [previewEpc, setPreviewEpc] = useState('');
+  const [previewEpcInput, setPreviewEpcInput] = useState('');
   const [previewData, setPreviewData] = useState(null);
   const [previewError, setPreviewError] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -187,6 +188,29 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
     return Array.isArray(previewLayout) && previewLayout.length ? previewLayout : layout;
   }, [layout, previewLayout]);
 
+  const loadPreviewByEpc = async (rawEpc) => {
+    const epc = String(rawEpc || '').trim();
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setPreviewEpc(epc);
+    if (!epc) {
+      setPreviewData(null);
+      setPreviewLoading(false);
+      return;
+    }
+    try {
+      const base = getPublicApiBaseUrl();
+      const out = await axios.get(`${base}/resolve`, { params: { epc } });
+      setPreviewData(out?.data?.data || null);
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || t('failedToLoadCertificate');
+      setPreviewData(null);
+      setPreviewError(msg);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (viewMode !== 'preview' && viewMode !== 'split') return;
     if (!token) return;
@@ -200,14 +224,12 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
         const epc = res?.data?.data?.items?.[0]?.epcCode ? String(res.data.data.items[0].epcCode) : '';
         if (!alive) return;
         setPreviewEpc(epc);
+        setPreviewEpcInput((prev) => (prev ? prev : epc));
         if (!epc) {
           setPreviewData(null);
           return;
         }
-        const base = getPublicApiBaseUrl();
-        const out = await axios.get(`${base}/resolve`, { params: { epc } });
-        if (!alive) return;
-        setPreviewData(out?.data?.data || null);
+        await loadPreviewByEpc(epc);
       } catch (e) {
         if (!alive) return;
         const msg = e?.response?.data?.message || e?.message || t('failedToLoadCertificate');
@@ -221,7 +243,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
     return () => {
       alive = false;
     };
-  }, [t, token, viewMode]);
+  }, [token, viewMode]);
 
   useEffect(() => {
     if (viewMode !== 'preview' && viewMode !== 'split') return;
@@ -413,6 +435,22 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
               ))}
             </optgroup>
           </select>
+          <div className="flex items-center gap-2">
+            <input
+              value={previewEpcInput}
+              onChange={(e) => setPreviewEpcInput(e.target.value)}
+              placeholder="Preview EPC"
+              className="ac-input w-64 px-3 py-2 text-xs font-mono"
+            />
+            <button
+              type="button"
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+              onClick={() => void loadPreviewByEpc(previewEpcInput)}
+              disabled={previewLoading}
+            >
+              {t('inquire')}
+            </button>
+          </div>
           {!layoutLocked ? (
             <>
               <button

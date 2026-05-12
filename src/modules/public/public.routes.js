@@ -192,6 +192,45 @@ function mergeTemplatePlaceholdersBaseWithTranslation(basePlaceholders, translat
   });
 }
 
+function mergeTemplateMetaAliases(input) {
+  const base = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+  const next = { ...base };
+  const batchNumber = base.batchNumber != null ? String(base.batchNumber).trim() : '';
+  const swiftletHouseNumber = base.swiftletHouseNumber != null ? String(base.swiftletHouseNumber).trim() : '';
+  const manufactureDate = base.manufactureDate != null ? String(base.manufactureDate).trim() : '';
+  if (batchNumber && (next.batch_number == null || String(next.batch_number).trim() === '')) next.batch_number = batchNumber;
+  if (batchNumber && (next.batchnumber == null || String(next.batchnumber).trim() === '')) next.batchnumber = batchNumber;
+  if (batchNumber && (next.batchNo == null || String(next.batchNo).trim() === '')) next.batchNo = batchNumber;
+  if (batchNumber && (next.batch_no == null || String(next.batch_no).trim() === '')) next.batch_no = batchNumber;
+  if (swiftletHouseNumber && (next.swiftlet_house_number == null || String(next.swiftlet_house_number).trim() === ''))
+    next.swiftlet_house_number = swiftletHouseNumber;
+  if (swiftletHouseNumber && (next.swiftlethousenumber == null || String(next.swiftlethousenumber).trim() === ''))
+    next.swiftlethousenumber = swiftletHouseNumber;
+  if (swiftletHouseNumber && (next.swiftletHouseNo == null || String(next.swiftletHouseNo).trim() === '')) next.swiftletHouseNo = swiftletHouseNumber;
+  if (swiftletHouseNumber && (next.swiftlet_house_no == null || String(next.swiftlet_house_no).trim() === ''))
+    next.swiftlet_house_no = swiftletHouseNumber;
+  if (manufactureDate && (next.manufacture_date == null || String(next.manufacture_date).trim() === '')) next.manufacture_date = manufactureDate;
+  if (manufactureDate && (next.manufacturedate == null || String(next.manufacturedate).trim() === '')) next.manufacturedate = manufactureDate;
+
+  const batchNumber2 = base.batch_number != null ? String(base.batch_number).trim() : '';
+  const swiftletHouseNumber2 = base.swiftlet_house_number != null ? String(base.swiftlet_house_number).trim() : '';
+  const manufactureDate2 = base.manufacture_date != null ? String(base.manufacture_date).trim() : '';
+  if (batchNumber2 && (next.batchNumber == null || String(next.batchNumber).trim() === '')) next.batchNumber = batchNumber2;
+  if (batchNumber2 && (next.batchnumber == null || String(next.batchnumber).trim() === '')) next.batchnumber = batchNumber2;
+  if (batchNumber2 && (next.batchNo == null || String(next.batchNo).trim() === '')) next.batchNo = batchNumber2;
+  if (batchNumber2 && (next.batch_no == null || String(next.batch_no).trim() === '')) next.batch_no = batchNumber2;
+  if (swiftletHouseNumber2 && (next.swiftletHouseNumber == null || String(next.swiftletHouseNumber).trim() === ''))
+    next.swiftletHouseNumber = swiftletHouseNumber2;
+  if (swiftletHouseNumber2 && (next.swiftlethousenumber == null || String(next.swiftlethousenumber).trim() === ''))
+    next.swiftlethousenumber = swiftletHouseNumber2;
+  if (swiftletHouseNumber2 && (next.swiftletHouseNo == null || String(next.swiftletHouseNo).trim() === '')) next.swiftletHouseNo = swiftletHouseNumber2;
+  if (swiftletHouseNumber2 && (next.swiftlet_house_no == null || String(next.swiftlet_house_no).trim() === ''))
+    next.swiftlet_house_no = swiftletHouseNumber2;
+  if (manufactureDate2 && (next.manufactureDate == null || String(next.manufactureDate).trim() === '')) next.manufactureDate = manufactureDate2;
+  if (manufactureDate2 && (next.manufacturedate == null || String(next.manufacturedate).trim() === '')) next.manufacturedate = manufactureDate2;
+  return next;
+}
+
 async function respondByCertificateId({ req, res, certificateId, verifiedVia, identity }) {
   const ip = scanlog.normalizeIp(req);
   const userAgent = req.get('user-agent') || '';
@@ -307,7 +346,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         ]);
         epcItem = row ? { netWeight: row.netWeight, productionDate: row.productionDate, caiqNumber: row.caiqNumber } : null;
         epcBatchTemplate = row?.batch?.certificateTemplate || null;
-        templateData = row?.batch?.templateData || null;
+        templateData = mergeTemplateMetaAliases(row?.batch?.templateData || null);
         epcBatchName = row?.batch?.batchName ? String(row.batch.batchName) : null;
         epcBatchId = row?.batch?.id != null ? Number(row.batch.id) : null;
         epcProduct = row?.batch?.product || null;
@@ -342,7 +381,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         ]);
         if (row) {
           epcBatchTemplate = epcBatchTemplate || row.certificateTemplate || null;
-          templateData = templateData || row.templateData || null;
+          templateData = templateData || mergeTemplateMetaAliases(row.templateData || null);
           epcBatchName = epcBatchName || (row.batchName ? String(row.batchName) : null);
           epcBatchId = epcBatchId || (row.id != null ? Number(row.id) : null);
           epcProduct = epcProduct || row.product || null;
