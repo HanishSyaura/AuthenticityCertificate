@@ -11,13 +11,14 @@ const { verifyToken } = require('../../middleware/auth.middleware');
 const { attachOrganization, requireOrganization } = require('../../middleware/org.middleware');
 const { attachAccessContext, requireAccess } = require('../../middleware/access.middleware');
 const { auditAction } = require('../../services/audit.service');
+const { pickWritableUploadRoot } = require('../../utils/uploadsRoot');
 
 async function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), ms))]);
 }
 
 function getUploadsRoot() {
-  return path.resolve(process.cwd(), 'uploads');
+  return pickWritableUploadRoot();
 }
 
 function makeFileName(originalName) {
