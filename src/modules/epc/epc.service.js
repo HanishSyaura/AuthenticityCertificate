@@ -242,6 +242,10 @@ async function deleteAllBatches({ organizationId, corpPrefix }) {
       deletedItems += Number(res.count) || 0;
     }
 
+    for (const group of chunkArray(ids, 1000)) {
+      await tx.epcBatchDocument.deleteMany({ where: { organizationId: orgId, batchId: { in: group } } });
+    }
+
     let deletedBatches = 0;
     for (const group of chunkArray(ids, 1000)) {
       const res = await tx.epcBatch.deleteMany({ where: { organizationId: orgId, id: { in: group } } });
@@ -895,6 +899,7 @@ async function deleteItems({ organizationId, itemIds, cleanup }) {
 
       const emptyBatchIds = batchIds.filter((bid) => (remainingByBatch.get(bid) || 0) <= 0);
       if (emptyBatchIds.length) {
+        await tx.epcBatchDocument.deleteMany({ where: { organizationId: orgId, batchId: { in: emptyBatchIds } } });
         const del = await tx.epcBatch.deleteMany({ where: { organizationId: orgId, id: { in: emptyBatchIds } } });
         deletedBatches = Number(del.count) || 0;
       }
@@ -1025,6 +1030,10 @@ async function deleteAllGeneratedBatches({ organizationId, corpPrefix }) {
     for (const group of chunkArray(ids, 1000)) {
       const res = await tx.epcItem.deleteMany({ where: { organizationId: orgId, batchId: { in: group } } });
       deletedItems += Number(res.count) || 0;
+    }
+
+    for (const group of chunkArray(ids, 1000)) {
+      await tx.epcBatchDocument.deleteMany({ where: { organizationId: orgId, batchId: { in: group } } });
     }
 
     let deletedBatches = 0;

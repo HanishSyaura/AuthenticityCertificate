@@ -307,9 +307,10 @@ async function deleteProduct({ organizationId, productId }) {
   if (String(existing.status || '').toLowerCase() !== 'inactive') throw new Error('Product must be inactive before delete');
 
   await prisma.$transaction(async (tx) => {
+    const orgId = Number(organizationId);
     const batchIds = (
       await tx.batch.findMany({
-        where: { organizationId: Number(organizationId), productId: Number(productId) },
+        where: { organizationId: orgId, productId: Number(productId) },
         select: { id: true }
       })
     ).map((r) => r.id);
@@ -334,14 +335,15 @@ async function deleteProduct({ organizationId, productId }) {
 
     const epcBatchIds = (
       await tx.epcBatch.findMany({
-        where: { organizationId: Number(organizationId), productId: Number(productId) },
+        where: { organizationId: orgId, productId: Number(productId) },
         select: { id: true }
       })
     ).map((r) => r.id);
 
     if (epcBatchIds.length) {
-      await tx.epcItem.deleteMany({ where: { batchId: { in: epcBatchIds } } });
-      await tx.epcBatch.deleteMany({ where: { id: { in: epcBatchIds } } });
+      await tx.epcItem.deleteMany({ where: { organizationId: orgId, batchId: { in: epcBatchIds } } });
+      await tx.epcBatchDocument.deleteMany({ where: { organizationId: orgId, batchId: { in: epcBatchIds } } });
+      await tx.epcBatch.deleteMany({ where: { organizationId: orgId, id: { in: epcBatchIds } } });
     }
 
     const res = await tx.product.deleteMany({
@@ -382,9 +384,10 @@ async function deleteProductsBulk({ organizationId, productIds }) {
 
   if (deletableIds.length) {
     await prisma.$transaction(async (tx) => {
+      const orgId = Number(organizationId);
       const batchIds = (
         await tx.batch.findMany({
-          where: { organizationId: Number(organizationId), productId: { in: deletableIds } },
+          where: { organizationId: orgId, productId: { in: deletableIds } },
           select: { id: true }
         })
       ).map((r) => r.id);
@@ -409,14 +412,15 @@ async function deleteProductsBulk({ organizationId, productIds }) {
 
       const epcBatchIds = (
         await tx.epcBatch.findMany({
-          where: { organizationId: Number(organizationId), productId: { in: deletableIds } },
+          where: { organizationId: orgId, productId: { in: deletableIds } },
           select: { id: true }
         })
       ).map((r) => r.id);
 
       if (epcBatchIds.length) {
-        await tx.epcItem.deleteMany({ where: { batchId: { in: epcBatchIds } } });
-        await tx.epcBatch.deleteMany({ where: { id: { in: epcBatchIds } } });
+        await tx.epcItem.deleteMany({ where: { organizationId: orgId, batchId: { in: epcBatchIds } } });
+        await tx.epcBatchDocument.deleteMany({ where: { organizationId: orgId, batchId: { in: epcBatchIds } } });
+        await tx.epcBatch.deleteMany({ where: { organizationId: orgId, id: { in: epcBatchIds } } });
       }
 
       await tx.product.deleteMany({
