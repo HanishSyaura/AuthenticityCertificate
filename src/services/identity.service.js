@@ -9,9 +9,12 @@ async function withTimeout(promise, ms) {
 
 function norm(v) {
   if (!v) return null;
-  const s = String(v).trim();
+  const s = String(v)
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '');
   if (!s) return null;
-  return s.toUpperCase();
+  return s;
 }
 
 function findActiveIdentityMem({ organizationId, nfcUid, epc }) {

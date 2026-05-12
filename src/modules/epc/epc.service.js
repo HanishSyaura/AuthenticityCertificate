@@ -1575,6 +1575,84 @@ function getBatchImportDocTypes() {
   return new Set(['moh_health_certificate', 'export_permit', 'dvs_health_certificate', 'dvs_coo_certificate']);
 }
 
+function normalizeIdentityEpc(raw) {
+  return String(raw || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '');
+}
+
+async function activateEpcIdentities({ tx, orgId, certificateId, epcCodes }) {
+  const certId = String(certificateId || '').trim();
+  if (!certId) throw new Error('certificateId is required.');
+  const codes = Array.from(
+    new Set((Array.isArray(epcCodes) ? epcCodes : []).map((c) => normalizeIdentityEpc(c)).filter((c) => c))
+  );
+  if (!codes.length) return { activated: 0, created: 0 };
+
+  const now = new Date();
+  const conflicts = [];
+  for (const group of chunkArray(codes, 1000)) {
+    const rows = await tx.tagIdentity.findMany({
+      where: {
+        organizationId: Number(orgId),
+        unassignedAt: null,
+        epc: { in: group },
+        certificateId: { not: certId }
+      },
+      select: { epc: true, certificateId: true }
+    });
+    for (const r of Array.isArray(rows) ? rows : []) {
+      const epc = String(r?.epc || '').trim();
+      const cid = String(r?.certificateId || '').trim();
+      if (!epc || !cid) continue;
+      conflicts.push({ epc, certificateId: cid });
+    }
+  }
+  if (conflicts.length) {
+    const sample = conflicts.slice(0, 10).map((r) => `${r.epc}→${r.certificateId}`);
+    throw new Error(
+      `Some EPC codes are already assigned to another certificate: ${sample.join(', ')}${conflicts.length > 10 ? ', ...' : ''}`
+    );
+  }
+
+  let activated = 0;
+  for (const group of chunkArray(codes, 1000)) {
+    const res = await tx.tagIdentity.updateMany({
+      where: {
+        organizationId: Number(orgId),
+        epc: { in: group },
+        OR: [{ unassignedAt: { not: null } }, { certificateId: certId }]
+      },
+      data: {
+        certificateId: certId,
+        assignedAt: now,
+        unassignedAt: null
+      }
+    });
+    activated += Number(res.count) || 0;
+  }
+
+  let created = 0;
+  for (const group of chunkArray(codes, 1000)) {
+    const res = await tx.tagIdentity.createMany({
+      data: group.map((epc) => ({
+        organizationId: Number(orgId),
+        certificateId: certId,
+        nfcUid: null,
+        epc,
+        assignedAt: now,
+        lastSeenAt: null,
+        unassignedAt: null
+      })),
+      skipDuplicates: true
+    });
+    created += Number(res.count) || 0;
+  }
+
+  return { activated, created };
+}
+
 async function previewBatchImportXlsx({ organizationId, batchId, base64 }) {
   const orgId = Number(organizationId);
   const id = batchId == null ? null : Number(batchId);
@@ -1705,14 +1783,17 @@ async function createImportBatchFromXlsx({
       if (!product) throw new Error('Product not found.');
 
       let tplId = null;
+      let tplCertId = null;
       if (certificateTemplateId !== undefined) {
         tplId = certificateTemplateId == null ? null : Number(certificateTemplateId);
         if (tplId != null) {
           const tpl = await tx.certificateTemplate.findFirst({
             where: { id: tplId, organizationId: orgId, deletedAt: null, templateType: 'auth' },
-            select: { id: true }
+            select: { id: true, certificateId: true }
           });
           if (!tpl) throw new Error('Auth certificate template not found.');
+          tplCertId = String(tpl.certificateId || '').trim() || null;
+          if (!tplCertId) throw new Error('Auth certificate template is missing certificateId.');
         }
       }
 
@@ -1726,6 +1807,27 @@ async function createImportBatchFromXlsx({
         throw new Error(`Some EPC codes already exist in the system: ${sample.join(', ')}${existing.length > 10 ? ', ...' : ''}`);
       }
 
+      if (tplCertId) {
+        const existingCert = await tx.certificate.findUnique({
+          where: { certificateId: tplCertId },
+          select: { certificateId: true, organizationId: true, status: true, issuedAt: true }
+        });
+        if (existingCert) {
+          if (Number(existingCert.organizationId) !== orgId) throw new Error('Certificate ID belongs to a different organization');
+          const s = String(existingCert.status || '').toUpperCase();
+          if (s === 'PENDING') {
+            await tx.certificate.update({
+              where: { certificateId: tplCertId },
+              data: { status: 'VALID', issuedAt: existingCert.issuedAt || new Date() }
+            });
+          }
+        } else {
+          await tx.certificate.create({
+            data: { certificateId: tplCertId, organizationId: orgId, type: 'shared', batchId: null, status: 'VALID', issuedAt: new Date() }
+          });
+        }
+      }
+
       const batch = await tx.epcBatch.create({
         data: {
           organizationId: orgId,
@@ -1737,7 +1839,7 @@ async function createImportBatchFromXlsx({
           batchName,
           batchQty: uniqueEpcs.length,
           remark: null,
-          certificateId: null,
+          certificateId: tplCertId,
           certificateTemplateId: tplId,
           templateData: {
             manufactureDate: meta.manufactureDate,
@@ -1765,6 +1867,10 @@ async function createImportBatchFromXlsx({
 
       for (const c of chunkArray(items, 1000)) {
         await tx.epcItem.createMany({ data: c });
+      }
+
+      if (tplCertId) {
+        await activateEpcIdentities({ tx, orgId, certificateId: tplCertId, epcCodes: uniqueEpcs });
       }
 
       for (const [docType, mediaUrl] of docEntries) {
@@ -1853,14 +1959,17 @@ async function submitBatchImport({
     if (!product) throw new Error('Product not found.');
 
     let tplId = null;
+    let tplCertId = null;
     if (certificateTemplateId !== undefined) {
       tplId = certificateTemplateId == null ? null : Number(certificateTemplateId);
       if (tplId != null) {
         const tpl = await tx.certificateTemplate.findFirst({
           where: { id: tplId, organizationId: orgId, deletedAt: null, templateType: 'auth' },
-          select: { id: true }
+          select: { id: true, certificateId: true }
         });
         if (!tpl) throw new Error('Auth certificate template not found.');
+        tplCertId = String(tpl.certificateId || '').trim() || null;
+        if (!tplCertId) throw new Error('Auth certificate template is missing certificateId.');
       }
     }
 
@@ -1895,16 +2004,42 @@ async function submitBatchImport({
       swiftletHouseNumber: meta.swiftletHouseNumber
     };
 
+    if (tplCertId) {
+      const existingCert = await tx.certificate.findUnique({
+        where: { certificateId: tplCertId },
+        select: { certificateId: true, organizationId: true, status: true, issuedAt: true }
+      });
+      if (existingCert) {
+        if (Number(existingCert.organizationId) !== orgId) throw new Error('Certificate ID belongs to a different organization');
+        const s = String(existingCert.status || '').toUpperCase();
+        if (s === 'PENDING') {
+          await tx.certificate.update({
+            where: { certificateId: tplCertId },
+            data: { status: 'VALID', issuedAt: existingCert.issuedAt || new Date() }
+          });
+        }
+      } else {
+        await tx.certificate.create({
+          data: { certificateId: tplCertId, organizationId: orgId, type: 'shared', batchId: null, status: 'VALID', issuedAt: new Date() }
+        });
+      }
+    }
+
     await tx.epcBatch.update({
       where: { id },
       data: {
         productId: pid,
         sku: skuCode,
+        ...(tplCertId ? { certificateId: tplCertId } : {}),
         certificateTemplateId: tplId,
         templateData: nextTemplateData,
         productionUploadedAt: new Date()
       }
     });
+
+    if (tplCertId) {
+      await activateEpcIdentities({ tx, orgId, certificateId: tplCertId, epcCodes });
+    }
 
     for (const [docType, mediaUrl] of docEntries) {
       await tx.epcBatchDocument.upsert({
