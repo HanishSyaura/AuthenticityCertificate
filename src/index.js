@@ -104,6 +104,14 @@ app.use(
   ...uploadStaticMiddlewares
 );
 
+app.use('/uploads', (req, res, next) => {
+  const p = String(req.path || '');
+  const isMediaFile = /^\/media\/\d+\/[^/]+\.[A-Za-z0-9]{1,10}$/i.test(p);
+  const isMediaWebpVariant = /^\/media\/\d+\/[A-Za-z0-9_-]+-w(320|640|1024)\.webp$/i.test(p);
+  if (isMediaFile || isMediaWebpVariant) return res.status(404).end();
+  return next();
+});
+
 function parseAllowedOrigins() {
   const raw = process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || '';
   return String(raw)

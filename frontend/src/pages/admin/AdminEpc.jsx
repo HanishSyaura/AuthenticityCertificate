@@ -535,6 +535,7 @@ export default function AdminEpc() {
               {t('total', { value: Number(itemTotal) || 0 })}{' '}
               <span className="text-zinc-400">
                 • Page {Math.floor(listOffset / listLimit) + 1} / {Math.max(1, Math.ceil((Number(itemTotal) || 0) / listLimit))}
+                • {listBatchId ? `${t('batch')} #${String(listBatchId).trim()}` : t('allBatches')}
               </span>
             </div>
 
@@ -597,6 +598,33 @@ export default function AdminEpc() {
                       {String(it.epcCode || '')}
                     </button>
                   )
+                },
+                {
+                  id: 'batch',
+                  header: t('batch'),
+                  cell: (it) => {
+                    const b = it?.batch;
+                    const id = b?.id != null ? String(b.id) : '';
+                    const name = b?.batchName ? String(b.batchName) : '-';
+                    const origin = b?.origin ? String(b.origin) : '';
+                    return (
+                      <button
+                        type="button"
+                        className="min-w-0 text-left text-xs text-zinc-800 hover:underline"
+                        onClick={() => {
+                          if (!id) return;
+                          setListBatchId(id);
+                          setListOffset(0);
+                        }}
+                      >
+                        <div className="truncate">{name}</div>
+                        <div className="mt-0.5 truncate text-[11px] text-zinc-500">
+                          {id ? `#${id}` : '-'}
+                          {origin ? ` • ${origin}` : ''}
+                        </div>
+                      </button>
+                    );
+                  }
                 },
                 {
                   id: 'status',
@@ -689,6 +717,22 @@ export default function AdminEpc() {
                 <div>
                   <div className="text-[11px] font-semibold text-zinc-600">{t('batchNumber')}</div>
                   <div className="mt-1 text-xs text-zinc-900">{detailItem.batchNumber ? String(detailItem.batchNumber) : '-'}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('batchId')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">{detailItem?.batch?.id != null ? String(detailItem.batch.id) : '-'}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('batchName')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">{detailItem?.batch?.batchName ? String(detailItem.batch.batchName) : '-'}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('origin')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">{detailItem?.batch?.origin ? String(detailItem.batch.origin) : '-'}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('remark')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">{detailItem?.batch?.remark ? String(detailItem.batch.remark) : '-'}</div>
                 </div>
                 <div>
                   <div className="text-[11px] font-semibold text-zinc-600">{t('swiftletHouseNumber')}</div>

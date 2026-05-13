@@ -21,6 +21,7 @@ export default function AdminDashboard() {
   const [tourAutoStarted, setTourAutoStarted] = useState(false);
   const [latestEpc, setLatestEpc] = useState('');
   const [epcStats, setEpcStats] = useState(null);
+  const [dashboardCounts, setDashboardCounts] = useState({ products: null, pages: null, templates: null });
   const { openTour, hasSeen } = useTourStore((s) => ({ openTour: s.openTour, hasSeen: s.hasSeen }));
   const { token, user } = useAdminAuthStore((s) => ({ token: s.token, user: s.user }));
 
@@ -32,6 +33,21 @@ export default function AdminDashboard() {
     return ['epc.read', 'epc.write', 'epc.batch.view', 'epc.batch.create', 'epc.scan.access', 'epc.production.access'].some((k) =>
       hasPermission(perms, k)
     );
+  }, [perms, role]);
+  const canReadProducts = useMemo(() => {
+    if (role === 'super_admin') return true;
+    if (hasPermission(perms, '*')) return true;
+    return ['products.read', 'products.write', 'categories.read', 'categories.write'].some((k) => hasPermission(perms, k));
+  }, [perms, role]);
+  const canReadCms = useMemo(() => {
+    if (role === 'super_admin') return true;
+    if (hasPermission(perms, '*')) return true;
+    return ['cms.read', 'cms.write', 'cms.publish', 'cms.meta.write'].some((k) => hasPermission(perms, k));
+  }, [perms, role]);
+  const canReadTemplates = useMemo(() => {
+    if (role === 'super_admin') return true;
+    if (hasPermission(perms, '*')) return true;
+    return ['templates.read', 'templates.write'].some((k) => hasPermission(perms, k));
   }, [perms, role]);
 
   useEffect(() => {
@@ -62,6 +78,35 @@ export default function AdminDashboard() {
       alive = false;
     };
   }, [token, canReadEpc]);
+
+  useEffect(() => {
+    if (!token || (!canReadProducts && !canReadCms && !canReadTemplates)) {
+      setDashboardCounts({ products: null, pages: null, templates: null });
+      return;
+    }
+    let alive = true;
+    (async () => {
+      try {
+        const api = createAdminApi({ token });
+        const [productsRes, pagesRes, templatesRes] = await Promise.all([
+          canReadProducts ? api.get('/products/') : Promise.resolve(null),
+          canReadCms ? api.get('/cms/pages', { params: { kind: 'landing' } }) : Promise.resolve(null),
+          canReadTemplates ? api.get('/templates/') : Promise.resolve(null)
+        ]);
+        if (!alive) return;
+        const products = Array.isArray(productsRes?.data?.data) ? productsRes.data.data.length : null;
+        const pages = Array.isArray(pagesRes?.data?.data) ? pagesRes.data.data.length : null;
+        const templates = Array.isArray(templatesRes?.data?.data) ? templatesRes.data.data.length : null;
+        setDashboardCounts({ products, pages, templates });
+      } catch {
+        if (!alive) return;
+        setDashboardCounts({ products: null, pages: null, templates: null });
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [token, canReadProducts, canReadCms, canReadTemplates]);
 
   useEffect(() => {
     const storageKey = 'ac_seen_admin_tour_v1';
@@ -125,6 +170,16 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Card title={t('productModule')} value={canReadProducts ? formatMaybeCount(dashboardCounts.products) : '—'} hint={t('products')} />
+        <Card title={t('cmsLanding')} value={canReadCms ? formatMaybeCount(dashboardCounts.pages) : '—'} hint={t('pages')} />
+        <Card
+          title={t('certificateList')}
+          value={canReadTemplates ? formatMaybeCount(dashboardCounts.templates) : '—'}
+          hint={t('templates')}
+        />
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card title={t('epcGenerated')} value={canReadEpc ? formatMaybeCount(epcGeneratedCount) : '—'} />
         <Card title={t('epcActive')} value={canReadEpc ? formatMaybeCount(epcActiveCount) : '—'} />
         <Card title={t('epcInactive')} value={canReadEpc ? formatMaybeCount(epcInactiveCount) : '—'} />

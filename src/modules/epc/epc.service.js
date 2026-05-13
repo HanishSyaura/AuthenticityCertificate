@@ -1227,6 +1227,7 @@ async function listItems({ organizationId, q, batchId, pendingOnly, createdFrom,
             select: {
               id: true,
               corpPrefix: true,
+              origin: true,
               batchName: true,
               batchQty: true,
               remark: true,
@@ -1277,6 +1278,7 @@ const EPC_ITEM_INCLUDE = {
     select: {
       id: true,
       corpPrefix: true,
+      origin: true,
       batchName: true,
       batchQty: true,
       remark: true,

@@ -205,7 +205,6 @@ Routes backend yang perlu diproxy (at minimum):
 - `/users/`
 - `/audit/`
 - `/organizations/`
-- `/uploads/`
 - `/bulk/`
 - `/fraud/`
 - `/integrations/`
@@ -223,10 +222,22 @@ location ^~ /products/ { proxy_pass http://127.0.0.1:5000; }
 location ^~ /users/ { proxy_pass http://127.0.0.1:5000; }
 location ^~ /audit/ { proxy_pass http://127.0.0.1:5000; }
 location ^~ /organizations/ { proxy_pass http://127.0.0.1:5000; }
-location ^~ /uploads/ { proxy_pass http://127.0.0.1:5000; }
 location ^~ /bulk/ { proxy_pass http://127.0.0.1:5000; }
 location ^~ /fraud/ { proxy_pass http://127.0.0.1:5000; }
 location ^~ /integrations/ { proxy_pass http://127.0.0.1:5000; }
+```
+
+### Serve uploads (public media)
+
+Untuk elakkan media (`/uploads/media/...`) require token, serve folder uploads sebagai static melalui Nginx (dan pastikan path ini sama dengan `UPLOADS_DIR` backend):
+
+```
+location ^~ /uploads/ {
+  alias /www/wwwroot/domain.com/AuthenticityCertificate/uploads/;
+  try_files $uri =404;
+  expires 30d;
+  add_header Cache-Control "public, max-age=2592000" always;
+}
 ```
 
 Untuk proxy header penting:
