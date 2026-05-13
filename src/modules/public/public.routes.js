@@ -235,16 +235,17 @@ function mergeTemplateMetaAliases(input) {
   return next;
 }
 
-async function respondByCertificateId({ req, res, certificateId, verifiedVia, identity }) {
+async function respondByCertificateId({ req, res, certificateId, verifiedVia, identity, organizationId }) {
   const ip = scanlog.normalizeIp(req);
   const userAgent = req.get('user-agent') || '';
   const deviceHash = typeof req.headers['x-device-hash'] === 'string' ? String(req.headers['x-device-hash']).trim() : null;
   const country = typeof req.headers['x-geo-country'] === 'string' ? String(req.headers['x-geo-country']).trim() : null;
   const latitude = req.headers['x-geo-lat'] != null ? Number(req.headers['x-geo-lat']) : null;
   const longitude = req.headers['x-geo-lng'] != null ? Number(req.headers['x-geo-lng']) : null;
+  const orgIdForLog = Number(organizationId || (typeof req.organization?.id === 'number' ? req.organization.id : 0)) || null;
   const scanEntry = await scanlog.addScan({
     certificateId,
-    organizationId: typeof req.organization?.id === 'number' ? req.organization.id : null,
+    organizationId: orgIdForLog,
     nfcUid: identity?.nfcUid || null,
     epc: identity?.epc || null,
     deviceHash: deviceHash || null,
@@ -257,13 +258,13 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
   });
 
   void fraudService.autoFlagIfNeeded({
-    organizationId: typeof req.organization?.id === 'number' ? req.organization.id : 1,
+    organizationId: orgIdForLog || 1,
     certificateId,
     scanEntry
   });
 
   void webhookService.emitEvent({
-    organizationId: typeof req.organization?.id === 'number' ? req.organization.id : 1,
+    organizationId: orgIdForLog || 1,
     event: 'certificate_scanned',
     data: {
       certificateId,
@@ -289,7 +290,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     if (!cert) return res.error('Certificate not found', 404);
     dbGate.markDbSuccess();
 
-    const resolvedOrgId = Number(req.organization?.id || cert.organizationId || 0) || null;
+    const resolvedOrgId = Number(organizationId || cert.organizationId || req.organization?.id || 0) || null;
     const identityFromReq = identity || null;
     let resolvedEpc = identityFromReq?.epc || null;
     let resolvedNfcUid = identityFromReq?.nfcUid || null;
@@ -621,7 +622,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
 
 router.get('/cert/:id', async (req, res) => {
   const { id } = req.params;
-  return respondByCertificateId({ req, res, certificateId: id, verifiedVia: 'qr', identity: null });
+  return respondByCertificateId({ req, res, certificateId: id, verifiedVia: 'qr', identity: null, organizationId: null });
 });
 
 router.get('/resolve', async (req, res) => {
@@ -631,12 +632,21 @@ router.get('/resolve', async (req, res) => {
   if (!orgId) return res.error('Organization not found', 404);
 
   try {
-    const certificateId = await identityService.resolveCertificateId({
+    const requireEpcBatchMeta = Boolean(epc) && !nfcUid;
+    let resolvedOrgId = orgId;
+    let certificateId = await identityService.resolveCertificateId({
       organizationId: orgId,
       nfcUid,
       epc,
-      requireEpcBatchMeta: Boolean(epc) && !nfcUid
+      requireEpcBatchMeta
     });
+    if (!certificateId && !req.apiKey) {
+      const found = await identityService.resolveCertificateIdGlobal({ nfcUid, epc, requireEpcBatchMeta });
+      if (found?.certificateId && found?.organizationId) {
+        certificateId = found.certificateId;
+        resolvedOrgId = found.organizationId;
+      }
+    }
     if (!certificateId) return res.error('Identity not found. Use QR code fallback.', 404);
 
     const verifiedVia = nfcUid ? 'nfc_uid' : 'epc';
@@ -645,7 +655,8 @@ router.get('/resolve', async (req, res) => {
       res,
       certificateId,
       verifiedVia,
-      identity: { nfcUid: nfcUid || null, epc: epc || null }
+      identity: { nfcUid: nfcUid || null, epc: epc || null },
+      organizationId: resolvedOrgId
     });
   } catch (e) {
     if (e?.message === 'epc_inactive_missing_batch_meta') {

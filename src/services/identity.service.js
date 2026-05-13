@@ -93,6 +93,79 @@ async function resolveCertificateId({ organizationId, nfcUid, epc, requireEpcBat
   }
 }
 
+async function resolveCertificateIdGlobal({ nfcUid, epc, requireEpcBatchMeta = false }) {
+  const uid = norm(nfcUid);
+  const e = norm(epc);
+  if (!uid && !e) return null;
+
+  const checkEpcBatchMeta = async (organizationId) => {
+    if (!requireEpcBatchMeta || !e) return;
+    const meta = await withTimeout(
+      prisma.epcItem.findUnique({
+        where: { organizationId_epcCode: { organizationId: Number(organizationId), epcCode: e } },
+        select: { batchNumber: true, swiftletHouseNumber: true }
+      }),
+      120
+    );
+    const ok =
+      String(meta?.batchNumber || '').trim().length > 0 && String(meta?.swiftletHouseNumber || '').trim().length > 0;
+    if (!ok) throw new Error('epc_inactive_missing_batch_meta');
+  };
+
+  try {
+    const rows = await withTimeout(
+      prisma.tagIdentity.findMany({
+        where: {
+          unassignedAt: null,
+          OR: [uid ? { nfcUid: uid } : undefined, e ? { epc: e } : undefined].filter(Boolean)
+        },
+        select: { certificateId: true, organizationId: true },
+        take: 2
+      }),
+      120
+    );
+    if (Array.isArray(rows) && rows.length === 1) {
+      const row = rows[0];
+      if (!row?.certificateId || !row?.organizationId) return null;
+      await checkEpcBatchMeta(row.organizationId);
+      return { certificateId: row.certificateId, organizationId: row.organizationId };
+    }
+    if (Array.isArray(rows) && rows.length > 1) return null;
+
+    if (e) {
+      const items = await withTimeout(
+        prisma.epcItem.findMany({
+          where: { epcCode: e, batch: { certificateId: { not: null } } },
+          select: {
+            organizationId: true,
+            batchNumber: true,
+            swiftletHouseNumber: true,
+            batch: { select: { certificateId: true } }
+          },
+          take: 2
+        }),
+        120
+      );
+      if (Array.isArray(items) && items.length === 1) {
+        const it = items[0];
+        const certId = String(it?.batch?.certificateId || '').trim();
+        if (!certId || !it?.organizationId) return null;
+        if (requireEpcBatchMeta) {
+          const ok =
+            String(it?.batchNumber || '').trim().length > 0 && String(it?.swiftletHouseNumber || '').trim().length > 0;
+          if (!ok) throw new Error('epc_inactive_missing_batch_meta');
+        }
+        return { certificateId: certId, organizationId: it.organizationId };
+      }
+    }
+
+    return null;
+  } catch (err) {
+    if (err?.message === 'epc_inactive_missing_batch_meta') throw err;
+    return null;
+  }
+}
+
 async function listIdentitiesByCertificate({ organizationId, certificateId }) {
   const orgId = Number(organizationId);
   const certId = String(certificateId);
@@ -371,6 +444,7 @@ async function moveActiveIdentities({ organizationId, fromCertificateId, toCerti
 
 module.exports = {
   resolveCertificateId,
+  resolveCertificateIdGlobal,
   listIdentities,
   listIdentitiesByCertificate,
   assignIdentity,

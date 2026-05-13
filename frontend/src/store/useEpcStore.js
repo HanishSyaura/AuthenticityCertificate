@@ -323,6 +323,36 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
+  fetchBatchImportHistory: async ({ limit = 20, offset = 0 } = {}) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.get('/epc/batch-import/history', { params: { limit, offset } });
+      const data = res?.data?.data || null;
+      set({ loading: false });
+      return data;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      set({ loading: false, error: msg });
+      return null;
+    }
+  },
+
+  getBatchImportHistory: async (id) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.get(`/epc/batch-import/history/${encodeURIComponent(id)}`);
+      const data = res?.data?.data || null;
+      set({ loading: false });
+      return data;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      set({ loading: false, error: msg });
+      return null;
+    }
+  },
+
   markProductionDone: async ({ batchId }) => {
     set({ loading: true, error: null });
     try {

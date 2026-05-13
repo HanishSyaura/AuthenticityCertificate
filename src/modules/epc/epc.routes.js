@@ -143,7 +143,7 @@ router.post(
 router.post(
   '/batch-import/submit',
   requirePermission(['epc.write', 'epc.production.access']),
-  auditAction('SUBMIT_EPC_BATCH_IMPORT', { targetType: 'epc_batch' }),
+  auditAction('SUBMIT_EPC_BATCH_IMPORT', { targetType: 'epc_batch', getMetadata: (req, res) => res.locals?.auditMetadata || null }),
   epcController.submitBatchImportNew
 );
 
@@ -157,8 +157,24 @@ router.post(
 router.post(
   '/batches/:id/batch-import/submit',
   requirePermission(['epc.write', 'epc.production.access']),
-  auditAction('SUBMIT_EPC_BATCH_IMPORT', { targetType: 'epc_batch', getTargetId: (req) => String(req.params?.id || '') }),
+  auditAction('SUBMIT_EPC_BATCH_IMPORT', {
+    targetType: 'epc_batch',
+    getTargetId: (req) => String(req.params?.id || ''),
+    getMetadata: (req, res) => res.locals?.auditMetadata || null
+  }),
   epcController.submitBatchImport
+);
+
+router.get(
+  '/batch-import/history',
+  requirePermission(['epc.write', 'epc.production.access']),
+  epcController.listBatchImportHistory
+);
+
+router.get(
+  '/batch-import/history/:id',
+  requirePermission(['epc.write', 'epc.production.access']),
+  epcController.getBatchImportHistory
 );
 
 router.post(

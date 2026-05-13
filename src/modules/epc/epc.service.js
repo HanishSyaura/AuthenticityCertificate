@@ -1827,6 +1827,16 @@ async function createImportBatchFromXlsx({
   }
   if (updates.length === 0) throw new Error('No EPC code found in the uploaded XLSX.');
 
+  const auditItems = updates.map((u) => ({
+    epcCode: String(u.epcCode || '').trim(),
+    barcode: u.barcode != null ? u.barcode : null,
+    batchNumber: u.batchNumber != null ? u.batchNumber : null,
+    swiftletHouseNumber: u.swiftletHouseNumber != null ? u.swiftletHouseNumber : null,
+    netWeight: u.netWeight != null ? u.netWeight : null,
+    productionDate: u.productionDate ? new Date(u.productionDate).toISOString() : null,
+    caiqNumber: u.caiqNumber != null ? u.caiqNumber : null
+  }));
+
   const epcCodes = updates.map((u) => String(u.epcCode || '').trim()).filter(Boolean);
   const uniqueEpcs = Array.from(new Set(epcCodes));
   if (uniqueEpcs.length !== epcCodes.length) throw new Error('Duplicate EPC code detected in the uploaded XLSX.');
@@ -1979,7 +1989,8 @@ async function createImportBatchFromXlsx({
         updated,
         certificateId: tplCertId,
         productId: assignedProductId,
-        batchIds: touchedBatchIds
+        batchIds: touchedBatchIds,
+        items: auditItems
       };
     },
     { timeout: 12_000, maxWait: 5_000 }

@@ -70,6 +70,8 @@ export default function AdminEpc() {
     importProductionXlsx,
     previewBatchImportXlsx,
     submitBatchImport,
+    fetchBatchImportHistory,
+    getBatchImportHistory,
     markProductionDone,
     exportBatchXlsxCustom,
     exportItemsXlsx,
@@ -93,6 +95,8 @@ export default function AdminEpc() {
     importProductionXlsx: s.importProductionXlsx,
     previewBatchImportXlsx: s.previewBatchImportXlsx,
     submitBatchImport: s.submitBatchImport,
+    fetchBatchImportHistory: s.fetchBatchImportHistory,
+    getBatchImportHistory: s.getBatchImportHistory,
     markProductionDone: s.markProductionDone,
     exportItemsXlsx: s.exportItemsXlsx,
     deleteItems: s.deleteItems,
@@ -111,6 +115,7 @@ export default function AdminEpc() {
   const [remark, setRemark] = useState('');
   const [generateOpen, setGenerateOpen] = useState(false);
   const [listQuery, setListQuery] = useState('');
+  const [listBatchId, setListBatchId] = useState('');
   const [createdFrom, setCreatedFrom] = useState('');
   const [createdTo, setCreatedTo] = useState('');
   const [listOffset, setListOffset] = useState(0);
@@ -172,6 +177,13 @@ export default function AdminEpc() {
     dvs_coo_certificate: false
   }));
   const [importLocalError, setImportLocalError] = useState('');
+  const [importLastResult, setImportLastResult] = useState(null);
+  const [importHistory, setImportHistory] = useState([]);
+  const [importHistoryTotal, setImportHistoryTotal] = useState(0);
+  const [importHistoryOffset, setImportHistoryOffset] = useState(0);
+  const importHistoryLimit = 20;
+  const [importHistoryOpen, setImportHistoryOpen] = useState(false);
+  const [importHistoryDetail, setImportHistoryDetail] = useState(null);
   const [viewBatchOpen, setViewBatchOpen] = useState(false);
   const [viewBatch, setViewBatch] = useState(null);
 
@@ -273,6 +285,15 @@ export default function AdminEpc() {
   }, [canBatchImport, canProduction, fetchBatches, tab]);
 
   useEffect(() => {
+    if (tab !== 'import' || !canBatchImport) return;
+    void (async () => {
+      const data = await fetchBatchImportHistory({ limit: importHistoryLimit, offset: importHistoryOffset });
+      setImportHistory(Array.isArray(data?.items) ? data.items : []);
+      setImportHistoryTotal(Number(data?.total) || 0);
+    })();
+  }, [canBatchImport, fetchBatchImportHistory, importHistoryLimit, importHistoryOffset, tab]);
+
+  useEffect(() => {
     if (tab === 'batches' && canBatchView) return;
     if (tab === 'import' && canBatchImport) return;
     if (tab === 'production' && canProduction) return;
@@ -287,14 +308,15 @@ export default function AdminEpc() {
       q: listQuery,
       createdFrom: createdFrom || undefined,
       createdTo: createdTo || undefined,
+      batchId: String(listBatchId || '').trim() || undefined,
       limit: listLimit,
       offset: listOffset
     });
-  }, [canBatchView, createdFrom, createdTo, fetchItems, listLimit, listOffset, listQuery, tab]);
+  }, [canBatchView, createdFrom, createdTo, fetchItems, listBatchId, listLimit, listOffset, listQuery, tab]);
 
   useEffect(() => {
     setSelectedItemIds(new Set());
-  }, [items, listOffset, listQuery, createdFrom, createdTo]);
+  }, [items, listOffset, listQuery, listBatchId, createdFrom, createdTo]);
 
   const pageItemIds = useMemo(
     () =>
@@ -390,6 +412,7 @@ export default function AdminEpc() {
                       q: listQuery,
                       createdFrom: createdFrom || undefined,
                       createdTo: createdTo || undefined,
+                      batchId: String(listBatchId || '').trim() || undefined,
                       limit: listLimit,
                       offset: 0
                     });
@@ -413,6 +436,7 @@ export default function AdminEpc() {
                       q: listQuery,
                       createdFrom: createdFrom || undefined,
                       createdTo: createdTo || undefined,
+                      batchId: String(listBatchId || '').trim() || undefined,
                       limit: listLimit,
                       offset: 0
                     });
@@ -430,7 +454,7 @@ export default function AdminEpc() {
           </div>
 
           <div className="p-4">
-            <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_240px_240px_auto]">
+            <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_180px_240px_240px_auto]">
               <div className="flex flex-col gap-1">
                 <label htmlFor="searchEpcCode" className="text-[11px] text-zinc-500">
                   {t('searchEpcCode')}
@@ -443,6 +467,21 @@ export default function AdminEpc() {
                     setListOffset(0);
                   }}
                   placeholder={t('searchEpc')}
+                  className="ac-input"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label htmlFor="batchId" className="text-[11px] text-zinc-500">
+                  {t('batchId')}
+                </label>
+                <input
+                  id="batchId"
+                  value={listBatchId}
+                  onChange={(e) => {
+                    setListBatchId(e.target.value);
+                    setListOffset(0);
+                  }}
+                  placeholder={t('batchId')}
                   className="ac-input"
                 />
               </div>
@@ -490,6 +529,7 @@ export default function AdminEpc() {
                       q: listQuery,
                       createdFrom: createdFrom || undefined,
                       createdTo: createdTo || undefined,
+                      batchId: String(listBatchId || '').trim() || undefined,
                       limit: listLimit,
                       offset: 0
                     })
@@ -972,6 +1012,18 @@ export default function AdminEpc() {
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 px-4 py-3">
             <div className="text-xs font-semibold text-zinc-600">{t('batchImport')}</div>
             <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                disabled={loading}
+                onClick={async () => {
+                  const data = await fetchBatchImportHistory({ limit: importHistoryLimit, offset: importHistoryOffset });
+                  setImportHistory(Array.isArray(data?.items) ? data.items : []);
+                  setImportHistoryTotal(Number(data?.total) || 0);
+                }}
+              >
+                {t('refresh')}
+              </button>
               <button type="button" className="ac-btn ac-btn-primary px-3 py-2 text-xs" disabled={loading} onClick={() => openImport(null)}>
                 {t('importBatchFile')}
               </button>
@@ -979,6 +1031,139 @@ export default function AdminEpc() {
           </div>
           <div className="px-4 py-6 text-sm text-zinc-700">
             {t('batchImportExistingEpcHint')}
+            {importLastResult ? (
+              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+                <div className="font-semibold">{t('save')} OK</div>
+                <div className="mt-1">
+                  {t('rowsLabel')}: {String(importLastResult?.rows ?? 0)} • {t('uniqueEpcLabel')}: {String(importLastResult?.uniqueEpcs ?? 0)} • Updated:{' '}
+                  {String(importLastResult?.updated ?? 0)}
+                </div>
+                {Array.isArray(importLastResult?.batchIds) && importLastResult.batchIds.length > 0 ? (
+                  <div className="mt-1">
+                    {t('batchId')}: {importLastResult.batchIds.map((id) => String(id)).join(', ')}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="mt-6">
+              <div className="mb-2 text-xs font-semibold text-zinc-800">{t('importHistory')}</div>
+              <div className="mb-2 text-[11px] text-zinc-500">{t('total', { value: Number(importHistoryTotal) || 0 })}</div>
+              <DataTable
+                density="compact"
+                minWidth={980}
+                rows={Array.isArray(importHistory) ? importHistory : []}
+                rowKey={(r) => r.id}
+                loading={loading}
+                emptyContent={t('noImportHistory')}
+                columns={[
+                  { id: 'time', header: t('time'), cell: (r) => <span className="whitespace-nowrap text-zinc-700">{formatDateTime(r?.createdAt)}</span> },
+                  { id: 'actor', header: t('importedBy'), cell: (r) => <span className="text-zinc-800">{String(r?.actorEmail || '-')}</span> },
+                  { id: 'productId', header: t('product'), cell: (r) => <span className="text-zinc-800">{r?.summary?.productId != null ? String(r.summary.productId) : '-'}</span> },
+                  {
+                    id: 'batchIds',
+                    header: t('batchId'),
+                    cell: (r) => (
+                      <span className="text-zinc-800">
+                        {Array.isArray(r?.summary?.batchIds) && r.summary.batchIds.length ? r.summary.batchIds.map((id) => String(id)).join(', ') : '-'}
+                      </span>
+                    )
+                  },
+                  { id: 'rows', header: t('rowsLabel'), cell: (r) => <span className="font-mono text-[11px] text-zinc-800">{String(r?.summary?.rows ?? '-')}</span> },
+                  { id: 'unique', header: t('uniqueEpcLabel'), cell: (r) => <span className="font-mono text-[11px] text-zinc-800">{String(r?.summary?.uniqueEpcs ?? '-')}</span> },
+                  { id: 'updated', header: t('updatedLabel'), cell: (r) => <span className="font-mono text-[11px] text-zinc-800">{String(r?.summary?.updated ?? '-')}</span> },
+                  {
+                    id: 'action',
+                    header: '',
+                    cell: (r) => (
+                      <button
+                        type="button"
+                        className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                        onClick={async () => {
+                          const detail = await getBatchImportHistory(r.id);
+                          setImportHistoryDetail(detail);
+                          setImportHistoryOpen(true);
+                        }}
+                      >
+                        {t('view')}
+                      </button>
+                    )
+                  }
+                ]}
+              />
+
+              <div className="mt-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                  disabled={loading || importHistoryOffset <= 0}
+                  onClick={() => setImportHistoryOffset((o) => Math.max(0, o - importHistoryLimit))}
+                >
+                  {t('prev')}
+                </button>
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                  disabled={loading || importHistoryOffset + importHistoryLimit >= (Number(importHistoryTotal) || 0)}
+                  onClick={() => setImportHistoryOffset((o) => o + importHistoryLimit)}
+                >
+                  {t('next')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {importHistoryOpen && importHistoryDetail ? (
+        <div className="ac-modal-backdrop">
+          <div className="ac-modal w-full max-w-4xl">
+            <div className="mb-3 text-sm font-semibold text-zinc-900">{t('importDetails')}</div>
+            <div className="mb-3 grid grid-cols-1 gap-2 text-xs text-zinc-700 sm:grid-cols-2">
+              <div>
+                <div className="text-[11px] font-semibold text-zinc-600">{t('time')}</div>
+                <div className="mt-0.5">{formatDateTime(importHistoryDetail?.createdAt) || '-'}</div>
+              </div>
+              <div>
+                <div className="text-[11px] font-semibold text-zinc-600">{t('importedBy')}</div>
+                <div className="mt-0.5">{String(importHistoryDetail?.actorEmail || '-')}</div>
+              </div>
+            </div>
+
+            <DataTable
+              density="compact"
+              minWidth={980}
+              rows={Array.isArray(importHistoryDetail?.metadata?.items) ? importHistoryDetail.metadata.items : []}
+              rowKey={(r) => String(r?.epcCode || '')}
+              loading={loading}
+              emptyContent={t('noEpc')}
+              columns={[
+                { id: 'epc', header: t('epcCode'), cell: (r) => <span className="font-mono text-[11px] text-zinc-800">{String(r?.epcCode || '')}</span> },
+                { id: 'barcode', header: t('barcode'), cell: (r) => <span className="text-zinc-800">{r?.barcode ? String(r.barcode) : '-'}</span> },
+                { id: 'batchNumber', header: t('batchNumber'), cell: (r) => <span className="text-zinc-800">{r?.batchNumber ? String(r.batchNumber) : '-'}</span> },
+                { id: 'swiftlet', header: t('swiftletHouseNumber'), cell: (r) => <span className="text-zinc-800">{r?.swiftletHouseNumber ? String(r.swiftletHouseNumber) : '-'}</span> },
+                { id: 'netWeight', header: t('netWeight'), cell: (r) => <span className="text-zinc-800">{r?.netWeight ? String(r.netWeight) : '-'}</span> },
+                {
+                  id: 'productionDate',
+                  header: t('manufactureDate'),
+                  cell: (r) => <span className="text-zinc-800">{r?.productionDate ? String(r.productionDate).slice(0, 10) : '-'}</span>
+                },
+                { id: 'caiq', header: t('individualLabelCaiq'), cell: (r) => <span className="text-zinc-800">{r?.caiqNumber ? String(r.caiqNumber) : '-'}</span> }
+              ]}
+            />
+
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                onClick={() => {
+                  setImportHistoryOpen(false);
+                  setImportHistoryDetail(null);
+                }}
+              >
+                {t('close')}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -1235,12 +1420,21 @@ export default function AdminEpc() {
                     if (!String(importProductId || '').trim()) throw new Error(t('selectProduct'));
                     const missingCount = Number(importPreview?.missingEpcs) || 0;
                     if (missingCount > 0) throw new Error(t('missingEpcError'));
-                    await submitBatchImport({
+                    const res = await submitBatchImport({
                       batchId: null,
                       base64: importBase64,
                       productId: String(importProductId || '').trim(),
                       certificateTemplateId: String(importAuthTemplateId || '').trim() || undefined
                     });
+                    setImportLastResult(res || null);
+                    if (Array.isArray(res?.batchIds) && res.batchIds.length === 1) {
+                      const bid = Number(res.batchIds[0]);
+                      if (Number.isFinite(bid) && bid > 0) {
+                        setTab('batches');
+                        setListBatchId(String(bid));
+                        setListOffset(0);
+                      }
+                    }
                     closeImport();
                   } catch (err) {
                     setImportLocalError(err?.message || tRaw('operationFailed'));

@@ -1,6 +1,7 @@
 const { z } = require('zod');
 const epcService = require('./epc.service');
 const { matchPermission } = require('../../middleware/access.middleware');
+const prisma = require('../../config/prisma');
 
 const generateSchema = z.object({
   batchQty: z.number().int().positive().max(5000),
@@ -399,6 +400,16 @@ async function submitBatchImport(req, res) {
       documents: {},
       actor: req.user
     });
+    res.locals.auditMetadata = {
+      type: 'batch_import',
+      rows: result?.rows ?? null,
+      uniqueEpcs: result?.uniqueEpcs ?? null,
+      updated: result?.updated ?? null,
+      productId: result?.productId ?? null,
+      certificateTemplateId: Object.prototype.hasOwnProperty.call(data, 'certificateTemplateId') ? data.certificateTemplateId : null,
+      batchIds: Array.isArray(result?.batchIds) ? result.batchIds : [],
+      items: Array.isArray(result?.items) ? result.items : []
+    };
     res.success(result, 'Batch import saved');
   } catch (e) {
     if (e instanceof z.ZodError) return res.error('Invalid input. Please check the form and try again.', 400);
@@ -418,9 +429,76 @@ async function submitBatchImportNew(req, res) {
       documents: {},
       actor: req.user
     });
+    res.locals.auditMetadata = {
+      type: 'batch_import',
+      rows: result?.rows ?? null,
+      uniqueEpcs: result?.uniqueEpcs ?? null,
+      updated: result?.updated ?? null,
+      productId: result?.productId ?? null,
+      certificateTemplateId: Object.prototype.hasOwnProperty.call(data, 'certificateTemplateId') ? data.certificateTemplateId : null,
+      batchIds: Array.isArray(result?.batchIds) ? result.batchIds : [],
+      items: Array.isArray(result?.items) ? result.items : []
+    };
     res.success(result, 'Batch import saved');
   } catch (e) {
     if (e instanceof z.ZodError) return res.error('Invalid input. Please check the form and try again.', 400);
+    res.error(e.message, 400);
+  }
+}
+
+async function listBatchImportHistory(req, res) {
+  try {
+    const { limit, offset } = parseLimitOffset(req.query);
+    const orgId = req.organization.id;
+    const where = { organizationId: orgId, action: 'SUBMIT_EPC_BATCH_IMPORT' };
+    const [total, rows] = await Promise.all([
+      prisma.auditLog.count({ where }),
+      prisma.auditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: offset,
+        take: limit,
+        select: { id: true, actorEmail: true, userId: true, createdAt: true, metadata: true }
+      })
+    ]);
+
+    const items = (Array.isArray(rows) ? rows : []).map((r) => {
+      const meta = r.metadata && typeof r.metadata === 'object' ? r.metadata : {};
+      const batchIds = Array.isArray(meta?.batchIds) ? meta.batchIds : [];
+      return {
+        id: r.id,
+        actorEmail: r.actorEmail,
+        userId: r.userId,
+        createdAt: r.createdAt,
+        summary: {
+          productId: meta?.productId ?? null,
+          certificateTemplateId: meta?.certificateTemplateId ?? null,
+          rows: meta?.rows ?? null,
+          uniqueEpcs: meta?.uniqueEpcs ?? null,
+          updated: meta?.updated ?? null,
+          batchIds
+        }
+      };
+    });
+
+    res.success({ total, items });
+  } catch (e) {
+    res.error(e.message, 400);
+  }
+}
+
+async function getBatchImportHistory(req, res) {
+  try {
+    const orgId = req.organization.id;
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.error('Invalid id', 400);
+    const row = await prisma.auditLog.findFirst({
+      where: { id, organizationId: orgId, action: 'SUBMIT_EPC_BATCH_IMPORT' },
+      select: { id: true, actorEmail: true, userId: true, createdAt: true, metadata: true }
+    });
+    if (!row) return res.error('Not found', 404);
+    res.success(row);
+  } catch (e) {
     res.error(e.message, 400);
   }
 }
@@ -531,6 +609,8 @@ module.exports = {
   previewBatchImportNew,
   submitBatchImport,
   submitBatchImportNew,
+  listBatchImportHistory,
+  getBatchImportHistory,
   markProductionDone,
   updateBatch,
   deleteBatch,
