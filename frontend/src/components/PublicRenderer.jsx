@@ -791,7 +791,13 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                         val = '-';
                       }
                       const hasValue = String(val || '').trim().length > 0;
-                      if (!hasValue && source !== 'static' && source !== 'title') return null;
+                      if (!hasValue && source !== 'static' && source !== 'title') {
+                        if (labelText) {
+                          val = '-';
+                        } else {
+                          return null;
+                        }
+                      }
                       const valueHtmlRaw =
                         source === 'static' || source === 'manual' || source === 'batch' || source === 'title' ? sanitizeLimitedHtml(val) : escapeTextToHtml(val);
                       const valueHtml = inlineizeHtml(valueHtmlRaw);
