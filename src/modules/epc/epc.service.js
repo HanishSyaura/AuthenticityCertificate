@@ -1904,8 +1904,8 @@ async function createImportBatchFromXlsx({
 
         await activateEpcIdentities({ tx, orgId, certificateId: tplCertId, epcCodes: uniqueEpcs });
       }
-      return { rows: updates.length, uniqueEpcs: uniqueEpcs.length, updated };
       return { rows: updates.length, uniqueEpcs: uniqueEpcs.length, updated, certificateId: tplCertId };
+    },
     { timeout: 12_000, maxWait: 5_000 }
   );
 

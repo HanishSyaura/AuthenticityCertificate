@@ -111,7 +111,6 @@ export default function AdminEpc() {
   const [remark, setRemark] = useState('');
   const [generateOpen, setGenerateOpen] = useState(false);
   const [listQuery, setListQuery] = useState('');
-  const [listBatchId, setListBatchId] = useState('');
   const [createdFrom, setCreatedFrom] = useState('');
   const [createdTo, setCreatedTo] = useState('');
   const [listOffset, setListOffset] = useState(0);
@@ -287,15 +286,14 @@ export default function AdminEpc() {
       q: listQuery,
       createdFrom: createdFrom || undefined,
       createdTo: createdTo || undefined,
-      batchId: listBatchId || undefined,
       limit: listLimit,
       offset: listOffset
     });
-  }, [canBatchView, createdFrom, createdTo, fetchItems, listBatchId, listLimit, listOffset, listQuery, tab]);
+  }, [canBatchView, createdFrom, createdTo, fetchItems, listLimit, listOffset, listQuery, tab]);
 
   useEffect(() => {
     setSelectedItemIds(new Set());
-  }, [items, listOffset, listQuery, listBatchId, createdFrom, createdTo]);
+  }, [items, listOffset, listQuery, createdFrom, createdTo]);
 
   const pageItemIds = useMemo(
     () =>
@@ -391,7 +389,6 @@ export default function AdminEpc() {
                       q: listQuery,
                       createdFrom: createdFrom || undefined,
                       createdTo: createdTo || undefined,
-                      batchId: listBatchId || undefined,
                       limit: listLimit,
                       offset: 0
                     });
@@ -415,7 +412,6 @@ export default function AdminEpc() {
                       q: listQuery,
                       createdFrom: createdFrom || undefined,
                       createdTo: createdTo || undefined,
-                      batchId: listBatchId || undefined,
                       limit: listLimit,
                       offset: 0
                     });
@@ -433,7 +429,7 @@ export default function AdminEpc() {
           </div>
 
           <div className="p-4">
-            <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_240px_240px_180px_auto]">
+            <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_240px_240px_auto]">
               <div className="flex flex-col gap-1">
                 <label htmlFor="searchEpcCode" className="text-[11px] text-zinc-500">
                   {t('searchEpcCode')}
@@ -482,22 +478,6 @@ export default function AdminEpc() {
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label htmlFor="batchId" className="text-[11px] text-zinc-500">
-                  {t('batchId')}
-                </label>
-                <input
-                  id="batchId"
-                  inputMode="numeric"
-                  value={listBatchId}
-                  onChange={(e) => {
-                    setListBatchId(e.target.value);
-                    setListOffset(0);
-                  }}
-                  className="ac-input"
-                  placeholder={t('allBatches')}
-                />
-              </div>
-              <div className="flex flex-col gap-1">
                 <div aria-hidden className="select-none text-[11px] text-transparent">
                   .
                 </div>
@@ -509,7 +489,6 @@ export default function AdminEpc() {
                       q: listQuery,
                       createdFrom: createdFrom || undefined,
                       createdTo: createdTo || undefined,
-                      batchId: listBatchId || undefined,
                       limit: listLimit,
                       offset: 0
                     })
@@ -524,7 +503,6 @@ export default function AdminEpc() {
               {t('total', { value: Number(itemTotal) || 0 })}{' '}
               <span className="text-zinc-400">
                 • Page {Math.floor(listOffset / listLimit) + 1} / {Math.max(1, Math.ceil((Number(itemTotal) || 0) / listLimit))}
-                • {listBatchId ? `${t('batch')} #${String(listBatchId).trim()}` : t('allBatches')}
               </span>
             </div>
 
@@ -850,7 +828,6 @@ export default function AdminEpc() {
                     q: listQuery,
                     createdFrom: createdFrom || undefined,
                     createdTo: createdTo || undefined,
-                    batchId: listBatchId || undefined,
                     columns: cols
                   });
                   setExportItemColsOpen(false);
@@ -1052,26 +1029,6 @@ export default function AdminEpc() {
                 <div className="sm:col-span-2">
                   <div className="text-[11px] font-semibold text-zinc-600">{t('authCertificate')}</div>
                   <div className="mt-1 text-xs text-zinc-900">{String(viewBatch?.certificateTemplate?.name || '-')}</div>
-                </div>
-                <div className="sm:col-span-2">
-                  <div className="text-[11px] font-semibold text-zinc-600">{t('epcItems')}</div>
-                  <div className="mt-2">
-                    <button
-                      type="button"
-                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                      onClick={() => {
-                        setTab('batches');
-                        setListQuery('');
-                        setCreatedFrom('');
-                        setCreatedTo('');
-                        setListBatchId(String(viewBatch.id));
-                        setListOffset(0);
-                        closeViewBatch();
-                      }}
-                    >
-                      {t('viewEpc')}
-                    </button>
-                  </div>
                 </div>
               </div>
 
@@ -1335,7 +1292,6 @@ export default function AdminEpc() {
                     q: listQuery,
                     createdFrom: createdFrom || undefined,
                     createdTo: createdTo || undefined,
-                    batchId: listBatchId || undefined,
                     limit: listLimit,
                     offset: 0
                   });
