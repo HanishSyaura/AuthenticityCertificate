@@ -299,13 +299,14 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
-  submitBatchImport: async ({ batchId, base64, certificateTemplateId } = {}) => {
+  submitBatchImport: async ({ batchId, base64, productId, certificateTemplateId } = {}) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
       const id = batchId == null || String(batchId).trim() === '' ? null : Number(batchId);
       const body = {
         base64,
+        ...(productId != null && String(productId).trim() !== '' ? { productId: Number(productId) } : {}),
         ...(certificateTemplateId != null && String(certificateTemplateId).trim() !== '' ? { certificateTemplateId: Number(certificateTemplateId) } : {})
       };
       const res =

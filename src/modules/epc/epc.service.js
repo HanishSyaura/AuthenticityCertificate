@@ -1796,7 +1796,8 @@ async function createImportBatchFromXlsx({
   productId,
   sku,
   certificateTemplateId,
-  documents
+  documents,
+  actor
 }) {
   const orgId = Number(organizationId);
   const { rows } = parseXlsxBase64(base64);
@@ -1865,6 +1866,74 @@ async function createImportBatchFromXlsx({
         throw new Error(`Some EPC codes do not exist in the system: ${missing.join(', ')}${(uniqueEpcs.length - foundByEpc.size) > 10 ? ', ...' : ''}`);
       }
 
+      let assignedProductId = null;
+      let assignedProductSku = null;
+      if (productId !== undefined) {
+        const pid = productId == null ? null : Number(productId);
+        if (pid != null) {
+          if (!Number.isFinite(pid) || pid <= 0) throw new Error('Product is required.');
+          const product = await tx.product.findFirst({ where: { id: pid, organizationId: orgId }, select: { id: true, sku: true, code: true } });
+          if (!product) throw new Error('Product not found.');
+          assignedProductId = Number(product.id);
+          assignedProductSku = String(product.sku || product.code || '').trim() || null;
+        }
+      }
+
+      let touchedBatchIds = [];
+      if (assignedProductId != null) {
+        const batchIdSet = new Set();
+        for (const group of chunkArray(uniqueEpcs, 1000)) {
+          const rows = await tx.epcItem.findMany({
+            where: { organizationId: orgId, epcCode: { in: group } },
+            select: { epcCode: true, batchId: true }
+          });
+          for (const r of Array.isArray(rows) ? rows : []) {
+            if (r?.batchId == null) {
+              throw new Error(`EPC is missing batch assignment: ${String(r?.epcCode || '').trim() || '-'}`);
+            }
+            batchIdSet.add(Number(r.batchId));
+          }
+        }
+        touchedBatchIds = Array.from(batchIdSet).filter((v) => Number.isFinite(v) && v > 0);
+
+        if (touchedBatchIds.length > 0) {
+          const batches = await tx.epcBatch.findMany({
+            where: { organizationId: orgId, id: { in: touchedBatchIds } },
+            select: { id: true, batchName: true, productId: true, sku: true }
+          });
+          const byId = new Map((Array.isArray(batches) ? batches : []).map((b) => [Number(b.id), b]));
+          const overrideAllowed = canOverrideItem({ actor });
+
+          for (const bid of touchedBatchIds) {
+            const b = byId.get(Number(bid));
+            if (!b) continue;
+            const existingPid = b.productId == null ? null : Number(b.productId);
+            if (existingPid != null && existingPid !== assignedProductId && !overrideAllowed) {
+              const err = new Error(`Batch already assigned to a different product: ${String(b.batchName || bid)}`);
+              err.status = 409;
+              throw err;
+            }
+          }
+
+          const now = new Date();
+          let batchesUpdated = 0;
+          for (const bid of touchedBatchIds) {
+            const b = byId.get(Number(bid));
+            if (!b) continue;
+            const data = {
+              productId: assignedProductId,
+              productionUploadedAt: now
+            };
+            const existingSku = String(b.sku || '').trim() || null;
+            if (!existingSku && assignedProductSku) data.sku = assignedProductSku;
+            const res = await tx.epcBatch.updateMany({ where: { organizationId: orgId, id: Number(bid) }, data });
+            batchesUpdated += Number(res.count) || 0;
+          }
+
+          if (batchesUpdated <= 0) throw new Error('Failed to assign product to EPC batch.');
+        }
+      }
+
       let updated = 0;
       for (const u of updates) {
         const data = {};
@@ -1904,7 +1973,14 @@ async function createImportBatchFromXlsx({
 
         await activateEpcIdentities({ tx, orgId, certificateId: tplCertId, epcCodes: uniqueEpcs });
       }
-      return { rows: updates.length, uniqueEpcs: uniqueEpcs.length, updated, certificateId: tplCertId };
+      return {
+        rows: updates.length,
+        uniqueEpcs: uniqueEpcs.length,
+        updated,
+        certificateId: tplCertId,
+        productId: assignedProductId,
+        batchIds: touchedBatchIds
+      };
     },
     { timeout: 12_000, maxWait: 5_000 }
   );

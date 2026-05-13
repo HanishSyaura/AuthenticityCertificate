@@ -254,8 +254,9 @@ export default function AdminEpc() {
       setImportPreview(null);
       setImportLocalError('');
       await fetchTemplates({ lang: 'en' });
+      await fetchProducts({ status: 'all' });
     },
-    [fetchTemplates]
+    [fetchProducts, fetchTemplates]
   );
 
   useEffect(() => {
@@ -1192,6 +1193,20 @@ export default function AdminEpc() {
               </div>
 
               <div>
+                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('product')}</div>
+                <select value={importProductId} onChange={(e) => setImportProductId(e.target.value)} className="ac-input">
+                  <option value="">{t('select')}</option>
+                  {(Array.isArray(products) ? products : []).map((p) => (
+                    <option key={p.id} value={String(p.id)}>
+                      {String(p?.sku || p?.code || '').trim()
+                        ? `${String(p.sku || p.code).trim()} — ${String(p?.name || '').trim() || '-'}`
+                        : String(p?.name || '').trim() || '-'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('authCertificate')}</div>
                 <select value={importAuthTemplateId} onChange={(e) => setImportAuthTemplateId(e.target.value)} className="ac-input">
                   <option value="">{t('select')}</option>
@@ -1217,11 +1232,13 @@ export default function AdminEpc() {
                     setImportLocalError('');
                     if (!importBase64) throw new Error(t('uploadXlsxFirst'));
                     if (!importPreview) throw new Error(t('uploadXlsxFirst'));
+                    if (!String(importProductId || '').trim()) throw new Error(t('selectProduct'));
                     const missingCount = Number(importPreview?.missingEpcs) || 0;
                     if (missingCount > 0) throw new Error(t('missingEpcError'));
                     await submitBatchImport({
                       batchId: null,
                       base64: importBase64,
+                      productId: String(importProductId || '').trim(),
                       certificateTemplateId: String(importAuthTemplateId || '').trim() || undefined
                     });
                     closeImport();

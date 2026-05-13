@@ -17,6 +17,7 @@ const previewBatchImportSchema = z.object({
 
 const submitBatchImportSchema = z.object({
   base64: z.string().min(1),
+  productId: z.union([z.number().int().positive(), z.null()]).optional(),
   certificateTemplateId: z.union([z.number().int().positive(), z.null()]).optional()
 });
 
@@ -392,10 +393,11 @@ async function submitBatchImport(req, res) {
     const result = await epcService.createImportBatchFromXlsx({
       organizationId: req.organization.id,
       base64: data.base64,
-      productId: null,
+      productId: Object.prototype.hasOwnProperty.call(data, 'productId') ? data.productId : undefined,
       sku: null,
       certificateTemplateId: Object.prototype.hasOwnProperty.call(data, 'certificateTemplateId') ? data.certificateTemplateId : undefined,
-      documents: {}
+      documents: {},
+      actor: req.user
     });
     res.success(result, 'Batch import saved');
   } catch (e) {
@@ -410,10 +412,11 @@ async function submitBatchImportNew(req, res) {
     const result = await epcService.createImportBatchFromXlsx({
       organizationId: req.organization.id,
       base64: data.base64,
-      productId: null,
+      productId: Object.prototype.hasOwnProperty.call(data, 'productId') ? data.productId : undefined,
       sku: null,
       certificateTemplateId: Object.prototype.hasOwnProperty.call(data, 'certificateTemplateId') ? data.certificateTemplateId : undefined,
-      documents: {}
+      documents: {},
+      actor: req.user
     });
     res.success(result, 'Batch import saved');
   } catch (e) {
