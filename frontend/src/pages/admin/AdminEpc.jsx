@@ -277,7 +277,7 @@ export default function AdminEpc() {
 
   useEffect(() => {
     if (tab === 'import' && canBatchImport) {
-      void fetchBatches({ origin: 'import', limit: 50, offset: 0 });
+      void fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
     } else if (tab === 'production' && canProduction) {
       void fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
     }
@@ -1409,7 +1409,7 @@ export default function AdminEpc() {
                       certificateTemplateId: Number(importAuthTemplateId),
                       documents: { ...importDocUrls }
                     });
-                    await fetchBatches({ origin: 'import', limit: 50, offset: 0 });
+                    await fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
                     closeImport();
                   } catch (err) {
                     setImportLocalError(err?.message || tRaw('operationFailed'));

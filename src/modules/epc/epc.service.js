@@ -1811,44 +1811,8 @@ async function createImportBatchFromXlsx({
     if (!has) throw new Error('All 4 supporting certificates are required.');
   }
 
-  let timeZone = null;
-  try {
-    const settings = await settingsService.ensureOrganizationSettings(orgId);
-    timeZone = settings?.defaultTimezone || null;
-  } catch {
-  }
-
-  const now = new Date();
-  const ddmmyyyy = formatDdMmYyyy(now, timeZone);
-  const dateKey = formatYyyyMmDd(now, timeZone);
-
-  const allowedPrefixes = getAllowedCorpPrefixes();
-  const detected = new Set(
-    uniqueEpcs
-      .map((code) => allowedPrefixes.find((p) => String(code || '').startsWith(String(p || ''))))
-      .filter(Boolean)
-  );
-  if (detected.size > 1) throw new Error('Excel contains multiple corp codes; import must be one corp code only.');
-  const corpPrefix = detected.size === 1 ? Array.from(detected)[0] : allowedPrefixes[0] || 'DA01';
-
   const result = await prisma.$transaction(
     async (tx) => {
-      await tx.importBatchSequence.upsert({
-        where: { dateKey },
-        update: {},
-        create: { dateKey, lastNo: 0n }
-      });
-
-      const seqRows = await tx.$queryRaw`
-        SELECT lastNo FROM \`ImportBatchSequence\`
-        WHERE dateKey = ${dateKey}
-        FOR UPDATE
-      `;
-      const current = seqRows && seqRows[0] && seqRows[0].lastNo !== undefined ? BigInt(seqRows[0].lastNo) : 0n;
-      const next = current + 1n;
-      await tx.importBatchSequence.update({ where: { dateKey }, data: { lastNo: next } });
-      const batchName = `Import - ${ddmmyyyy}${String(next).padStart(6, '0')}`;
-
       const pid = productId != null ? Number(productId) : null;
       if (!pid || !Number.isFinite(pid) || pid <= 0) throw new Error('Product is required.');
       const product = await tx.product.findFirst({ where: { id: pid, organizationId: orgId }, select: { id: true } });
@@ -1869,15 +1833,36 @@ async function createImportBatchFromXlsx({
         }
       }
 
-      const existing = await tx.epcItem.findMany({
-        where: { organizationId: orgId, epcCode: { in: uniqueEpcs } },
-        select: { epcCode: true },
-        take: 50
-      });
-      if (existing.length) {
-        const sample = existing.map((r) => String(r.epcCode || '').trim()).filter(Boolean).slice(0, 10);
-        throw new Error(`Some EPC codes already exist in the system: ${sample.join(', ')}${existing.length > 10 ? ', ...' : ''}`);
+      const foundByEpc = new Map();
+      const batchIdSet = new Set();
+      for (const group of chunkArray(uniqueEpcs, 1000)) {
+        const rows = await tx.epcItem.findMany({
+          where: { organizationId: orgId, epcCode: { in: group } },
+          select: { epcCode: true, batchId: true }
+        });
+        for (const r of Array.isArray(rows) ? rows : []) {
+          const code = String(r?.epcCode || '').trim();
+          const bid = Number(r?.batchId);
+          if (!code) continue;
+          if (Number.isFinite(bid)) batchIdSet.add(bid);
+          foundByEpc.set(code, bid);
+        }
       }
+
+      if (foundByEpc.size !== uniqueEpcs.length) {
+        const missing = uniqueEpcs.filter((c) => !foundByEpc.has(String(c || '').trim())).slice(0, 10);
+        throw new Error(`Some EPC codes do not exist in the system: ${missing.join(', ')}${(uniqueEpcs.length - foundByEpc.size) > 10 ? ', ...' : ''}`);
+      }
+
+      const batchIds = Array.from(batchIdSet).filter((n) => Number.isFinite(n));
+      if (!batchIds.length) throw new Error('No matching batch found for the EPC codes.');
+
+      const existingBatches = await tx.epcBatch.findMany({
+        where: { organizationId: orgId, id: { in: batchIds } },
+        select: { id: true, templateData: true }
+      });
+      const existingById = new Map(existingBatches.map((b) => [Number(b.id), b]));
+      if (existingById.size !== batchIds.length) throw new Error('Batch not found');
 
       if (tplCertId) {
         const existingCert = await tx.certificate.findUnique({
@@ -1900,69 +1885,69 @@ async function createImportBatchFromXlsx({
         }
       }
 
-      const batch = await tx.epcBatch.create({
-        data: {
-          organizationId: orgId,
-          corpPrefix,
-          periodKey: null,
-          origin: 'import',
-          productId: pid,
-          sku: skuCode,
-          batchName,
-          batchQty: uniqueEpcs.length,
-          remark: null,
-          certificateId: tplCertId,
-          certificateTemplateId: tplId,
-          templateData: mergeTemplateMetaAliases({
-            manufactureDate: meta.manufactureDate,
-            batchNumber: meta.batchNumber,
-            swiftletHouseNumber: meta.swiftletHouseNumber
-          }),
-          productionUploadedAt: new Date(),
-          productionDoneAt: null
-        },
-        select: { id: true }
-      });
+      const now = new Date();
+      for (const batchId of batchIds) {
+        const existing = existingById.get(Number(batchId));
+        const prevTemplateData =
+          existing?.templateData && typeof existing.templateData === 'object' && !Array.isArray(existing.templateData) ? existing.templateData : {};
+        await tx.epcBatch.update({
+          where: { id: Number(batchId) },
+          data: {
+            certificateId: tplCertId,
+            certificateTemplateId: tplId,
+            templateData: mergeTemplateMetaAliases({
+              ...prevTemplateData,
+              manufactureDate: meta.manufactureDate,
+              batchNumber: meta.batchNumber,
+              swiftletHouseNumber: meta.swiftletHouseNumber
+            }),
+            productionUploadedAt: now
+          }
+        });
+      }
 
-      const items = updates.map((u, idx) => ({
-        organizationId: orgId,
-        batchId: batch.id,
-        epcCode: String(u.epcCode || '').trim(),
-        runningNo: BigInt(idx + 1),
-        barcode: u.barcode,
-        batchNumber: u.batchNumber,
-        swiftletHouseNumber: u.swiftletHouseNumber,
-        netWeight: u.netWeight,
-        productionDate: u.productionDate,
-        caiqNumber: u.caiqNumber
-      }));
-
-      for (const c of chunkArray(items, 1000)) {
-        await tx.epcItem.createMany({ data: c });
+      let updated = 0;
+      for (const u of updates) {
+        const data = {};
+        if (u.barcode != null) data.barcode = u.barcode;
+        if (u.batchNumber != null) data.batchNumber = u.batchNumber;
+        if (u.swiftletHouseNumber != null) data.swiftletHouseNumber = u.swiftletHouseNumber;
+        if (u.netWeight != null) data.netWeight = u.netWeight;
+        if (u.productionDate != null) data.productionDate = u.productionDate;
+        if (u.caiqNumber != null) data.caiqNumber = u.caiqNumber;
+        if (Object.keys(data).length === 0) continue;
+        const res = await tx.epcItem.updateMany({
+          where: { organizationId: orgId, epcCode: String(u.epcCode || '').trim() },
+          data
+        });
+        updated += Number(res.count) || 0;
       }
 
       if (tplCertId) {
         await activateEpcIdentities({ tx, orgId, certificateId: tplCertId, epcCodes: uniqueEpcs });
       }
 
-      for (const [docType, mediaUrl] of docEntries) {
-        await tx.epcBatchDocument.upsert({
-          where: { batchId_docType: { batchId: batch.id, docType } },
-          update: { mediaUrl, uploadedAt: new Date() },
-          create: { organizationId: orgId, batchId: batch.id, docType, mediaUrl }
-        });
+      for (const batchId of batchIds) {
+        for (const [docType, mediaUrl] of docEntries) {
+          await tx.epcBatchDocument.upsert({
+            where: { batchId_docType: { batchId: Number(batchId), docType } },
+            update: { mediaUrl, uploadedAt: now },
+            create: { organizationId: orgId, batchId: Number(batchId), docType, mediaUrl }
+          });
+        }
       }
 
-      const full = await tx.epcBatch.findFirst({
-        where: { id: batch.id, organizationId: orgId },
+      const fullBatches = await tx.epcBatch.findMany({
+        where: { id: { in: batchIds }, organizationId: orgId },
         include: {
           product: { select: { id: true, sku: true, name: true, code: true } },
           certificateTemplate: { select: { id: true, certificateId: true, name: true } },
           documents: { select: { docType: true, mediaUrl: true, uploadedAt: true } }
-        }
+        },
+        orderBy: { id: 'asc' }
       });
 
-      return { batchId: batch.id, rows: updates.length, created: items.length, meta, batch: full };
+      return { batchIds, rows: updates.length, updated, meta, batches: fullBatches };
     },
     { timeout: 12_000, maxWait: 5_000 }
   );
