@@ -227,7 +227,7 @@ export default function AdminRecords() {
 
   return (
     <div className="ac-page">
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="mb-6 flex items-start justify-between gap-4" data-tour="records-header">
         <div>
           <h2 className="text-base font-semibold text-zinc-900">{pageTitle}</h2>
           <p className="mt-1 text-sm text-zinc-600">{t('recordsSubtitle')}</p>
@@ -250,6 +250,7 @@ export default function AdminRecords() {
             type="button"
             className="ac-btn ac-btn-soft px-3 py-2"
             onClick={() => openTour({ steps: getProductModuleTourSteps(), storageKey: 'ac_seen_product_module_tour_v1' })}
+            data-tour="records-open-guide"
           >
             Guide
           </button>
@@ -382,84 +383,85 @@ export default function AdminRecords() {
       ) : null}
 
       {activeTab === 'products' ? (
-        <DataTable
-          minWidth={1300}
-          rows={filteredProducts}
-          rowKey={(p) => p.id}
-          loading={loading}
-          loadingContent={t('loading')}
-          emptyContent={
-            <div>
-              <div className="text-sm font-semibold text-zinc-900">{t('noProducts')}</div>
-              <div className="mt-1 text-sm text-zinc-600">{t('noProductsHint')}</div>
-            </div>
-          }
-          top={
-            selectedCount ? (
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm font-semibold text-zinc-900">{t('selectedProducts', { value: selectedCount })}</div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button type="button" className="ac-btn ac-btn-soft px-3 py-2" onClick={() => setSelectedProductIds(new Set())}>
-                    {t('clearSelection')}
-                  </button>
-                  <button
-                    type="button"
-                    className="ac-btn ac-btn-soft px-3 py-2"
-                    onClick={async () => {
-                      const ids = Array.from(selectedProductIds);
-                      const activeIds = ids.filter((id) => {
-                        const p = productById.get(String(id));
-                        return String(p?.status || '').toLowerCase() !== 'inactive';
-                      });
-                      if (!activeIds.length) return;
-                      if (!window.confirm(t('confirmDeactivateSelectedProducts', { value: activeIds.length }))) return;
-                      for (const id of activeIds) {
-                        await deactivateProduct({ id });
-                      }
-                      void fetchProducts();
-                    }}
-                    disabled={Array.from(selectedProductIds).every((id) => String(productById.get(String(id))?.status || '').toLowerCase() === 'inactive')}
-                  >
-                    {t('deactivateSelected')}
-                  </button>
-                  <button
-                    type="button"
-                    className="ac-btn ac-btn-soft px-3 py-2"
-                    onClick={async () => {
-                      const ids = Array.from(selectedProductIds);
-                      if (!ids.length) return;
-                      if (!window.confirm(t('confirmDeleteSelectedProducts', { value: ids.length }))) return;
-                      const result = await bulkDeleteProducts({ ids });
-                      const deletedCount = Array.isArray(result?.deletedIds) ? result.deletedIds.length : 0;
-                      const notInactiveCount = Array.isArray(result?.notInactiveIds) ? result.notInactiveIds.length : 0;
-                      const notFoundCount = Array.isArray(result?.notFoundIds) ? result.notFoundIds.length : 0;
-
-                      setSelectedProductIds((prev) => {
-                        if (!prev.size) return prev;
-                        const next = new Set(prev);
-                        (Array.isArray(result?.deletedIds) ? result.deletedIds : []).forEach((id) => next.delete(id));
-                        return next;
-                      });
-                      void fetchProducts();
-
-                      if (notInactiveCount || notFoundCount) {
-                        setBulkNotice({
-                          type: 'warning',
-                          message: t('bulkDeletePartial', { deleted: deletedCount, notInactive: notInactiveCount, notFound: notFoundCount })
-                        });
-                      } else {
-                        setBulkNotice({ type: 'success', message: t('bulkDeleteSuccess', { value: deletedCount }) });
-                      }
-                    }}
-                  >
-                    {t('deleteSelected')}
-                  </button>
-                </div>
+        <div data-tour="records-products-table">
+          <DataTable
+            minWidth={1300}
+            rows={filteredProducts}
+            rowKey={(p) => p.id}
+            loading={loading}
+            loadingContent={t('loading')}
+            emptyContent={
+              <div>
+                <div className="text-sm font-semibold text-zinc-900">{t('noProducts')}</div>
+                <div className="mt-1 text-sm text-zinc-600">{t('noProductsHint')}</div>
               </div>
-            ) : null
-          }
-          onRowClick={(p) => navigate(`/admin/records/${p.id}`)}
-          columns={[
+            }
+            top={
+              selectedCount ? (
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-sm font-semibold text-zinc-900">{t('selectedProducts', { value: selectedCount })}</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" className="ac-btn ac-btn-soft px-3 py-2" onClick={() => setSelectedProductIds(new Set())}>
+                      {t('clearSelection')}
+                    </button>
+                    <button
+                      type="button"
+                      className="ac-btn ac-btn-soft px-3 py-2"
+                      onClick={async () => {
+                        const ids = Array.from(selectedProductIds);
+                        const activeIds = ids.filter((id) => {
+                          const p = productById.get(String(id));
+                          return String(p?.status || '').toLowerCase() !== 'inactive';
+                        });
+                        if (!activeIds.length) return;
+                        if (!window.confirm(t('confirmDeactivateSelectedProducts', { value: activeIds.length }))) return;
+                        for (const id of activeIds) {
+                          await deactivateProduct({ id });
+                        }
+                        void fetchProducts();
+                      }}
+                      disabled={Array.from(selectedProductIds).every((id) => String(productById.get(String(id))?.status || '').toLowerCase() === 'inactive')}
+                    >
+                      {t('deactivateSelected')}
+                    </button>
+                    <button
+                      type="button"
+                      className="ac-btn ac-btn-soft px-3 py-2"
+                      onClick={async () => {
+                        const ids = Array.from(selectedProductIds);
+                        if (!ids.length) return;
+                        if (!window.confirm(t('confirmDeleteSelectedProducts', { value: ids.length }))) return;
+                        const result = await bulkDeleteProducts({ ids });
+                        const deletedCount = Array.isArray(result?.deletedIds) ? result.deletedIds.length : 0;
+                        const notInactiveCount = Array.isArray(result?.notInactiveIds) ? result.notInactiveIds.length : 0;
+                        const notFoundCount = Array.isArray(result?.notFoundIds) ? result.notFoundIds.length : 0;
+
+                        setSelectedProductIds((prev) => {
+                          if (!prev.size) return prev;
+                          const next = new Set(prev);
+                          (Array.isArray(result?.deletedIds) ? result.deletedIds : []).forEach((id) => next.delete(id));
+                          return next;
+                        });
+                        void fetchProducts();
+
+                        if (notInactiveCount || notFoundCount) {
+                          setBulkNotice({
+                            type: 'warning',
+                            message: t('bulkDeletePartial', { deleted: deletedCount, notInactive: notInactiveCount, notFound: notFoundCount })
+                          });
+                        } else {
+                          setBulkNotice({ type: 'success', message: t('bulkDeleteSuccess', { value: deletedCount }) });
+                        }
+                      }}
+                    >
+                      {t('deleteSelected')}
+                    </button>
+                  </div>
+                </div>
+              ) : null
+            }
+            onRowClick={(p) => navigate(`/admin/records/${p.id}`)}
+            columns={[
             {
               id: 'select',
               header: (
@@ -611,22 +613,24 @@ export default function AdminRecords() {
               headerClassName: 'pr-3',
               className: 'pr-3'
             }
-          ]}
-        />
+            ]}
+          />
+        </div>
       ) : (
-        <DataTable
-          minWidth={900}
-          rows={filteredCategories}
-          rowKey={(c) => c.id}
-          loading={loading}
-          loadingContent={t('loading')}
-          emptyContent={
-            <div>
-              <div className="text-sm font-semibold text-zinc-900">{t('noCategories')}</div>
-              <div className="mt-1 text-sm text-zinc-600">{t('noCategoriesHint')}</div>
-            </div>
-          }
-          columns={[
+        <div data-tour="records-categories-table">
+          <DataTable
+            minWidth={900}
+            rows={filteredCategories}
+            rowKey={(c) => c.id}
+            loading={loading}
+            loadingContent={t('loading')}
+            emptyContent={
+              <div>
+                <div className="text-sm font-semibold text-zinc-900">{t('noCategories')}</div>
+                <div className="mt-1 text-sm text-zinc-600">{t('noCategoriesHint')}</div>
+              </div>
+            }
+            columns={[
             { id: 'name', header: t('name'), cell: (c) => <span className="font-medium text-zinc-900">{c.name}</span> },
             { id: 'code', header: t('code'), cell: (c) => <span className="font-mono text-sm text-zinc-700">{c.code}</span> },
             {
@@ -678,7 +682,8 @@ export default function AdminRecords() {
               className: 'pr-3'
             }
           ]}
-        />
+          />
+        </div>
       )}
 
       {showCreate ? (

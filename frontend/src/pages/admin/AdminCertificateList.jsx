@@ -123,7 +123,7 @@ export default function AdminCertificateList() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3" data-tour="cert-header">
         <div>
           <h2 className="text-base font-semibold text-zinc-900">{t('certificateList')}</h2>
           <p className="mt-1 text-sm text-zinc-600">{t('certificateListSubtitle')}</p>
@@ -131,6 +131,7 @@ export default function AdminCertificateList() {
         <button
           type="button"
           className="ac-btn px-3 py-2 text-xs"
+          data-tour="cert-add"
           onClick={() => {
             setNewError(null);
             setNewBgError(null);
@@ -149,24 +150,25 @@ export default function AdminCertificateList() {
         </div>
       ) : null}
 
-      <DataTable
-        minWidth={720}
-        rows={Array.isArray(templates) ? templates : []}
-        rowKey={(tpl) => getTemplateId(tpl) || tpl?.id || tpl?.templateId || tpl?.template_id}
-        loading={loading}
-        loadingContent={t('loading')}
-        emptyContent={
-          <div>
-            <div className="text-sm font-semibold text-zinc-900">{t('noCertificates')}</div>
-            <div className="mt-1 text-xs text-zinc-600">{t('noCertificatesHint')}</div>
-          </div>
-        }
-        onRowClick={(tpl) => {
-          const id = getTemplateId(tpl);
-          if (!id) return;
-          navigate(`/admin/certificates/${id}`);
-        }}
-        columns={[
+      <div data-tour="cert-table">
+        <DataTable
+          minWidth={720}
+          rows={Array.isArray(templates) ? templates : []}
+          rowKey={(tpl) => getTemplateId(tpl) || tpl?.id || tpl?.templateId || tpl?.template_id}
+          loading={loading}
+          loadingContent={t('loading')}
+          emptyContent={
+            <div>
+              <div className="text-sm font-semibold text-zinc-900">{t('noCertificates')}</div>
+              <div className="mt-1 text-xs text-zinc-600">{t('noCertificatesHint')}</div>
+            </div>
+          }
+          onRowClick={(tpl) => {
+            const id = getTemplateId(tpl);
+            if (!id) return;
+            navigate(`/admin/certificates/${id}`);
+          }}
+          columns={[
           {
             id: 'name',
             header: t('certificateName'),
@@ -239,8 +241,9 @@ export default function AdminCertificateList() {
               />
             )
           }
-        ]}
-      />
+          ]}
+        />
+      </div>
 
       {createOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

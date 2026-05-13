@@ -139,17 +139,19 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
-  exportItemsXlsx: async ({ itemIds, q, createdFrom, createdTo, columns } = {}) => {
+  exportItemsXlsx: async ({ itemIds, q, createdFrom, createdTo, batchId, columns } = {}) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
       const ids = Array.isArray(itemIds) ? itemIds.map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0) : [];
       const cols = Array.isArray(columns) ? columns.map((s) => String(s || '').trim()).filter(Boolean) : [];
+      const bid = batchId != null ? Number(batchId) : NaN;
       const body = {
         ...(ids.length ? { itemIds: ids } : {}),
         ...(q ? { q: String(q) } : {}),
         ...(createdFrom ? { createdFrom } : {}),
         ...(createdTo ? { createdTo } : {}),
+        ...(Number.isFinite(bid) && bid > 0 ? { batchId: bid } : {}),
         ...(cols.length ? { columns: cols } : {})
       };
       const res = await api.post('/epc/items/export-xlsx', body, { responseType: 'arraybuffer' });

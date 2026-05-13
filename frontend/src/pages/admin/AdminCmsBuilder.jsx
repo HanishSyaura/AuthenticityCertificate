@@ -251,7 +251,7 @@ export default function AdminCmsBuilder() {
   return (
     <div className="p-3 sm:p-4 lg:p-4">
       <div className="mb-4 flex items-start justify-between gap-4">
-        <div>
+        <div data-tour="cms-header">
           <h2 className="text-base font-semibold text-zinc-900">{t('cmsHeading')}</h2>
           <p className="mt-1 text-sm text-zinc-600">{t('cmsSubheading')}</p>
           {error ? <div className="mt-2 text-xs text-amber-700">{error}</div> : null}
@@ -265,6 +265,7 @@ export default function AdminCmsBuilder() {
             className="ac-input rounded-lg px-3 py-2 text-xs font-semibold"
             value={language || 'en'}
             onChange={(e) => setLanguage(e.target.value)}
+            data-tour="cms-language"
           >
             <option value="en">EN</option>
             <option value="ms">BM</option>
@@ -304,6 +305,7 @@ export default function AdminCmsBuilder() {
             }}
             className="ac-btn rounded-lg px-3 py-2 text-xs"
             disabled={!selectedPageId || saveStatus === 'saving'}
+            data-tour="cms-save"
           >
             {t('save')}
           </button>
@@ -315,6 +317,7 @@ export default function AdminCmsBuilder() {
             }}
             className="ac-btn rounded-lg px-3 py-2 text-xs"
             disabled={!selectedPageId || layoutLocked}
+            data-tour="cms-publish"
           >
             {t('publish')}
           </button>
@@ -406,57 +409,63 @@ export default function AdminCmsBuilder() {
           </button>
         ) : null}
         {pagesOpen ? (
-          <CmsPagePanel
-            pages={pages}
-            selectedPageId={selectedPageId}
-            onSelectPage={(id) => {
-              selectPage(id);
-              setSelectedBlockId(null);
-            }}
-            onCollapse={() => setPagesOpen(false)}
-            onReorderPages={async (orderedIds) => {
-              await reorderPages({ orderedIds });
-            }}
-            onCreatePage={async ({ name, slug }) => {
-              const created = await createPage({ name, slug });
-              selectPage(created.id);
-              setSelectedBlockId(null);
-            }}
-            onDeletePage={async (id) => {
-              await deletePage({ pageId: id });
-              setSelectedBlockId(null);
-            }}
-          />
+          <div data-tour="cms-pages-panel">
+            <CmsPagePanel
+              pages={pages}
+              selectedPageId={selectedPageId}
+              onSelectPage={(id) => {
+                selectPage(id);
+                setSelectedBlockId(null);
+              }}
+              onCollapse={() => setPagesOpen(false)}
+              onReorderPages={async (orderedIds) => {
+                await reorderPages({ orderedIds });
+              }}
+              onCreatePage={async ({ name, slug }) => {
+                const created = await createPage({ name, slug });
+                selectPage(created.id);
+                setSelectedBlockId(null);
+              }}
+              onDeletePage={async (id) => {
+                await deletePage({ pageId: id });
+                setSelectedBlockId(null);
+              }}
+            />
+          </div>
         ) : null}
 
         {saveError ? <div className="col-span-full -mt-2 text-xs text-rose-700">{saveError}</div> : null}
 
-        <CmsCanvasPanel
-          viewMode={viewMode}
-          kind="landing"
-          selectedPage={selectedPage}
-          layout={layout}
-          previewLayout={previewLayout}
-          layoutLoaded={layoutLoaded}
-          setLayout={setLayout}
-          selectedBlockId={selectedBlockId}
-          setSelectedBlockId={setSelectedBlockId}
-          layoutLocked={layoutLocked}
-        />
+        <div data-tour="cms-canvas-panel">
+          <CmsCanvasPanel
+            viewMode={viewMode}
+            kind="landing"
+            selectedPage={selectedPage}
+            layout={layout}
+            previewLayout={previewLayout}
+            layoutLoaded={layoutLoaded}
+            setLayout={setLayout}
+            selectedBlockId={selectedBlockId}
+            setSelectedBlockId={setSelectedBlockId}
+            layoutLocked={layoutLocked}
+          />
+        </div>
 
         {inspectorOpen ? (
-          <CmsInspectorPanel
-            selectedBlock={selectedBlock}
-            layout={layout}
-            setLayout={setLayout}
-            clearSelection={() => setSelectedBlockId(null)}
-            templates={templates}
-            layoutLocked={layoutLocked}
-            canvasWidth={canvasWidth}
-            canvasHeight={canvasHeight}
-            grid={4}
-            onCollapse={() => setInspectorOpen(false)}
-          />
+          <div data-tour="cms-inspector-panel">
+            <CmsInspectorPanel
+              selectedBlock={selectedBlock}
+              layout={layout}
+              setLayout={setLayout}
+              clearSelection={() => setSelectedBlockId(null)}
+              templates={templates}
+              layoutLocked={layoutLocked}
+              canvasWidth={canvasWidth}
+              canvasHeight={canvasHeight}
+              grid={4}
+              onCollapse={() => setInspectorOpen(false)}
+            />
+          </div>
         ) : null}
       </div>
     </div>

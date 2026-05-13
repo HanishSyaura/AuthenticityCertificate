@@ -1,10 +1,19 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../../i18n/useT';
 import useTourStore from '../../store/useTourStore';
 
 function clamp(v, min, max) {
   return Math.max(min, Math.min(v, max));
+}
+
+function safeQuerySelector(selector) {
+  if (!selector) return null;
+  try {
+    return document.querySelector(selector);
+  } catch {
+    return null;
+  }
 }
 
 function computePlacement(targetRect) {
@@ -40,20 +49,42 @@ export default function TourOverlay() {
   const step = Array.isArray(steps) ? steps[stepIndex] : null;
   const total = Array.isArray(steps) ? steps.length : 0;
   const tooltipRef = useRef(null);
+  const lastHighlightedElRef = useRef(null);
+  const [targetEl, setTargetEl] = useState(null);
   const [targetRect, setTargetRect] = useState(null);
   const [tooltipPos, setTooltipPos] = useState({ top: 0, left: 0, placement: 'center' });
 
   const hasNext = stepIndex < total - 1;
   const hasPrev = stepIndex > 0;
 
-  const targetEl = useMemo(() => {
-    if (!isOpen || !step?.selector) return null;
-    try {
-      return document.querySelector(step.selector);
-    } catch {
-      return null;
+  useEffect(() => {
+    if (!isOpen) return;
+    const selector = String(step?.selector || '').trim();
+    if (!selector) {
+      setTargetEl(null);
+      return;
     }
-  }, [isOpen, step?.selector]);
+
+    let alive = true;
+    const update = () => {
+      if (!alive) return;
+      const el = safeQuerySelector(selector);
+      setTargetEl((prev) => (prev === el ? prev : el));
+    };
+
+    update();
+    let tries = 0;
+    const intervalId = window.setInterval(() => {
+      tries += 1;
+      update();
+      if (tries >= 40) window.clearInterval(intervalId);
+    }, 100);
+
+    return () => {
+      alive = false;
+      window.clearInterval(intervalId);
+    };
+  }, [isOpen, stepIndex, step?.selector]);
 
   const recalc = useCallback(() => {
     if (!isOpen) return;
@@ -106,6 +137,11 @@ export default function TourOverlay() {
     if (!isOpen) return;
     recalc();
   }, [isOpen, stepIndex, recalc]);
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    recalc();
+  }, [isOpen, targetEl, recalc]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -183,6 +219,39 @@ export default function TourOverlay() {
     }, 50);
     return () => window.clearTimeout(timeout);
   }, [isOpen, stepIndex, step, navigator]);
+
+  useEffect(() => {
+    const prev = lastHighlightedElRef.current;
+    if (prev && prev !== targetEl) {
+      try {
+        prev.removeAttribute('data-tour-active');
+      } catch {
+        void 0;
+      }
+    }
+
+    if (isOpen && targetEl) {
+      try {
+        targetEl.setAttribute('data-tour-active', '1');
+      } catch {
+        void 0;
+      }
+      lastHighlightedElRef.current = targetEl;
+    }
+
+    if (!isOpen) {
+      if (prev) {
+        try {
+          prev.removeAttribute('data-tour-active');
+        } catch {
+          void 0;
+        }
+      }
+      lastHighlightedElRef.current = null;
+      setTargetEl(null);
+      setTargetRect(null);
+    }
+  }, [isOpen, targetEl]);
 
   if (!isOpen || !step) return null;
 

@@ -40,6 +40,12 @@ router.get(
   epcController.listBatches
 );
 
+router.get(
+  '/stats',
+  requirePermission(['epc.read', 'epc.write', 'epc.batch.view', 'epc.batch.create', 'epc.scan.access', 'epc.production.access']),
+  epcController.getEpcStats
+);
+
 router.patch(
   '/batches/:id',
   requirePermission(['epc.write', 'epc.batch.create']),

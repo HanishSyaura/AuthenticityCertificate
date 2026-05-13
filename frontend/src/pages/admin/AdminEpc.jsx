@@ -111,6 +111,7 @@ export default function AdminEpc() {
   const [remark, setRemark] = useState('');
   const [generateOpen, setGenerateOpen] = useState(false);
   const [listQuery, setListQuery] = useState('');
+  const [listBatchId, setListBatchId] = useState('');
   const [createdFrom, setCreatedFrom] = useState('');
   const [createdTo, setCreatedTo] = useState('');
   const [listOffset, setListOffset] = useState(0);
@@ -293,12 +294,19 @@ export default function AdminEpc() {
 
   useEffect(() => {
     if (tab !== 'batches' || !canBatchView) return;
-    void fetchItems({ q: listQuery, createdFrom: createdFrom || undefined, createdTo: createdTo || undefined, limit: listLimit, offset: listOffset });
-  }, [canBatchView, createdFrom, createdTo, fetchItems, listLimit, listOffset, listQuery, tab]);
+    void fetchItems({
+      q: listQuery,
+      createdFrom: createdFrom || undefined,
+      createdTo: createdTo || undefined,
+      batchId: listBatchId || undefined,
+      limit: listLimit,
+      offset: listOffset
+    });
+  }, [canBatchView, createdFrom, createdTo, fetchItems, listBatchId, listLimit, listOffset, listQuery, tab]);
 
   useEffect(() => {
     setSelectedItemIds(new Set());
-  }, [items, listOffset, listQuery, createdFrom, createdTo]);
+  }, [items, listOffset, listQuery, listBatchId, createdFrom, createdTo]);
 
   const pageItemIds = useMemo(
     () =>
@@ -310,13 +318,13 @@ export default function AdminEpc() {
   const allPageSelected = useMemo(() => pageItemIds.length > 0 && pageItemIds.every((id) => selectedItemIds.has(id)), [pageItemIds, selectedItemIds]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="p-4 sm:p-6 lg:p-8" data-tour="epc-page">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
+        <div data-tour="epc-header">
           <div className="text-base font-semibold text-zinc-900">{t('epc')}</div>
           <div className="mt-1 text-sm text-zinc-600">{t('guideStepBatchesBody')}</div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" data-tour="epc-tabs">
           {canBatchView ? (
             <button
               type="button"
@@ -360,12 +368,12 @@ export default function AdminEpc() {
       ) : null}
 
       {tab === 'batches' && canBatchView ? (
-        <div className="rounded-xl border border-zinc-200 bg-white">
+        <div className="rounded-xl border border-zinc-200 bg-white" data-tour="epc-items-card">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 px-4 py-3">
             <div className="text-xs font-semibold text-zinc-600">{t('epcItems')}</div>
             <div className="flex flex-wrap items-center gap-2">
               {canScan ? (
-                <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => navigate('/admin/epc/scan')}>
+                <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" data-tour="epc-scan" onClick={() => navigate('/admin/epc/scan')}>
                   {t('scanInput')}
                 </button>
               ) : null}
@@ -390,7 +398,14 @@ export default function AdminEpc() {
                     if (!res) return;
                     setSelectedItemIds(new Set());
                     setListOffset(0);
-                    await fetchItems({ q: listQuery, limit: listLimit, offset: 0 });
+                    await fetchItems({
+                      q: listQuery,
+                      createdFrom: createdFrom || undefined,
+                      createdTo: createdTo || undefined,
+                      batchId: listBatchId || undefined,
+                      limit: listLimit,
+                      offset: 0
+                    });
                   }}
                 >
                   {t('delete')}
@@ -407,14 +422,21 @@ export default function AdminEpc() {
                     if (!res) return;
                     setSelectedItemIds(new Set());
                     setListOffset(0);
-                    await fetchItems({ q: listQuery, limit: listLimit, offset: 0 });
+                    await fetchItems({
+                      q: listQuery,
+                      createdFrom: createdFrom || undefined,
+                      createdTo: createdTo || undefined,
+                      batchId: listBatchId || undefined,
+                      limit: listLimit,
+                      offset: 0
+                    });
                   }}
                 >
                   {t('clearAllGeneratedEpc')}
                 </button>
               ) : null}
               {canBatchCreate ? (
-                <button type="button" className="ac-btn ac-btn-primary px-3 py-2 text-xs" onClick={() => setGenerateOpen(true)}>
+                <button type="button" className="ac-btn ac-btn-primary px-3 py-2 text-xs" data-tour="epc-generate" onClick={() => setGenerateOpen(true)}>
                   {t('generate')}
                 </button>
               ) : null}
@@ -422,7 +444,7 @@ export default function AdminEpc() {
           </div>
 
           <div className="p-4">
-            <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_240px_240px_auto]">
+            <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_240px_240px_180px_auto]">
               <div className="flex flex-col gap-1">
                 <label htmlFor="searchEpcCode" className="text-[11px] text-zinc-500">
                   {t('searchEpcCode')}
@@ -471,6 +493,22 @@ export default function AdminEpc() {
                 />
               </div>
               <div className="flex flex-col gap-1">
+                <label htmlFor="batchId" className="text-[11px] text-zinc-500">
+                  {t('batchId')}
+                </label>
+                <input
+                  id="batchId"
+                  inputMode="numeric"
+                  value={listBatchId}
+                  onChange={(e) => {
+                    setListBatchId(e.target.value);
+                    setListOffset(0);
+                  }}
+                  className="ac-input"
+                  placeholder={t('allBatches')}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
                 <div aria-hidden className="select-none text-[11px] text-transparent">
                   .
                 </div>
@@ -478,7 +516,14 @@ export default function AdminEpc() {
                   type="button"
                   className="ac-btn ac-btn-soft px-4 py-3 text-sm"
                   onClick={() =>
-                    fetchItems({ q: listQuery, createdFrom: createdFrom || undefined, createdTo: createdTo || undefined, limit: listLimit, offset: 0 })
+                    fetchItems({
+                      q: listQuery,
+                      createdFrom: createdFrom || undefined,
+                      createdTo: createdTo || undefined,
+                      batchId: listBatchId || undefined,
+                      limit: listLimit,
+                      offset: 0
+                    })
                   }
                 >
                   {t('inquire')}
@@ -795,7 +840,13 @@ export default function AdminEpc() {
                     'createdAt',
                     'remark'
                   ].filter((k) => Boolean(exportItemCols?.[k]));
-                  await exportItemsXlsx({ q: listQuery, createdFrom: createdFrom || undefined, createdTo: createdTo || undefined, columns: cols });
+                  await exportItemsXlsx({
+                    q: listQuery,
+                    createdFrom: createdFrom || undefined,
+                    createdTo: createdTo || undefined,
+                    batchId: listBatchId || undefined,
+                    columns: cols
+                  });
                   setExportItemColsOpen(false);
                 }}
               >
@@ -995,6 +1046,10 @@ export default function AdminEpc() {
             <div className="space-y-4 p-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('batchId')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">{String(viewBatch?.id || '-')}</div>
+                </div>
+                <div>
                   <div className="text-[11px] font-semibold text-zinc-600">{t('batchName')}</div>
                   <div className="mt-1 text-xs text-zinc-900">{String(viewBatch?.batchName || '-')}</div>
                 </div>
@@ -1015,6 +1070,26 @@ export default function AdminEpc() {
                 <div className="sm:col-span-2">
                   <div className="text-[11px] font-semibold text-zinc-600">{t('authCertificate')}</div>
                   <div className="mt-1 text-xs text-zinc-900">{String(viewBatch?.certificateTemplate?.name || '-')}</div>
+                </div>
+                <div className="sm:col-span-2">
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('epcItems')}</div>
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                      onClick={() => {
+                        setTab('batches');
+                        setListQuery('');
+                        setCreatedFrom('');
+                        setCreatedTo('');
+                        setListBatchId(String(viewBatch.id));
+                        setListOffset(0);
+                        closeViewBatch();
+                      }}
+                    >
+                      {t('viewEpc')}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1355,7 +1430,14 @@ export default function AdminEpc() {
                   setBatchQty(1);
                   setRemark('');
                   setListOffset(0);
-                  await fetchItems({ q: listQuery, limit: listLimit, offset: 0 });
+                  await fetchItems({
+                    q: listQuery,
+                    createdFrom: createdFrom || undefined,
+                    createdTo: createdTo || undefined,
+                    batchId: listBatchId || undefined,
+                    limit: listLimit,
+                    offset: 0
+                  });
                   await fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
                 }}
               >

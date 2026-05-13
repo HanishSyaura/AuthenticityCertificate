@@ -71,6 +71,7 @@ const exportItemsSchema = z.object({
   q: z.string().optional(),
   createdFrom: z.string().optional(),
   createdTo: z.string().optional(),
+  batchId: z.number().int().positive().optional(),
   columns: z.array(z.string().min(1)).max(50).optional()
 });
 
@@ -129,6 +130,15 @@ async function listBatches(req, res) {
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     const origin = typeof req.query.origin === 'string' ? req.query.origin.trim() : '';
     const data = await epcService.listBatches({ organizationId: req.organization.id, q, origin, limit, offset });
+    res.success(data);
+  } catch (e) {
+    res.error(e.message, 400);
+  }
+}
+
+async function getEpcStats(req, res) {
+  try {
+    const data = await epcService.getEpcStats({ organizationId: req.organization.id });
     res.success(data);
   } catch (e) {
     res.error(e.message, 400);
@@ -253,6 +263,7 @@ async function exportItems(req, res) {
     const q = typeof data.q === 'string' ? data.q.trim() : '';
     const fromRaw = typeof data.createdFrom === 'string' ? data.createdFrom.trim() : '';
     const toRaw = typeof data.createdTo === 'string' ? data.createdTo.trim() : '';
+    const batchId = data.batchId != null ? Number(data.batchId) : null;
     const createdFrom = fromRaw ? new Date(fromRaw) : null;
     const createdTo = toRaw ? new Date(toRaw) : null;
     if (createdFrom && Number.isNaN(createdFrom.getTime())) return res.error('Invalid createdFrom', 400);
@@ -264,6 +275,7 @@ async function exportItems(req, res) {
       q,
       createdFrom,
       createdTo,
+      batchId,
       columns: cols
     });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -504,6 +516,7 @@ module.exports = {
   peekCertificateId,
   generateBatch,
   listBatches,
+  getEpcStats,
   listItems,
   getItemByEpc,
   resetItemsProduction,

@@ -1,8 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import useCmsStore from '../../store/useCmsStore';
-import useCertTemplatesStore from '../../store/useCertTemplatesStore';
-import useRecordsStore from '../../store/useRecordsStore';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
 import { useT } from '../../i18n/useT';
 import useTourStore from '../../store/useTourStore';
@@ -24,10 +20,8 @@ export default function AdminDashboard() {
   const { t } = useT();
   const [tourAutoStarted, setTourAutoStarted] = useState(false);
   const [latestEpc, setLatestEpc] = useState('');
+  const [epcStats, setEpcStats] = useState(null);
   const { openTour, hasSeen } = useTourStore((s) => ({ openTour: s.openTour, hasSeen: s.hasSeen }));
-  const { pages, fetchPages } = useCmsStore((s) => ({ pages: s.pages, fetchPages: s.fetchPages }));
-  const { templates, fetchTemplates } = useCertTemplatesStore((s) => ({ templates: s.templates, fetchTemplates: s.fetchTemplates }));
-  const { products, fetchProducts } = useRecordsStore((s) => ({ products: s.products, fetchProducts: s.fetchProducts }));
   const { token, user } = useAdminAuthStore((s) => ({ token: s.token, user: s.user }));
 
   const role = user?.role || 'admin';
@@ -41,24 +35,27 @@ export default function AdminDashboard() {
   }, [perms, role]);
 
   useEffect(() => {
-    fetchPages();
-    fetchTemplates();
-    fetchProducts();
-  }, [fetchPages, fetchTemplates, fetchProducts]);
-
-  useEffect(() => {
-    if (!token || !canReadEpc) return;
+    if (!token || !canReadEpc) {
+      setLatestEpc('');
+      setEpcStats(null);
+      return;
+    }
     let alive = true;
     (async () => {
       try {
         const api = createAdminApi({ token });
-        const res = await api.get('/epc/items', { params: { limit: 1, offset: 0 } });
-        const epc = String(res?.data?.data?.items?.[0]?.epcCode || '').trim();
+        const [itemsRes, statsRes] = await Promise.all([
+          api.get('/epc/items', { params: { limit: 1, offset: 0 } }),
+          api.get('/epc/stats')
+        ]);
+        const epc = String(itemsRes?.data?.data?.items?.[0]?.epcCode || '').trim();
         if (!alive) return;
         setLatestEpc(epc);
+        setEpcStats(statsRes?.data?.data || null);
       } catch {
         if (!alive) return;
         setLatestEpc('');
+        setEpcStats(null);
       }
     })();
     return () => {
@@ -77,8 +74,10 @@ export default function AdminDashboard() {
     return () => clearTimeout(timer);
   }, [tourAutoStarted, hasSeen, openTour, t]);
 
-  const productCount = useMemo(() => (Array.isArray(products) ? products.length : 0), [products]);
-  const templateCount = useMemo(() => (Array.isArray(templates) ? templates.length : 0), [templates]);
+  const epcGeneratedCount = useMemo(() => (epcStats ? Number(epcStats.generatedCount) || 0 : null), [epcStats]);
+  const epcActiveCount = useMemo(() => (epcStats ? Number(epcStats.activeCount) || 0 : null), [epcStats]);
+  const epcInactiveCount = useMemo(() => (epcStats ? Number(epcStats.inactiveCount) || 0 : null), [epcStats]);
+  const formatMaybeCount = (n) => (typeof n === 'number' ? n.toLocaleString() : '—');
   const verifyPath = useMemo(() => {
     if (latestEpc) return `/verify?epc=${encodeURIComponent(latestEpc)}`;
     return '/verify/<CERTIFICATE_ID>';
@@ -108,7 +107,7 @@ export default function AdminDashboard() {
 
       <div className="ac-card mb-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
+          <div data-tour="dashboard-first-time">
             <div className="text-sm font-semibold text-zinc-900">{t('firstTimeTitle')}</div>
             <div className="mt-1 text-sm text-zinc-600">{t('firstTimeSubtitle')}</div>
           </div>
@@ -116,6 +115,7 @@ export default function AdminDashboard() {
             <button
               type="button"
               className="ac-btn ac-btn-primary px-3 py-2 text-xs"
+              data-tour="dashboard-start-tour"
               onClick={() => openTour({ steps: getAdminGettingStartedTourSteps(t), storageKey: 'ac_seen_admin_tour_v1' })}
             >
               {t('tourStart')}
@@ -125,23 +125,12 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Card title={t('productModule')} value={productCount} hint={t('products')} />
-        <Card title={t('cmsLanding')} value={pages.length} hint={t('pages')} />
-        <Card title={t('certificateList')} value={templateCount} hint={t('templates')} />
+        <Card title={t('epcGenerated')} value={canReadEpc ? formatMaybeCount(epcGeneratedCount) : '—'} />
+        <Card title={t('epcActive')} value={canReadEpc ? formatMaybeCount(epcActiveCount) : '—'} />
+        <Card title={t('epcInactive')} value={canReadEpc ? formatMaybeCount(epcInactiveCount) : '—'} />
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Link to="/admin/cms" className="ac-card p-4 hover:bg-zinc-50">
-          <div className="text-sm font-semibold text-zinc-900">{t('cmsBuilder')}</div>
-          <div className="mt-1 text-xs text-zinc-600">{t('cmsSubheading')}</div>
-        </Link>
-        <Link to="/admin/certificates" className="ac-card p-4 hover:bg-zinc-50">
-          <div className="text-sm font-semibold text-zinc-900">{t('certificateList')}</div>
-          <div className="mt-1 text-xs text-zinc-600">{t('certTplSubheading')}</div>
-        </Link>
-      </div>
-
-      <div className="ac-card mt-4 p-4">
+      <div className="ac-card mt-4 p-4" data-tour="dashboard-verify">
         <div className="text-xs font-semibold text-zinc-600">{t('publicVerifyPage')}</div>
         <div className="mt-1 text-xs text-zinc-600">{t('publicVerifyHint')}</div>
         <div className="mt-2 flex flex-wrap items-center gap-2">

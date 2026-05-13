@@ -728,14 +728,16 @@ async function exportBatchImportTemplateXlsx() {
   return { buffer, filename };
 }
 
-async function exportItemsXlsx({ organizationId, itemIds, q, createdFrom, createdTo, columns }) {
+async function exportItemsXlsx({ organizationId, itemIds, q, createdFrom, createdTo, batchId, columns }) {
   const orgId = Number(organizationId);
   const ids = Array.from(new Set((Array.isArray(itemIds) ? itemIds : []).map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0)));
   const query = typeof q === 'string' ? q.trim() : '';
+  const bid = batchId != null ? Number(batchId) : NaN;
 
   const where = {
     organizationId: orgId,
     ...(ids.length ? { id: { in: ids } } : {}),
+    ...(Number.isFinite(bid) && bid > 0 ? { batchId: bid } : {}),
     ...((createdFrom || createdTo)
       ? {
           createdAt: {
@@ -1163,6 +1165,31 @@ async function listBatches({ organizationId, q, origin, limit, offset }) {
   });
 
   return { items: itemsWithStats, total, limit, offset };
+}
+
+async function getEpcStats({ organizationId }) {
+  const orgId = Number(organizationId);
+  const [generatedCount, activeRows] = await withTimeout(
+    Promise.all([
+      prisma.epcItem.count({ where: { organizationId: orgId } }),
+      prisma.$queryRaw(
+        Prisma.sql`
+          SELECT COUNT(t.id) AS activeCount
+          FROM \`EpcItem\` i
+          INNER JOIN \`TagIdentity\` t
+            ON t.organizationId = i.organizationId
+           AND t.epc = i.epcCode
+           AND t.unassignedAt IS NULL
+          WHERE i.organizationId = ${orgId}
+        `
+      )
+    ]),
+    2500
+  );
+
+  const activeCount = Number(Array.isArray(activeRows) ? activeRows?.[0]?.activeCount : 0) || 0;
+  const inactiveCount = Math.max(0, (Number(generatedCount) || 0) - activeCount);
+  return { generatedCount: Number(generatedCount) || 0, activeCount, inactiveCount };
 }
 
 async function listItems({ organizationId, q, batchId, pendingOnly, createdFrom, createdTo, limit, offset }) {
@@ -2314,6 +2341,7 @@ module.exports = {
   exportBatchProductionTemplateXlsx,
   exportBatchImportTemplateXlsx,
   exportItemsXlsx,
+  getEpcStats,
   listBatches,
   listItems,
   deleteItems,
