@@ -299,32 +299,18 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
-  submitBatchImport: async ({ batchId, base64, productId, sku, certificateTemplateId, documents }) => {
+  submitBatchImport: async ({ batchId, base64 } = {}) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
       const id = batchId == null || String(batchId).trim() === '' ? null : Number(batchId);
-      const body = {
-        base64,
-        productId: Number(productId),
-        sku: String(sku || '').trim(),
-        documents: documents || {}
-      };
-      if (certificateTemplateId !== undefined) {
-        body.certificateTemplateId = certificateTemplateId == null || String(certificateTemplateId).trim() === '' ? null : Number(certificateTemplateId);
-      }
+      const body = { base64 };
       const res =
         id != null && Number.isFinite(id)
           ? await api.post(`/epc/batches/${id}/batch-import/submit`, body)
           : await api.post('/epc/batch-import/submit', body);
       const data = res?.data?.data || null;
-      const updatedBatch = data?.batch || null;
-      if (updatedBatch?.id != null) {
-        const batches = (get().batches || []).map((b) => (String(b.id) === String(updatedBatch.id) ? updatedBatch : b));
-        set({ batches, loading: false });
-      } else {
-        set({ loading: false });
-      }
+      set({ loading: false });
       return data;
     } catch (e) {
       const msg = e?.response?.data?.message || tRaw('operationFailed');

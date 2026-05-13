@@ -16,11 +16,7 @@ const previewBatchImportSchema = z.object({
 });
 
 const submitBatchImportSchema = z.object({
-  base64: z.string().min(1),
-  productId: z.number().int().positive(),
-  sku: z.string().min(1),
-  certificateTemplateId: z.union([z.number().int().positive(), z.null()]).optional(),
-  documents: z.record(z.string().min(1), z.string().min(1))
+  base64: z.string().min(1)
 });
 
 const importExistingSchema = z.object({
@@ -391,16 +387,14 @@ async function previewBatchImportNew(req, res) {
 
 async function submitBatchImport(req, res) {
   try {
-    const batchId = Number(req.params.id);
     const data = submitBatchImportSchema.parse(req.body);
-    const result = await epcService.submitBatchImport({
+    const result = await epcService.createImportBatchFromXlsx({
       organizationId: req.organization.id,
-      batchId,
       base64: data.base64,
-      productId: data.productId,
-      sku: data.sku,
-      certificateTemplateId: Object.prototype.hasOwnProperty.call(data, 'certificateTemplateId') ? data.certificateTemplateId : undefined,
-      documents: data.documents
+      productId: null,
+      sku: null,
+      certificateTemplateId: undefined,
+      documents: {}
     });
     res.success(result, 'Batch import saved');
   } catch (e) {
@@ -415,10 +409,10 @@ async function submitBatchImportNew(req, res) {
     const result = await epcService.createImportBatchFromXlsx({
       organizationId: req.organization.id,
       base64: data.base64,
-      productId: data.productId,
-      sku: data.sku,
-      certificateTemplateId: Object.prototype.hasOwnProperty.call(data, 'certificateTemplateId') ? data.certificateTemplateId : undefined,
-      documents: data.documents
+      productId: null,
+      sku: null,
+      certificateTemplateId: undefined,
+      documents: {}
     });
     res.success(result, 'Batch import saved');
   } catch (e) {

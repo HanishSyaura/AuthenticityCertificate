@@ -247,27 +247,15 @@ export default function AdminEpc() {
   }, []);
 
   const openImport = useCallback(
-    async (b) => {
+    (b) => {
       const batch = b || null;
       setImportBatch(batch);
       setImportOpen(true);
       setImportBase64('');
       setImportPreview(null);
       setImportLocalError('');
-      const nextProductId = batch?.product?.id != null ? String(batch.product.id) : '';
-      setImportProductId(nextProductId);
-      setImportSku(String(batch?.sku || batch?.product?.sku || '').trim());
-      setImportAuthTemplateId(batch?.certificateTemplate?.id != null ? String(batch.certificateTemplate.id) : '');
-      const byType = new Map((Array.isArray(batch?.documents) ? batch.documents : []).map((d) => [String(d?.docType || '').trim(), String(d?.mediaUrl || '').trim()]));
-      setImportDocUrls({
-        moh_health_certificate: byType.get('moh_health_certificate') || '',
-        export_permit: byType.get('export_permit') || '',
-        dvs_health_certificate: byType.get('dvs_health_certificate') || '',
-        dvs_coo_certificate: byType.get('dvs_coo_certificate') || ''
-      });
-      await Promise.all([fetchProducts({ status: 'active' }), fetchTemplates({ lang: 'en' })]);
     },
-    [fetchProducts, fetchTemplates]
+    []
   );
 
   useEffect(() => {
@@ -277,7 +265,7 @@ export default function AdminEpc() {
 
   useEffect(() => {
     if (tab === 'import' && canBatchImport) {
-      void fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
+      void fetchBatches({ origin: 'import', limit: 50, offset: 0 });
     } else if (tab === 'production' && canProduction) {
       void fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
     }
@@ -1032,37 +1020,13 @@ export default function AdminEpc() {
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 px-4 py-3">
             <div className="text-xs font-semibold text-zinc-600">{t('batchImport')}</div>
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" disabled={loading} onClick={exportBatchImportTemplateXlsx}>
-                {t('downloadTemplate')}
-              </button>
               <button type="button" className="ac-btn ac-btn-primary px-3 py-2 text-xs" disabled={loading} onClick={() => openImport(null)}>
                 {t('importBatchFile')}
               </button>
             </div>
           </div>
-          <div className="divide-y divide-zinc-100">
-            {(Array.isArray(batches) ? batches : []).map((b) => {
-              const uploaded = Boolean(b.productionUploadedAt);
-              const docCount = Array.isArray(b.documents) ? b.documents.filter((d) => String(d?.mediaUrl || '').trim()).length : 0;
-              return (
-                <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-zinc-900">{b.batchName}</div>
-                    <div className="mt-1 text-[11px] text-zinc-500">
-                      {uploaded ? t('uploadedAt', { value: formatDateTime(b.productionUploadedAt) }) : t('notUploaded')} •{' '}
-                      {b.product?.name ? `${b.product.name} (${String(b.sku || b.product?.sku || '').trim() || '-'})` : t('noProductAssigned')} •{' '}
-                      {t('supportingCertsUploaded', { value: docCount })}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openViewBatch(b)}>
-                      {t('viewBatch')}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-            {(!batches || batches.length === 0) && !loading ? <div className="px-4 py-6 text-xs text-zinc-500">{t('noBatches')}</div> : null}
+          <div className="px-4 py-6 text-sm text-zinc-700">
+            Import XLSX untuk update data EPC yang sedia ada (contoh: net weight, CAIQ, barcode). EPC dalam fail mesti wujud dalam sistem.
           </div>
         </div>
       ) : null}
@@ -1276,109 +1240,24 @@ export default function AdminEpc() {
                 {importPreview ? (
                   <div className="mt-2 grid grid-cols-1 gap-2 rounded-xl border border-zinc-200 bg-white p-3 text-xs text-zinc-800 sm:grid-cols-3">
                     <div>
-                      <div className="text-[11px] font-semibold text-zinc-600">{t('manufactureDate')}</div>
-                      <div className="mt-0.5 font-mono">{String(importPreview.manufactureDate || '-')}</div>
+                      <div className="text-[11px] font-semibold text-zinc-600">Rows</div>
+                      <div className="mt-0.5 font-mono">{String(importPreview.rows || 0)}</div>
                     </div>
                     <div>
-                      <div className="text-[11px] font-semibold text-zinc-600">{t('batchNumber')}</div>
-                      <div className="mt-0.5 font-mono">{String(importPreview.batchNumber || '-')}</div>
+                      <div className="text-[11px] font-semibold text-zinc-600">Unique EPC</div>
+                      <div className="mt-0.5 font-mono">{String(importPreview.uniqueEpcs || 0)}</div>
                     </div>
                     <div>
-                      <div className="text-[11px] font-semibold text-zinc-600">{t('swiftletHouseNumber')}</div>
-                      <div className="mt-0.5 font-mono">{String(importPreview.swiftletHouseNumber || '-')}</div>
+                      <div className="text-[11px] font-semibold text-zinc-600">Missing EPC</div>
+                      <div className="mt-0.5 font-mono">{String(importPreview.missingEpcs || 0)}</div>
                     </div>
                   </div>
                 ) : null}
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('product')}</div>
-                  <select
-                    value={importProductId}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      setImportProductId(id);
-                      const p = (Array.isArray(products) ? products : []).find((x) => String(x?.id) === String(id));
-                      if (p?.sku) setImportSku(String(p.sku).trim());
-                    }}
-                    className="ac-input"
-                  >
-                    <option value="">{t('selectProduct')}</option>
-                    {(Array.isArray(products) ? products : []).map((p) => (
-                      <option key={p.id} value={String(p.id)}>
-                        {p.name} ({p.sku})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('sku')}</div>
-                  <input value={importSku} onChange={(e) => setImportSku(e.target.value)} className="ac-input" />
-                </div>
-              </div>
-
-              <div>
-                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('authCertificate')}</div>
-                <select value={importAuthTemplateId} onChange={(e) => setImportAuthTemplateId(e.target.value)} className="ac-input">
-                  <option value="">{t('select')}</option>
-                  {authTemplates.map((tpl) => (
-                    <option key={tpl.id} value={String(tpl.id)}>
-                      {String(tpl?.certificateId || '').trim() ? `${tpl.certificateId} — ${tpl.name}` : tpl.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <div className="mb-2 text-[11px] font-semibold text-zinc-600">{t('supportingCertificates')}</div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {DOC_TYPES.map((docType) => {
-                    const uploading = Boolean(importDocUploading?.[docType]);
-                    const url = String(importDocUrls?.[docType] || '').trim();
-                    const label = getDocTypeLabel(docType);
-                    return (
-                      <div key={docType} className="rounded-xl border border-zinc-200 bg-white p-3">
-                        <div className="text-xs font-semibold text-zinc-900">{label}</div>
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <label className="ac-btn ac-btn-soft px-3 py-2 text-xs">
-                            {uploading ? t('uploading') : t('uploadPdf')}
-                            <input
-                              type="file"
-                              accept="application/pdf,.pdf"
-                              className="hidden"
-                              disabled={uploading}
-                              onChange={async (e) => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                setImportLocalError('');
-                                setImportDocUploading((prev) => ({ ...prev, [docType]: true }));
-                                try {
-                                  const uploaded = await uploadMedia({ file });
-                                  const nextUrl = String(uploaded?.url || '').trim();
-                                  if (!nextUrl) throw new Error(tRaw('operationFailed'));
-                                  setImportDocUrls((prev) => ({ ...prev, [docType]: nextUrl }));
-                                } catch (err) {
-                                  setImportLocalError(err?.response?.data?.message || err?.message || tRaw('operationFailed'));
-                                } finally {
-                                  setImportDocUploading((prev) => ({ ...prev, [docType]: false }));
-                                  e.target.value = '';
-                                }
-                              }}
-                            />
-                          </label>
-                          {url ? (
-                            <a href={url} target="_blank" rel="noreferrer" className="text-[11px] font-semibold underline">
-                              {t('view')}
-                            </a>
-                          ) : (
-                            <div className="text-[11px] text-zinc-500">{t('notUploaded')}</div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                {importPreview?.missingSample?.length ? (
+                  <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                    Missing sample: {String(importPreview.missingSample.join(', '))}
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -1395,21 +1274,9 @@ export default function AdminEpc() {
                     setImportLocalError('');
                     if (!importBase64) throw new Error(t('uploadXlsxFirst'));
                     if (!importPreview) throw new Error(t('uploadXlsxFirst'));
-                    if (!String(importProductId || '').trim()) throw new Error(t('selectProduct'));
-                    if (!String(importSku || '').trim()) throw new Error(t('skuRequired'));
-                    if (!String(importAuthTemplateId || '').trim()) throw new Error(t('authCertRequired'));
-                    for (const dt of DOC_TYPES) {
-                      if (!String(importDocUrls?.[dt] || '').trim()) throw new Error(t('allSupportingCertsRequired'));
-                    }
-                    await submitBatchImport({
-                      batchId: null,
-                      base64: importBase64,
-                      productId: Number(importProductId),
-                      sku: String(importSku || '').trim(),
-                      certificateTemplateId: Number(importAuthTemplateId),
-                      documents: { ...importDocUrls }
-                    });
-                    await fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
+                    const missingCount = Number(importPreview?.missingEpcs) || 0;
+                    if (missingCount > 0) throw new Error('Some EPC codes do not exist in the system.');
+                    await submitBatchImport({ batchId: null, base64: importBase64 });
                     closeImport();
                   } catch (err) {
                     setImportLocalError(err?.message || tRaw('operationFailed'));
