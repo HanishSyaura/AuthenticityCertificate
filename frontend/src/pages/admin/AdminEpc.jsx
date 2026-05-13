@@ -247,15 +247,16 @@ export default function AdminEpc() {
   }, []);
 
   const openImport = useCallback(
-    (b) => {
+    async (b) => {
       const batch = b || null;
       setImportBatch(batch);
       setImportOpen(true);
       setImportBase64('');
       setImportPreview(null);
       setImportLocalError('');
+      await fetchTemplates({ lang: 'en' });
     },
-    []
+    [fetchTemplates]
   );
 
   useEffect(() => {
@@ -586,33 +587,6 @@ export default function AdminEpc() {
                       {String(it.epcCode || '')}
                     </button>
                   )
-                },
-                {
-                  id: 'batch',
-                  header: t('batch'),
-                  cell: (it) => {
-                    const b = it?.batch;
-                    const id = b?.id != null ? String(b.id) : '';
-                    const name = b?.batchName ? String(b.batchName) : '-';
-                    const origin = b?.origin ? String(b.origin) : '';
-                    return (
-                      <button
-                        type="button"
-                        className="min-w-0 text-left text-xs text-zinc-800 hover:underline"
-                        onClick={() => {
-                          if (!id) return;
-                          setListBatchId(id);
-                          setListOffset(0);
-                        }}
-                      >
-                        <div className="truncate">{name}</div>
-                        <div className="mt-0.5 truncate text-[11px] text-zinc-500">
-                          {id ? `#${id}` : '-'}
-                          {origin ? ` • ${origin}` : ''}
-                        </div>
-                      </button>
-                    );
-                  }
                 },
                 {
                   id: 'status',
@@ -1026,7 +1000,7 @@ export default function AdminEpc() {
             </div>
           </div>
           <div className="px-4 py-6 text-sm text-zinc-700">
-            Import XLSX untuk update data EPC yang sedia ada (contoh: net weight, CAIQ, barcode). EPC dalam fail mesti wujud dalam sistem.
+            {t('batchImportExistingEpcHint')}
           </div>
         </div>
       ) : null}
@@ -1240,24 +1214,36 @@ export default function AdminEpc() {
                 {importPreview ? (
                   <div className="mt-2 grid grid-cols-1 gap-2 rounded-xl border border-zinc-200 bg-white p-3 text-xs text-zinc-800 sm:grid-cols-3">
                     <div>
-                      <div className="text-[11px] font-semibold text-zinc-600">Rows</div>
+                      <div className="text-[11px] font-semibold text-zinc-600">{t('rowsLabel')}</div>
                       <div className="mt-0.5 font-mono">{String(importPreview.rows || 0)}</div>
                     </div>
                     <div>
-                      <div className="text-[11px] font-semibold text-zinc-600">Unique EPC</div>
+                      <div className="text-[11px] font-semibold text-zinc-600">{t('uniqueEpcLabel')}</div>
                       <div className="mt-0.5 font-mono">{String(importPreview.uniqueEpcs || 0)}</div>
                     </div>
                     <div>
-                      <div className="text-[11px] font-semibold text-zinc-600">Missing EPC</div>
+                      <div className="text-[11px] font-semibold text-zinc-600">{t('missingEpcLabel')}</div>
                       <div className="mt-0.5 font-mono">{String(importPreview.missingEpcs || 0)}</div>
                     </div>
                   </div>
                 ) : null}
                 {importPreview?.missingSample?.length ? (
                   <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                    Missing sample: {String(importPreview.missingSample.join(', '))}
+                    {t('missingSampleLabel')}: {String(importPreview.missingSample.join(', '))}
                   </div>
                 ) : null}
+              </div>
+
+              <div>
+                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('authCertificate')}</div>
+                <select value={importAuthTemplateId} onChange={(e) => setImportAuthTemplateId(e.target.value)} className="ac-input">
+                  <option value="">{t('select')}</option>
+                  {authTemplates.map((tpl) => (
+                    <option key={tpl.id} value={String(tpl.id)}>
+                      {String(tpl?.certificateId || '').trim() ? `${tpl.certificateId} — ${tpl.name}` : tpl.name}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -1275,8 +1261,12 @@ export default function AdminEpc() {
                     if (!importBase64) throw new Error(t('uploadXlsxFirst'));
                     if (!importPreview) throw new Error(t('uploadXlsxFirst'));
                     const missingCount = Number(importPreview?.missingEpcs) || 0;
-                    if (missingCount > 0) throw new Error('Some EPC codes do not exist in the system.');
-                    await submitBatchImport({ batchId: null, base64: importBase64 });
+                    if (missingCount > 0) throw new Error(t('missingEpcError'));
+                    await submitBatchImport({
+                      batchId: null,
+                      base64: importBase64,
+                      certificateTemplateId: String(importAuthTemplateId || '').trim() || undefined
+                    });
                     closeImport();
                   } catch (err) {
                     setImportLocalError(err?.message || tRaw('operationFailed'));

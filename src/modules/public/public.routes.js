@@ -328,6 +328,9 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
               netWeight: true,
               productionDate: true,
               caiqNumber: true,
+              barcode: true,
+              batchNumber: true,
+              swiftletHouseNumber: true,
               batch: {
                 select: {
                   id: true,
@@ -348,9 +351,28 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
           }),
           new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
         ]);
-        epcItem = row ? { netWeight: row.netWeight, productionDate: row.productionDate, caiqNumber: row.caiqNumber } : null;
+        epcItem = row
+          ? {
+              netWeight: row.netWeight,
+              productionDate: row.productionDate,
+              caiqNumber: row.caiqNumber,
+              barcode: row.barcode || null,
+              batchNumber: row.batchNumber || null,
+              swiftletHouseNumber: row.swiftletHouseNumber || null
+            }
+          : null;
         epcBatchTemplate = row?.batch?.certificateTemplate || null;
-        templateData = mergeTemplateMetaAliases(row?.batch?.templateData || null);
+        templateData = mergeTemplateMetaAliases({
+          ...(row?.batch?.templateData && typeof row.batch.templateData === 'object' && !Array.isArray(row.batch.templateData) ? row.batch.templateData : {}),
+          epcCode: resolvedEpc,
+          barcode: row?.barcode || null,
+          netWeight: row?.netWeight || null,
+          caiqNumber: row?.caiqNumber || null,
+          manufactureDate: row?.productionDate ? new Date(row.productionDate).toISOString().slice(0, 10) : null,
+          productionDate: row?.productionDate || null,
+          batchNumber: row?.batchNumber || null,
+          swiftletHouseNumber: row?.swiftletHouseNumber || null
+        });
         epcBatchName = row?.batch?.batchName ? String(row.batch.batchName) : null;
         epcBatchId = row?.batch?.id != null ? Number(row.batch.id) : null;
         epcProduct = row?.batch?.product || null;
@@ -495,6 +517,21 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     }
 
     let certificateTemplate = epcBatchTemplate || resolvedProduct?.certificateTemplate || null;
+    if (resolvedOrgId && !certificateTemplate) {
+      try {
+        if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
+        const tpl = await Promise.race([
+          prisma.certificateTemplate.findFirst({
+            where: { organizationId: resolvedOrgId, certificateId: String(certificateId), deletedAt: null },
+            orderBy: { id: 'desc' }
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
+        ]);
+        certificateTemplate = tpl || null;
+      } catch {
+        dbGate.markDbFailure({ cooldownMs: 10_000 });
+      }
+    }
     if (resolvedOrgId && lang !== 'en') {
       const ids = [];
       const mainId = certificateTemplate?.id != null ? Number(certificateTemplate.id) : NaN;

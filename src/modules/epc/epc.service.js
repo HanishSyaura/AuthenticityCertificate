@@ -1832,6 +1832,21 @@ async function createImportBatchFromXlsx({
 
   const result = await prisma.$transaction(
     async (tx) => {
+      let tplId = null;
+      let tplCertId = null;
+      if (certificateTemplateId !== undefined) {
+        tplId = certificateTemplateId == null ? null : Number(certificateTemplateId);
+        if (tplId != null) {
+          const tpl = await tx.certificateTemplate.findFirst({
+            where: { id: tplId, organizationId: orgId, deletedAt: null, templateType: 'auth' },
+            select: { id: true, certificateId: true }
+          });
+          if (!tpl) throw new Error('Auth certificate template not found.');
+          tplCertId = String(tpl.certificateId || '').trim() || null;
+          if (!tplCertId) throw new Error('Auth certificate template is missing certificateId.');
+        }
+      }
+
       const foundByEpc = new Map();
       for (const group of chunkArray(uniqueEpcs, 1000)) {
         const rows = await tx.epcItem.findMany({
@@ -1866,10 +1881,34 @@ async function createImportBatchFromXlsx({
         });
         updated += Number(res.count) || 0;
       }
+
+      if (tplCertId) {
+        const existingCert = await tx.certificate.findUnique({
+          where: { certificateId: tplCertId },
+          select: { certificateId: true, organizationId: true, status: true, issuedAt: true }
+        });
+        if (existingCert) {
+          if (Number(existingCert.organizationId) !== orgId) throw new Error('Certificate ID belongs to a different organization');
+          const s = String(existingCert.status || '').toUpperCase();
+          if (s === 'PENDING') {
+            await tx.certificate.update({
+              where: { certificateId: tplCertId },
+              data: { status: 'VALID', issuedAt: existingCert.issuedAt || new Date() }
+            });
+          }
+        } else {
+          await tx.certificate.create({
+            data: { certificateId: tplCertId, organizationId: orgId, type: 'shared', batchId: null, status: 'VALID', issuedAt: new Date() }
+          });
+        }
+
+        await activateEpcIdentities({ tx, orgId, certificateId: tplCertId, epcCodes: uniqueEpcs });
+      }
       return { rows: updates.length, uniqueEpcs: uniqueEpcs.length, updated };
-    },
+      return { rows: updates.length, uniqueEpcs: uniqueEpcs.length, updated, certificateId: tplCertId };
     { timeout: 12_000, maxWait: 5_000 }
   );
+
 
   return result;
 }
