@@ -268,6 +268,8 @@ proxy_read_timeout 600s;
 proxy_send_timeout 600s;
 ```
 
+Nota: letak setting ini pada `server { ... }` (global) atau pada `location` yang handle upload API (contoh `location ^~ /api/ { ... }`). Jika set pada location yang salah, upload boleh gagal walaupun UI sudah set `MAX_UPLOAD_MB`.
+
 Kalau backend set limit sendiri, boleh override di env:
 
 - `MAX_UPLOAD_MB=500`

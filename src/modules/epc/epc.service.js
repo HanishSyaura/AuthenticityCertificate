@@ -248,6 +248,17 @@ async function deleteAllBatches({ organizationId, corpPrefix }) {
 
     let deletedItems = 0;
     for (const group of chunkArray(ids, 1000)) {
+      await tx.$executeRaw(
+        Prisma.sql`
+          DELETE d
+          FROM \`EpcItemDocument\` d
+          INNER JOIN \`EpcItem\` i
+            ON i.id = d.epcItemId
+          WHERE d.organizationId = ${orgId}
+            AND i.organizationId = ${orgId}
+            AND i.batchId IN (${Prisma.join(group)})
+        `
+      );
       const res = await tx.epcItem.deleteMany({ where: { organizationId: orgId, batchId: { in: group } } });
       deletedItems += Number(res.count) || 0;
     }
@@ -882,7 +893,12 @@ async function deleteItems({ organizationId, itemIds, cleanup }) {
       }
     }
 
-    const res = await tx.epcItem.deleteMany({ where: { organizationId: orgId, id: { in: existing.map((r) => Number(r.id)) } } });
+    const existingIds = existing.map((r) => Number(r.id)).filter((n) => Number.isFinite(n) && n > 0);
+    for (const group of chunkArray(existingIds, 1000)) {
+      await tx.epcItemDocument.deleteMany({ where: { organizationId: orgId, epcItemId: { in: group } } });
+    }
+
+    const res = await tx.epcItem.deleteMany({ where: { organizationId: orgId, id: { in: existingIds } } });
     const deletedItems = Number(res.count) || 0;
 
     for (const [batchId, dec] of deletedByBatch.entries()) {
@@ -1047,6 +1063,17 @@ async function deleteAllGeneratedBatches({ organizationId, corpPrefix }) {
 
     let deletedItems = 0;
     for (const group of chunkArray(ids, 1000)) {
+      await tx.$executeRaw(
+        Prisma.sql`
+          DELETE d
+          FROM \`EpcItemDocument\` d
+          INNER JOIN \`EpcItem\` i
+            ON i.id = d.epcItemId
+          WHERE d.organizationId = ${orgId}
+            AND i.organizationId = ${orgId}
+            AND i.batchId IN (${Prisma.join(group)})
+        `
+      );
       const res = await tx.epcItem.deleteMany({ where: { organizationId: orgId, batchId: { in: group } } });
       deletedItems += Number(res.count) || 0;
     }

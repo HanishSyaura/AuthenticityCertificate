@@ -108,28 +108,62 @@ function uploadMedia(req, res) {
       if (!file) return res.error('File required', 400);
       const orgId = Number(req.organization.id);
       const destDir = path.join(getUploadsRoot(), 'media', String(orgId));
-      const baseName = path.parse(String(file.filename || '')).name;
-      if (isProcessableImage(file) && file.path) {
+      const isImg = isProcessableImage(file);
+      let fileName = String(file.filename || '');
+      let filePath = String(file.path || '');
+      req.__acUploadAbsPath = filePath;
+      let created = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const url = `/uploads/media/${orgId}/${fileName}`;
         try {
-          await generateWebpVariants({ filePath: file.path, destDir, baseName });
+          created = await withTimeout(
+            prisma.mediaAsset.create({
+              data: {
+                organizationId: orgId,
+                originalName: file.originalname,
+                fileName,
+                mimeType: file.mimetype,
+                sizeBytes: Number(file.size),
+                url
+              }
+            }),
+            5000
+          );
+          break;
+        } catch (e) {
+          if (e?.code === 'P2002' && attempt < 2) {
+            const nextName = makeFileName(file.originalname);
+            const nextPath = path.join(destDir, nextName);
+            try {
+              await fs.rename(filePath, nextPath);
+              fileName = nextName;
+              filePath = nextPath;
+              req.__acUploadAbsPath = filePath;
+              continue;
+            } catch {
+              throw e;
+            }
+          }
+          throw e;
+        }
+      }
+
+      if (!created) return res.error('Failed to upload', 400);
+
+      if (isImg && filePath) {
+        try {
+          const baseName = path.parse(String(fileName || '')).name;
+          await generateWebpVariants({ filePath, destDir, baseName });
         } catch {}
       }
-      const url = `/uploads/media/${orgId}/${file.filename}`;
-      const created = await withTimeout(
-        prisma.mediaAsset.create({
-          data: {
-            organizationId: orgId,
-            originalName: file.originalname,
-            fileName: file.filename,
-            mimeType: file.mimetype,
-            sizeBytes: Number(file.size),
-            url
-          }
-        }),
-        1500
-      );
       res.success(created, 'Uploaded');
     } catch (e) {
+      try {
+        const filePath = String(req.__acUploadAbsPath || req.file?.path || '');
+        if (filePath) await fs.unlink(filePath);
+      } catch {}
+      if (e?.code === 'P2002') return res.error('Duplicate upload. Please retry.', 409);
+      if (e?.message === 'db_timeout') return res.error('Database timeout', 503);
       res.error(e.message, 400);
     }
   });

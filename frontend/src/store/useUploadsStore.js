@@ -25,7 +25,6 @@ const useUploadsStore = create(() => ({
     form.append('file', file);
     try {
       const res = await api.post('/uploads/media', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 300_000
       });
       return res?.data?.data;

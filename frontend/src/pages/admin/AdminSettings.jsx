@@ -199,7 +199,6 @@ export default function AdminSettings() {
       const form = new FormData();
       form.append('file', file);
       const res = await api.post('/uploads/media', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 300_000
       });
       const created = res?.data?.data;
