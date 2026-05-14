@@ -1415,16 +1415,16 @@ export default function AdminEpc() {
                 {importPreview ? (
                   <div className="mt-2 grid grid-cols-1 gap-2 rounded-xl border border-zinc-200 bg-white p-3 text-xs text-zinc-800 sm:grid-cols-3">
                     <div>
-                      <div className="text-[11px] font-semibold text-zinc-600">{t('rowsLabel')}</div>
-                      <div className="mt-0.5 font-mono">{String(importPreview.rows || 0)}</div>
+                      <div className="text-[11px] font-semibold text-zinc-600">{t('manufactureDateLabel')}</div>
+                      <div className="mt-0.5 font-mono">{String(importPreview?.manufactureDate || '-')}</div>
                     </div>
                     <div>
-                      <div className="text-[11px] font-semibold text-zinc-600">{t('uniqueEpcLabel')}</div>
-                      <div className="mt-0.5 font-mono">{String(importPreview.uniqueEpcs || 0)}</div>
+                      <div className="text-[11px] font-semibold text-zinc-600">{t('batchNumberLabel')}</div>
+                      <div className="mt-0.5 font-mono">{String(importPreview?.batchNumber || '-')}</div>
                     </div>
                     <div>
-                      <div className="text-[11px] font-semibold text-zinc-600">{t('missingEpcLabel')}</div>
-                      <div className="mt-0.5 font-mono">{String(importPreview.missingEpcs || 0)}</div>
+                      <div className="text-[11px] font-semibold text-zinc-600">{t('swiftletHouseNumberLabel')}</div>
+                      <div className="mt-0.5 font-mono">{String(importPreview?.swiftletHouseNumber || '-')}</div>
                     </div>
                   </div>
                 ) : null}
@@ -1540,13 +1540,6 @@ export default function AdminEpc() {
                       certificateTemplateId: String(importAuthTemplateId || '').trim() || undefined,
                       documents: importDocUrls
                     });
-                    if (Array.isArray(res?.batchIds) && res.batchIds.length) {
-                      for (const bidRaw of res.batchIds) {
-                        const bid = Number(bidRaw);
-                        if (!Number.isFinite(bid) || bid <= 0) continue;
-                        await updateBatchDocuments({ batchId: bid, documents: importDocUrls });
-                      }
-                    }
                     setImportLastResult(res || null);
                     if (Array.isArray(res?.batchIds) && res.batchIds.length === 1) {
                       const bid = Number(res.batchIds[0]);

@@ -1804,12 +1804,35 @@ async function previewBatchImportXlsx({ organizationId, batchId, base64 }) {
     }
   }
 
+  const summarizeSet = (set) => {
+    const values = Array.from(set);
+    if (values.length === 0) return null;
+    if (values.length === 1) return values[0];
+    const shown = values.slice(0, 3).map((v) => String(v || '').trim()).filter(Boolean);
+    return `${shown.join(', ')}${values.length > shown.length ? ', ...' : ''}`;
+  };
+
+  const batchNumberSet = new Set();
+  const swiftletHouseNumberSet = new Set();
+  const manufactureDateSet = new Set();
+  for (const u of updates) {
+    const bn = String(u?.batchNumber || '').trim();
+    if (bn) batchNumberSet.add(bn);
+    const sh = String(u?.swiftletHouseNumber || '').trim();
+    if (sh) swiftletHouseNumberSet.add(sh);
+    const d = u?.productionDate;
+    if (d instanceof Date && !Number.isNaN(d.getTime())) manufactureDateSet.add(d.toISOString().slice(0, 10));
+  }
+
   return {
     rows: updates.length,
     uniqueEpcs: uniqueEpcs.length,
     existingEpcs: found,
     missingEpcs: missing.length,
-    missingSample: missing.slice(0, 10)
+    missingSample: missing.slice(0, 10),
+    manufactureDate: summarizeSet(manufactureDateSet),
+    batchNumber: summarizeSet(batchNumberSet),
+    swiftletHouseNumber: summarizeSet(swiftletHouseNumberSet)
   };
 }
 
@@ -1897,22 +1920,27 @@ async function createImportBatchFromXlsx({
         }
       }
 
-      const foundByEpc = new Map();
+      const epcItemByEpc = new Map();
       for (const group of chunkArray(uniqueEpcs, 1000)) {
         const rows = await tx.epcItem.findMany({
           where: { organizationId: orgId, epcCode: { in: group } },
-          select: { epcCode: true }
+          select: { id: true, epcCode: true, batchId: true }
         });
         for (const r of Array.isArray(rows) ? rows : []) {
           const code = String(r?.epcCode || '').trim();
           if (!code) continue;
-          foundByEpc.set(code, true);
+          const id = r?.id != null ? Number(r.id) : null;
+          const batchId = r?.batchId != null ? Number(r.batchId) : null;
+          if (!Number.isFinite(id) || id <= 0) continue;
+          epcItemByEpc.set(code, { id, batchId });
         }
       }
 
-      if (foundByEpc.size !== uniqueEpcs.length) {
-        const missing = uniqueEpcs.filter((c) => !foundByEpc.has(String(c || '').trim())).slice(0, 10);
-        throw new Error(`Some EPC codes do not exist in the system: ${missing.join(', ')}${(uniqueEpcs.length - foundByEpc.size) > 10 ? ', ...' : ''}`);
+      if (epcItemByEpc.size !== uniqueEpcs.length) {
+        const missing = uniqueEpcs.filter((c) => !epcItemByEpc.has(String(c || '').trim())).slice(0, 10);
+        throw new Error(
+          `Some EPC codes do not exist in the system: ${missing.join(', ')}${(uniqueEpcs.length - epcItemByEpc.size) > 10 ? ', ...' : ''}`
+        );
       }
 
       let assignedProductId = null;
@@ -1931,17 +1959,12 @@ async function createImportBatchFromXlsx({
       let touchedBatchIds = [];
       if (assignedProductId != null) {
         const batchIdSet = new Set();
-        for (const group of chunkArray(uniqueEpcs, 1000)) {
-          const rows = await tx.epcItem.findMany({
-            where: { organizationId: orgId, epcCode: { in: group } },
-            select: { epcCode: true, batchId: true }
-          });
-          for (const r of Array.isArray(rows) ? rows : []) {
-            if (r?.batchId == null) {
-              throw new Error(`EPC is missing batch assignment: ${String(r?.epcCode || '').trim() || '-'}`);
-            }
-            batchIdSet.add(Number(r.batchId));
+        for (const [epcCode, meta] of epcItemByEpc.entries()) {
+          const batchId = meta?.batchId != null ? Number(meta.batchId) : null;
+          if (!Number.isFinite(batchId) || batchId <= 0) {
+            throw new Error(`EPC is missing batch assignment: ${String(epcCode || '').trim() || '-'}`);
           }
+          batchIdSet.add(batchId);
         }
         touchedBatchIds = Array.from(batchIdSet).filter((v) => Number.isFinite(v) && v > 0);
 
@@ -1983,17 +2006,28 @@ async function createImportBatchFromXlsx({
         }
       }
 
-      if (docEntries.length > 0 && touchedBatchIds.length > 0) {
-        for (const bidRaw of touchedBatchIds) {
-          const bid = Number(bidRaw);
-          if (!Number.isFinite(bid) || bid <= 0) continue;
-          for (const [docType, mediaUrl] of docEntries) {
-            await tx.epcBatchDocument.upsert({
-              where: { batchId_docType: { batchId: bid, docType } },
-              update: { mediaUrl, uploadedAt: new Date() },
-              create: { organizationId: orgId, batchId: bid, docType, mediaUrl }
-            });
-          }
+      if (docEntries.length > 0) {
+        const epcItemIds = Array.from(epcItemByEpc.values())
+          .map((v) => (v?.id != null ? Number(v.id) : null))
+          .filter((v) => Number.isFinite(v) && v > 0);
+        const docTypeList = docEntries.map(([k]) => k);
+        const now = new Date();
+
+        for (const group of chunkArray(epcItemIds, 1000)) {
+          await tx.epcItemDocument.deleteMany({
+            where: { organizationId: orgId, epcItemId: { in: group }, docType: { in: docTypeList } }
+          });
+          await tx.epcItemDocument.createMany({
+            data: group.flatMap((epcItemId) =>
+              docEntries.map(([docType, mediaUrl]) => ({
+                organizationId: orgId,
+                epcItemId,
+                docType,
+                mediaUrl,
+                uploadedAt: now
+              }))
+            )
+          });
         }
       }
 
@@ -2197,12 +2231,32 @@ async function submitBatchImport({
       await activateEpcIdentities({ tx, orgId, certificateId: tplCertId, epcCodes });
     }
 
-    for (const [docType, mediaUrl] of docEntries) {
-      await tx.epcBatchDocument.upsert({
-        where: { batchId_docType: { batchId: id, docType } },
-        update: { mediaUrl, uploadedAt: new Date() },
-        create: { organizationId: orgId, batchId: id, docType, mediaUrl }
-      });
+    const epcItems = await tx.epcItem.findMany({
+      where: { organizationId: orgId, batchId: id, epcCode: { in: epcCodes } },
+      select: { id: true }
+    });
+    const epcItemIds = (Array.isArray(epcItems) ? epcItems : [])
+      .map((r) => (r?.id != null ? Number(r.id) : null))
+      .filter((v) => Number.isFinite(v) && v > 0);
+    if (epcItemIds.length) {
+      const docTypeList = docEntries.map(([k]) => k);
+      const now = new Date();
+      for (const group of chunkArray(epcItemIds, 1000)) {
+        await tx.epcItemDocument.deleteMany({
+          where: { organizationId: orgId, epcItemId: { in: group }, docType: { in: docTypeList } }
+        });
+        await tx.epcItemDocument.createMany({
+          data: group.flatMap((epcItemId) =>
+            docEntries.map(([docType, mediaUrl]) => ({
+              organizationId: orgId,
+              epcItemId,
+              docType,
+              mediaUrl,
+              uploadedAt: now
+            }))
+          )
+        });
+      }
     }
 
     const full = await tx.epcBatch.findFirst({

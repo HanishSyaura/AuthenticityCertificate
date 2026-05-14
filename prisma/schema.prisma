@@ -32,6 +32,7 @@ model Organization {
   epcBatches      EpcBatch[]
   epcItems        EpcItem[]
   epcBatchDocuments EpcBatchDocument[]
+  epcItemDocuments  EpcItemDocument[]
   productSupportingCertificates ProductSupportingCertificate[]
   certificates    Certificate[]
   scanLogs        ScanLog[]
@@ -309,6 +310,8 @@ model EpcItem {
   caiqNumber     String?
   createdAt      DateTime  @default(now())
 
+  documents EpcItemDocument[]
+
   @@unique([organizationId, epcCode])
   @@index([organizationId, createdAt])
   @@index([batchId])
@@ -330,6 +333,24 @@ model EpcBatchDocument {
   @@unique([batchId, docType])
   @@index([organizationId, uploadedAt])
   @@index([batchId])
+}
+
+model EpcItemDocument {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  epcItemId Int
+  epcItem   EpcItem @relation(fields: [epcItemId], references: [id])
+
+  docType  String
+  mediaUrl String
+
+  uploadedAt DateTime @default(now())
+
+  @@unique([epcItemId, docType])
+  @@index([organizationId, uploadedAt])
+  @@index([epcItemId])
 }
 
 model Certificate {

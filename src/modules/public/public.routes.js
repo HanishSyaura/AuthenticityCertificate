@@ -314,6 +314,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     }
 
     let epcItem = null;
+    let epcItemId = null;
     let epcBatchTemplate = null;
     let templateData = null;
     let epcBatchName = null;
@@ -326,6 +327,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
           prisma.epcItem.findUnique({
             where: { organizationId_epcCode: { organizationId: resolvedOrgId, epcCode: String(resolvedEpc) } },
             select: {
+              id: true,
               netWeight: true,
               productionDate: true,
               caiqNumber: true,
@@ -352,6 +354,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
           }),
           new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
         ]);
+        epcItemId = row?.id != null ? Number(row.id) : null;
         epcItem = row
           ? {
               netWeight: row.netWeight,
@@ -500,12 +503,12 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
       }
     }
 
-    if (resolvedOrgId && epcBatchId) {
+    if (resolvedOrgId && epcItemId) {
       try {
         if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
         const rows = await Promise.race([
-          prisma.epcBatchDocument.findMany({
-            where: { organizationId: resolvedOrgId, batchId: epcBatchId },
+          prisma.epcItemDocument.findMany({
+            where: { organizationId: resolvedOrgId, epcItemId },
             select: { docType: true, mediaUrl: true },
             orderBy: { docType: 'asc' }
           }),
