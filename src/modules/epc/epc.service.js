@@ -1251,6 +1251,8 @@ async function listItems({ organizationId, q, batchId, pendingOnly, createdFrom,
               batchQty: true,
               remark: true,
               certificateId: true,
+              certificateTemplateId: true,
+              certificateTemplate: { select: { id: true, name: true } },
               sku: true,
               createdAt: true,
               product: { select: { id: true, sku: true, name: true, code: true } }
@@ -1302,6 +1304,8 @@ const EPC_ITEM_INCLUDE = {
       batchQty: true,
       remark: true,
       certificateId: true,
+      certificateTemplateId: true,
+      certificateTemplate: { select: { id: true, name: true } },
       sku: true,
       createdAt: true,
       product: { select: { id: true, sku: true, name: true, code: true } }
@@ -1822,6 +1826,22 @@ async function createImportBatchFromXlsx({
   const { rows } = parseXlsxBase64(base64);
   if (!Array.isArray(rows) || rows.length === 0) throw new Error('Excel is empty');
 
+  const docTypes = getBatchImportDocTypes();
+  const docEntries = Object.entries(documents && typeof documents === 'object' ? documents : {}).map(([k, v]) => [
+    String(k || '').trim(),
+    String(v || '').trim()
+  ]);
+  if (docEntries.length > 0) {
+    for (const [k, v] of docEntries) {
+      if (!docTypes.has(k)) throw new Error('Invalid supporting certificate type.');
+      if (!v) throw new Error('Supporting certificate URL is required.');
+    }
+    for (const required of docTypes) {
+      const has = docEntries.some(([k]) => k === required);
+      if (!has) throw new Error('All 4 supporting certificates are required.');
+    }
+  }
+
   const updates = [];
   for (const r of rows) {
     const n = normalizeRowKeys(r);
@@ -1960,6 +1980,20 @@ async function createImportBatchFromXlsx({
           }
 
           if (batchesUpdated <= 0) throw new Error('Failed to assign product to EPC batch.');
+        }
+      }
+
+      if (docEntries.length > 0 && touchedBatchIds.length > 0) {
+        for (const bidRaw of touchedBatchIds) {
+          const bid = Number(bidRaw);
+          if (!Number.isFinite(bid) || bid <= 0) continue;
+          for (const [docType, mediaUrl] of docEntries) {
+            await tx.epcBatchDocument.upsert({
+              where: { batchId_docType: { batchId: bid, docType } },
+              update: { mediaUrl, uploadedAt: new Date() },
+              create: { organizationId: orgId, batchId: bid, docType, mediaUrl }
+            });
+          }
         }
       }
 

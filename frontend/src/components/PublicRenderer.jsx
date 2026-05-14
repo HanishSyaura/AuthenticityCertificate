@@ -503,36 +503,37 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
           const mode = String(block.content?.mode || 'fit');
           const isStretch = mode === 'stretch';
           const isEager = eagerImageIds.has(String(block.id || ''));
-          const webpSrcSet = block.content?.url ? buildUploadsWebpSrcSet(block.content.url) : null;
+          const resolvedUrl = block.content?.url ? resolvePublicMediaUrl(String(block.content.url)) : '';
+          const webpSrcSet = resolvedUrl ? buildUploadsWebpSrcSet(resolvedUrl) : null;
           const renderedW = Math.max(1, Math.round((Number(block.__rect?.w || 0) || 0) * (Number(scale) || 1)));
           const sizes = `${renderedW}px`;
           return (
             <div key={block.id} style={style} className="overflow-hidden">
-              {block.content?.url ? (
+              {resolvedUrl ? (
                 webpSrcSet ? (
                   <picture className="block h-full w-full">
                     <source type="image/webp" srcSet={webpSrcSet} sizes={sizes} />
                     <img
-                      src={block.content.url}
+                      src={resolvedUrl}
                       alt=""
                       className={`${isStretch ? 'h-full w-full object-fill' : 'h-full w-full object-contain'} cursor-zoom-in`}
                       loading={isEager ? 'eager' : 'lazy'}
                       decoding="async"
                       fetchPriority={isEager ? 'high' : 'low'}
                       draggable={false}
-                      onClick={() => setLightboxSrc(block.content.url)}
+                      onClick={() => setLightboxSrc(resolvedUrl)}
                     />
                   </picture>
                 ) : (
                   <img
-                    src={block.content.url}
+                    src={resolvedUrl}
                     alt=""
                     className={`${isStretch ? 'h-full w-full object-fill' : 'h-full w-full object-contain'} cursor-zoom-in`}
                     loading={isEager ? 'eager' : 'lazy'}
                     decoding="async"
                     fetchPriority={isEager ? 'high' : 'low'}
                     draggable={false}
-                    onClick={() => setLightboxSrc(block.content.url)}
+                    onClick={() => setLightboxSrc(resolvedUrl)}
                   />
                 )
               ) : (
@@ -646,7 +647,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                 .filter(Boolean)
             );
             const bgColor = String(template?.backgroundColor || '#ffffff');
-            const bgUrl = template?.background ? String(template.background) : '';
+            const bgUrl = template?.background ? resolvePublicMediaUrl(String(template.background)) : '';
             const bgMode = String(template?.backgroundMode || 'background');
             const bgSrcSet = bgUrl ? buildUploadsWebpSrcSet(bgUrl) : null;
             const bgSizes = `${Math.max(1, Math.round(baseW * scale))}px`;

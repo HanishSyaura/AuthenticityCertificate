@@ -21,7 +21,8 @@ const previewBatchImportSchema = z.object({
 const submitBatchImportSchema = z.object({
   base64: z.string().min(1),
   productId: z.union([z.number().int().positive(), z.null()]).optional(),
-  certificateTemplateId: z.union([z.number().int().positive(), z.null()]).optional()
+  certificateTemplateId: z.union([z.number().int().positive(), z.null()]).optional(),
+  documents: z.record(z.string(), z.string()).optional()
 });
 
 const importExistingSchema = z.object({
@@ -405,7 +406,7 @@ async function submitBatchImport(req, res) {
       productId: Object.prototype.hasOwnProperty.call(data, 'productId') ? data.productId : undefined,
       sku: null,
       certificateTemplateId: Object.prototype.hasOwnProperty.call(data, 'certificateTemplateId') ? data.certificateTemplateId : undefined,
-      documents: {},
+      documents: Object.prototype.hasOwnProperty.call(data, 'documents') ? data.documents : {},
       actor: req.user
     });
     res.locals.auditMetadata = {
@@ -434,7 +435,7 @@ async function submitBatchImportNew(req, res) {
       productId: Object.prototype.hasOwnProperty.call(data, 'productId') ? data.productId : undefined,
       sku: null,
       certificateTemplateId: Object.prototype.hasOwnProperty.call(data, 'certificateTemplateId') ? data.certificateTemplateId : undefined,
-      documents: {},
+      documents: Object.prototype.hasOwnProperty.call(data, 'documents') ? data.documents : {},
       actor: req.user
     });
     res.locals.auditMetadata = {
@@ -476,17 +477,51 @@ async function listBatchImportHistory(req, res) {
       })
     ]);
 
+    const productIds = [];
+    const certificateTemplateIds = [];
+    for (const r of Array.isArray(rows) ? rows : []) {
+      const meta = r?.metadata && typeof r.metadata === 'object' ? r.metadata : {};
+      const productIdNum = Number(meta?.productId);
+      if (Number.isFinite(productIdNum) && productIdNum > 0) productIds.push(productIdNum);
+      const templateIdNum = Number(meta?.certificateTemplateId);
+      if (Number.isFinite(templateIdNum) && templateIdNum > 0) certificateTemplateIds.push(templateIdNum);
+    }
+
+    const uniqueProductIds = Array.from(new Set(productIds));
+    const uniqueTemplateIds = Array.from(new Set(certificateTemplateIds));
+
+    const [products, templates] = await Promise.all([
+      uniqueProductIds.length
+        ? prisma.product.findMany({ where: { organizationId: orgId, id: { in: uniqueProductIds } }, select: { id: true, name: true } })
+        : Promise.resolve([]),
+      uniqueTemplateIds.length
+        ? prisma.certificateTemplate.findMany({
+            where: { organizationId: orgId, id: { in: uniqueTemplateIds } },
+            select: { id: true, name: true }
+          })
+        : Promise.resolve([])
+    ]);
+
+    const productMap = new Map((Array.isArray(products) ? products : []).map((p) => [p.id, p]));
+    const templateMap = new Map((Array.isArray(templates) ? templates : []).map((t) => [t.id, t]));
+
     const items = (Array.isArray(rows) ? rows : []).map((r) => {
       const meta = r.metadata && typeof r.metadata === 'object' ? r.metadata : {};
       const batchIds = Array.isArray(meta?.batchIds) ? meta.batchIds : [];
+      const productId = meta?.productId ?? null;
+      const productIdNum = Number(productId);
+      const certificateTemplateId = meta?.certificateTemplateId ?? null;
+      const certificateTemplateIdNum = Number(certificateTemplateId);
       return {
         id: r.id,
         actorEmail: r.actorEmail,
         userId: r.userId,
         createdAt: r.createdAt,
         summary: {
-          productId: meta?.productId ?? null,
-          certificateTemplateId: meta?.certificateTemplateId ?? null,
+          productId,
+          productName: Number.isFinite(productIdNum) ? productMap.get(productIdNum)?.name ?? null : null,
+          certificateTemplateId,
+          certificateTemplateName: Number.isFinite(certificateTemplateIdNum) ? templateMap.get(certificateTemplateIdNum)?.name ?? null : null,
           rows: meta?.rows ?? null,
           uniqueEpcs: meta?.uniqueEpcs ?? null,
           updated: meta?.updated ?? null,

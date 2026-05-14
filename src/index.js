@@ -89,19 +89,41 @@ async function tryServeWebpVariant(req, res, next) {
   return next();
 }
 
-const uploadStaticMiddlewares = uploadRoots.map((root) =>
-  express.static(root, {
-    etag: true,
-    lastModified: true,
-    immutable: isProd,
-    maxAge: isProd ? '365d' : 0
-  })
-);
+function buildUploadStaticMiddlewares(overrides = {}) {
+  return uploadRoots.map((root) =>
+    express.static(root, {
+      etag: true,
+      lastModified: true,
+      immutable: isProd,
+      maxAge: isProd ? '365d' : 0,
+      ...overrides
+    })
+  );
+}
+
+const uploadStaticMiddlewares = buildUploadStaticMiddlewares();
+const uploadStaticMiddlewaresNoFallthrough = buildUploadStaticMiddlewares({ fallthrough: false });
 
 app.use(
   '/uploads',
   tryServeWebpVariant,
   ...uploadStaticMiddlewares
+);
+
+app.use(
+  '/public/uploads',
+  tryServeWebpVariant,
+  ...uploadStaticMiddlewaresNoFallthrough
+);
+app.use(
+  '/api/public/uploads',
+  tryServeWebpVariant,
+  ...uploadStaticMiddlewaresNoFallthrough
+);
+app.use(
+  '/api/v1/public/uploads',
+  tryServeWebpVariant,
+  ...uploadStaticMiddlewaresNoFallthrough
 );
 
 app.use('/uploads', (req, res, next) => {

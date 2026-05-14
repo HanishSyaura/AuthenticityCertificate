@@ -717,16 +717,18 @@ export default function AdminEpc() {
                   <div className="mt-1 text-xs text-zinc-900">{detailItem.batchNumber ? String(detailItem.batchNumber) : '-'}</div>
                 </div>
                 <div>
-                  <div className="text-[11px] font-semibold text-zinc-600">{t('batchId')}</div>
-                  <div className="mt-1 text-xs text-zinc-900">{detailItem?.batch?.id != null ? String(detailItem.batch.id) : '-'}</div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('product')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">{detailItem?.batch?.product?.name ? String(detailItem.batch.product.name) : '-'}</div>
                 </div>
                 <div>
-                  <div className="text-[11px] font-semibold text-zinc-600">{t('batchName')}</div>
-                  <div className="mt-1 text-xs text-zinc-900">{detailItem?.batch?.batchName ? String(detailItem.batch.batchName) : '-'}</div>
-                </div>
-                <div>
-                  <div className="text-[11px] font-semibold text-zinc-600">{t('origin')}</div>
-                  <div className="mt-1 text-xs text-zinc-900">{detailItem?.batch?.origin ? String(detailItem.batch.origin) : '-'}</div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('certTemplate')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">
+                    {detailItem?.batch?.certificateTemplate?.name
+                      ? String(detailItem.batch.certificateTemplate.name)
+                      : detailItem?.batch?.certificateTemplateId != null
+                        ? String(detailItem.batch.certificateTemplateId)
+                        : '-'}
+                  </div>
                 </div>
                 <div>
                   <div className="text-[11px] font-semibold text-zinc-600">{t('remark')}</div>
@@ -1068,27 +1070,32 @@ export default function AdminEpc() {
               <div className="mb-2 text-[11px] text-zinc-500">{t('total', { value: Number(importHistoryTotal) || 0 })}</div>
               <DataTable
                 density="compact"
-                minWidth={980}
+                minWidth={760}
                 rows={Array.isArray(importHistory) ? importHistory : []}
                 rowKey={(r) => r.id}
                 loading={loading}
                 emptyContent={t('noImportHistory')}
                 columns={[
                   { id: 'time', header: t('time'), cell: (r) => <span className="whitespace-nowrap text-zinc-700">{formatDateTime(r?.createdAt)}</span> },
-                  { id: 'actor', header: t('importedBy'), cell: (r) => <span className="text-zinc-800">{String(r?.actorEmail || '-')}</span> },
-                  { id: 'productId', header: t('product'), cell: (r) => <span className="text-zinc-800">{r?.summary?.productId != null ? String(r.summary.productId) : '-'}</span> },
                   {
-                    id: 'batchIds',
-                    header: t('batchId'),
+                    id: 'product',
+                    header: t('product'),
                     cell: (r) => (
-                      <span className="text-zinc-800">
-                        {Array.isArray(r?.summary?.batchIds) && r.summary.batchIds.length ? r.summary.batchIds.map((id) => String(id)).join(', ') : '-'}
-                      </span>
+                      <span className="text-zinc-800">{String(r?.summary?.productName || r?.summary?.productId || '-')}</span>
                     )
                   },
-                  { id: 'rows', header: t('rowsLabel'), cell: (r) => <span className="font-mono text-[11px] text-zinc-800">{String(r?.summary?.rows ?? '-')}</span> },
-                  { id: 'unique', header: t('uniqueEpcLabel'), cell: (r) => <span className="font-mono text-[11px] text-zinc-800">{String(r?.summary?.uniqueEpcs ?? '-')}</span> },
-                  { id: 'updated', header: t('updatedLabel'), cell: (r) => <span className="font-mono text-[11px] text-zinc-800">{String(r?.summary?.updated ?? '-')}</span> },
+                  {
+                    id: 'certTemplate',
+                    header: t('certTemplate'),
+                    cell: (r) => <span className="text-zinc-800">{String(r?.summary?.certificateTemplateName || r?.summary?.certificateTemplateId || '-')}</span>
+                  },
+                  {
+                    id: 'qtyEpc',
+                    header: t('qtyEpc'),
+                    cell: (r) => (
+                      <span className="font-mono text-[11px] text-zinc-800">{String(r?.summary?.uniqueEpcs ?? r?.summary?.rows ?? '-')}</span>
+                    )
+                  },
                   {
                     id: 'action',
                     header: '',
@@ -1134,7 +1141,7 @@ export default function AdminEpc() {
 
       {importHistoryOpen && importHistoryDetail ? (
         <div className="ac-modal-backdrop">
-          <div className="ac-modal w-full max-w-4xl">
+          <div className="ac-modal flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden">
             <div className="mb-3 text-sm font-semibold text-zinc-900">{t('importDetails')}</div>
             <div className="mb-3 grid grid-cols-1 gap-2 text-xs text-zinc-700 sm:grid-cols-2">
               <div>
@@ -1147,27 +1154,29 @@ export default function AdminEpc() {
               </div>
             </div>
 
-            <DataTable
-              density="compact"
-              minWidth={980}
-              rows={Array.isArray(importHistoryDetail?.metadata?.items) ? importHistoryDetail.metadata.items : []}
-              rowKey={(r) => String(r?.epcCode || '')}
-              loading={loading}
-              emptyContent={t('noEpc')}
-              columns={[
-                { id: 'epc', header: t('epcCode'), cell: (r) => <span className="font-mono text-[11px] text-zinc-800">{String(r?.epcCode || '')}</span> },
-                { id: 'barcode', header: t('barcode'), cell: (r) => <span className="text-zinc-800">{r?.barcode ? String(r.barcode) : '-'}</span> },
-                { id: 'batchNumber', header: t('batchNumber'), cell: (r) => <span className="text-zinc-800">{r?.batchNumber ? String(r.batchNumber) : '-'}</span> },
-                { id: 'swiftlet', header: t('swiftletHouseNumber'), cell: (r) => <span className="text-zinc-800">{r?.swiftletHouseNumber ? String(r.swiftletHouseNumber) : '-'}</span> },
-                { id: 'netWeight', header: t('netWeight'), cell: (r) => <span className="text-zinc-800">{r?.netWeight ? String(r.netWeight) : '-'}</span> },
-                {
-                  id: 'productionDate',
-                  header: t('manufactureDate'),
-                  cell: (r) => <span className="text-zinc-800">{r?.productionDate ? String(r.productionDate).slice(0, 10) : '-'}</span>
-                },
-                { id: 'caiq', header: t('individualLabelCaiq'), cell: (r) => <span className="text-zinc-800">{r?.caiqNumber ? String(r.caiqNumber) : '-'}</span> }
-              ]}
-            />
+            <div className="min-h-0 flex-1 overflow-auto">
+              <DataTable
+                density="compact"
+                minWidth={980}
+                rows={Array.isArray(importHistoryDetail?.metadata?.items) ? importHistoryDetail.metadata.items : []}
+                rowKey={(r) => String(r?.epcCode || '')}
+                loading={loading}
+                emptyContent={t('noEpc')}
+                columns={[
+                  { id: 'epc', header: t('epcCode'), cell: (r) => <span className="font-mono text-[11px] text-zinc-800">{String(r?.epcCode || '')}</span> },
+                  { id: 'barcode', header: t('barcode'), cell: (r) => <span className="text-zinc-800">{r?.barcode ? String(r.barcode) : '-'}</span> },
+                  { id: 'batchNumber', header: t('batchNumber'), cell: (r) => <span className="text-zinc-800">{r?.batchNumber ? String(r.batchNumber) : '-'}</span> },
+                  { id: 'swiftlet', header: t('swiftletHouseNumber'), cell: (r) => <span className="text-zinc-800">{r?.swiftletHouseNumber ? String(r.swiftletHouseNumber) : '-'}</span> },
+                  { id: 'netWeight', header: t('netWeight'), cell: (r) => <span className="text-zinc-800">{r?.netWeight ? String(r.netWeight) : '-'}</span> },
+                  {
+                    id: 'productionDate',
+                    header: t('manufactureDate'),
+                    cell: (r) => <span className="text-zinc-800">{r?.productionDate ? String(r.productionDate).slice(0, 10) : '-'}</span>
+                  },
+                  { id: 'caiq', header: t('individualLabelCaiq'), cell: (r) => <span className="text-zinc-800">{r?.caiqNumber ? String(r.caiqNumber) : '-'}</span> }
+                ]}
+              />
+            </div>
 
             <div className="mt-4 flex flex-wrap justify-end gap-2">
               <button
@@ -1451,6 +1460,59 @@ export default function AdminEpc() {
                   ))}
                 </select>
               </div>
+
+              <div>
+                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('supportingCertificates')}</div>
+                <div className="mb-2 text-[11px] text-zinc-500">
+                  {t('supportingCertsUploaded', {
+                    value: DOC_TYPES.filter((k) => String(importDocUrls?.[k] || '').trim()).length
+                  })}
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {DOC_TYPES.map((docType) => {
+                    const url = String(importDocUrls?.[docType] || '').trim();
+                    const uploading = Boolean(importDocUploading?.[docType]);
+                    return (
+                      <div key={docType} className="rounded-xl border border-zinc-200 bg-white p-3">
+                        <div className="text-xs font-semibold text-zinc-900">{getDocTypeLabel(docType)}</div>
+                        <div className="mt-2 flex flex-wrap items-center gap-3">
+                          {url ? (
+                            <a href={url} target="_blank" rel="noreferrer" className="text-[11px] font-semibold underline">
+                              {t('view')}
+                            </a>
+                          ) : (
+                            <div className="text-[11px] text-zinc-500">{t('notUploaded')}</div>
+                          )}
+                          <label className="ac-btn ac-btn-soft px-3 py-2 text-xs">
+                            {uploading ? t('uploading') : t('upload')}
+                            <input
+                              type="file"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                try {
+                                  setImportLocalError('');
+                                  setImportDocUploading((prev) => ({ ...prev, [docType]: true }));
+                                  const uploaded = await uploadMedia({ file });
+                                  const mediaUrl = String(uploaded?.url || '').trim();
+                                  if (!mediaUrl) throw new Error(tRaw('operationFailed'));
+                                  setImportDocUrls((prev) => ({ ...prev, [docType]: mediaUrl }));
+                                } catch (err) {
+                                  setImportLocalError(err?.message || tRaw('operationFailed'));
+                                } finally {
+                                  setImportDocUploading((prev) => ({ ...prev, [docType]: false }));
+                                  e.target.value = '';
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
             <div className="mt-4 flex flex-wrap justify-end gap-2">
@@ -1460,7 +1522,7 @@ export default function AdminEpc() {
               <button
                 type="button"
                 className="ac-btn ac-btn-primary px-3 py-2 text-xs"
-                disabled={loading}
+                disabled={loading || Object.values(importDocUploading || {}).some(Boolean)}
                 onClick={async () => {
                   try {
                     setImportLocalError('');
@@ -1469,12 +1531,22 @@ export default function AdminEpc() {
                     if (!String(importProductId || '').trim()) throw new Error(t('selectProduct'));
                     const missingCount = Number(importPreview?.missingEpcs) || 0;
                     if (missingCount > 0) throw new Error(t('missingEpcError'));
+                    const uploadedCount = DOC_TYPES.filter((k) => String(importDocUrls?.[k] || '').trim()).length;
+                    if (uploadedCount !== DOC_TYPES.length) throw new Error(t('allSupportingCertsRequired'));
                     const res = await submitBatchImport({
                       batchId: null,
                       base64: importBase64,
                       productId: String(importProductId || '').trim(),
-                      certificateTemplateId: String(importAuthTemplateId || '').trim() || undefined
+                      certificateTemplateId: String(importAuthTemplateId || '').trim() || undefined,
+                      documents: importDocUrls
                     });
+                    if (Array.isArray(res?.batchIds) && res.batchIds.length) {
+                      for (const bidRaw of res.batchIds) {
+                        const bid = Number(bidRaw);
+                        if (!Number.isFinite(bid) || bid <= 0) continue;
+                        await updateBatchDocuments({ batchId: bid, documents: importDocUrls });
+                      }
+                    }
                     setImportLastResult(res || null);
                     if (Array.isArray(res?.batchIds) && res.batchIds.length === 1) {
                       const bid = Number(res.batchIds[0]);

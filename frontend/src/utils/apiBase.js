@@ -75,16 +75,20 @@ export function resolvePublicMediaUrl(urlOrPath) {
   if (!raw) return '';
 
   const normalizeUploadsPath = (inputPath) => {
-    const p = String(inputPath || '').trim();
-    if (!p) return '';
-    if (p.startsWith('/api/uploads/')) return p.replace(/^\/api\/uploads\//, '/uploads/');
-    if (p.startsWith('/admin/api/uploads/')) return p.replace(/^\/admin\/api\/uploads\//, '/uploads/');
-    if (p.startsWith('/admin/uploads/')) return p.replace(/^\/admin\/uploads\//, '/uploads/');
-    if (p.startsWith('api/uploads/')) return `/${p.replace(/^api\/uploads\//, 'uploads/')}`;
-    if (p.startsWith('admin/api/uploads/')) return `/${p.replace(/^admin\/api\/uploads\//, 'uploads/')}`;
-    if (p.startsWith('admin/uploads/')) return `/${p.replace(/^admin\/uploads\//, 'uploads/')}`;
-    if (p.startsWith('uploads/')) return `/${p}`;
-    return p;
+    const rawPath = String(inputPath || '').trim();
+    if (!rawPath) return '';
+
+    const p = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
+    const normalized = p
+      .replace(/^\/admin\/api\/uploads\//, '/uploads/')
+      .replace(/^\/admin\/uploads\//, '/uploads/')
+      .replace(/^\/api\/uploads\//, '/uploads/')
+      .replace(/^\/api\/public\/uploads\//, '/public/uploads/')
+      .replace(/^\/api\/v1\/public\/uploads\//, '/public/uploads/');
+
+    if (normalized.startsWith('/public/uploads/')) return normalized;
+    if (normalized.startsWith('/uploads/')) return normalized.replace(/^\/uploads\//, '/public/uploads/');
+    return normalized;
   };
 
   if (isAbsoluteUrl(raw)) {
