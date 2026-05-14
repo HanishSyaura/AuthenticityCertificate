@@ -5,6 +5,7 @@ import PublicRenderer from '../components/PublicRenderer';
 import VerifyLoadingScreen from '../components/VerifyLoadingScreen';
 import { useT } from '../i18n/useT';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import { buildUploadsWebpSrcSet } from '../utils/mediaVariants';
 
 function IconShieldCheck(props) {
   return (
@@ -25,13 +26,6 @@ function IconShieldAlert(props) {
   );
 }
 
-function backgroundSizeForMode(mode) {
-  const m = String(mode || '').trim().toLowerCase() || 'background';
-  if (m === 'fit') return 'contain';
-  if (m === 'actual') return 'auto';
-  return '100% 100%';
-}
-
 const VerifyPage = () => {
   const { id } = useParams();
   const location = useLocation();
@@ -40,10 +34,20 @@ const VerifyPage = () => {
   const [loadingMeta, setLoadingMeta] = useState(null);
   const [loadingMode, setLoadingMode] = useState('auto');
   const [showLoader, setShowLoader] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
   const loaderStartAtRef = useRef(0);
   const loaderHideTimerRef = useRef(null);
   const { t, lang, locale } = useT();
   const hasTemplate = Boolean(Array.isArray(certificate?.certificateTemplate?.layoutJson));
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const onChange = () => setReduceMotion(!!mq.matches);
+    onChange();
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  }, []);
 
   useEffect(() => {
     if (id) {
@@ -140,21 +144,51 @@ const VerifyPage = () => {
       const pageBg = String(certificate?.certificateTemplate?.backgroundColor || '').trim() || '#ffffff';
       const pageBgUrl = certificate?.certificateTemplate?.background ? String(certificate.certificateTemplate.background) : '';
       const pageBgMode = String(certificate?.certificateTemplate?.backgroundMode || '').trim() || 'background';
+      const isVideoBg = /\.(mp4|webm|ogg)(\?|#|$)/i.test(pageBgUrl);
+      const bgWebpSrcSet = !isVideoBg && pageBgUrl ? buildUploadsWebpSrcSet(pageBgUrl) : null;
+      const bgClass =
+        pageBgMode === 'actual'
+          ? 'pointer-events-none fixed left-1/2 top-1/2 z-0 max-h-none max-w-none -translate-x-1/2 -translate-y-1/2 object-center'
+          : pageBgMode === 'fit'
+            ? 'pointer-events-none fixed inset-0 z-0 h-full w-full object-contain object-center'
+            : 'pointer-events-none fixed inset-0 z-0 h-full w-full object-fill object-center';
       return (
         <div
-          className="min-h-[100dvh] w-full overflow-x-hidden"
+          className="relative min-h-[100dvh] w-full overflow-x-hidden"
           style={{
             backgroundColor: pageBg,
-            backgroundImage: pageBgUrl ? `url(${pageBgUrl})` : undefined,
+            backgroundImage: undefined,
             backgroundRepeat: 'no-repeat',
             backgroundPosition: 'top center',
-            backgroundSize: pageBgUrl ? backgroundSizeForMode(pageBgMode) : undefined
+            backgroundSize: undefined
           }}
         >
+          {isVideoBg ? (
+            <video
+              src={pageBgUrl}
+              muted
+              playsInline
+              autoPlay={!reduceMotion}
+              loop
+              preload={!reduceMotion ? 'metadata' : 'none'}
+              className={bgClass}
+              aria-hidden="true"
+              tabIndex={-1}
+            />
+          ) : pageBgUrl ? (
+            bgWebpSrcSet ? (
+              <picture className="fixed inset-0 z-0 h-full w-full">
+                <source type="image/webp" srcSet={bgWebpSrcSet} sizes="100vw" />
+                <img src={pageBgUrl} alt="" className={bgClass} decoding="async" fetchPriority="low" draggable={false} />
+              </picture>
+            ) : (
+              <img src={pageBgUrl} alt="" className={bgClass} decoding="async" fetchPriority="low" draggable={false} />
+            )
+          ) : null}
           <div className="fixed right-3 top-3 z-50">
             <LanguageSwitcher size="md" />
           </div>
-          <div className="w-full">
+          <div className="relative z-10 w-full">
             <PublicRenderer layout={certificate.layout} data={certificate} responsive responsiveMode="viewport" baseWidth={390} />
           </div>
           {!hasSupportingDocBlocks && batchDocs.length ? (
@@ -218,18 +252,48 @@ const VerifyPage = () => {
               const pageBg = String(certificate?.certificateTemplate?.backgroundColor || '').trim() || '#ffffff';
               const pageBgUrl = certificate?.certificateTemplate?.background ? String(certificate.certificateTemplate.background) : '';
               const pageBgMode = String(certificate?.certificateTemplate?.backgroundMode || '').trim() || 'background';
+              const isVideoBg = /\.(mp4|webm|ogg)(\?|#|$)/i.test(pageBgUrl);
+              const bgWebpSrcSet = !isVideoBg && pageBgUrl ? buildUploadsWebpSrcSet(pageBgUrl) : null;
+              const bgClass =
+                pageBgMode === 'actual'
+                  ? 'pointer-events-none fixed left-1/2 top-1/2 z-0 max-h-none max-w-none -translate-x-1/2 -translate-y-1/2 object-center'
+                  : pageBgMode === 'fit'
+                    ? 'pointer-events-none fixed inset-0 z-0 h-full w-full object-contain object-center'
+                    : 'pointer-events-none fixed inset-0 z-0 h-full w-full object-fill object-center';
               return (
                 <div
-                  className="min-h-[100dvh] overflow-x-hidden"
+                  className="relative min-h-[100dvh] overflow-x-hidden"
                   style={{
                     backgroundColor: pageBg,
-                    backgroundImage: pageBgUrl ? `url(${pageBgUrl})` : undefined,
+                    backgroundImage: undefined,
                     backgroundRepeat: 'no-repeat',
                     backgroundPosition: 'top center',
-                    backgroundSize: pageBgUrl ? backgroundSizeForMode(pageBgMode) : undefined
+                    backgroundSize: undefined
                   }}
                 >
-                  <div className="w-full">
+                  {isVideoBg ? (
+                    <video
+                      src={pageBgUrl}
+                      muted
+                      playsInline
+                      autoPlay={!reduceMotion}
+                      loop
+                      preload={!reduceMotion ? 'metadata' : 'none'}
+                      className={bgClass}
+                      aria-hidden="true"
+                      tabIndex={-1}
+                    />
+                  ) : pageBgUrl ? (
+                    bgWebpSrcSet ? (
+                      <picture className="fixed inset-0 z-0 h-full w-full">
+                        <source type="image/webp" srcSet={bgWebpSrcSet} sizes="100vw" />
+                        <img src={pageBgUrl} alt="" className={bgClass} decoding="async" fetchPriority="low" draggable={false} />
+                      </picture>
+                    ) : (
+                      <img src={pageBgUrl} alt="" className={bgClass} decoding="async" fetchPriority="low" draggable={false} />
+                    )
+                  ) : null}
+                  <div className="relative z-10 w-full">
                     <PublicRenderer
                       responsive
                       responsiveMode="viewport"

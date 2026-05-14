@@ -338,6 +338,108 @@ function textAlignClass(align) {
   return 'text-left';
 }
 
+const CmsVideoBlock = ({ block, style, t }) => {
+  const wrapRef = useRef(null);
+  const videoRef = useRef(null);
+  const [shouldLoad, setShouldLoad] = useState(false);
+  const [activated, setActivated] = useState(false);
+
+  const raw = useMemo(() => String(block?.content?.url || '').trim(), [block]);
+  const resolved = useMemo(() => {
+    return raw ? resolveCmsVideoSource(raw, typeof window !== 'undefined' ? window.location.origin : 'https://example.invalid') : null;
+  }, [raw]);
+
+  const posterRaw = String(block?.content?.posterUrl || block?.content?.poster || '').trim();
+  const poster = posterRaw ? resolvePublicMediaUrl(posterRaw) : '';
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    if (typeof window === 'undefined' || typeof window.IntersectionObserver !== 'function') {
+      setShouldLoad(true);
+      return;
+    }
+    let alive = true;
+    const obs = new window.IntersectionObserver(
+      (entries) => {
+        if (!alive) return;
+        const hit = entries.some((e) => e && e.isIntersecting);
+        if (hit) {
+          setShouldLoad(true);
+          obs.disconnect();
+        }
+      },
+      { root: null, rootMargin: '240px 0px', threshold: 0.01 }
+    );
+    obs.observe(el);
+    return () => {
+      alive = false;
+      obs.disconnect();
+    };
+  }, []);
+
+  const active = shouldLoad || activated;
+
+  useEffect(() => {
+    if (!active) return;
+    const el = videoRef.current;
+    if (!el) return;
+    try {
+      el.load?.();
+    } catch {
+    }
+  }, [active]);
+
+  return (
+    <div
+      ref={wrapRef}
+      style={style}
+      className={active ? '' : 'cursor-pointer'}
+      onClick={() => {
+        if (!active) setActivated(true);
+      }}
+      role={!active ? 'button' : undefined}
+      tabIndex={!active ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (active) return;
+        if (e.key === 'Enter' || e.key === ' ') setActivated(true);
+      }}
+      aria-label={!active ? (t ? t('video') : 'video') : undefined}
+    >
+      {resolved?.kind === 'iframe' ? (
+        active ? (
+          <iframe
+            title="video"
+            src={resolved.src}
+            className="h-full w-full border-0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            loading="lazy"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 text-xs text-zinc-500">
+            {t ? t('video') : 'video'}
+          </div>
+        )
+      ) : resolved?.kind === 'video' ? (
+        <video
+          ref={videoRef}
+          src={active ? resolved.src : undefined}
+          controls
+          playsInline
+          preload={active ? 'metadata' : 'none'}
+          poster={poster || undefined}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 text-xs text-zinc-500">
+          {t ? t('video') : 'video'}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed = false, responsive = false, responsiveMode = 'container', baseWidth = 390 }) => {
   const { t, locale } = useT();
   const layoutSafe = Array.isArray(layout) ? layout : null;
@@ -916,29 +1018,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
         );
         }
       case 'video':
-        return (() => {
-          const raw = String(block.content?.url || '').trim();
-          const resolved = raw ? resolveCmsVideoSource(raw, typeof window !== 'undefined' ? window.location.origin : 'https://example.invalid') : null;
-          return (
-            <div key={block.id} style={style}>
-              {resolved?.kind === 'iframe' ? (
-                <iframe
-                  title="video"
-                  src={resolved.src}
-                  className="h-full w-full border-0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
-              ) : resolved?.kind === 'video' ? (
-                <video src={resolved.src} controls playsInline preload="metadata" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 text-xs text-zinc-500">
-                  {t('video')}
-                </div>
-              )}
-            </div>
-          );
-        })();
+        return <CmsVideoBlock key={block.id} block={block} style={style} t={t} />;
       default:
         return null;
     }

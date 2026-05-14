@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
+const fsSync = require('fs');
 const fs = require('fs/promises');
 const sharp = require('sharp');
 const authRoutes = require('./modules/auth/auth.routes');
@@ -27,7 +28,17 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-const uploadRoots = listUploadRootCandidates();
+const uploadRoots = (() => {
+  const candidates = listUploadRootCandidates();
+  const existing = candidates.filter((p) => {
+    try {
+      return fsSync.existsSync(p);
+    } catch {
+      return false;
+    }
+  });
+  return existing.length > 0 ? existing : candidates;
+})();
 const isProd = process.env.NODE_ENV === 'production';
 
 async function fileExists(absPath) {
@@ -75,18 +86,70 @@ async function tryServeWebpVariant(req, res, next) {
     if (!inAbs) continue;
 
     try {
-      await sharp(inAbs)
-        .rotate()
-        .resize({ width, withoutEnlargement: true })
-        .webp({ quality: 80 })
-        .toFile(outAbs);
-      if (isProd) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-      return res.sendFile(outAbs);
+      const p = ensureWebpVariant({ inAbs, outAbs, width });
+      await p;
+      if (await fileExists(outAbs)) {
+        if (isProd) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        return res.sendFile(outAbs, (err) => {
+          if (err) return next();
+        });
+      }
+      continue;
     } catch {
       continue;
     }
   }
   return next();
+}
+
+const inflightWebp = new Map();
+function ensureWebpVariant({ inAbs, outAbs, width }) {
+  const key = String(outAbs);
+  const existing = inflightWebp.get(key);
+  if (existing) return existing;
+  const p = (async () => {
+    const tmpAbs = `${outAbs}.tmp-${process.pid}-${cryptoRandomHex(8)}`;
+    try {
+      await sharp(inAbs)
+        .rotate()
+        .resize({ width, withoutEnlargement: true })
+        .webp({ quality: 80 })
+        .toFile(tmpAbs);
+      try {
+        await fs.rename(tmpAbs, outAbs);
+      } catch {
+        try {
+          await fs.unlink(tmpAbs);
+        } catch {}
+      }
+    } finally {
+      inflightWebp.delete(key);
+    }
+  })();
+  inflightWebp.set(key, p);
+  return p;
+}
+
+function cryptoRandomHex(bytes) {
+  try {
+    const crypto = require('crypto');
+    return crypto.randomBytes(bytes).toString('hex');
+  } catch {
+    return String(Date.now());
+  }
+}
+
+function wrapStaticErrorsAs404(mw) {
+  return (req, res, next) => {
+    mw(req, res, (err) => {
+      if (!err) return next();
+      const status = Number(err?.status || err?.statusCode || 0);
+      const code = String(err?.code || '');
+      if (status === 404 || code === 'ENOENT' || code === 'ENOTDIR') return res.status(404).end();
+      if (code === 'EACCES' || code === 'EPERM') return res.status(404).end();
+      return res.status(404).end();
+    });
+  };
 }
 
 function buildUploadStaticMiddlewares(overrides = {}) {
@@ -96,13 +159,15 @@ function buildUploadStaticMiddlewares(overrides = {}) {
       lastModified: true,
       immutable: isProd,
       maxAge: isProd ? '365d' : 0,
+      redirect: false,
+      index: false,
       ...overrides
     })
   );
 }
 
 const uploadStaticMiddlewares = buildUploadStaticMiddlewares();
-const uploadStaticMiddlewaresNoFallthrough = buildUploadStaticMiddlewares({ fallthrough: false });
+const uploadStaticMiddlewaresNoFallthrough = buildUploadStaticMiddlewares({ fallthrough: false }).map(wrapStaticErrorsAs404);
 
 app.use(
   '/uploads',
