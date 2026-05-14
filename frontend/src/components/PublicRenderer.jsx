@@ -1045,6 +1045,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
       <>
         {content}
         {lightboxSrc ? <ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} /> : null}
+        {pdfSrc ? <PdfLightbox src={pdfSrc} title={pdfTitle || 'PDF'} onClose={() => setPdfSrc(null)} /> : null}
       </>
     );
   }

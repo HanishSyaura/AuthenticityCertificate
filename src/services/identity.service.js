@@ -7,6 +7,12 @@ async function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), ms))]);
 }
 
+function getDbTimeoutMs() {
+  const raw = process.env.IDENTITY_DB_TIMEOUT_MS || process.env.DB_QUERY_TIMEOUT_MS;
+  const ms = Number(raw);
+  return Number.isFinite(ms) && ms > 0 ? ms : 1200;
+}
+
 function norm(v) {
   if (!v) return null;
   const s = String(v)
@@ -36,6 +42,7 @@ async function resolveCertificateId({ organizationId, nfcUid, epc, requireEpcBat
   const uid = norm(nfcUid);
   const e = norm(epc);
   if (!uid && !e) return null;
+  const dbTimeoutMs = getDbTimeoutMs();
 
   try {
     const found = await withTimeout(
@@ -47,7 +54,7 @@ async function resolveCertificateId({ organizationId, nfcUid, epc, requireEpcBat
         },
         select: { certificateId: true }
       }),
-      80
+      dbTimeoutMs
     );
     if (found?.certificateId) {
       if (requireEpcBatchMeta && e) {
@@ -56,7 +63,7 @@ async function resolveCertificateId({ organizationId, nfcUid, epc, requireEpcBat
             where: { organizationId_epcCode: { organizationId: orgId, epcCode: e } },
             select: { batchNumber: true, swiftletHouseNumber: true }
           }),
-          80
+          dbTimeoutMs
         );
         const ok =
           String(meta?.batchNumber || '').trim().length > 0 && String(meta?.swiftletHouseNumber || '').trim().length > 0;
@@ -71,7 +78,7 @@ async function resolveCertificateId({ organizationId, nfcUid, epc, requireEpcBat
           where: { organizationId_epcCode: { organizationId: orgId, epcCode: e } },
           select: { batchNumber: true, swiftletHouseNumber: true, batch: { select: { certificateId: true } } }
         }),
-        80
+        dbTimeoutMs
       );
       if (epcItem?.batch?.certificateId) {
         if (requireEpcBatchMeta) {
@@ -97,6 +104,7 @@ async function resolveCertificateIdGlobal({ nfcUid, epc, requireEpcBatchMeta = f
   const uid = norm(nfcUid);
   const e = norm(epc);
   if (!uid && !e) return null;
+  const dbTimeoutMs = getDbTimeoutMs();
 
   const checkEpcBatchMeta = async (organizationId) => {
     if (!requireEpcBatchMeta || !e) return;
@@ -105,7 +113,7 @@ async function resolveCertificateIdGlobal({ nfcUid, epc, requireEpcBatchMeta = f
         where: { organizationId_epcCode: { organizationId: Number(organizationId), epcCode: e } },
         select: { batchNumber: true, swiftletHouseNumber: true }
       }),
-      120
+      dbTimeoutMs
     );
     const ok =
       String(meta?.batchNumber || '').trim().length > 0 && String(meta?.swiftletHouseNumber || '').trim().length > 0;
@@ -122,7 +130,7 @@ async function resolveCertificateIdGlobal({ nfcUid, epc, requireEpcBatchMeta = f
         select: { certificateId: true, organizationId: true },
         take: 2
       }),
-      120
+      dbTimeoutMs
     );
     if (Array.isArray(rows) && rows.length === 1) {
       const row = rows[0];
@@ -144,7 +152,7 @@ async function resolveCertificateIdGlobal({ nfcUid, epc, requireEpcBatchMeta = f
           },
           take: 2
         }),
-        120
+        dbTimeoutMs
       );
       if (Array.isArray(items) && items.length === 1) {
         const it = items[0];
@@ -169,13 +177,14 @@ async function resolveCertificateIdGlobal({ nfcUid, epc, requireEpcBatchMeta = f
 async function listIdentitiesByCertificate({ organizationId, certificateId }) {
   const orgId = Number(organizationId);
   const certId = String(certificateId);
+  const dbTimeoutMs = getDbTimeoutMs();
   try {
     const rows = await withTimeout(
       prisma.tagIdentity.findMany({
         where: { organizationId: orgId, certificateId: certId, unassignedAt: null },
         orderBy: { assignedAt: 'desc' }
       }),
-      80
+      dbTimeoutMs
     );
     return rows;
   } catch {
@@ -418,6 +427,7 @@ async function moveActiveIdentities({ organizationId, fromCertificateId, toCerti
   const fromId = String(fromCertificateId);
   const toId = String(toCertificateId);
   const now = new Date();
+  const dbTimeoutMs = getDbTimeoutMs();
 
   try {
     const moved = await withTimeout(
@@ -425,7 +435,7 @@ async function moveActiveIdentities({ organizationId, fromCertificateId, toCerti
         where: { organizationId: orgId, certificateId: fromId, unassignedAt: null },
         data: { certificateId: toId, assignedAt: now }
       }),
-      120
+      dbTimeoutMs
     );
     return { moved: moved.count };
   } catch {

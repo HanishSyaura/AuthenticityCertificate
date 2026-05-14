@@ -372,7 +372,7 @@ async function importProductionXlsx(req, res) {
     const result = await epcService.importProductionXlsx({ organizationId: req.organization.id, batchId, base64: data.base64 });
     res.success(result, 'Production file imported');
   } catch (e) {
-    res.error(e.message, 400);
+    res.error(e.message, e?.status || 400);
   }
 }
 
@@ -383,7 +383,7 @@ async function previewBatchImport(req, res) {
     const result = await epcService.previewBatchImportXlsx({ organizationId: req.organization.id, batchId, base64: data.base64 });
     res.success(result);
   } catch (e) {
-    res.error(e.message, 400);
+    res.error(e.message, e?.status || 400);
   }
 }
 
@@ -393,7 +393,7 @@ async function previewBatchImportNew(req, res) {
     const result = await epcService.previewBatchImportXlsx({ organizationId: req.organization.id, batchId: null, base64: data.base64 });
     res.success(result);
   } catch (e) {
-    res.error(e.message, 400);
+    res.error(e.message, e?.status || 400);
   }
 }
 
@@ -421,8 +421,13 @@ async function submitBatchImport(req, res) {
     };
     res.success(result, 'Batch import saved');
   } catch (e) {
-    if (e instanceof z.ZodError) return res.error('Invalid input. Please check the form and try again.', 400);
-    res.error(e.message, 400);
+    if (e instanceof z.ZodError) {
+      const first = Array.isArray(e.issues) ? e.issues[0] : null;
+      const field = first?.path?.length ? first.path.join('.') : 'form';
+      const detail = first?.message ? `: ${first.message}` : '';
+      return res.error(`Invalid input (${field})${detail}`, 400);
+    }
+    res.error(e.message, e?.status || 400);
   }
 }
 
@@ -450,8 +455,13 @@ async function submitBatchImportNew(req, res) {
     };
     res.success(result, 'Batch import saved');
   } catch (e) {
-    if (e instanceof z.ZodError) return res.error('Invalid input. Please check the form and try again.', 400);
-    res.error(e.message, 400);
+    if (e instanceof z.ZodError) {
+      const first = Array.isArray(e.issues) ? e.issues[0] : null;
+      const field = first?.path?.length ? first.path.join('.') : 'form';
+      const detail = first?.message ? `: ${first.message}` : '';
+      return res.error(`Invalid input (${field})${detail}`, 400);
+    }
+    res.error(e.message, e?.status || 400);
   }
 }
 

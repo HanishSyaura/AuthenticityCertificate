@@ -17,6 +17,16 @@ function normalizeLang(lang) {
   return 'en';
 }
 
+function getPublicDbTimeoutMs() {
+  const raw = process.env.PUBLIC_DB_TIMEOUT_MS || process.env.DB_QUERY_TIMEOUT_MS;
+  const ms = Number(raw);
+  return Number.isFinite(ms) && ms > 0 ? ms : 5000;
+}
+
+function isPrismaError(err) {
+  return typeof err?.name === 'string' && err.name.startsWith('Prisma');
+}
+
 router.use(attachOrganization);
 
 router.get('/settings', async (req, res) => {
@@ -30,7 +40,7 @@ router.get('/settings', async (req, res) => {
       return res.success({ organization: null, settings: { logoUrl: null } }, 'OK');
     }
 
-    const dbTimeoutMs = 350;
+    const dbTimeoutMs = getPublicDbTimeoutMs();
     const [org, settingsRows] = await Promise.all([
       Promise.race([
         prisma.organization.findUnique({ where: { id: orgId } }),
@@ -69,7 +79,7 @@ router.get('/settings', async (req, res) => {
       'OK'
     );
   } catch (e) {
-    if (e?.message === 'db_timeout') dbGate.markDbFailure({ cooldownMs: 10_000 });
+    if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000 });
     return res.success({ organization: null, settings: { logoUrl: null } }, 'OK');
   }
 });
@@ -279,10 +289,10 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
 
   const overrideStatus = scanlog.getCertificateStatusOverride(certificateId);
 
-  const dbTimeoutMs = 350;
+  const dbTimeoutMs = getPublicDbTimeoutMs();
+  const dbTimeoutShortMs = Math.max(250, Math.min(dbTimeoutMs, 1500));
   try {
     const lang = normalizeLang(req.query?.lang || req.query?.language);
-    if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
     let cert = await Promise.race([
       certificateService.getCertificateDetailsCached(certificateId, { ttlMs: 5000 }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), dbTimeoutMs))
@@ -296,20 +306,19 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     let resolvedNfcUid = identityFromReq?.nfcUid || null;
     if ((resolvedEpc == null && resolvedNfcUid == null) || resolvedOrgId == null) {
       try {
-        if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
         const idRow = await Promise.race([
           prisma.tagIdentity.findFirst({
             where: { organizationId: resolvedOrgId || Number(cert.organizationId || 0), certificateId: String(certificateId), unassignedAt: null },
             orderBy: { assignedAt: 'desc' }
           }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), dbTimeoutShortMs))
         ]);
         if (idRow) {
           resolvedEpc = resolvedEpc || idRow.epc || null;
           resolvedNfcUid = resolvedNfcUid || idRow.nfcUid || null;
         }
-      } catch {
-        dbGate.markDbFailure({ cooldownMs: 10_000 });
+      } catch (e) {
+        if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000 });
       }
     }
 
@@ -322,7 +331,6 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     let epcProduct = null;
     if (resolvedOrgId && resolvedEpc) {
       try {
-        if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
         const row = await Promise.race([
           prisma.epcItem.findUnique({
             where: { organizationId_epcCode: { organizationId: resolvedOrgId, epcCode: String(resolvedEpc) } },
@@ -352,7 +360,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
               }
             }
           }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), dbTimeoutShortMs))
         ]);
         epcItemId = row?.id != null ? Number(row.id) : null;
         epcItem = row
@@ -380,14 +388,13 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         epcBatchName = row?.batch?.batchName ? String(row.batch.batchName) : null;
         epcBatchId = row?.batch?.id != null ? Number(row.batch.id) : null;
         epcProduct = row?.batch?.product || null;
-      } catch {
-        dbGate.markDbFailure({ cooldownMs: 10_000 });
+      } catch (e) {
+        if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000 });
       }
     }
 
     if (resolvedOrgId && !resolvedEpc && (epcBatchTemplate == null || templateData == null || epcBatchName == null || epcProduct == null)) {
       try {
-        if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
         const row = await Promise.race([
           prisma.epcBatch.findFirst({
             where: { organizationId: resolvedOrgId, certificateId: String(certificateId) },
@@ -407,7 +414,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
               }
             }
           }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), dbTimeoutShortMs))
         ]);
         if (row) {
           epcBatchTemplate = epcBatchTemplate || row.certificateTemplate || null;
@@ -416,8 +423,8 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
           epcBatchId = epcBatchId || (row.id != null ? Number(row.id) : null);
           epcProduct = epcProduct || row.product || null;
         }
-      } catch {
-        dbGate.markDbFailure({ cooldownMs: 10_000 });
+      } catch (e) {
+        if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000 });
       }
     }
 
@@ -432,14 +439,13 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     const landingOrgId = resolvedOrgId || Number(req.organization?.id || cert.organizationId || 0) || null;
     if (landingOrgId) {
       try {
-        if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
         const pages = await Promise.race([
           prisma.cmsPage.findMany({
             where: { organizationId: landingOrgId, kind: 'landing' },
             orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
             include: { layout: true, publishedVersion: true }
           }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), dbTimeoutShortMs))
         ]);
 
         const rootId = pageId != null ? Number(pageId) : null;
@@ -454,7 +460,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         const translations = ids.length
           ? await Promise.race([
               prisma.cmsTranslation.findMany({ where: { organizationId: landingOrgId, language: lang, pageId: { in: ids } } }),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
+              new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), dbTimeoutShortMs))
             ])
           : [];
         const tByPageId = new Map((translations || []).map((r) => [Number(r.pageId), r]));
@@ -478,8 +484,8 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
           const tRow = tByPageId.get(Number(pageId));
           if (Array.isArray(tRow?.contentJson) && tRow.contentJson.length > 0) layout = tRow.contentJson;
         }
-      } catch {
-        dbGate.markDbFailure({ cooldownMs: 10_000 });
+      } catch (e) {
+        if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000 });
       }
     }
 
@@ -490,50 +496,47 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     const supportingTemplateIds = getSupportingTemplateIdsFromLayout(layout);
     if (resolvedOrgId && supportingTemplateIds.length) {
       try {
-        if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
         const rows = await Promise.race([
           prisma.certificateTemplate.findMany({
             where: { organizationId: resolvedOrgId, id: { in: supportingTemplateIds }, deletedAt: null }
           }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), dbTimeoutShortMs))
         ]);
         supportingTemplates = Array.isArray(rows) ? rows : [];
-      } catch {
-        dbGate.markDbFailure({ cooldownMs: 10_000 });
+      } catch (e) {
+        if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000 });
       }
     }
 
     if (resolvedOrgId && epcItemId) {
       try {
-        if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
         const rows = await Promise.race([
           prisma.epcItemDocument.findMany({
             where: { organizationId: resolvedOrgId, epcItemId },
             select: { docType: true, mediaUrl: true },
             orderBy: { docType: 'asc' }
           }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), dbTimeoutShortMs))
         ]);
         batchDocuments = Array.isArray(rows) ? rows : [];
-      } catch {
-        dbGate.markDbFailure({ cooldownMs: 10_000 });
+      } catch (e) {
+        if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000 });
       }
     }
 
     let certificateTemplate = epcBatchTemplate || resolvedProduct?.certificateTemplate || null;
     if (resolvedOrgId && !certificateTemplate) {
       try {
-        if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
         const tpl = await Promise.race([
           prisma.certificateTemplate.findFirst({
             where: { organizationId: resolvedOrgId, certificateId: String(certificateId), deletedAt: null },
             orderBy: { id: 'desc' }
           }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), dbTimeoutShortMs))
         ]);
         certificateTemplate = tpl || null;
-      } catch {
-        dbGate.markDbFailure({ cooldownMs: 10_000 });
+      } catch (e) {
+        if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000 });
       }
     }
     if (resolvedOrgId && lang !== 'en') {
@@ -547,12 +550,11 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
       const uniqIds = Array.from(new Set(ids));
       if (uniqIds.length) {
         try {
-          if (!dbGate.shouldUseDb()) throw new Error('db_disabled');
           const trs = await Promise.race([
             prisma.certificateTemplateTranslation.findMany({
               where: { organizationId: resolvedOrgId, language: lang, templateId: { in: uniqIds } }
             }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 250))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), dbTimeoutShortMs))
           ]);
           const byId = new Map((trs || []).map((r) => [Number(r.templateId), r]));
           const applyTr = (tpl) => {
@@ -567,8 +569,8 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
           };
           certificateTemplate = applyTr(certificateTemplate);
           supportingTemplates = (Array.isArray(supportingTemplates) ? supportingTemplates : []).map(applyTr);
-        } catch {
-          dbGate.markDbFailure({ cooldownMs: 10_000 });
+        } catch (e) {
+          if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000 });
         }
       }
     }
@@ -617,7 +619,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
       'Verification successful'
     );
   } catch (e) {
-    dbGate.markDbFailure({ cooldownMs: 10_000 });
+    if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000 });
     const msg = e?.message === 'db_timeout' ? 'Service temporarily unavailable' : 'Service unavailable';
     return res.error(msg, 503);
   }

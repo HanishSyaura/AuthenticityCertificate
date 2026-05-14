@@ -1405,7 +1405,7 @@ export default function AdminEpc() {
                       } catch (err) {
                         setImportPreview(null);
                         setImportBase64('');
-                        setImportLocalError(err?.message || tRaw('operationFailed'));
+                        setImportLocalError(err?.response?.data?.message || err?.message || tRaw('operationFailed'));
                       } finally {
                         e.target.value = '';
                       }
@@ -1551,7 +1551,7 @@ export default function AdminEpc() {
                     }
                     closeImport();
                   } catch (err) {
-                    setImportLocalError(err?.message || tRaw('operationFailed'));
+                    setImportLocalError(err?.response?.data?.message || err?.message || tRaw('operationFailed'));
                   }
                 }}
               >

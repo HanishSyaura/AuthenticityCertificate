@@ -18,7 +18,11 @@ export function buildUploadsWebpSrcSet(url, widths = [320, 640, 1024]) {
   const file = pathPart.slice(lastSlash + 1);
 
   const dot = file.lastIndexOf('.');
-  const base = dot > 0 ? file.slice(0, dot) : file;
+  if (dot <= 0) return null;
+  const ext = file.slice(dot + 1).toLowerCase();
+  const allowed = new Set(['jpg', 'jpeg', 'png', 'webp', 'tif', 'tiff', 'avif']);
+  if (!allowed.has(ext)) return null;
+  const base = file.slice(0, dot);
   if (!base || !/^[A-Za-z0-9_-]+$/.test(base)) return null;
 
   const safeWidths = (Array.isArray(widths) ? widths : [])
