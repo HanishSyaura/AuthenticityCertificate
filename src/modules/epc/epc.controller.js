@@ -5,6 +5,27 @@ const prisma = require('../../config/prisma');
 
 const EPC_BATCH_IMPORT_AUDIT_ACTION = 'SUBMIT_EPC_BATCH_IMPORT';
 
+function resolveStatus(error, fallback = 400) {
+  const msg = String(error?.message || '');
+  const code = error?.code;
+  const lower = msg.toLowerCase();
+  const status = Number(error?.status);
+  if (Number.isFinite(status) && status >= 400 && status <= 599) return status;
+  if (msg === 'db_timeout') return 503;
+  if (code === 'P2021') return 503;
+  if (code === 'P1001' || code === 'P1002' || code === 'P1003') return 503;
+  if (lower.includes('database') && (lower.includes('timeout') || lower.includes('unavailable') || lower.includes('connect'))) return 503;
+  return fallback;
+}
+
+function resolveMessage(error) {
+  const msg = String(error?.message || 'Unknown error');
+  const code = error?.code;
+  if (msg === 'db_timeout') return 'Database tidak dapat diakses (timeout). Sila cuba lagi.';
+  if (code === 'P2021') return 'Database schema belum siap (table tiada). Sila jalankan patch/migrasi DB.';
+  return msg;
+}
+
 const generateSchema = z.object({
   batchQty: z.number().int().positive().max(5000),
   remark: z.string().optional()
@@ -399,25 +420,25 @@ async function previewBatchImportNew(req, res) {
 
 async function submitBatchImport(req, res) {
   try {
+    const batchId = Number(req.params.id);
     const data = submitBatchImportSchema.parse(req.body);
-    const result = await epcService.createImportBatchFromXlsx({
+    const result = await epcService.submitBatchImport({
       organizationId: req.organization.id,
+      batchId,
       base64: data.base64,
       productId: Object.prototype.hasOwnProperty.call(data, 'productId') ? data.productId : undefined,
       sku: null,
       certificateTemplateId: Object.prototype.hasOwnProperty.call(data, 'certificateTemplateId') ? data.certificateTemplateId : undefined,
-      documents: Object.prototype.hasOwnProperty.call(data, 'documents') ? data.documents : {},
-      actor: req.user
+      documents: Object.prototype.hasOwnProperty.call(data, 'documents') ? data.documents : {}
     });
     res.locals.auditMetadata = {
       type: 'batch_import',
       rows: result?.rows ?? null,
-      uniqueEpcs: result?.uniqueEpcs ?? null,
       updated: result?.updated ?? null,
-      productId: result?.productId ?? null,
+      productId: Object.prototype.hasOwnProperty.call(data, 'productId') ? data.productId : null,
       certificateTemplateId: Object.prototype.hasOwnProperty.call(data, 'certificateTemplateId') ? data.certificateTemplateId : null,
-      batchIds: Array.isArray(result?.batchIds) ? result.batchIds : [],
-      items: Array.isArray(result?.items) ? result.items : []
+      batchIds: Number.isFinite(batchId) && batchId > 0 ? [batchId] : [],
+      items: []
     };
     res.success(result, 'Batch import saved');
   } catch (e) {
@@ -427,7 +448,7 @@ async function submitBatchImport(req, res) {
       const detail = first?.message ? `: ${first.message}` : '';
       return res.error(`Invalid input (${field})${detail}`, 400);
     }
-    res.error(e.message, e?.status || 400);
+    res.error(resolveMessage(e), resolveStatus(e, 400));
   }
 }
 
@@ -461,7 +482,7 @@ async function submitBatchImportNew(req, res) {
       const detail = first?.message ? `: ${first.message}` : '';
       return res.error(`Invalid input (${field})${detail}`, 400);
     }
-    res.error(e.message, e?.status || 400);
+    res.error(resolveMessage(e), resolveStatus(e, 400));
   }
 }
 
