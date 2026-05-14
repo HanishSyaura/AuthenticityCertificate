@@ -3,6 +3,8 @@ const epcService = require('./epc.service');
 const { matchPermission } = require('../../middleware/access.middleware');
 const prisma = require('../../config/prisma');
 
+const EPC_BATCH_IMPORT_AUDIT_ACTION = 'SUBMIT_EPC_BATCH_IMPORT';
+
 const generateSchema = z.object({
   batchQty: z.number().int().positive().max(5000),
   remark: z.string().optional()
@@ -36,6 +38,12 @@ const updateBatchSchema = z.object({
     .union([z.string(), z.null()])
     .optional()
     .refine((v) => v == null || !Number.isNaN(new Date(v).getTime()), 'Invalid productionDate')
+});
+
+const updateBatchDocumentsSchema = z.object({
+  documents: z
+    .record(z.string(), z.string())
+    .refine((v) => v && typeof v === 'object' && Object.keys(v).length > 0, 'documents required')
 });
 
 const recalcSequenceSchema = z.object({
@@ -450,7 +458,13 @@ async function listBatchImportHistory(req, res) {
   try {
     const { limit, offset } = parseLimitOffset(req.query);
     const orgId = req.organization.id;
-    const where = { organizationId: orgId, action: 'SUBMIT_EPC_BATCH_IMPORT' };
+    const epcCount = await prisma.epcItem.count({ where: { organizationId: orgId } });
+    if (!Number(epcCount)) {
+      await prisma.auditLog.deleteMany({ where: { organizationId: orgId, action: EPC_BATCH_IMPORT_AUDIT_ACTION } });
+      return res.success({ total: 0, items: [] });
+    }
+
+    const where = { organizationId: orgId, action: EPC_BATCH_IMPORT_AUDIT_ACTION };
     const [total, rows] = await Promise.all([
       prisma.auditLog.count({ where }),
       prisma.auditLog.findMany({
@@ -492,8 +506,13 @@ async function getBatchImportHistory(req, res) {
     const orgId = req.organization.id;
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.error('Invalid id', 400);
+    const epcCount = await prisma.epcItem.count({ where: { organizationId: orgId } });
+    if (!Number(epcCount)) {
+      await prisma.auditLog.deleteMany({ where: { organizationId: orgId, action: EPC_BATCH_IMPORT_AUDIT_ACTION } });
+      return res.error('Not found', 404);
+    }
     const row = await prisma.auditLog.findFirst({
-      where: { id, organizationId: orgId, action: 'SUBMIT_EPC_BATCH_IMPORT' },
+      where: { id, organizationId: orgId, action: EPC_BATCH_IMPORT_AUDIT_ACTION },
       select: { id: true, actorEmail: true, userId: true, createdAt: true, metadata: true }
     });
     if (!row) return res.error('Not found', 404);
@@ -529,6 +548,18 @@ async function updateBatch(req, res) {
     const data = updateBatchSchema.parse(req.body);
     const updated = await epcService.updateBatch({ organizationId: req.organization.id, batchId, patch: data, actor: req.user });
     res.success(updated, 'Batch updated');
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    res.error(e.message, 400);
+  }
+}
+
+async function updateBatchDocuments(req, res) {
+  try {
+    const batchId = Number(req.params.id);
+    const data = updateBatchDocumentsSchema.parse(req.body || {});
+    const updated = await epcService.updateBatchDocuments({ organizationId: req.organization.id, batchId, documents: data.documents });
+    res.success(updated, 'Batch documents updated');
   } catch (e) {
     if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
     res.error(e.message, 400);
@@ -613,6 +644,7 @@ module.exports = {
   getBatchImportHistory,
   markProductionDone,
   updateBatch,
+  updateBatchDocuments,
   deleteBatch,
   importExisting,
   recalculateSequence,

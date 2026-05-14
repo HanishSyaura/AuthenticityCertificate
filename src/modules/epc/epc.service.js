@@ -5,8 +5,18 @@ const { generateCertificateId, peekNextCertificateId } = require('../../utils/id
 const { matchPermission } = require('../../middleware/access.middleware');
 const settingsService = require('../settings/settings.service');
 
+const EPC_BATCH_IMPORT_AUDIT_ACTION = 'SUBMIT_EPC_BATCH_IMPORT';
+
 async function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), ms))]);
+}
+
+async function pruneBatchImportHistoryIfNoEpcsTx(tx, organizationId) {
+  const orgId = Number(organizationId);
+  const remaining = await tx.epcItem.count({ where: { organizationId: orgId } });
+  if (Number(remaining) > 0) return { pruned: 0, remainingEpcs: Number(remaining) || 0 };
+  const res = await tx.auditLog.deleteMany({ where: { organizationId: orgId, action: EPC_BATCH_IMPORT_AUDIT_ACTION } });
+  return { pruned: Number(res.count) || 0, remainingEpcs: 0 };
 }
 
 function getAllowedCorpPrefixes() {
@@ -261,13 +271,15 @@ async function deleteAllBatches({ organizationId, corpPrefix }) {
       });
     }
 
-    return { deletedBatches, deletedItems, corpPrefixes: prefixes };
+    const pruned = await pruneBatchImportHistoryIfNoEpcsTx(tx, orgId);
+    return { deletedBatches, deletedItems, corpPrefixes: prefixes, prunedBatchImportHistory: pruned.pruned };
   });
 
   return {
     deletedBatches: Number(result.deletedBatches) || 0,
     deletedItems: Number(result.deletedItems) || 0,
-    corpPrefixes: Array.isArray(result.corpPrefixes) ? result.corpPrefixes : []
+    corpPrefixes: Array.isArray(result.corpPrefixes) ? result.corpPrefixes : [],
+    prunedBatchImportHistory: Number(result.prunedBatchImportHistory) || 0
   };
 }
 
@@ -959,10 +971,15 @@ async function deleteItems({ organizationId, itemIds, cleanup }) {
       }
     }
 
-    return { deletedItems, deletedBatches };
+    const pruned = await pruneBatchImportHistoryIfNoEpcsTx(tx, orgId);
+    return { deletedItems, deletedBatches, prunedBatchImportHistory: pruned.pruned };
   });
 
-  return result;
+  return {
+    deletedItems: Number(result.deletedItems) || 0,
+    deletedBatches: Number(result.deletedBatches) || 0,
+    prunedBatchImportHistory: Number(result.prunedBatchImportHistory) || 0
+  };
 }
 
 async function deleteAllGeneratedBatches({ organizationId, corpPrefix }) {
@@ -1080,13 +1097,15 @@ async function deleteAllGeneratedBatches({ organizationId, corpPrefix }) {
       });
     }
 
-    return { deletedBatches, deletedItems, corpPrefixes: prefixes };
+    const pruned = await pruneBatchImportHistoryIfNoEpcsTx(tx, orgId);
+    return { deletedBatches, deletedItems, corpPrefixes: prefixes, prunedBatchImportHistory: pruned.pruned };
   });
 
   return {
     deletedBatches: Number(result.deletedBatches) || 0,
     deletedItems: Number(result.deletedItems) || 0,
-    corpPrefixes: Array.isArray(result.corpPrefixes) ? result.corpPrefixes : []
+    corpPrefixes: Array.isArray(result.corpPrefixes) ? result.corpPrefixes : [],
+    prunedBatchImportHistory: Number(result.prunedBatchImportHistory) || 0
   };
 }
 
@@ -2166,6 +2185,48 @@ async function submitBatchImport({
   return result;
 }
 
+async function updateBatchDocuments({ organizationId, batchId, documents }) {
+  const orgId = Number(organizationId);
+  const id = Number(batchId);
+  if (!Number.isFinite(id)) throw new Error('Invalid batch id');
+
+  const docTypes = getBatchImportDocTypes();
+  const docEntries = Object.entries(documents && typeof documents === 'object' ? documents : {}).map(([k, v]) => [
+    String(k || '').trim(),
+    String(v || '').trim()
+  ]);
+  if (docEntries.length === 0) throw new Error('Supporting certificates are required.');
+  for (const [k, v] of docEntries) {
+    if (!docTypes.has(k)) throw new Error('Invalid supporting certificate type.');
+    if (!v) throw new Error('Supporting certificate URL is required.');
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const batch = await tx.epcBatch.findFirst({ where: { id, organizationId: orgId }, select: { id: true } });
+    if (!batch) throw new Error('Batch not found');
+
+    for (const [docType, mediaUrl] of docEntries) {
+      await tx.epcBatchDocument.upsert({
+        where: { batchId_docType: { batchId: id, docType } },
+        update: { mediaUrl, uploadedAt: new Date() },
+        create: { organizationId: orgId, batchId: id, docType, mediaUrl }
+      });
+    }
+
+    return await tx.epcBatch.findFirst({
+      where: { id, organizationId: orgId },
+      include: {
+        product: { select: { id: true, sku: true, name: true, code: true } },
+        certificateTemplate: { select: { id: true, certificateId: true, name: true } },
+        documents: { select: { docType: true, mediaUrl: true, uploadedAt: true } }
+      }
+    });
+  });
+
+  if (!result) throw new Error('Batch not found');
+  return result;
+}
+
 async function markProductionDone({ organizationId, batchId }) {
   const orgId = Number(organizationId);
   const id = Number(batchId);
@@ -2226,7 +2287,8 @@ async function deleteBatch({ organizationId, batchId }) {
         data: { lastNo: nextLastNo }
       });
     }
-    return { batchId: id, corpPrefix: batch.corpPrefix };
+    const pruned = await pruneBatchImportHistoryIfNoEpcsTx(tx, orgId);
+    return { batchId: id, corpPrefix: batch.corpPrefix, prunedBatchImportHistory: pruned.pruned };
   });
   return result;
 }
@@ -2384,6 +2446,7 @@ module.exports = {
   previewBatchImportXlsx,
   createImportBatchFromXlsx,
   submitBatchImport,
+  updateBatchDocuments,
   markProductionDone,
   updateBatch,
   deleteBatch,

@@ -53,6 +53,13 @@ router.patch(
   epcController.updateBatch
 );
 
+router.put(
+  '/batches/:id/documents',
+  requirePermission(['epc.write', 'epc.production.access']),
+  auditAction('UPDATE_EPC_BATCH_DOCUMENTS', { targetType: 'epc_batch', getTargetId: (req) => String(req.params?.id || '') }),
+  epcController.updateBatchDocuments
+);
+
 router.delete(
   '/batches/:id',
   requirePermission(['epc.write', 'epc.delete']),

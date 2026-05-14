@@ -52,6 +52,7 @@ export default function AdminEpc() {
   }, [perms, role]);
   const canProduction = allow('epc.write', 'epc.production.access');
   const canBatchImport = allow('epc.write', 'epc.production.access');
+  const canEditBatchDocs = allow('epc.write', 'epc.production.access');
 
   const {
     corpCodes,
@@ -76,7 +77,8 @@ export default function AdminEpc() {
     exportBatchXlsxCustom,
     exportItemsXlsx,
     deleteItems,
-    deleteAllGeneratedBatches
+    deleteAllGeneratedBatches,
+    updateBatchDocuments
   } = useEpcStore((s) => ({
     corpCodes: s.corpCodes,
     batches: s.batches,
@@ -100,7 +102,8 @@ export default function AdminEpc() {
     markProductionDone: s.markProductionDone,
     exportItemsXlsx: s.exportItemsXlsx,
     deleteItems: s.deleteItems,
-    deleteAllGeneratedBatches: s.deleteAllGeneratedBatches
+    deleteAllGeneratedBatches: s.deleteAllGeneratedBatches,
+    updateBatchDocuments: s.updateBatchDocuments
   }));
 
   const { products, fetchProducts } = useRecordsStore((s) => ({ products: s.products, fetchProducts: s.fetchProducts }));
@@ -186,6 +189,13 @@ export default function AdminEpc() {
   const [importHistoryDetail, setImportHistoryDetail] = useState(null);
   const [viewBatchOpen, setViewBatchOpen] = useState(false);
   const [viewBatch, setViewBatch] = useState(null);
+  const [viewBatchLocalError, setViewBatchLocalError] = useState('');
+  const [viewBatchDocUploading, setViewBatchDocUploading] = useState(() => ({
+    moh_health_certificate: false,
+    export_permit: false,
+    dvs_health_certificate: false,
+    dvs_coo_certificate: false
+  }));
 
   const getDocTypeLabel = useCallback(
     (docType) =>
@@ -249,6 +259,13 @@ export default function AdminEpc() {
   const closeViewBatch = useCallback(() => {
     setViewBatchOpen(false);
     setViewBatch(null);
+    setViewBatchLocalError('');
+    setViewBatchDocUploading({
+      moh_health_certificate: false,
+      export_permit: false,
+      dvs_health_certificate: false,
+      dvs_coo_certificate: false
+    });
   }, []);
 
   const openViewBatch = useCallback((b) => {
@@ -1189,6 +1206,9 @@ export default function AdminEpc() {
               </button>
             </div>
             <div className="space-y-4 p-4">
+              {viewBatchLocalError ? (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{viewBatchLocalError}</div>
+              ) : null}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <div className="text-[11px] font-semibold text-zinc-600">{t('batchId')}</div>
@@ -1236,6 +1256,35 @@ export default function AdminEpc() {
                             <div className="text-[11px] text-zinc-500">{t('notUploaded')}</div>
                           )}
                         </div>
+                        {canEditBatchDocs ? (
+                          <div className="mt-3">
+                            <label className="ac-btn ac-btn-soft inline-flex px-3 py-2 text-xs">
+                              {viewBatchDocUploading?.[docType] ? t('uploading') : t('upload')}
+                              <input
+                                type="file"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  try {
+                                    setViewBatchLocalError('');
+                                    setViewBatchDocUploading((prev) => ({ ...prev, [docType]: true }));
+                                    const uploaded = await uploadMedia({ file });
+                                    const mediaUrl = String(uploaded?.url || '').trim();
+                                    if (!mediaUrl) throw new Error(tRaw('operationFailed'));
+                                    const updated = await updateBatchDocuments({ batchId: viewBatch.id, documents: { [docType]: mediaUrl } });
+                                    if (updated) setViewBatch(updated);
+                                  } catch (err) {
+                                    setViewBatchLocalError(err?.message || tRaw('operationFailed'));
+                                  } finally {
+                                    setViewBatchDocUploading((prev) => ({ ...prev, [docType]: false }));
+                                    e.target.value = '';
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })}

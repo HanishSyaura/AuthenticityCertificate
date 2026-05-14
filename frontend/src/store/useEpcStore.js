@@ -443,6 +443,23 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
+  updateBatchDocuments: async ({ batchId, documents }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const id = Number(batchId);
+      const res = await api.put(`/epc/batches/${id}/documents`, { documents: documents || {} });
+      const updated = res?.data?.data;
+      const batches = (get().batches || []).map((b) => (String(b.id) === String(id) ? updated : b));
+      set({ loading: false, batches });
+      return updated;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
   importExistingXlsx: async ({ productId, batchName, base64 }) => {
     set({ loading: true, error: null });
     try {
