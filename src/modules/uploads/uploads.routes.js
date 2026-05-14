@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const fs = require('fs/promises');
 const sharp = require('sharp');
 const prisma = require('../../config/prisma');
+const jobQueue = require('../../services/jobQueue.service');
 const { verifyToken } = require('../../middleware/auth.middleware');
 const { attachOrganization, requireOrganization } = require('../../middleware/org.middleware');
 const { attachAccessContext, requireAccess } = require('../../middleware/access.middleware');
@@ -109,9 +110,18 @@ function uploadMedia(req, res) {
       const orgId = Number(req.organization.id);
       const destDir = path.join(getUploadsRoot(), 'media', String(orgId));
       const isImg = isProcessableImage(file);
+      const isVideo = String(file.mimetype || '').toLowerCase().startsWith('video/');
       let fileName = String(file.filename || '');
       let filePath = String(file.path || '');
       req.__acUploadAbsPath = filePath;
+
+      if (isVideo && path.extname(fileName).toLowerCase() !== '.mp4') {
+        try {
+          if (filePath) await fs.unlink(filePath);
+        } catch {}
+        return res.error('Unsupported video format. Please upload MP4.', 400);
+      }
+
       let created = null;
       for (let attempt = 0; attempt < 3; attempt += 1) {
         const url = `/uploads/media/${orgId}/${fileName}`;
@@ -124,7 +134,8 @@ function uploadMedia(req, res) {
                 fileName,
                 mimeType: file.mimetype,
                 sizeBytes: Number(file.size),
-                url
+                url,
+                processingStatus: isVideo ? 'processing' : 'ready'
               }
             }),
             5000
@@ -149,6 +160,24 @@ function uploadMedia(req, res) {
       }
 
       if (!created) return res.error('Failed to upload', 400);
+
+      if (isVideo) {
+        const disabled = ['1', 'true', 'yes', 'on'].includes(String(process.env.DISABLE_VIDEO_TRANSCODE || '').toLowerCase());
+        if (!disabled) {
+          try {
+            const job = await jobQueue.addJob('transcode_video', { mediaAssetId: created.id });
+            created = await prisma.mediaAsset.update({
+              where: { id: Number(created.id) },
+              data: { processingJobId: String(job?.id || '') || null }
+            });
+          } catch {}
+        } else {
+          created = await prisma.mediaAsset.update({
+            where: { id: Number(created.id) },
+            data: { processingStatus: 'ready', processingError: null, processedAt: new Date() }
+          });
+        }
+      }
 
       if (isImg && filePath) {
         try {
@@ -187,6 +216,9 @@ async function deleteMedia(req, res) {
       await fs.unlink(filePath);
     } catch {}
     const baseName = path.parse(String(asset.fileName || '')).name;
+    try {
+      await fs.unlink(path.join(dir, `${baseName}-poster.jpg`));
+    } catch {}
     for (const w of [320, 640, 1024]) {
       try {
         await fs.unlink(path.join(dir, `${baseName}-w${w}.webp`));

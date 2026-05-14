@@ -575,6 +575,11 @@ model MediaAsset {
   mimeType     String
   sizeBytes    Int
   url          String
+  processingStatus String   @default("ready")
+  processingError  String?
+  posterUrl        String?
+  processedAt      DateTime?
+  processingJobId  String?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt

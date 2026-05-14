@@ -140,13 +140,27 @@ export default function CmsInspectorPanel({
 
   const accept = selectedBlock?.type === 'video' ? 'video/*' : selectedBlock?.type === 'image' ? 'image/*' : undefined;
 
+  const guessPosterUrl = useCallback((uploadUrl) => {
+    const s = String(uploadUrl || '').trim();
+    const m = s.match(/^(\/uploads\/media\/\d+\/)([^/?#]+)\.mp4$/i);
+    return m ? `${m[1]}${m[2]}-poster.jpg` : '';
+  }, []);
+
   const doUpload = useCallback(
     async (file, blockId) => {
       setUploadError(null);
       setUploading(true);
       try {
         const created = await uploadMedia({ file });
-        if (created?.url) updateBlockContentById(blockId, { url: created.url });
+        if (created?.url) {
+          const blockType = layout.find((b) => String(b?.id) === String(blockId))?.type || '';
+          const patch = { url: created.url };
+          if (blockType === 'video') {
+            const poster = String(created?.posterUrl || '').trim() || guessPosterUrl(created.url);
+            if (poster) patch.posterUrl = poster;
+          }
+          updateBlockContentById(blockId, patch);
+        }
         setFileKey((k) => k + 1);
         return created;
       } catch (err) {
@@ -157,7 +171,7 @@ export default function CmsInspectorPanel({
         setUploading(false);
       }
     },
-    [t, updateBlockContentById, uploadMedia]
+    [guessPosterUrl, layout, t, updateBlockContentById, uploadMedia]
   );
 
   return (

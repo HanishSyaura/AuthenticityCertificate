@@ -350,7 +350,13 @@ const CmsVideoBlock = ({ block, style, t }) => {
   }, [raw]);
 
   const posterRaw = String(block?.content?.posterUrl || block?.content?.poster || '').trim();
-  const poster = posterRaw ? resolvePublicMediaUrl(posterRaw) : '';
+  const posterPick = useMemo(() => {
+    if (posterRaw) return posterRaw;
+    if (resolved?.kind !== 'video') return '';
+    const m = String(raw || '').match(/^(\/uploads\/media\/\d+\/)([^/?#]+)\.mp4$/i);
+    return m ? `${m[1]}${m[2]}-poster.jpg` : '';
+  }, [posterRaw, raw, resolved?.kind]);
+  const poster = posterPick ? resolvePublicMediaUrl(posterPick) : '';
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -428,7 +434,7 @@ const CmsVideoBlock = ({ block, style, t }) => {
           controls
           playsInline
           preload={active ? 'metadata' : 'none'}
-          poster={poster || undefined}
+          poster={active ? poster || undefined : undefined}
           className="h-full w-full object-cover"
         />
       ) : (

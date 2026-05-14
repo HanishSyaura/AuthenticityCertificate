@@ -13,6 +13,7 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
 
   const iframeSrc = useMemo(() => blobUrl || '', [blobUrl]);
   useEffect(() => {
+    if (!resolvedSrc) return undefined;
     const prevOverflow = document?.body?.style?.overflow ?? '';
     if (document?.body?.style) document.body.style.overflow = 'hidden';
 
@@ -24,11 +25,10 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
       window.removeEventListener('keydown', onKeyDown);
       if (document?.body?.style) document.body.style.overflow = prevOverflow;
     };
-  }, [onClose]);
-
-  if (!resolvedSrc) return null;
+  }, [onClose, resolvedSrc]);
 
   useEffect(() => {
+    if (!resolvedSrc) return undefined;
     let alive = true;
     const ctrl = new AbortController();
     setError('');
@@ -55,8 +55,7 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
         if (!alive) return;
         setError(msg);
       } finally {
-        if (!alive) return;
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     };
 
@@ -73,24 +72,26 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
     };
   }, [blobUrl]);
 
+  if (!resolvedSrc) return null;
+
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" onClick={onClose}>
-      <button
-        type="button"
-        className="absolute right-4 top-4 rounded bg-black/50 px-3 py-1 text-sm text-white"
-        onClick={(e) => {
-          e.stopPropagation();
-          onClose?.();
-        }}
-      >
-        ×
-      </button>
       <div className="h-full max-h-[calc(100vh-2rem)] w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-2 flex items-center justify-between gap-3">
           <div className="truncate text-sm font-semibold text-white">{title}</div>
-          <a href={iframeSrc || resolvedSrc} target="_blank" rel="noreferrer" className="text-xs font-semibold text-white underline">
-            {t('openInNewTab')}
-          </a>
+          <div className="flex items-center gap-3">
+            <a href={iframeSrc || resolvedSrc} target="_blank" rel="noreferrer" className="text-xs font-semibold text-white underline">
+              {t('openInNewTab')}
+            </a>
+            <button
+              type="button"
+              aria-label="Close"
+              className="rounded bg-black/50 px-3 py-1 text-sm text-white"
+              onClick={() => onClose?.()}
+            >
+              ×
+            </button>
+          </div>
         </div>
         {iframeSrc ? (
           <iframe title={title} src={iframeSrc} className="h-[calc(100vh-6rem)] w-full rounded bg-white" />

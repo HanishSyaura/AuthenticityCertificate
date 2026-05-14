@@ -236,6 +236,7 @@ location ^~ /uploads/ {
   alias /www/wwwroot/domain.com/AuthenticityCertificate/uploads/;
   try_files $uri =404;
   expires 30d;
+  add_header Accept-Ranges bytes always;
   add_header Cache-Control "public, max-age=2592000" always;
 }
 ```
@@ -247,6 +248,7 @@ location ^~ /public/uploads/ {
   alias /www/wwwroot/domain.com/AuthenticityCertificate/uploads/;
   try_files $uri =404;
   expires 30d;
+  add_header Accept-Ranges bytes always;
   add_header Cache-Control "public, max-age=2592000" always;
 }
 ```
@@ -273,6 +275,12 @@ Nota: letak setting ini pada `server { ... }` (global) atau pada `location` yang
 Kalau backend set limit sendiri, boleh override di env:
 
 - `MAX_UPLOAD_MB=500`
+
+### Video optimisation (FFmpeg)
+
+Untuk auto-optimize video upload (H.264 MP4 + faststart + poster image), pastikan server ada `ffmpeg` dalam PATH atau set:
+
+- `FFMPEG_PATH=/full/path/to/ffmpeg`
 
 ## Step 8 — Validate production
 
