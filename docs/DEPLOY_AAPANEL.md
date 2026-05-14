@@ -240,6 +240,17 @@ location ^~ /uploads/ {
 }
 ```
 
+Kalau frontend consume media melalui `/public/uploads/...`, anda boleh serve endpoint itu terus dari folder yang sama (lebih laju + kurang load backend):
+
+```
+location ^~ /public/uploads/ {
+  alias /www/wwwroot/domain.com/AuthenticityCertificate/uploads/;
+  try_files $uri =404;
+  expires 30d;
+  add_header Cache-Control "public, max-age=2592000" always;
+}
+```
+
 Untuk proxy header penting:
 
 ```

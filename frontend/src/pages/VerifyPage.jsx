@@ -5,7 +5,6 @@ import PublicRenderer from '../components/PublicRenderer';
 import VerifyLoadingScreen from '../components/VerifyLoadingScreen';
 import { useT } from '../i18n/useT';
 import LanguageSwitcher from '../components/LanguageSwitcher';
-import { buildUploadsWebpSrcSet } from '../utils/mediaVariants';
 import { resolvePublicMediaUrl } from '../utils/apiBase';
 
 function IconShieldCheck(props) {
@@ -27,75 +26,6 @@ function IconShieldAlert(props) {
   );
 }
 
-function VerifyPageBackground({ background, backgroundMode, reduceMotion }) {
-  const url = resolvePublicMediaUrl(background);
-  const mode = String(backgroundMode || '').trim() || 'background';
-  const isVideo = /\.(mp4|webm|ogg)(\?|#|$)/i.test(url);
-  const isLikelyImage = /\.(png|jpe?g|webp)(\?|#|$)/i.test(url);
-  const webpSrcSet = !isVideo && isLikelyImage && url ? buildUploadsWebpSrcSet(url) : null;
-  const bgClass =
-    mode === 'actual'
-      ? 'pointer-events-none fixed left-1/2 top-1/2 z-0 max-h-none max-w-none -translate-x-1/2 -translate-y-1/2 object-center'
-      : mode === 'fit'
-        ? 'pointer-events-none fixed inset-0 z-0 h-full w-full object-contain object-center'
-        : 'pointer-events-none fixed inset-0 z-0 h-full w-full object-fill object-center';
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    setReady(false);
-  }, [url, isVideo]);
-
-  if (!url) return null;
-
-  const opacityClass = reduceMotion
-    ? 'opacity-100'
-    : ready
-      ? 'opacity-100 transition-opacity duration-300'
-      : 'opacity-0 transition-opacity duration-300';
-
-  if (isVideo) {
-    return (
-      <video
-        key={url}
-        src={url}
-        muted
-        playsInline
-        autoPlay={!reduceMotion}
-        loop
-        preload={!reduceMotion ? 'metadata' : 'none'}
-        className={`${bgClass} ${opacityClass}`}
-        aria-hidden="true"
-        tabIndex={-1}
-        onLoadedData={() => setReady(true)}
-      />
-    );
-  }
-
-  const img = (
-    <img
-      key={url}
-      src={url}
-      alt=""
-      className={`${bgClass} ${opacityClass}`}
-      decoding="async"
-      fetchPriority="low"
-      draggable={false}
-      onLoad={() => setReady(true)}
-    />
-  );
-
-  if (webpSrcSet) {
-    return (
-      <picture className="fixed inset-0 z-0 h-full w-full">
-        <source type="image/webp" srcSet={webpSrcSet} sizes="100vw" />
-        {img}
-      </picture>
-    );
-  }
-
-  return img;
-}
-
 const VerifyPage = () => {
   const { id } = useParams();
   const location = useLocation();
@@ -104,20 +34,10 @@ const VerifyPage = () => {
   const [loadingMeta, setLoadingMeta] = useState(null);
   const [loadingMode, setLoadingMode] = useState('auto');
   const [showLoader, setShowLoader] = useState(false);
-  const [reduceMotion, setReduceMotion] = useState(false);
   const loaderStartAtRef = useRef(0);
   const loaderHideTimerRef = useRef(null);
   const { t, lang, locale } = useT();
   const hasTemplate = Boolean(Array.isArray(certificate?.certificateTemplate?.layoutJson));
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const onChange = () => setReduceMotion(!!mq.matches);
-    onChange();
-    mq.addEventListener?.('change', onChange);
-    return () => mq.removeEventListener?.('change', onChange);
-  }, []);
 
   useEffect(() => {
     if (id) {
@@ -212,8 +132,6 @@ const VerifyPage = () => {
       : false;
     if (Array.isArray(certificate?.layout)) {
       const pageBg = String(certificate?.certificateTemplate?.backgroundColor || '').trim() || '#ffffff';
-      const pageBgMode = String(certificate?.certificateTemplate?.backgroundMode || '').trim() || 'background';
-      const pageBgUrl = certificate?.certificateTemplate?.background ? String(certificate.certificateTemplate.background) : '';
       return (
         <div
           className="relative min-h-[100dvh] w-full overflow-x-hidden"
@@ -225,7 +143,6 @@ const VerifyPage = () => {
             backgroundSize: undefined
           }}
         >
-          <VerifyPageBackground background={pageBgUrl} backgroundMode={pageBgMode} reduceMotion={reduceMotion} />
           <div className="fixed right-3 top-3 z-50">
             <LanguageSwitcher size="md" />
           </div>
@@ -292,8 +209,6 @@ const VerifyPage = () => {
               const baseW = Number.isFinite(canvasW) && canvasW > 0 ? canvasW : 390;
               const baseH = Number.isFinite(canvasH) && canvasH > 0 ? canvasH : 844;
               const pageBg = String(certificate?.certificateTemplate?.backgroundColor || '').trim() || '#ffffff';
-              const pageBgMode = String(certificate?.certificateTemplate?.backgroundMode || '').trim() || 'background';
-              const pageBgUrl = certificate?.certificateTemplate?.background ? String(certificate.certificateTemplate.background) : '';
               return (
                 <div
                   className="relative min-h-[100dvh] overflow-x-hidden"
@@ -305,7 +220,6 @@ const VerifyPage = () => {
                     backgroundSize: undefined
                   }}
                 >
-                  <VerifyPageBackground background={pageBgUrl} backgroundMode={pageBgMode} reduceMotion={reduceMotion} />
                   <div className="relative z-10 w-full">
                     <PublicRenderer
                       responsive

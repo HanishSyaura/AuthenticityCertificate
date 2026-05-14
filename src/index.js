@@ -21,24 +21,30 @@ const settingsRoutes = require('./modules/settings/settings.routes');
 const accessRoutes = require('./modules/access/access.routes');
 const { rateLimit } = require('./middleware/rateLimit.middleware');
 const { applyDbPatches } = require('./config/dbPatches');
-const { listUploadRootCandidates } = require('./utils/uploadsRoot');
+const { pickWritableUploadRoot } = require('./utils/uploadsRoot');
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-const uploadRoots = (() => {
-  const candidates = listUploadRootCandidates();
-  const existing = candidates.filter((p) => {
-    try {
-      return fsSync.existsSync(p);
-    } catch {
-      return false;
-    }
-  });
-  return existing.length > 0 ? existing : candidates;
-})();
+// Standardized Response Format Middleware
+app.use((req, res, next) => {
+  const stringifySafe = (payload) =>
+    JSON.stringify(payload, (_key, value) => (typeof value === 'bigint' ? value.toString() : value));
+  res.success = (data, message = 'OK') => {
+    res.set('Content-Type', 'application/json');
+    res.send(stringifySafe({ success: true, data, message }));
+  };
+  res.error = (message, status = 500) => {
+    res.status(status);
+    res.set('Content-Type', 'application/json');
+    res.send(stringifySafe({ success: false, message }));
+  };
+  next();
+});
+
+const uploadRoots = [pickWritableUploadRoot()];
 const isProd = process.env.NODE_ENV === 'production';
 
 async function fileExists(absPath) {
@@ -227,22 +233,6 @@ app.use(
   })
 );
 app.use(express.json());
-
-// Standardized Response Format Middleware
-app.use((req, res, next) => {
-  const stringifySafe = (payload) =>
-    JSON.stringify(payload, (_key, value) => (typeof value === 'bigint' ? value.toString() : value));
-  res.success = (data, message = 'OK') => {
-    res.set('Content-Type', 'application/json');
-    res.send(stringifySafe({ success: true, data, message }));
-  };
-  res.error = (message, status = 500) => {
-    res.status(status);
-    res.set('Content-Type', 'application/json');
-    res.send(stringifySafe({ success: false, message }));
-  };
-  next();
-});
 
 const dbInit = { ready: false, error: null, promise: null };
 dbInit.promise = applyDbPatches()

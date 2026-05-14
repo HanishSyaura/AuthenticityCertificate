@@ -1,7 +1,15 @@
 export function buildUploadsWebpSrcSet(url, widths = [320, 640, 1024]) {
   const raw = String(url || '').trim();
   if (!raw) return null;
-  const uploadsIdx = raw.indexOf('/uploads/');
+  const markers = ['/public/uploads/', '/uploads/'];
+  let uploadsIdx = -1;
+  for (const m of markers) {
+    const idx = raw.indexOf(m);
+    if (idx >= 0) {
+      uploadsIdx = idx;
+      break;
+    }
+  }
   if (uploadsIdx < 0) return null;
 
   const prefix = raw.slice(0, uploadsIdx);

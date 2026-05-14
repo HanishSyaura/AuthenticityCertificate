@@ -19,11 +19,16 @@ function uniquePaths(paths) {
   return out;
 }
 
+function projectUploadsRoot() {
+  return path.resolve(__dirname, '..', '..', 'uploads');
+}
+
 function listUploadRootCandidates() {
   const envRoot = normalizeCandidate(process.env.UPLOADS_DIR || process.env.UPLOADS_ROOT || '');
   const cwd = process.cwd();
   const candidates = [
     envRoot,
+    projectUploadsRoot(),
     path.resolve(cwd, 'uploads'),
     path.resolve(cwd, '..', 'uploads'),
     path.resolve(cwd, '..', '..', 'uploads')
@@ -33,17 +38,18 @@ function listUploadRootCandidates() {
 
 function pickWritableUploadRoot() {
   const candidates = listUploadRootCandidates();
+  const envRoot = normalizeCandidate(process.env.UPLOADS_DIR || process.env.UPLOADS_ROOT || '');
+  if (envRoot) return envRoot;
   for (const abs of candidates) {
     try {
       if (fs.existsSync(abs)) return abs;
     } catch {
     }
   }
-  return candidates[0] || path.resolve(process.cwd(), 'uploads');
+  return candidates[0] || projectUploadsRoot();
 }
 
 module.exports = {
   listUploadRootCandidates,
   pickWritableUploadRoot
 };
-

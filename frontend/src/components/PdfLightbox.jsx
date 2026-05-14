@@ -74,7 +74,7 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
   }, [blobUrl]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" onClick={onClose}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" onClick={onClose}>
       <button
         type="button"
         className="absolute right-4 top-4 rounded bg-black/50 px-3 py-1 text-sm text-white"
