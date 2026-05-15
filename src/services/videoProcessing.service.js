@@ -94,6 +94,8 @@ async function transcodeOne({ mediaAssetId }) {
       inAbs,
       '-vf',
       'scale=-2:720',
+      '-pix_fmt',
+      'yuv420p',
       '-c:v',
       'libx264',
       '-preset',
