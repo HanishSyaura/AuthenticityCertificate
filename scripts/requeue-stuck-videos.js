@@ -34,7 +34,7 @@ async function main() {
     const job = await jobQueue.addJob(
       'transcode_video',
       { mediaAssetId: r.id },
-      { jobId: `transcode_video:${r.id}`, attempts: 2, backoff: { type: 'exponential', delay: 5000 } }
+      { jobId: `transcode_video__${r.id}`, attempts: 2, backoff: { type: 'exponential', delay: 5000 } }
     );
     await prisma.mediaAsset.update({
       where: { id: r.id },
@@ -56,4 +56,3 @@ main()
       await prisma.$disconnect();
     } catch {}
   });
-

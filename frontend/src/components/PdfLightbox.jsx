@@ -40,9 +40,12 @@ async function ensurePdfWorkerSrc(pdfjs) {
   return src;
 }
 
-function PdfCanvasViewer({ data, title }) {
+function PdfCanvasViewer({ data, title, zoom = 1 }) {
   const { t } = useT();
   const containerRef = useRef(null);
+  const docRef = useRef(null);
+  const canvasByPageRef = useRef(new Map());
+  const renderSeqRef = useRef(0);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [numPages, setNumPages] = useState(0);
@@ -71,6 +74,14 @@ function PdfCanvasViewer({ data, title }) {
     let alive = true;
     setError('');
     setNumPages(0);
+    const prevDoc = docRef.current;
+    docRef.current = null;
+    if (prevDoc) {
+      try {
+        prevDoc.destroy?.();
+      } catch {
+      }
+    }
     if (!(data instanceof Uint8Array) || data.length === 0) return () => void 0;
 
     const run = async () => {
@@ -78,7 +89,12 @@ function PdfCanvasViewer({ data, title }) {
       try {
         const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
         await ensurePdfWorkerSrc(pdfjs);
-        const doc = await pdfjs.getDocument({ data }).promise;
+        let doc = null;
+        try {
+          doc = await pdfjs.getDocument({ data }).promise;
+        } catch {
+          doc = await pdfjs.getDocument({ data, disableWorker: true }).promise;
+        }
         if (!alive) {
           try {
             doc.destroy?.();
@@ -86,11 +102,8 @@ function PdfCanvasViewer({ data, title }) {
           }
           return;
         }
-        setNumPages(Number(doc.numPages) > 0 ? Number(doc.numPages) : 0);
-        try {
-          doc.destroy?.();
-        } catch {
-        }
+        docRef.current = doc;
+        setNumPages(Number(doc?.numPages) > 0 ? Number(doc.numPages) : 0);
       } catch (e) {
         const msg = e?.message ? String(e.message) : t('operationFailed');
         if (!alive) return;
@@ -103,6 +116,14 @@ function PdfCanvasViewer({ data, title }) {
     void run();
     return () => {
       alive = false;
+      const doc = docRef.current;
+      docRef.current = null;
+      if (doc) {
+        try {
+          doc.destroy?.();
+        } catch {
+        }
+      }
     };
   }, [data, t]);
 
@@ -111,21 +132,24 @@ function PdfCanvasViewer({ data, title }) {
     if (!(data instanceof Uint8Array) || data.length === 0) return () => void 0;
     if (!numPages) return () => void 0;
     if (!containerW) return () => void 0;
+    const doc = docRef.current;
+    if (!doc) return () => void 0;
+    const seq = (renderSeqRef.current += 1);
 
     const run = async () => {
       try {
-        const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-        await ensurePdfWorkerSrc(pdfjs);
-        const doc = await pdfjs.getDocument({ data }).promise;
+        await new Promise((r) => window.requestAnimationFrame(r));
 
         for (let pageNum = 1; pageNum <= numPages; pageNum += 1) {
           if (!alive) break;
-          const canvas = document.getElementById(`ac_pdf_page_${pageNum}`) || null;
+          if (seq !== renderSeqRef.current) break;
+          const canvas = canvasByPageRef.current.get(pageNum) || null;
           if (!(canvas instanceof HTMLCanvasElement)) continue;
           const page = await doc.getPage(pageNum);
           const baseViewport = page.getViewport({ scale: 1 });
           const targetW = Math.max(1, Math.floor(containerW));
-          const scale = Math.max(0.1, targetW / Math.max(1, baseViewport.width));
+          const fitScale = Math.max(0.1, targetW / Math.max(1, baseViewport.width));
+          const scale = Math.max(0.1, fitScale * Math.max(0.25, Math.min(6, Number(zoom) || 1)));
           const viewport = page.getViewport({ scale });
 
           const dpr = typeof window !== 'undefined' && window.devicePixelRatio ? Math.max(1, Number(window.devicePixelRatio) || 1) : 1;
@@ -137,20 +161,20 @@ function PdfCanvasViewer({ data, title }) {
           canvas.style.height = `${cssH}px`;
           const ctx = canvas.getContext('2d', { alpha: false });
           if (!ctx) continue;
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-          await page.render({ canvasContext: ctx, viewport }).promise;
+          const task = page.render({ canvasContext: ctx, viewport });
+          await task.promise;
           try {
             page.cleanup();
           } catch {
           }
         }
-
-        try {
-          doc.cleanup?.();
-          doc.destroy?.();
-        } catch {
-        }
-      } catch {
+      } catch (e) {
+        const msg = e?.message ? String(e.message) : t('operationFailed');
+        if (!alive) return;
+        setError(msg);
       }
     };
 
@@ -158,7 +182,7 @@ function PdfCanvasViewer({ data, title }) {
     return () => {
       alive = false;
     };
-  }, [containerW, data, numPages]);
+  }, [containerW, data, numPages, t, zoom]);
 
   if (error) {
     return <div className="flex h-full w-full items-center justify-center p-4 text-sm text-zinc-700">{error}</div>;
@@ -181,7 +205,13 @@ function PdfCanvasViewer({ data, title }) {
             const n = idx + 1;
             return (
               <div key={n} className="w-full overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm shadow-zinc-900/5">
-                <canvas id={`ac_pdf_page_${n}`} className="block h-auto w-full" />
+                <canvas
+                  className="block h-auto w-full"
+                  ref={(el) => {
+                    if (el) canvasByPageRef.current.set(n, el);
+                    else canvasByPageRef.current.delete(n);
+                  }}
+                />
               </div>
             );
           })}
@@ -199,6 +229,7 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
   const [pdfData, setPdfData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [zoom, setZoom] = useState(1);
 
   const iframeSrc = useMemo(() => blobUrl || '', [blobUrl]);
   const preferCanvas = useMemo(() => {
@@ -233,6 +264,7 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
     setLoading(true);
     setBlobUrl('');
     setPdfData(null);
+    setZoom(1);
 
     const run = async () => {
       try {
@@ -287,6 +319,31 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
             ×
           </button>
           <div className="min-w-0 flex-1 truncate text-center text-sm font-semibold sm:text-left">{title}</div>
+          {preferCanvas ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="rounded bg-black/50 px-2 py-1 text-xs font-semibold text-white"
+                onClick={() => setZoom((z) => Math.max(0.5, Number(z || 1) - 0.25))}
+              >
+                −
+              </button>
+              <button
+                type="button"
+                className="rounded bg-black/50 px-2 py-1 text-[11px] font-semibold text-white"
+                onClick={() => setZoom(1)}
+              >
+                {Math.round((Number(zoom) || 1) * 100)}%
+              </button>
+              <button
+                type="button"
+                className="rounded bg-black/50 px-2 py-1 text-xs font-semibold text-white"
+                onClick={() => setZoom((z) => Math.min(4, Number(z || 1) + 0.25))}
+              >
+                +
+              </button>
+            </div>
+          ) : null}
           <a href={iframeSrc || resolvedSrc} target="_blank" rel="noreferrer" className="text-xs font-semibold text-white underline">
             {t('openInNewTab')}
           </a>
@@ -294,7 +351,7 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
 
         <div className="min-h-0 flex-1 overflow-hidden bg-white sm:rounded-xl">
           {preferCanvas && pdfData instanceof Uint8Array ? (
-            <PdfCanvasViewer data={pdfData} title={title} />
+            <PdfCanvasViewer data={pdfData} title={title} zoom={zoom} />
           ) : iframeSrc ? (
             <iframe title={title} src={iframeSrc} className="h-full w-full bg-white" />
           ) : (

@@ -168,13 +168,24 @@ function uploadMedia(req, res) {
             const job = await jobQueue.addJob(
               'transcode_video',
               { mediaAssetId: created.id },
-              { jobId: `transcode_video:${created.id}`, attempts: 2, backoff: { type: 'exponential', delay: 5000 } }
+              { jobId: `transcode_video__${created.id}`, attempts: 2, backoff: { type: 'exponential', delay: 5000 } }
             );
             created = await prisma.mediaAsset.update({
               where: { id: Number(created.id) },
               data: { processingJobId: String(job?.id || '') || null }
             });
-          } catch {}
+          } catch (e) {
+            try {
+              created = await prisma.mediaAsset.update({
+                where: { id: Number(created.id) },
+                data: {
+                  processingStatus: 'failed',
+                  processingError: e?.message || String(e),
+                  processedAt: new Date()
+                }
+              });
+            } catch {}
+          }
         } else {
           created = await prisma.mediaAsset.update({
             where: { id: Number(created.id) },
