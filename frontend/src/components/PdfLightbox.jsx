@@ -135,6 +135,15 @@ function PdfCanvasViewer({ data, title, zoom = 1 }) {
     const doc = docRef.current;
     if (!doc) return () => void 0;
     const seq = (renderSeqRef.current += 1);
+    const getCanvasEl = (pageNum) => {
+      const fromMap = canvasByPageRef.current.get(pageNum) || null;
+      if (fromMap instanceof HTMLCanvasElement) return fromMap;
+      const root = containerRef.current;
+      if (!root) return null;
+      const sel = `[data-ac-pdf-page="${pageNum}"]`;
+      const el = root.querySelector(sel);
+      return el instanceof HTMLCanvasElement ? el : null;
+    };
 
     const run = async () => {
       try {
@@ -143,7 +152,7 @@ function PdfCanvasViewer({ data, title, zoom = 1 }) {
         for (let pageNum = 1; pageNum <= numPages; pageNum += 1) {
           if (!alive) break;
           if (seq !== renderSeqRef.current) break;
-          const canvas = canvasByPageRef.current.get(pageNum) || null;
+          const canvas = getCanvasEl(pageNum);
           if (!(canvas instanceof HTMLCanvasElement)) continue;
           const page = await doc.getPage(pageNum);
           const baseViewport = page.getViewport({ scale: 1 });
@@ -207,6 +216,7 @@ function PdfCanvasViewer({ data, title, zoom = 1 }) {
               <div key={n} className="w-full overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm shadow-zinc-900/5">
                 <canvas
                   className="block h-auto w-full"
+                  data-ac-pdf-page={n}
                   ref={(el) => {
                     if (el) canvasByPageRef.current.set(n, el);
                     else canvasByPageRef.current.delete(n);

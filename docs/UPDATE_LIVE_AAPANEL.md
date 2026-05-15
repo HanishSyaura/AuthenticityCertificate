@@ -267,3 +267,69 @@ curl -s http://127.0.0.1:5000/health
 echo
 ```
 
+<br />
+
+Update Video file
+
+A) Ambil filename MP4 terbaru
+
+```Shell
+ls -t /www/wwwroot/birdnestauth.clbgroups.com/_uploads/media/1/*.
+mp4 2>/dev/null | head -n 5
+```
+
+Copy yang paling atas (itu paling baru).
+
+B) Check status DB untuk filename tu Ganti NEW\.mp4 :
+
+```Shell
+cd /www/wwwroot/birdnestauth.clbgroups.com/AuthenticityCertificate
+node - <<'NODE'
+require('dotenv').config();
+const prisma = require('./src/config/prisma');
+(async () => {
+  const fileName = 'NEW.mp4';
+  const row = await prisma.mediaAsset.findFirst({ where: { 
+  fileName } });
+  console.log(row?.id, row?.processingStatus, row?.
+  processingError, row?.processingJobId, row?.posterUrl, row?.
+  sizeBytes, row?.processedAt);
+  await prisma.$disconnect();
+})().catch((e)=>{ console.error(e); process.exit(1); });
+NODE
+```
+
+C) Bila status dah ready , verify format iPhone (720p + yuv420p) Guna path penuh file:
+
+```Shell
+FILE="/www/wwwroot/birdnestauth.clbgroups.com/_uploads/media/1/
+NEW.mp4"
+ffprobe -v error -show_streams -select_streams v:0 -of json 
+"$FILE" | head -n 50
+```
+
+Target:
+
+- width: 1280 , height: 720
+- pix\_fmt: yuv420p
+
+Kalau kau nak check “semua yang masih processing”, run:
+
+```Shell
+cd /www/wwwroot/birdnestauth.clbgroups.com/AuthenticityCertificate
+node - <<'NODE'
+require('dotenv').config();
+const prisma = require('./src/config/prisma');
+(async () => {
+  const rows = await prisma.mediaAsset.findMany({
+    where: { processingStatus: 'processing', deletedAt: null },
+    orderBy: { createdAt: 'desc' },
+    take: 20
+  });
+  console.log(rows.map(r => ({ id: r.id, fileName: r.fileName, 
+  jobId: r.processingJobId, createdAt: r.createdAt })));
+  await prisma.$disconnect();
+})().catch((e)=>{ console.error(e); process.exit(1); });
+NODE
+```
+
