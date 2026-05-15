@@ -117,11 +117,19 @@ function queueConfig() {
   return { name, prefix };
 }
 
+function workerConfig() {
+  const concurrency = clampInt(process.env.BULLMQ_CONCURRENCY, 1, 4, 1);
+  const lockDuration = clampInt(process.env.BULLMQ_LOCK_MS, 30_000, 60 * 60_000, 10 * 60_000);
+  const lockRenewTime = clampInt(process.env.BULLMQ_LOCK_RENEW_MS, 5_000, lockDuration - 1000, Math.floor(lockDuration / 2));
+  return { concurrency, lockDuration, lockRenewTime };
+}
+
 function ensureQueue() {
   if (!hasRedis()) return null;
   if (queue && worker) return queue;
 
   const cfg = queueConfig();
+  const wcfg = workerConfig();
   redisConnection = new IORedis(process.env.REDIS_URL, {
     maxRetriesPerRequest: null
   });
@@ -134,7 +142,13 @@ function ensureQueue() {
       if (!fn) throw new Error(`No handler for job ${job.name}`);
       return await fn(job.data);
     },
-    { connection: redisConnection, prefix: cfg.prefix }
+    {
+      connection: redisConnection,
+      prefix: cfg.prefix,
+      concurrency: wcfg.concurrency,
+      lockDuration: wcfg.lockDuration,
+      lockRenewTime: wcfg.lockRenewTime
+    }
   );
 
   return queue;

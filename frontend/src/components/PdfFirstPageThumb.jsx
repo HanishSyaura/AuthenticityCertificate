@@ -9,6 +9,21 @@ const CACHE_ERR_TTL_MS = 2000;
 let workerSrcPromise = null;
 let workerSrcBlobUrl = '';
 
+function getPdfAssetsBaseUrl() {
+  const base = (import.meta?.env?.BASE_URL || '/').trim() || '/';
+  return base.endsWith('/') ? base : `${base}/`;
+}
+
+function getPdfDocumentParams(data) {
+  const base = getPdfAssetsBaseUrl();
+  return {
+    data,
+    cMapUrl: `${base}pdfjs/cmaps/`,
+    cMapPacked: true,
+    standardFontDataUrl: `${base}pdfjs/standard_fonts/`
+  };
+}
+
 async function ensurePdfWorkerSrc(pdfjs) {
   const existing = pdfjs?.GlobalWorkerOptions?.workerSrc;
   if (typeof existing === 'string' && existing.trim()) return existing.trim();
@@ -46,7 +61,12 @@ async function renderFirstPagePngDataUrl({ arrayBuffer, widthPx }) {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   await ensurePdfWorkerSrc(pdfjs);
   const buf = arrayBuffer instanceof ArrayBuffer ? arrayBuffer : new ArrayBuffer(0);
-  const doc = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise;
+  let doc = null;
+  try {
+    doc = await pdfjs.getDocument(getPdfDocumentParams(new Uint8Array(buf))).promise;
+  } catch {
+    doc = await pdfjs.getDocument({ ...getPdfDocumentParams(new Uint8Array(buf)), disableWorker: true }).promise;
+  }
   const page = await doc.getPage(1);
   const baseViewport = page.getViewport({ scale: 1 });
   const targetW = Number.isFinite(widthPx) && widthPx > 0 ? widthPx : 520;

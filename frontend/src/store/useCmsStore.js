@@ -73,6 +73,23 @@ function coerceLayoutToArray(value) {
   return null;
 }
 
+function pickTextOnlyTranslationLayout(layout) {
+  const arr = Array.isArray(layout) ? layout : [];
+  const out = [];
+  const used = new Set();
+  for (const b of arr) {
+    if (!b || typeof b !== 'object') continue;
+    if (String(b.type || '') !== 'text') continue;
+    const id = String(b.id || '').trim();
+    if (!id || used.has(id)) continue;
+    used.add(id);
+    const text = b?.content?.text;
+    if (typeof text !== 'string') continue;
+    out.push({ id, type: 'text', content: { text } });
+  }
+  return out;
+}
+
 const useCmsStore = create((set, get) => ({
   pages: [],
   layoutsByPageKey: {},
@@ -168,7 +185,8 @@ const useCmsStore = create((set, get) => ({
 
     try {
       const api = createAdminApi({ token });
-      await api.post('/cms/layout', { pageId, layoutJson: safe, language: lang });
+      const payload = String(lang).toLowerCase() === 'en' ? safe : pickTextOnlyTranslationLayout(safe);
+      await api.post('/cms/layout', { pageId, layoutJson: payload, language: lang });
     } catch (e) {
       const msg = e?.response?.data?.message || tRaw('operationFailed');
       throw new Error(msg);

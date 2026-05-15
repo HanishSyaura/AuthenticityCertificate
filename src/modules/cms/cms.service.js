@@ -52,6 +52,23 @@ function mergeCmsLayoutBaseWithTranslation(baseLayout, translatedLayout) {
   });
 }
 
+function pickTextOnlyTranslationLayout(layout) {
+  const arr = Array.isArray(layout) ? layout : [];
+  const out = [];
+  const used = new Set();
+  for (const b of arr) {
+    if (!b || typeof b !== 'object') continue;
+    if (String(b.type || '') !== 'text') continue;
+    const id = String(b.id || '').trim();
+    if (!id || used.has(id)) continue;
+    used.add(id);
+    const text = b?.content?.text;
+    if (typeof text !== 'string') continue;
+    out.push({ id, type: 'text', content: { text } });
+  }
+  return out;
+}
+
 function isMeaningfulHtmlText(value) {
   if (value == null) return false;
   const s = String(value);
@@ -130,10 +147,7 @@ async function getPageBySlug({ organizationId, slug, language }) {
         null;
       const translatedLayout = coerceLayoutToArray(translation?.contentJson) ?? null;
 
-      const effectiveLayout =
-        lang !== 'en'
-          ? mergeCmsLayoutBaseWithTranslation(baseLayout, translatedLayout)
-          : translatedLayout ?? baseLayout ?? null;
+      const effectiveLayout = mergeCmsLayoutBaseWithTranslation(baseLayout, translatedLayout);
       return { ...page, effectiveLayout, language: lang };
     })(),
     DEFAULT_TIMEOUT_MS
@@ -143,11 +157,12 @@ async function getPageBySlug({ organizationId, slug, language }) {
 async function saveLayout({ organizationId, pageId, layoutJson, language }) {
   const lang = normalizeLang(language);
   const pid = parseInt(pageId);
+  const translationPayload = lang === 'en' ? layoutJson : pickTextOnlyTranslationLayout(layoutJson);
   await withTimeout(
     prisma.cmsTranslation.upsert({
       where: { pageId_language: { pageId: pid, language: lang } },
-      update: { organizationId: Number(organizationId), contentJson: layoutJson },
-      create: { organizationId: Number(organizationId), pageId: pid, language: lang, contentJson: layoutJson }
+      update: { organizationId: Number(organizationId), contentJson: translationPayload },
+      create: { organizationId: Number(organizationId), pageId: pid, language: lang, contentJson: translationPayload }
     }),
     DEFAULT_TIMEOUT_MS
   );
@@ -204,12 +219,13 @@ async function fillEmptyTranslation({ organizationId, pageId, language }) {
   );
   const existingLayout = coerceLayoutToArray(existing?.contentJson) ?? null;
   const filled = fillEmptyCmsTextFromBase(baseLayout, existingLayout);
+  const translationPayload = pickTextOnlyTranslationLayout(filled);
 
   await withTimeout(
     prisma.cmsTranslation.upsert({
       where: { pageId_language: { pageId: pid, language: lang } },
-      update: { organizationId: orgId, contentJson: filled },
-      create: { organizationId: orgId, pageId: pid, language: lang, contentJson: filled }
+      update: { organizationId: orgId, contentJson: translationPayload },
+      create: { organizationId: orgId, pageId: pid, language: lang, contentJson: translationPayload }
     }),
     DEFAULT_TIMEOUT_MS
   );

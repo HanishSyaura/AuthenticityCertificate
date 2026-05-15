@@ -473,7 +473,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
             : Array.isArray(p?.layout?.layoutJson)
               ? p.layout.layoutJson
               : null;
-          const effectiveLayout = lang !== 'en' ? mergeCmsLayoutBaseWithTranslation(baseLayout, tLayout) : tLayout ?? baseLayout;
+          const effectiveLayout = mergeCmsLayoutBaseWithTranslation(baseLayout, tLayout);
           return { id: p.id, effectiveLayout };
         });
 

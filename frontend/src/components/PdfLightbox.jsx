@@ -7,6 +7,21 @@ import useAdminAuthStore from '../store/useAdminAuthStore';
 let workerSrcPromise = null;
 let workerSrcBlobUrl = '';
 
+function getPdfAssetsBaseUrl() {
+  const base = (import.meta?.env?.BASE_URL || '/').trim() || '/';
+  return base.endsWith('/') ? base : `${base}/`;
+}
+
+function getPdfDocumentParams(data) {
+  const base = getPdfAssetsBaseUrl();
+  return {
+    data,
+    cMapUrl: `${base}pdfjs/cmaps/`,
+    cMapPacked: true,
+    standardFontDataUrl: `${base}pdfjs/standard_fonts/`
+  };
+}
+
 async function ensurePdfWorkerSrc(pdfjs) {
   const existing = pdfjs?.GlobalWorkerOptions?.workerSrc;
   if (typeof existing === 'string' && existing.trim()) return existing.trim();
@@ -40,16 +55,17 @@ async function ensurePdfWorkerSrc(pdfjs) {
   return src;
 }
 
-function PdfCanvasViewer({ data, title, zoom = 1 }) {
+function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange }) {
   const { t } = useT();
   const containerRef = useRef(null);
   const docRef = useRef(null);
-  const canvasByPageRef = useRef(new Map());
-  const renderSeqRef = useRef(0);
+  const canvasRef = useRef(null);
+  const renderTaskRef = useRef(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [numPages, setNumPages] = useState(0);
   const [containerW, setContainerW] = useState(0);
+  const [containerH, setContainerH] = useState(0);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -57,7 +73,9 @@ function PdfCanvasViewer({ data, title, zoom = 1 }) {
 
     const measure = () => {
       const w = Number(el.clientWidth || 0);
+      const h = Number(el.clientHeight || 0);
       setContainerW(Number.isFinite(w) && w > 0 ? w : 0);
+      setContainerH(Number.isFinite(h) && h > 0 ? h : 0);
     };
     measure();
 
@@ -76,6 +94,13 @@ function PdfCanvasViewer({ data, title, zoom = 1 }) {
     setNumPages(0);
     const prevDoc = docRef.current;
     docRef.current = null;
+    if (renderTaskRef.current) {
+      try {
+        renderTaskRef.current.cancel?.();
+      } catch {
+      }
+      renderTaskRef.current = null;
+    }
     if (prevDoc) {
       try {
         prevDoc.destroy?.();
@@ -91,9 +116,9 @@ function PdfCanvasViewer({ data, title, zoom = 1 }) {
         await ensurePdfWorkerSrc(pdfjs);
         let doc = null;
         try {
-          doc = await pdfjs.getDocument({ data }).promise;
+          doc = await pdfjs.getDocument(getPdfDocumentParams(data)).promise;
         } catch {
-          doc = await pdfjs.getDocument({ data, disableWorker: true }).promise;
+          doc = await pdfjs.getDocument({ ...getPdfDocumentParams(data), disableWorker: true }).promise;
         }
         if (!alive) {
           try {
@@ -103,7 +128,9 @@ function PdfCanvasViewer({ data, title, zoom = 1 }) {
           return;
         }
         docRef.current = doc;
-        setNumPages(Number(doc?.numPages) > 0 ? Number(doc.numPages) : 0);
+        const total = Number(doc?.numPages) > 0 ? Number(doc.numPages) : 0;
+        setNumPages(total);
+        onNumPagesChange?.(total);
       } catch (e) {
         const msg = e?.message ? String(e.message) : t('operationFailed');
         if (!alive) return;
@@ -125,60 +152,64 @@ function PdfCanvasViewer({ data, title, zoom = 1 }) {
         }
       }
     };
-  }, [data, t]);
+  }, [data, onNumPagesChange, t]);
 
   useEffect(() => {
     let alive = true;
     if (!(data instanceof Uint8Array) || data.length === 0) return () => void 0;
     if (!numPages) return () => void 0;
     if (!containerW) return () => void 0;
+    if (!containerH) return () => void 0;
     const doc = docRef.current;
     if (!doc) return () => void 0;
-    const seq = (renderSeqRef.current += 1);
-    const getCanvasEl = (pageNum) => {
-      const fromMap = canvasByPageRef.current.get(pageNum) || null;
-      if (fromMap instanceof HTMLCanvasElement) return fromMap;
-      const root = containerRef.current;
-      if (!root) return null;
-      const sel = `[data-ac-pdf-page="${pageNum}"]`;
-      const el = root.querySelector(sel);
-      return el instanceof HTMLCanvasElement ? el : null;
-    };
+    const pageSafe = Math.max(1, Math.min(Number(page) || 1, numPages));
 
     const run = async () => {
       try {
         await new Promise((r) => window.requestAnimationFrame(r));
+        const canvas = canvasRef.current;
+        if (!(canvas instanceof HTMLCanvasElement)) return;
 
-        for (let pageNum = 1; pageNum <= numPages; pageNum += 1) {
-          if (!alive) break;
-          if (seq !== renderSeqRef.current) break;
-          const canvas = getCanvasEl(pageNum);
-          if (!(canvas instanceof HTMLCanvasElement)) continue;
-          const page = await doc.getPage(pageNum);
-          const baseViewport = page.getViewport({ scale: 1 });
-          const targetW = Math.max(1, Math.floor(containerW));
-          const fitScale = Math.max(0.1, targetW / Math.max(1, baseViewport.width));
-          const scale = Math.max(0.1, fitScale * Math.max(0.25, Math.min(6, Number(zoom) || 1)));
-          const viewport = page.getViewport({ scale });
+        const pdfPage = await doc.getPage(pageSafe);
+        const baseViewport = pdfPage.getViewport({ scale: 1 });
+        const pad = 24;
+        const availW = Math.max(1, Math.floor(containerW - pad * 2));
+        const availH = Math.max(1, Math.floor(containerH - pad * 2));
+        const fitScale = Math.max(
+          0.1,
+          Math.min(availW / Math.max(1, baseViewport.width), availH / Math.max(1, baseViewport.height))
+        );
+        const z = Math.max(0.25, Math.min(6, Number(zoom) || 1));
+        const viewport = pdfPage.getViewport({ scale: Math.max(0.1, fitScale * z) });
 
-          const dpr = typeof window !== 'undefined' && window.devicePixelRatio ? Math.max(1, Number(window.devicePixelRatio) || 1) : 1;
-          const cssW = Math.max(1, Math.floor(viewport.width));
-          const cssH = Math.max(1, Math.floor(viewport.height));
-          canvas.width = Math.max(1, Math.floor(cssW * dpr));
-          canvas.height = Math.max(1, Math.floor(cssH * dpr));
-          canvas.style.width = `${cssW}px`;
-          canvas.style.height = `${cssH}px`;
-          const ctx = canvas.getContext('2d', { alpha: false });
-          if (!ctx) continue;
-          ctx.setTransform(1, 0, 0, 1, 0, 0);
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-          const task = page.render({ canvasContext: ctx, viewport });
-          await task.promise;
+        const dpr = typeof window !== 'undefined' && window.devicePixelRatio ? Math.max(1, Number(window.devicePixelRatio) || 1) : 1;
+        const cssW = Math.max(1, Math.floor(viewport.width));
+        const cssH = Math.max(1, Math.floor(viewport.height));
+        canvas.width = Math.max(1, Math.floor(cssW * dpr));
+        canvas.height = Math.max(1, Math.floor(cssH * dpr));
+        canvas.style.width = `${cssW}px`;
+        canvas.style.height = `${cssH}px`;
+
+        const ctx = canvas.getContext('2d', { alpha: false });
+        if (!ctx) return;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        if (renderTaskRef.current) {
           try {
-            page.cleanup();
+            renderTaskRef.current.cancel?.();
           } catch {
           }
+          renderTaskRef.current = null;
+        }
+        const task = pdfPage.render({ canvasContext: ctx, viewport });
+        renderTaskRef.current = task;
+        await task.promise;
+        if (!alive) return;
+        renderTaskRef.current = null;
+        try {
+          pdfPage.cleanup();
+        } catch {
         }
       } catch (e) {
         const msg = e?.message ? String(e.message) : t('operationFailed');
@@ -190,8 +221,15 @@ function PdfCanvasViewer({ data, title, zoom = 1 }) {
     void run();
     return () => {
       alive = false;
+      if (renderTaskRef.current) {
+        try {
+          renderTaskRef.current.cancel?.();
+        } catch {
+        }
+        renderTaskRef.current = null;
+      }
     };
-  }, [containerW, data, numPages, t, zoom]);
+  }, [containerH, containerW, data, numPages, page, t, zoom]);
 
   if (error) {
     return <div className="flex h-full w-full items-center justify-center p-4 text-sm text-zinc-700">{error}</div>;
@@ -207,25 +245,8 @@ function PdfCanvasViewer({ data, title, zoom = 1 }) {
 
   return (
     <div ref={containerRef} className="h-full w-full overflow-auto bg-white">
-      <div className="mx-auto w-full max-w-none px-0 py-4 sm:max-w-[980px] sm:px-6 sm:py-6">
-        <div className="text-xs font-semibold text-zinc-600">{title || 'PDF'}</div>
-        <div className="mt-3 space-y-4">
-          {Array.from({ length: numPages }).map((_, idx) => {
-            const n = idx + 1;
-            return (
-              <div key={n} className="w-full overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm shadow-zinc-900/5">
-                <canvas
-                  className="block h-auto w-full"
-                  data-ac-pdf-page={n}
-                  ref={(el) => {
-                    if (el) canvasByPageRef.current.set(n, el);
-                    else canvasByPageRef.current.delete(n);
-                  }}
-                />
-              </div>
-            );
-          })}
-        </div>
+      <div className="flex min-h-full w-full items-center justify-center p-3">
+        <canvas ref={canvasRef} className="block max-w-none rounded-lg border border-zinc-200 bg-white shadow-sm shadow-zinc-900/5" />
       </div>
     </div>
   );
@@ -240,17 +261,11 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [page, setPage] = useState(1);
+  const [numPages, setNumPages] = useState(0);
 
   const iframeSrc = useMemo(() => blobUrl || '', [blobUrl]);
-  const preferCanvas = useMemo(() => {
-    try {
-      if (typeof navigator === 'undefined') return false;
-      const ua = String(navigator.userAgent || '');
-      return /Android/i.test(ua);
-    } catch {
-      return false;
-    }
-  }, []);
+  const useCanvas = useMemo(() => true, []);
   useEffect(() => {
     if (!resolvedSrc) return undefined;
     const prevOverflow = document?.body?.style?.overflow ?? '';
@@ -275,6 +290,8 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
     setBlobUrl('');
     setPdfData(null);
     setZoom(1);
+    setPage(1);
+    setNumPages(0);
 
     const run = async () => {
       try {
@@ -329,21 +346,37 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
             ×
           </button>
           <div className="min-w-0 flex-1 truncate text-center text-sm font-semibold sm:text-left">{title}</div>
-          {preferCanvas ? (
+          {useCanvas ? (
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                className="rounded bg-black/50 px-2 py-1 text-xs font-semibold text-white"
-                onClick={() => setZoom((z) => Math.max(0.5, Number(z || 1) - 0.25))}
+                className="rounded bg-black/50 px-2 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                onClick={() => setPage((p) => Math.max(1, Number(p || 1) - 1))}
+                disabled={page <= 1}
               >
-                −
+                ‹
               </button>
               <button
                 type="button"
                 className="rounded bg-black/50 px-2 py-1 text-[11px] font-semibold text-white"
                 onClick={() => setZoom(1)}
               >
-                {Math.round((Number(zoom) || 1) * 100)}%
+                {numPages ? `${page}/${numPages}` : `${page}/-`} · {Math.round((Number(zoom) || 1) * 100)}%
+              </button>
+              <button
+                type="button"
+                className="rounded bg-black/50 px-2 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                onClick={() => setPage((p) => Math.min(Math.max(1, Number(numPages) || 1), Number(p || 1) + 1))}
+                disabled={numPages ? page >= numPages : false}
+              >
+                ›
+              </button>
+              <button
+                type="button"
+                className="rounded bg-black/50 px-2 py-1 text-xs font-semibold text-white"
+                onClick={() => setZoom((z) => Math.max(0.5, Number(z || 1) - 0.25))}
+              >
+                −
               </button>
               <button
                 type="button"
@@ -360,8 +393,16 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden bg-white sm:rounded-xl">
-          {preferCanvas && pdfData instanceof Uint8Array ? (
-            <PdfCanvasViewer data={pdfData} title={title} zoom={zoom} />
+          {useCanvas && pdfData instanceof Uint8Array ? (
+            <PdfCanvasViewer
+              data={pdfData}
+              zoom={zoom}
+              page={page}
+              onNumPagesChange={(n) => {
+                setNumPages(Number(n) || 0);
+                setPage((p) => Math.max(1, Math.min(Number(n) || 1, Number(p || 1))));
+              }}
+            />
           ) : iframeSrc ? (
             <iframe title={title} src={iframeSrc} className="h-full w-full bg-white" />
           ) : (
