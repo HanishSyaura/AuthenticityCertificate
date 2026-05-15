@@ -68,87 +68,99 @@ async function transcodeOne({ mediaAssetId }) {
   const asset = await prisma.mediaAsset.findFirst({ where: { id } });
   if (!asset) throw new Error('media_asset_not_found');
 
-  const mime = String(asset.mimeType || '').toLowerCase();
-  if (!mime.startsWith('video/')) {
+  try {
+    const mime = String(asset.mimeType || '').toLowerCase();
+    if (!mime.startsWith('video/')) {
+      await prisma.mediaAsset.update({
+        where: { id },
+        data: { processingStatus: 'ready', processingError: null, processedAt: new Date() }
+      });
+      return { ok: true, skipped: true };
+    }
+
+    const root = pickWritableUploadRoot();
+    const orgId = String(asset.organizationId);
+    const dirAbs = path.join(root, 'media', orgId);
+    const inAbs = path.join(dirAbs, String(asset.fileName || ''));
+    const inStat = await fileStatSafe(inAbs);
+    if (!inStat) throw new Error('source_missing');
+
+    const tmpOutAbs = `${inAbs}.tmp-${process.pid}-${randHex(8)}.mp4`;
+    const cmd = ffmpegBin();
+
+    await run(cmd, [
+      '-y',
+      '-i',
+      inAbs,
+      '-vf',
+      'scale=-2:720',
+      '-c:v',
+      'libx264',
+      '-preset',
+      'veryfast',
+      '-crf',
+      '23',
+      '-profile:v',
+      'high',
+      '-level',
+      '4.1',
+      '-g',
+      '48',
+      '-keyint_min',
+      '48',
+      '-sc_threshold',
+      '0',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '128k',
+      '-movflags',
+      '+faststart',
+      '-f',
+      'mp4',
+      tmpOutAbs
+    ]);
+
+    await replaceFile(tmpOutAbs, inAbs);
+
+    const posterRel = posterRelUrlForAsset(asset) || null;
+    const posterAbs = posterRel ? path.join(root, posterRel.replace(/^\/uploads\//, '')) : null;
+    if (posterAbs) {
+      const posterTmp = `${posterAbs}.tmp-${process.pid}-${randHex(8)}.jpg`;
+      try {
+        await fs.mkdir(path.dirname(posterAbs), { recursive: true });
+        await run(cmd, ['-y', '-i', inAbs, '-ss', '00:00:01.000', '-vframes', '1', '-q:v', '3', posterTmp]);
+        await replaceFile(posterTmp, posterAbs);
+      } catch {
+        try {
+          await fs.unlink(posterTmp);
+        } catch {}
+      }
+    }
+
+    const outStat = await fileStatSafe(inAbs);
     await prisma.mediaAsset.update({
       where: { id },
-      data: { processingStatus: 'ready', processingError: null, processedAt: new Date() }
+      data: {
+        mimeType: 'video/mp4',
+        sizeBytes: outStat ? Number(outStat.size) : asset.sizeBytes,
+        processingStatus: 'ready',
+        processingError: null,
+        posterUrl: posterRel || asset.posterUrl || null,
+        processedAt: new Date()
+      }
     });
-    return { ok: true, skipped: true };
-  }
 
-  const root = pickWritableUploadRoot();
-  const orgId = String(asset.organizationId);
-  const dirAbs = path.join(root, 'media', orgId);
-  const inAbs = path.join(dirAbs, String(asset.fileName || ''));
-  const inStat = await fileStatSafe(inAbs);
-  if (!inStat) throw new Error('source_missing');
-
-  const tmpOutAbs = `${inAbs}.tmp-${process.pid}-${randHex(8)}`;
-  const cmd = ffmpegBin();
-
-  await run(cmd, [
-    '-y',
-    '-i',
-    inAbs,
-    '-vf',
-    'scale=-2:720',
-    '-c:v',
-    'libx264',
-    '-preset',
-    'veryfast',
-    '-crf',
-    '23',
-    '-profile:v',
-    'high',
-    '-level',
-    '4.1',
-    '-g',
-    '48',
-    '-keyint_min',
-    '48',
-    '-sc_threshold',
-    '0',
-    '-c:a',
-    'aac',
-    '-b:a',
-    '128k',
-    '-movflags',
-    '+faststart',
-    tmpOutAbs
-  ]);
-
-  await replaceFile(tmpOutAbs, inAbs);
-
-  const posterRel = posterRelUrlForAsset(asset) || null;
-  const posterAbs = posterRel ? path.join(root, posterRel.replace(/^\/uploads\//, '')) : null;
-  if (posterAbs) {
-    const posterTmp = `${posterAbs}.tmp-${process.pid}-${randHex(8)}`;
+    return { ok: true, bytesBefore: Number(inStat.size), bytesAfter: outStat ? Number(outStat.size) : null };
+  } catch (e) {
     try {
-      await fs.mkdir(path.dirname(posterAbs), { recursive: true });
-      await run(cmd, ['-y', '-i', inAbs, '-ss', '00:00:01.000', '-vframes', '1', '-q:v', '3', posterTmp]);
-      await replaceFile(posterTmp, posterAbs);
-    } catch {
-      try {
-        await fs.unlink(posterTmp);
-      } catch {}
-    }
+      await prisma.mediaAsset.update({
+        where: { id },
+        data: { processingStatus: 'failed', processingError: e?.message || String(e), processedAt: new Date() }
+      });
+    } catch {}
+    throw e;
   }
-
-  const outStat = await fileStatSafe(inAbs);
-  await prisma.mediaAsset.update({
-    where: { id },
-    data: {
-      mimeType: 'video/mp4',
-      sizeBytes: outStat ? Number(outStat.size) : asset.sizeBytes,
-      processingStatus: 'ready',
-      processingError: null,
-      posterUrl: posterRel || asset.posterUrl || null,
-      processedAt: new Date()
-    }
-  });
-
-  return { ok: true, bytesBefore: Number(inStat.size), bytesAfter: outStat ? Number(outStat.size) : null };
 }
 
 jobQueue.registerHandler('transcode_video', async ({ mediaAssetId }) => {
