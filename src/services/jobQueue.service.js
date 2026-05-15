@@ -110,23 +110,31 @@ let queue = null;
 let worker = null;
 let handlers = new Map();
 
+function queueConfig() {
+  const name = String(process.env.BULLMQ_QUEUE_NAME || process.env.QUEUE_NAME || 'bulk').trim() || 'bulk';
+  const prefixRaw = String(process.env.BULLMQ_PREFIX || process.env.QUEUE_PREFIX || '').trim();
+  const prefix = prefixRaw ? prefixRaw : undefined;
+  return { name, prefix };
+}
+
 function ensureQueue() {
   if (!hasRedis()) return null;
   if (queue && worker) return queue;
 
+  const cfg = queueConfig();
   redisConnection = new IORedis(process.env.REDIS_URL, {
     maxRetriesPerRequest: null
   });
 
-  queue = new Queue('bulk', { connection: redisConnection });
+  queue = new Queue(cfg.name, { connection: redisConnection, prefix: cfg.prefix });
   worker = new Worker(
-    'bulk',
+    cfg.name,
     async (job) => {
       const fn = handlers.get(job.name);
       if (!fn) throw new Error(`No handler for job ${job.name}`);
       return await fn(job.data);
     },
-    { connection: redisConnection }
+    { connection: redisConnection, prefix: cfg.prefix }
   );
 
   return queue;
