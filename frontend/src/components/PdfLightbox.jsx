@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useT } from '../i18n/useT';
 import { resolvePublicMediaUrl } from '../utils/apiBase';
 import useAdminAuthStore from '../store/useAdminAuthStore';
@@ -275,7 +276,10 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
 
   if (!resolvedSrc) return null;
 
-  return (
+  const portalTarget = typeof document !== 'undefined' ? document.body : null;
+  if (!portalTarget) return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-[9999] bg-black/70 sm:p-4" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="flex h-full w-full flex-col sm:mx-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-5xl" onClick={(e) => e.stopPropagation()}>
         <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-black/80 px-3 py-3 text-white backdrop-blur sm:rounded-t-xl sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-0">
@@ -300,6 +304,7 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    portalTarget
   );
 }
