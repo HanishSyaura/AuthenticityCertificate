@@ -3,6 +3,7 @@ const prisma = require('../config/prisma');
 const jobQueue = require('./jobQueue.service');
 
 const memHooks = [];
+const memHooksMax = Math.max(100, Number(process.env.WEBHOOK_MEM_MAX) || 1000);
 
 async function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), ms))]);
@@ -38,6 +39,7 @@ async function createWebhook({ organizationId, url, secret, events }) {
   } catch {
     const next = { id: Date.now(), ...data, createdAt: new Date(), updatedAt: new Date() };
     memHooks.unshift(next);
+    if (memHooks.length > memHooksMax) memHooks.length = memHooksMax;
     return next;
   }
 }

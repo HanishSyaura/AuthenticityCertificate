@@ -165,7 +165,11 @@ function uploadMedia(req, res) {
         const disabled = ['1', 'true', 'yes', 'on'].includes(String(process.env.DISABLE_VIDEO_TRANSCODE || '').toLowerCase());
         if (!disabled) {
           try {
-            const job = await jobQueue.addJob('transcode_video', { mediaAssetId: created.id });
+            const job = await jobQueue.addJob(
+              'transcode_video',
+              { mediaAssetId: created.id },
+              { jobId: `transcode_video:${created.id}`, attempts: 2, backoff: { type: 'exponential', delay: 5000 } }
+            );
             created = await prisma.mediaAsset.update({
               where: { id: Number(created.id) },
               data: { processingJobId: String(job?.id || '') || null }

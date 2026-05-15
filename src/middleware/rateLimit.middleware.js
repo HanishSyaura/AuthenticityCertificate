@@ -14,6 +14,18 @@ function rateLimit({ windowMs, max, keyFn, message }) {
 
   const w = Math.max(1000, Number(windowMs) || 60_000);
   const m = Math.max(1, Number(max) || 60);
+  const maxKeys = Math.max(1000, Number(process.env.RATE_LIMIT_MAX_KEYS) || 20_000);
+
+  const sweep = () => {
+    const now = Date.now();
+    for (const [k, v] of hits.entries()) {
+      if (v.resetAt <= now) hits.delete(k);
+    }
+    if (hits.size > maxKeys) hits.clear();
+  };
+
+  const sweepTimer = setInterval(sweep, Math.min(Math.max(w, 1000), 60_000));
+  if (typeof sweepTimer.unref === 'function') sweepTimer.unref();
 
   return (req, res, next) => {
     const now = Date.now();
@@ -23,13 +35,13 @@ function rateLimit({ windowMs, max, keyFn, message }) {
 
     ops++;
     if (ops % 1000 === 0) {
-      for (const [k, v] of hits.entries()) {
-        if (v.resetAt <= now) hits.delete(k);
-      }
+      sweep();
     }
 
+    if (item && item.resetAt <= now) hits.delete(key);
     if (!item || item.resetAt <= now) {
       hits.set(key, { count: 1, resetAt: now + w });
+      if (hits.size > maxKeys) sweep();
       return next();
     }
 

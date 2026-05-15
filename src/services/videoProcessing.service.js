@@ -38,14 +38,33 @@ async function replaceFile(tmpAbs, finalAbs) {
 
 async function run(cmd, args, opts = {}) {
   return await new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { windowsHide: true, ...opts });
+    const timeoutMsRaw = opts.timeoutMs ?? process.env.FFMPEG_TIMEOUT_MS;
+    const timeoutMs =
+      timeoutMsRaw === undefined || timeoutMsRaw === null || String(timeoutMsRaw).trim() === ''
+        ? 30 * 60_000
+        : Math.max(0, Number(timeoutMsRaw) || 0);
+    const spawnOpts = { ...opts };
+    delete spawnOpts.timeoutMs;
+    const child = spawn(cmd, args, { windowsHide: true, ...spawnOpts });
     let stderr = '';
+    let timedOut = false;
+    const t =
+      timeoutMs > 0
+        ? setTimeout(() => {
+            timedOut = true;
+            try {
+              child.kill();
+            } catch {}
+          }, timeoutMs)
+        : null;
     child.stderr?.on('data', (d) => {
       if (stderr.length > 20000) return;
       stderr += String(d);
     });
     child.on('error', (e) => reject(e));
     child.on('close', (code) => {
+      if (t) clearTimeout(t);
+      if (timedOut) return reject(new Error('ffmpeg_timeout'));
       if (code === 0) return resolve({ ok: true });
       reject(new Error(stderr.trim() || `ffmpeg_failed_${code}`));
     });
