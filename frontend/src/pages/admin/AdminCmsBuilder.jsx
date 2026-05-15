@@ -52,7 +52,7 @@ function composeLayouts({ pages, layoutsByPageKey, language }) {
   const out = [];
   for (const p of ordered) {
     const key = `${p.id}:${lang}`;
-    const layout = byKey[key] || byKey[String(p.id)] || null;
+    const layout = byKey[key] || null;
     const arr = Array.isArray(layout) ? layout : [];
     const prefix = `p${String(p.id)}-`;
     for (const b of arr) out.push(shiftBlock(b, { yOffset, idPrefix: prefix }));
@@ -144,7 +144,7 @@ export default function AdminCmsBuilder() {
   const layout = useMemo(() => {
     if (!selectedPageId) return [];
     const key = `${selectedPageId}:${language || 'en'}`;
-    return layoutsByPageKey[key] || layoutsByPageKey[String(selectedPageId)] || [];
+    return layoutsByPageKey[key] || [];
   }, [language, layoutsByPageKey, selectedPageId]);
 
   const previewLayout = useMemo(() => composeLayouts({ pages, layoutsByPageKey, language }), [language, layoutsByPageKey, pages]);

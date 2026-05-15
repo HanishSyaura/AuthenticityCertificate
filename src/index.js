@@ -26,6 +26,7 @@ const { pickWritableUploadRoot } = require('./utils/uploadsRoot');
 dotenv.config();
 
 require('./services/videoProcessing.service');
+require('./services/pdfPreview.service');
 const jobQueue = require('./services/jobQueue.service');
 
 if (jobQueue.hasRedis()) jobQueue.initQueue();

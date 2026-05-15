@@ -148,7 +148,7 @@ const useCmsStore = create((set, get) => ({
     const key = `${page.id}:${language}`;
 
     const current = get().layoutsByPageKey || {};
-    const existing = current[key] || current[String(page.id)];
+    const existing = current[key];
     if (existing) return;
 
     try {
@@ -187,6 +187,23 @@ const useCmsStore = create((set, get) => ({
       const api = createAdminApi({ token });
       const payload = String(lang).toLowerCase() === 'en' ? safe : pickTextOnlyTranslationLayout(safe);
       await api.post('/cms/layout', { pageId, layoutJson: payload, language: lang });
+      if (String(lang).toLowerCase() === 'en') {
+        set((state) => {
+          const byKey = state.layoutsByPageKey || {};
+          const keepKey = `${pageId}:en`;
+          const prefix = `${pageId}:`;
+          const cleaned = {};
+          for (const [k, v] of Object.entries(byKey)) {
+            if (k === keepKey) {
+              cleaned[k] = v;
+              continue;
+            }
+            if (k.startsWith(prefix)) continue;
+            cleaned[k] = v;
+          }
+          return { layoutsByPageKey: cleaned };
+        });
+      }
     } catch (e) {
       const msg = e?.response?.data?.message || tRaw('operationFailed');
       throw new Error(msg);
