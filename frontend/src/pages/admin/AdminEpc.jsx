@@ -66,7 +66,6 @@ export default function AdminEpc() {
     fetchItems,
     generateBatch,
     exportBatchVerifyUrlXlsx,
-    exportBatchProductionTemplateXlsx,
     exportBatchImportTemplateXlsx,
     importProductionXlsx,
     previewBatchImportXlsx,
@@ -91,7 +90,6 @@ export default function AdminEpc() {
     fetchItems: s.fetchItems,
     generateBatch: s.generateBatch,
     exportBatchVerifyUrlXlsx: s.exportBatchVerifyUrlXlsx,
-    exportBatchProductionTemplateXlsx: s.exportBatchProductionTemplateXlsx,
     exportBatchImportTemplateXlsx: s.exportBatchImportTemplateXlsx,
     exportBatchXlsxCustom: s.exportBatchXlsxCustom,
     importProductionXlsx: s.importProductionXlsx,
@@ -1605,10 +1603,7 @@ export default function AdminEpc() {
                 disabled={loading || !batchQty}
                 onClick={async () => {
                   const created = await generateBatch({ batchQty, remark: String(remark || '').trim() || undefined });
-                  const batchId = created?.batch?.id != null ? Number(created.batch.id) : null;
-                  if (Number.isFinite(batchId)) {
-                    await exportBatchProductionTemplateXlsx(batchId);
-                  }
+                  if (created?.batch?.id != null) await exportBatchImportTemplateXlsx();
                   setGenerateOpen(false);
                   setBatchQty(1);
                   setRemark('');

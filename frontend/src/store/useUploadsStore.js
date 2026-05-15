@@ -16,7 +16,7 @@ function tryExtractMaxMb(message) {
 }
 
 const useUploadsStore = create(() => ({
-  uploadMedia: async ({ file }) => {
+  uploadMedia: async ({ file, onProgress }) => {
     if (isFileTooLarge(file)) {
       throw new Error(tRaw('fileTooLargeMaxMb', { mb: MAX_UPLOAD_MB }));
     }
@@ -25,7 +25,15 @@ const useUploadsStore = create(() => ({
     form.append('file', file);
     try {
       const res = await api.post('/uploads/media', form, {
-        timeout: 300_000
+        timeout: 300_000,
+        onUploadProgress: (evt) => {
+          if (typeof onProgress !== 'function') return;
+          const loaded = Number(evt?.loaded) || 0;
+          const totalRaw = Number(evt?.total);
+          const total = Number.isFinite(totalRaw) && totalRaw > 0 ? totalRaw : null;
+          const percent = total ? (loaded / total) * 100 : null;
+          onProgress({ loaded, total, percent });
+        }
       });
       return res?.data?.data;
     } catch (e) {

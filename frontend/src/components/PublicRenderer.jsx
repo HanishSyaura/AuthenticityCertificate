@@ -358,6 +358,13 @@ const CmsVideoBlock = ({ block, style, t }) => {
   }, [posterRaw, raw, resolved?.kind]);
   const poster = posterPick ? resolvePublicMediaUrl(posterPick) : '';
 
+  const videoSrc = useMemo(() => {
+    if (resolved?.kind !== 'video') return '';
+    const s = String(resolved?.src || '').trim();
+    if (!s) return '';
+    return resolvePublicMediaUrl(s);
+  }, [resolved?.kind, resolved?.src]);
+
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
@@ -430,7 +437,7 @@ const CmsVideoBlock = ({ block, style, t }) => {
       ) : resolved?.kind === 'video' ? (
         <video
           ref={videoRef}
-          src={active ? resolved.src : undefined}
+          src={active ? videoSrc || undefined : undefined}
           controls
           playsInline
           preload={active ? 'metadata' : 'none'}

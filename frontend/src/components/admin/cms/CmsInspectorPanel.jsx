@@ -29,6 +29,8 @@ export default function CmsInspectorPanel({
   const { t } = useT();
   const { uploadMedia } = useUploadsStore((s) => ({ uploadMedia: s.uploadMedia }));
   const [uploading, setUploading] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState(null);
+  const [uploadPct, setUploadPct] = useState(null);
   const [uploadError, setUploadError] = useState(null);
   const [fileKey, setFileKey] = useState(0);
   const [cropOpen, setCropOpen] = useState(false);
@@ -149,9 +151,19 @@ export default function CmsInspectorPanel({
   const doUpload = useCallback(
     async (file, blockId) => {
       setUploadError(null);
+      setUploadPhase('uploading');
+      setUploadPct(0);
       setUploading(true);
       try {
-        const created = await uploadMedia({ file });
+        const created = await uploadMedia({
+          file,
+          onProgress: ({ percent }) => {
+            if (!Number.isFinite(percent)) return;
+            const p = clamp(Math.round(percent), 0, 100);
+            setUploadPct(p);
+            setUploadPhase(p >= 100 ? 'processing' : 'uploading');
+          }
+        });
         if (created?.url) {
           const blockType = layout.find((b) => String(b?.id) === String(blockId))?.type || '';
           const patch = { url: created.url };
@@ -169,6 +181,8 @@ export default function CmsInspectorPanel({
         throw new Error(msg);
       } finally {
         setUploading(false);
+        setUploadPhase(null);
+        setUploadPct(null);
       }
     },
     [guessPosterUrl, layout, t, updateBlockContentById, uploadMedia]
@@ -600,6 +614,19 @@ export default function CmsInspectorPanel({
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
                 <div className="mt-1 text-[11px] text-zinc-500">{t('maxFileSize', { mb: MAX_UPLOAD_MB })}</div>
+                {uploading ? (
+                  <div className="mt-2 space-y-1">
+                    <div className="flex items-center justify-between text-[11px] text-zinc-600">
+                      <div>{uploadPhase === 'processing' ? t('processing') : t('uploading')}</div>
+                      {Number.isFinite(uploadPct) ? <div>{uploadPct}%</div> : null}
+                    </div>
+                    {Number.isFinite(uploadPct) ? (
+                      <div className="h-2 w-full overflow-hidden rounded bg-zinc-100">
+                        <div className="h-full bg-indigo-600" style={{ width: `${uploadPct}%` }} />
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 {uploadError ? <div className="mt-2 text-xs text-rose-700">{uploadError}</div> : null}
                 {selectedBlock.type === 'image' && String(selectedBlock.content?.url || '').trim() ? (
                   <button
