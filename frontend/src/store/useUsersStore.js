@@ -23,7 +23,7 @@ const useUsersStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const res = await api.get('/users');
+      const res = await api.get('/users/');
       const users = Array.isArray(res?.data?.data) ? res.data.data : [];
       const safeUsers = users.filter((u) => u && isValidId(u.id));
       set({ users: safeUsers, loading: false, lastSyncAt: Date.now() });
@@ -39,13 +39,13 @@ const useUsersStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const res = await api.post('/users', { name, email, password, role });
+      const res = await api.post('/users/', { name, email, password, role });
       const created = res?.data?.data;
       let nextUsers = null;
       if (created && isValidId(created.id)) {
         nextUsers = [created, ...get().users].filter((u) => u && isValidId(u.id));
       } else {
-        const listRes = await api.get('/users');
+        const listRes = await api.get('/users/');
         const users = Array.isArray(listRes?.data?.data) ? listRes.data.data : [];
         nextUsers = users.filter((u) => u && isValidId(u.id));
       }
