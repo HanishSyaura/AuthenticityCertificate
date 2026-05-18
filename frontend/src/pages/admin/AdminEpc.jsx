@@ -17,6 +17,14 @@ function formatDateTime(input) {
   return d.toISOString().slice(0, 19).replace('T', ' ');
 }
 
+function formatNetWeight(value) {
+  if (value === null || value === undefined) return '-';
+  const s = String(value).trim();
+  if (!s) return '-';
+  if (/^\d+(\.\d+)?$/.test(s)) return `${s} g`;
+  return s;
+}
+
 function toBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -286,10 +294,40 @@ export default function AdminEpc() {
     [fetchProducts, fetchTemplates]
   );
 
+  const resolveBatchAuthCertificate = useCallback(
+    (batch) => {
+      if (!batch) return '-';
+      const templatesList = Array.isArray(templates) ? templates : [];
+      const explicitTemplateId = batch?.certificateTemplateId ?? batch?.certificateTemplate?.id ?? null;
+      const batchCertificateId = String(batch?.certificateId ?? '').trim();
+      let tpl = null;
+      if (explicitTemplateId != null) {
+        const idNum = Number(explicitTemplateId);
+        if (Number.isFinite(idNum)) tpl = templatesList.find((t) => Number(t?.id) === idNum) || null;
+      }
+      if (!tpl && batchCertificateId) {
+        tpl = templatesList.find((t) => String(t?.certificateId || '').trim() === batchCertificateId) || null;
+      }
+      const name = String(tpl?.name || batch?.certificateTemplate?.name || '').trim();
+      const certId = String(tpl?.certificateId || '').trim();
+      if (name) return certId ? `${certId} — ${name}` : name;
+      if (explicitTemplateId != null) return String(explicitTemplateId);
+      if (batchCertificateId) return batchCertificateId;
+      return '-';
+    },
+    [templates]
+  );
+
   useEffect(() => {
     if (!canBatchCreate && !canBatchView && !canBatchImport && !canProduction) return;
     void fetchCorpCodes();
   }, [canBatchCreate, canBatchImport, canBatchView, canProduction, fetchBatches, fetchCorpCodes]);
+
+  useEffect(() => {
+    if (!(detailOpen || viewBatchOpen)) return;
+    if (Array.isArray(templates) && templates.length) return;
+    void fetchTemplates({ lang: 'en' });
+  }, [detailOpen, fetchTemplates, templates, viewBatchOpen]);
 
   useEffect(() => {
     if (tab === 'import' && canBatchImport) {
@@ -702,7 +740,7 @@ export default function AdminEpc() {
                 </div>
                 <div>
                   <div className="text-[11px] font-semibold text-zinc-600">{t('netWeight')}</div>
-                  <div className="mt-1 text-xs text-zinc-900">{detailItem.netWeight ? String(detailItem.netWeight) : '-'}</div>
+                  <div className="mt-1 text-xs text-zinc-900">{formatNetWeight(detailItem.netWeight)}</div>
                 </div>
                 <div>
                   <div className="text-[11px] font-semibold text-zinc-600">{t('manufactureDate')}</div>
@@ -720,13 +758,7 @@ export default function AdminEpc() {
                 </div>
                 <div>
                   <div className="text-[11px] font-semibold text-zinc-600">{t('certTemplate')}</div>
-                  <div className="mt-1 text-xs text-zinc-900">
-                    {detailItem?.batch?.certificateTemplate?.name
-                      ? String(detailItem.batch.certificateTemplate.name)
-                      : detailItem?.batch?.certificateTemplateId != null
-                        ? String(detailItem.batch.certificateTemplateId)
-                        : '-'}
-                  </div>
+                  <div className="mt-1 text-xs text-zinc-900">{resolveBatchAuthCertificate(detailItem?.batch)}</div>
                 </div>
                 <div>
                   <div className="text-[11px] font-semibold text-zinc-600">{t('remark')}</div>
@@ -1165,7 +1197,7 @@ export default function AdminEpc() {
                   { id: 'barcode', header: t('barcode'), cell: (r) => <span className="text-zinc-800">{r?.barcode ? String(r.barcode) : '-'}</span> },
                   { id: 'batchNumber', header: t('batchNumber'), cell: (r) => <span className="text-zinc-800">{r?.batchNumber ? String(r.batchNumber) : '-'}</span> },
                   { id: 'swiftlet', header: t('swiftletHouseNumber'), cell: (r) => <span className="text-zinc-800">{r?.swiftletHouseNumber ? String(r.swiftletHouseNumber) : '-'}</span> },
-                  { id: 'netWeight', header: t('netWeight'), cell: (r) => <span className="text-zinc-800">{r?.netWeight ? String(r.netWeight) : '-'}</span> },
+                  { id: 'netWeight', header: t('netWeight'), cell: (r) => <span className="text-zinc-800">{formatNetWeight(r?.netWeight)}</span> },
                   {
                     id: 'productionDate',
                     header: t('manufactureDate'),
@@ -1241,7 +1273,7 @@ export default function AdminEpc() {
                 </div>
                 <div className="sm:col-span-2">
                   <div className="text-[11px] font-semibold text-zinc-600">{t('authCertificate')}</div>
-                  <div className="mt-1 text-xs text-zinc-900">{String(viewBatch?.certificateTemplate?.name || '-')}</div>
+                  <div className="mt-1 text-xs text-zinc-900">{resolveBatchAuthCertificate(viewBatch)}</div>
                 </div>
               </div>
 

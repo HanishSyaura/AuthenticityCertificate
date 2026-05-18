@@ -286,6 +286,17 @@ function formatNetWeightValue(input) {
   return s;
 }
 
+function translateCertificateStatus(t, statusRaw) {
+  const s = String(statusRaw || '').trim().toUpperCase();
+  if (!s) return '-';
+  if (s === 'VALID') return t('statusValid');
+  if (s === 'REVOKED') return t('statusRevoked');
+  if (s === 'SUSPICIOUS') return t('statusSuspicious');
+  if (s === 'EXPIRED') return t('statusExpired');
+  if (s === 'PREVIEW') return t('statusPreview');
+  return statusRaw || '-';
+}
+
 function applyFormatter(token, value, locale) {
   const raw = String(token || '').trim();
   if (!raw) return value;
@@ -603,11 +614,13 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
           const html = sanitizeLimitedHtml(interpolated);
           const fs = Number(block.content?.fontSize) > 0 ? Number(block.content.fontSize) : 14;
           const color = String(block.content?.fontColor || '').trim() || '#18181b';
+          const lhRaw = Number(block.content?.lineHeight);
+          const lh = Number.isFinite(lhRaw) && lhRaw > 0 ? lhRaw : 1.2;
           return (
             <div key={block.id} style={style} className="overflow-hidden">
               <div
                 className="ql-editor ac-richtext"
-                style={{ fontSize: `${fs}px`, lineHeight: 1.2, color }}
+                style={{ fontSize: `${fs}px`, lineHeight: lh, color }}
                 dangerouslySetInnerHTML={{ __html: html }}
               />
             </div>
@@ -988,7 +1001,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
                     variant === 'supporting' ? 'text-zinc-900' : ok ? 'text-emerald-900' : 'text-rose-900'
                   }`}
                 >
-                  {variant === 'supporting' ? t('supportingCertificate') : status || '-'}
+                  {variant === 'supporting' ? t('supportingCertificate') : translateCertificateStatus(t, status)}
                 </div>
               </div>
               <div className="mt-3 rounded-none border border-white/40 bg-white/60 px-3 py-2">

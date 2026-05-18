@@ -229,6 +229,7 @@ export default function AdminUsers() {
                     onClick={(e) => e.stopPropagation()}
                     onChange={async (e) => {
                       const role = e.target.value;
+                      if (!u?.id) return;
                       await updateUserRole({ id: u.id, role });
                     }}
                     className="w-full rounded-xl border border-zinc-200 bg-white px-2 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400 disabled:bg-zinc-50 disabled:text-zinc-500"
@@ -300,6 +301,7 @@ export default function AdminUsers() {
                       disabled,
                       onSelect: async () => {
                         if (!window.confirm(t('confirmDeleteUser'))) return;
+                        if (!u?.id) return;
                         await deleteUser({ id: u.id });
                       }
                     }

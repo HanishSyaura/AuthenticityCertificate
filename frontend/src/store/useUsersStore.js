@@ -3,6 +3,11 @@ import useAdminAuthStore from './useAdminAuthStore';
 import { createAdminApi } from '../utils/adminApi';
 import { tRaw } from '../i18n/tRaw';
 
+function isValidId(id) {
+  const n = Number(id);
+  return Number.isFinite(n) && n > 0;
+}
+
 function getApi() {
   const { token } = useAdminAuthStore.getState();
   return createAdminApi({ token });
@@ -20,8 +25,9 @@ const useUsersStore = create((set, get) => ({
       const api = getApi();
       const res = await api.get('/users');
       const users = Array.isArray(res?.data?.data) ? res.data.data : [];
-      set({ users, loading: false, lastSyncAt: Date.now() });
-      return users;
+      const safeUsers = users.filter((u) => u && isValidId(u.id));
+      set({ users: safeUsers, loading: false, lastSyncAt: Date.now() });
+      return safeUsers;
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || tRaw('failedToLoadUsers');
       set({ loading: false, error: msg });
@@ -48,6 +54,11 @@ const useUsersStore = create((set, get) => ({
   updateUserRole: async ({ id, role }) => {
     set({ loading: true, error: null });
     try {
+      if (!isValidId(id)) {
+        const msg = tRaw('failedToUpdateRole');
+        set({ loading: false, error: msg });
+        throw new Error(msg);
+      }
       const api = getApi();
       const res = await api.patch(`/users/${encodeURIComponent(id)}/role`, { role });
       const updated = res?.data?.data;
@@ -64,6 +75,11 @@ const useUsersStore = create((set, get) => ({
   deleteUser: async ({ id }) => {
     set({ loading: true, error: null });
     try {
+      if (!isValidId(id)) {
+        const msg = tRaw('failedToDeleteUser');
+        set({ loading: false, error: msg });
+        throw new Error(msg);
+      }
       const api = getApi();
       await api.delete(`/users/${encodeURIComponent(id)}`);
       const users = get().users.filter((u) => String(u.id) !== String(id));
@@ -79,6 +95,11 @@ const useUsersStore = create((set, get) => ({
   resetUserPassword: async ({ id, newPassword }) => {
     set({ loading: true, error: null });
     try {
+      if (!isValidId(id)) {
+        const msg = tRaw('failedToResetPassword');
+        set({ loading: false, error: msg });
+        throw new Error(msg);
+      }
       const api = getApi();
       const res = await api.post(`/users/${encodeURIComponent(id)}/reset-password`, { password: newPassword });
       set({ loading: false, lastSyncAt: Date.now() });

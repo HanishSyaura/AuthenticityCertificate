@@ -58,6 +58,7 @@ async function ensurePdfWorkerSrc(pdfjs) {
 function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange }) {
   const { t } = useT();
   const containerRef = useRef(null);
+  const onNumPagesChangeRef = useRef(onNumPagesChange);
   const docRef = useRef(null);
   const canvasRef = useRef(null);
   const renderTaskRef = useRef(null);
@@ -66,6 +67,10 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange }) {
   const [numPages, setNumPages] = useState(0);
   const [containerW, setContainerW] = useState(0);
   const [containerH, setContainerH] = useState(0);
+
+  useEffect(() => {
+    onNumPagesChangeRef.current = onNumPagesChange;
+  }, [onNumPagesChange]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -86,7 +91,7 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange }) {
     }
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
-  }, []);
+  }, [numPages]);
 
   useEffect(() => {
     let alive = true;
@@ -130,7 +135,7 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange }) {
         docRef.current = doc;
         const total = Number(doc?.numPages) > 0 ? Number(doc.numPages) : 0;
         setNumPages(total);
-        onNumPagesChange?.(total);
+        onNumPagesChangeRef.current?.(total);
       } catch (e) {
         const msg = e?.message ? String(e.message) : t('operationFailed');
         if (!alive) return;
@@ -152,7 +157,7 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange }) {
         }
       }
     };
-  }, [data, onNumPagesChange, t]);
+  }, [data, t]);
 
   useEffect(() => {
     let alive = true;

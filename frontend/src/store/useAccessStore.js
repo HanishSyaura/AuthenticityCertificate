@@ -3,6 +3,11 @@ import useAdminAuthStore from './useAdminAuthStore';
 import { createAdminApi } from '../utils/adminApi';
 import { tRaw } from '../i18n/tRaw';
 
+function isValidId(id) {
+  const n = Number(id);
+  return Number.isFinite(n) && n > 0;
+}
+
 function getApi() {
   const { token } = useAdminAuthStore.getState();
   return createAdminApi({ token });
@@ -96,6 +101,11 @@ const useAccessStore = create((set, get) => ({
   setUserRoles: async ({ userId, roleIds }) => {
     set({ loading: true, error: null });
     try {
+      if (!isValidId(userId)) {
+        const msg = tRaw('failedToUpdateUserRoles');
+        set({ loading: false, error: msg });
+        throw new Error(msg);
+      }
       const api = getApi();
       const res = await api.put(`/access/users/${encodeURIComponent(userId)}/roles`, { roleIds });
       set({ loading: false, lastSyncAt: Date.now() });

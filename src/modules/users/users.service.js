@@ -7,6 +7,7 @@ async function withTimeout(promise, ms) {
 
 function sanitizeUser(u) {
   if (!u) return null;
+  if (u.id == null || !Number.isFinite(Number(u.id))) return null;
   const roleNamesFromJoin = Array.isArray(u.roles)
     ? u.roles
         .map((ur) => ur?.role?.name)
@@ -35,7 +36,13 @@ async function listUsers() {
     }),
     2000
   );
-  return users.map(sanitizeUser);
+  return users.map(sanitizeUser).filter(Boolean);
+}
+
+function parseUserId(id) {
+  const uid = Number(id);
+  if (!Number.isFinite(uid) || uid <= 0) throw new Error('Invalid user id');
+  return uid;
 }
 
 async function createUser({ name, email, password, role }) {
@@ -71,7 +78,7 @@ async function createUser({ name, email, password, role }) {
 }
 
 async function updateUserRole({ id, role }) {
-  const uid = Number(id);
+  const uid = parseUserId(id);
   const user = await prisma.$transaction(async (tx) => {
     const updated = await withTimeout(
       tx.user.update({
@@ -98,7 +105,7 @@ async function updateUserRole({ id, role }) {
 }
 
 async function deleteUser({ id }) {
-  const uid = Number(id);
+  const uid = parseUserId(id);
   await prisma.$transaction(async (tx) => {
     const existing = await withTimeout(tx.user.findUnique({ where: { id: uid }, select: { id: true } }), 1200);
     if (!existing) throw new Error('User not found');
@@ -111,9 +118,10 @@ async function deleteUser({ id }) {
 
 async function setUserPassword({ id, password }) {
   const hashed = await bcrypt.hash(password, 10);
+  const uid = parseUserId(id);
   const user = await withTimeout(
     prisma.user.update({
-      where: { id: Number(id) },
+      where: { id: uid },
       data: { password: hashed }
     }),
     1500
@@ -122,7 +130,7 @@ async function setUserPassword({ id, password }) {
 }
 
 async function setUserRoles({ id, roleIds }) {
-  const uid = Number(id);
+  const uid = parseUserId(id);
   const ids = Array.isArray(roleIds) ? roleIds.map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0) : [];
 
   const user = await prisma.$transaction(async (tx) => {

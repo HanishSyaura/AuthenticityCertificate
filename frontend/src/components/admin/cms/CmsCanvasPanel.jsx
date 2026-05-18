@@ -146,7 +146,7 @@ function PreviewStage({
 }
 
 export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPage, layout, previewLayout, setLayout, selectedBlockId, setSelectedBlockId, layoutLocked = false }) {
-  const { t } = useT();
+  const { t, lang } = useT();
   const safeLayout = useMemo(() => (Array.isArray(layout) ? layout.filter((b) => b && typeof b === 'object') : []), [layout]);
   const layoutRef = useRef(safeLayout);
   const supportingTplCacheRef = useRef(new Map());
@@ -212,7 +212,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
         }
       }
       const base = getPublicApiBaseUrl();
-      const out = await axios.get(`${base}/resolve`, { params: { epc } });
+      const out = await axios.get(`${base}/resolve`, { params: { epc, ...(lang ? { lang } : {}) } });
       setPreviewData(out?.data?.data || null);
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || t('failedToLoadCertificate');
@@ -255,7 +255,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
     return () => {
       alive = false;
     };
-  }, [token, viewMode]);
+  }, [lang, token, viewMode]);
 
   useEffect(() => {
     if (viewMode !== 'preview' && viewMode !== 'split') return;
@@ -269,7 +269,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
         const cache = supportingTplCacheRef.current;
         const missing = ids.filter((id) => !cache.has(id));
         if (missing.length) {
-          const results = await Promise.allSettled(missing.map((id) => api.get(`/templates/${id}`)));
+          const results = await Promise.allSettled(missing.map((id) => api.get(`/templates/${id}`, { params: { ...(lang ? { lang } : {}) } })));
           for (let i = 0; i < results.length; i += 1) {
             const r = results[i];
             const id = missing[i];
@@ -300,7 +300,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
     return () => {
       alive = false;
     };
-  }, [effectivePreviewLayout, token, viewMode]);
+  }, [effectivePreviewLayout, lang, token, viewMode]);
 
   useEffect(() => {
     layoutRef.current = safeLayout;
@@ -358,9 +358,11 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
           const preview = stripHtmlToText(it.content?.text || '');
           const fs = Number(it.content?.fontSize) > 0 ? Number(it.content.fontSize) : 14;
           const color = String(it.content?.fontColor || '').trim() || '#18181b';
+          const lhRaw = Number(it.content?.lineHeight);
+          const lh = Number.isFinite(lhRaw) && lhRaw > 0 ? lhRaw : 1.2;
           return (
             <div className="h-full w-full p-2">
-              <div className="whitespace-pre-wrap" style={{ fontSize: `${fs}px`, lineHeight: 1.2, color }}>
+              <div className="whitespace-pre-wrap" style={{ fontSize: `${fs}px`, lineHeight: lh, color }}>
                 {preview || ''}
               </div>
             </div>

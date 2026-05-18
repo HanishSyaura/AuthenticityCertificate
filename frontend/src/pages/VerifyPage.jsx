@@ -26,6 +26,17 @@ function IconShieldAlert(props) {
   );
 }
 
+function translateCertificateStatus(t, statusRaw) {
+  const s = String(statusRaw || '').trim().toUpperCase();
+  if (!s) return '-';
+  if (s === 'VALID') return t('statusValid');
+  if (s === 'REVOKED') return t('statusRevoked');
+  if (s === 'SUSPICIOUS') return t('statusSuspicious');
+  if (s === 'EXPIRED') return t('statusExpired');
+  if (s === 'PREVIEW') return t('statusPreview');
+  return statusRaw || '-';
+}
+
 const VerifyPage = () => {
   const { id } = useParams();
   const location = useLocation();
@@ -197,7 +208,7 @@ const VerifyPage = () => {
             <div className="flex items-center gap-2">
               {statusOk || statusPreview ? <IconShieldCheck className="h-5 w-5" /> : <IconShieldAlert className="h-5 w-5" />}
               <div className="text-sm font-semibold">{t('verification')}</div>
-              <div className="rounded-full bg-white/70 px-2 py-1 text-xs font-semibold">{statusUpper || '-'}</div>
+              <div className="rounded-full bg-white/70 px-2 py-1 text-xs font-semibold">{translateCertificateStatus(t, statusUpper)}</div>
             </div>
             <LanguageSwitcher size="md" />
           </div>

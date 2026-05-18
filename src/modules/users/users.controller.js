@@ -18,6 +18,12 @@ const resetPasswordSchema = z.object({
   password: z.string().min(8).optional()
 });
 
+function parseId(raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
 async function list(req, res) {
   try {
     const users = await usersService.listUsers();
@@ -48,6 +54,7 @@ async function create(req, res) {
 async function updateRole(req, res) {
   try {
     const { id } = req.params;
+    if (!parseId(id)) return res.error('Invalid user id', 400);
     const data = roleSchema.parse(req.body);
     const user = await usersService.updateUserRole({ id, role: data.role });
     res.success(user, 'Role updated');
@@ -60,6 +67,7 @@ async function updateRole(req, res) {
 async function remove(req, res) {
   try {
     const { id } = req.params;
+    if (!parseId(id)) return res.error('Invalid user id', 400);
     const result = await usersService.deleteUser({ id });
     res.success(result, 'User deleted');
   } catch (e) {
@@ -70,6 +78,7 @@ async function remove(req, res) {
 async function resetPassword(req, res) {
   try {
     const { id } = req.params;
+    if (!parseId(id)) return res.error('Invalid user id', 400);
     const data = resetPasswordSchema.parse(req.body);
     const password = typeof data.password === 'string' && data.password.trim() ? data.password : DEFAULT_PASSWORD;
     if (String(password).length < 8) return res.error('Password must be at least 8 characters', 400);

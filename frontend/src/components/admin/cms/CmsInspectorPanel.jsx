@@ -337,6 +337,18 @@ export default function CmsInspectorPanel({
                       className="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-2"
                     />
                   </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-zinc-600">{t('lineHeight')}</label>
+                    <input
+                      type="number"
+                      min={0.8}
+                      max={3}
+                      step={0.05}
+                      value={Number(selectedBlock.content?.lineHeight) > 0 ? Number(selectedBlock.content.lineHeight) : 1.2}
+                      onChange={(e) => updateSelectedContent({ lineHeight: Number(e.target.value) || 1.2 })}
+                      className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                    />
+                  </div>
                 </div>
               ) : null}
               <div className="mt-1">
