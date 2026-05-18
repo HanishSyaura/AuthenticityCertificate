@@ -383,6 +383,7 @@ export default function AdminUsers() {
                   if (!nm || !em) return;
                   if (pw.length < 8) return;
                   await createUser({ name: nm, email: em, password: pw, role: newRole });
+                  if (String(query || '').trim()) setQuery('');
                   setShowCreate(false);
                   setName('');
                   setEmail('');

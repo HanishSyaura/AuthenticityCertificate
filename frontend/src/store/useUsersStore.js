@@ -41,8 +41,15 @@ const useUsersStore = create((set, get) => ({
       const api = getApi();
       const res = await api.post('/users', { name, email, password, role });
       const created = res?.data?.data;
-      const users = [created, ...get().users].filter(Boolean);
-      set({ users, loading: false, lastSyncAt: Date.now() });
+      let nextUsers = null;
+      if (created && isValidId(created.id)) {
+        nextUsers = [created, ...get().users].filter((u) => u && isValidId(u.id));
+      } else {
+        const listRes = await api.get('/users');
+        const users = Array.isArray(listRes?.data?.data) ? listRes.data.data : [];
+        nextUsers = users.filter((u) => u && isValidId(u.id));
+      }
+      set({ users: nextUsers, loading: false, lastSyncAt: Date.now() });
       return created;
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || tRaw('failedToCreateUser');
