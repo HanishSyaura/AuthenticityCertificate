@@ -254,7 +254,7 @@ app.use(async (req, res, next) => {
   if (req.path === '/' || req.path === '/health') return next();
   if (dbInit.ready) return next();
 
-  const timeoutMs = Number(process.env.DB_PATCH_TIMEOUT_MS || 3000);
+  const timeoutMs = Number(process.env.DB_PATCH_TIMEOUT_MS || 10000);
   try {
     await Promise.race([
       dbInit.promise,
@@ -321,10 +321,11 @@ app.get('/health', async (req, res) => {
     const prisma = require('./config/prisma');
     await Promise.race([
       prisma.$queryRaw`SELECT 1`,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 500))
+      new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), 2000))
     ]);
     db = 'ok';
-  } catch {
+  } catch (e) {
+    console.error(`[health] DB check failed: ${e?.message || e}`);
     db = 'unavailable';
   }
   res.success({ status: 'ok', db }, 'OK');

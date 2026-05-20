@@ -10,7 +10,7 @@ async function withTimeout(promise, ms) {
 function getDbTimeoutMs() {
   const raw = process.env.AUTH_DB_TIMEOUT_MS || process.env.DB_QUERY_TIMEOUT_MS;
   const ms = Number(raw);
-  return Number.isFinite(ms) && ms > 0 ? ms : 1200;
+  return Number.isFinite(ms) && ms > 0 ? ms : 5000;
 }
 
 function isPrismaError(err) {
@@ -28,7 +28,7 @@ async function login(email, password) {
     if (user) role = user.role;
     dbGate.markDbSuccess();
   } catch (e) {
-    if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000 });
+    if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e });
     throw e?.message === 'db_unavailable' ? e : e?.message === 'db_timeout' ? e : isPrismaError(e) ? e : new Error('db_timeout');
   }
 
@@ -47,7 +47,7 @@ async function login(email, password) {
       }
       dbGate.markDbSuccess();
     } catch (e) {
-      if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000 });
+      if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e });
       throw e;
     }
   }

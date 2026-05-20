@@ -24,7 +24,7 @@ function getGateConfig() {
   };
 }
 
-function markDbFailure({ cooldownMs } = {}) {
+function markDbFailure({ cooldownMs, error } = {}) {
   const cfg = getGateConfig();
   const windowMs = cfg.windowMs;
   const threshold = cfg.threshold;
@@ -36,10 +36,16 @@ function markDbFailure({ cooldownMs } = {}) {
     failureCount = 0;
   }
   failureCount += 1;
+
+  console.error(`[dbGate] DB failure detected (${failureCount}/${threshold}). Error: ${error?.message || error || 'Unknown error'}`);
+
   if (failureCount < threshold) return;
 
   const next = t + Math.max(1000, cooldownEffective);
-  if (next > disabledUntil) disabledUntil = next;
+  if (next > disabledUntil) {
+    disabledUntil = next;
+    console.error(`[dbGate] Circuit breaker TRIPPED. DB disabled until ${new Date(disabledUntil).toISOString()}`);
+  }
 }
 
 function markDbSuccess() {
