@@ -17,6 +17,21 @@ function isPrismaError(err) {
   return typeof err?.name === 'string' && err.name.startsWith('Prisma');
 }
 
+function isPrismaSchemaError(err) {
+  if (!isPrismaError(err)) return false;
+  const code = err?.code;
+  const msg = err?.message || '';
+  if (code === 'P2022' || code === 'P2023' || code === 'P2025') return true;
+  if (msg.includes('does not exist') || msg.includes('Unknown column')) return true;
+  return false;
+}
+
+function shouldTriggerDbGate(err) {
+  if (err?.message === 'db_timeout') return true;
+  if (isPrismaError(err) && !isPrismaSchemaError(err)) return true;
+  return false;
+}
+
 async function login(email, password) {
   let user = null;
   let role = null;
@@ -28,7 +43,7 @@ async function login(email, password) {
     if (user) role = user.role;
     dbGate.markDbSuccess();
   } catch (e) {
-    if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'authService.login:user' });
+    if (shouldTriggerDbGate(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'authService.login:user' });
     throw e?.message === 'db_unavailable' ? e : e?.message === 'db_timeout' ? e : isPrismaError(e) ? e : new Error('db_timeout');
   }
 
@@ -47,7 +62,7 @@ async function login(email, password) {
       }
       dbGate.markDbSuccess();
     } catch (e) {
-      if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'authService.login:admin' });
+      if (shouldTriggerDbGate(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'authService.login:admin' });
       throw e;
     }
   }

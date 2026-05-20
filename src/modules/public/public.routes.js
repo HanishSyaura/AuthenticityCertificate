@@ -27,6 +27,21 @@ function isPrismaError(err) {
   return typeof err?.name === 'string' && err.name.startsWith('Prisma');
 }
 
+function isPrismaSchemaError(err) {
+  if (!isPrismaError(err)) return false;
+  const code = err?.code;
+  const msg = err?.message || '';
+  if (code === 'P2022' || code === 'P2023' || code === 'P2025') return true;
+  if (msg.includes('does not exist') || msg.includes('Unknown column')) return true;
+  return false;
+}
+
+function shouldTriggerDbGate(err) {
+  if (err?.message === 'db_timeout') return true;
+  if (isPrismaError(err) && !isPrismaSchemaError(err)) return true;
+  return false;
+}
+
 router.use(attachOrganization);
 
 router.get('/settings', async (req, res) => {
@@ -79,7 +94,7 @@ router.get('/settings', async (req, res) => {
       'OK'
     );
   } catch (e) {
-    if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'GET /settings' });
+    if (shouldTriggerDbGate(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'GET /settings' });
     return res.success({ organization: null, settings: { logoUrl: null } }, 'OK');
   }
 });
@@ -318,7 +333,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
           resolvedNfcUid = resolvedNfcUid || idRow.nfcUid || null;
         }
       } catch (e) {
-        if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'respondByCertificateId:tagIdentity' });
+        if (shouldTriggerDbGate(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'respondByCertificateId:tagIdentity' });
       }
     }
 
@@ -389,7 +404,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         epcBatchId = row?.batch?.id != null ? Number(row.batch.id) : null;
         epcProduct = row?.batch?.product || null;
       } catch (e) {
-        if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'respondByCertificateId:epcItem' });
+        if (shouldTriggerDbGate(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'respondByCertificateId:epcItem' });
       }
     }
 
@@ -424,7 +439,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
           epcProduct = epcProduct || row.product || null;
         }
       } catch (e) {
-        if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'respondByCertificateId:epcBatch' });
+        if (shouldTriggerDbGate(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'respondByCertificateId:epcBatch' });
       }
     }
 
@@ -485,7 +500,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
           if (Array.isArray(tRow?.contentJson) && tRow.contentJson.length > 0) layout = tRow.contentJson;
         }
       } catch (e) {
-        if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'respondByCertificateId:cmsPage' });
+        if (shouldTriggerDbGate(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'respondByCertificateId:cmsPage' });
       }
     }
 
@@ -504,7 +519,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         ]);
         supportingTemplates = Array.isArray(rows) ? rows : [];
       } catch (e) {
-        if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'respondByCertificateId:supportingCert' });
+        if (shouldTriggerDbGate(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'respondByCertificateId:supportingCert' });
       }
     }
 
@@ -520,7 +535,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         ]);
         batchDocuments = Array.isArray(rows) ? rows : [];
       } catch (e) {
-        if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'respondByCertificateId:epcItemDoc' });
+        if (shouldTriggerDbGate(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'respondByCertificateId:epcItemDoc' });
       }
     }
 
@@ -536,7 +551,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         ]);
         certificateTemplate = tpl || null;
       } catch (e) {
-        if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'respondByCertificateId:certTemplate' });
+        if (shouldTriggerDbGate(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'respondByCertificateId:certTemplate' });
       }
     }
     if (resolvedOrgId && lang !== 'en') {
@@ -570,7 +585,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
           certificateTemplate = applyTr(certificateTemplate);
           supportingTemplates = (Array.isArray(supportingTemplates) ? supportingTemplates : []).map(applyTr);
         } catch (e) {
-          if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'respondByCertificateId:templateTranslation' });
+          if (shouldTriggerDbGate(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'respondByCertificateId:templateTranslation' });
         }
       }
     }
@@ -620,7 +635,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     );
   } catch (e) {
     console.error(`[public.resolve] Error: ${e?.message || e}`);
-    if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'respondByCertificateId:main' });
+    if (shouldTriggerDbGate(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'respondByCertificateId:main' });
     const msg = e?.message === 'db_timeout' ? 'Service temporarily unavailable' : 'Service unavailable';
     return res.error(msg, 503);
   }

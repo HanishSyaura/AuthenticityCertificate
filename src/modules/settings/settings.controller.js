@@ -36,6 +36,11 @@ async function getSettings(req, res) {
       'OK'
     );
   } catch (e) {
+    const msg = String(e?.message || '');
+    if (msg.includes('does not exist') || msg.includes('Unknown column')) {
+      console.error('[getSettings] Database schema mismatch: ' + msg);
+      return res.error('System maintenance in progress. Please try again later.', 503);
+    }
     if (e?.message === 'db_timeout') return res.error('Database temporarily unavailable', 503);
     res.error('Service temporarily unavailable', 503);
   }

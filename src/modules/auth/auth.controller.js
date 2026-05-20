@@ -16,6 +16,13 @@ async function login(req, res, next) {
     if (error instanceof z.ZodError) {
       return res.error(error.errors[0].message, 400);
     }
+    const msg = String(error?.message || '');
+    const errCode = String(error?.code || '');
+    const errName = String(error?.name || '');
+    if (msg.includes('does not exist') || msg.includes('Unknown column') || errCode === 'P2022' || errCode === 'P2023') {
+      console.error('[login] Database schema mismatch: ' + msg);
+      return res.error('System maintenance in progress. Please try again later.', 503);
+    }
     if (error?.message === 'db_timeout') {
       return res.error('Database temporarily unavailable', 503);
     }
@@ -25,7 +32,7 @@ async function login(req, res, next) {
     if (error?.message === 'jwt_secret_missing') {
       return res.error('Service temporarily unavailable', 503);
     }
-    if (typeof error?.name === 'string' && error.name.startsWith('Prisma')) {
+    if (errName.startsWith('Prisma')) {
       return res.error('Database temporarily unavailable', 503);
     }
     if (error?.message === 'Invalid email or password') {

@@ -1213,6 +1213,20 @@ async function ensureEpcScanGroupSchemaCompat() {
   }
 }
 
+async function ensureUserSchemaCompat() {
+  const tableName = 'User';
+  const exists = await tableExists(tableName);
+  if (!exists) return;
+
+  await ensureColumn(
+    tableName,
+    'mustResetPassword',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`mustResetPassword\` TINYINT(1) NOT NULL DEFAULT 0`,
+    null,
+    null
+  );
+}
+
 async function applyDbPatches() {
   await ensureProductSchemaCompat();
   await ensureProductSupportingCertificateSchemaCompat();
@@ -1226,6 +1240,7 @@ async function applyDbPatches() {
   await ensureEpcScanGroupSchemaCompat();
   await ensureOrganizationSettingsSchemaCompat();
   await ensureAccessControlSchemaCompat();
+  await ensureUserSchemaCompat();
 }
 
 module.exports = { applyDbPatches };
