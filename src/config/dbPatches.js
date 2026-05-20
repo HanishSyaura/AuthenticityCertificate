@@ -1110,6 +1110,109 @@ async function ensureCertificateSequenceSchemaCompat() {
   );
 }
 
+async function ensureEpcScanGroupSchemaCompat() {
+  const groupTable = 'EpcScanGroup';
+  const itemTable = 'EpcScanGroupItem';
+
+  if (!(await tableExists(groupTable))) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`${groupTable}\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`organizationId\` INT NOT NULL,
+        \`status\` VARCHAR(32) NOT NULL DEFAULT 'OPEN',
+        \`productId\` INT NULL,
+        \`createdByEmail\` VARCHAR(191) NULL,
+        \`assignedByEmail\` VARCHAR(191) NULL,
+        \`assignedAt\` DATETIME NULL,
+        \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+
+  await ensureColumn(
+    groupTable,
+    'organizationId',
+    `ALTER TABLE \`${groupTable}\` ADD COLUMN \`organizationId\` INT NULL`,
+    `UPDATE \`${groupTable}\` SET \`organizationId\` = 0 WHERE \`organizationId\` IS NULL`,
+    `ALTER TABLE \`${groupTable}\` MODIFY \`organizationId\` INT NOT NULL`
+  );
+  await ensureColumn(
+    groupTable,
+    'status',
+    `ALTER TABLE \`${groupTable}\` ADD COLUMN \`status\` VARCHAR(32) NULL`,
+    `UPDATE \`${groupTable}\` SET \`status\` = 'OPEN' WHERE \`status\` IS NULL OR \`status\` = ''`,
+    `ALTER TABLE \`${groupTable}\` MODIFY \`status\` VARCHAR(32) NOT NULL DEFAULT 'OPEN'`
+  );
+  await ensureColumn(groupTable, 'productId', `ALTER TABLE \`${groupTable}\` ADD COLUMN \`productId\` INT NULL`, null, null);
+  await ensureColumn(groupTable, 'createdByEmail', `ALTER TABLE \`${groupTable}\` ADD COLUMN \`createdByEmail\` VARCHAR(191) NULL`, null, null);
+  await ensureColumn(groupTable, 'assignedByEmail', `ALTER TABLE \`${groupTable}\` ADD COLUMN \`assignedByEmail\` VARCHAR(191) NULL`, null, null);
+  await ensureColumn(groupTable, 'assignedAt', `ALTER TABLE \`${groupTable}\` ADD COLUMN \`assignedAt\` DATETIME NULL`, null, null);
+  await ensureColumn(
+    groupTable,
+    'createdAt',
+    `ALTER TABLE \`${groupTable}\` ADD COLUMN \`createdAt\` DATETIME NULL`,
+    `UPDATE \`${groupTable}\` SET \`createdAt\` = NOW() WHERE \`createdAt\` IS NULL`,
+    `ALTER TABLE \`${groupTable}\` MODIFY \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`
+  );
+
+  const idxOrgCreated = `${groupTable}_organizationId_createdAt_idx`;
+  if (!(await indexExists(groupTable, idxOrgCreated))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${idxOrgCreated}\` ON \`${groupTable}\` (\`organizationId\`, \`createdAt\`)`);
+  }
+  const idxOrgStatus = `${groupTable}_organizationId_status_idx`;
+  if (!(await indexExists(groupTable, idxOrgStatus))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${idxOrgStatus}\` ON \`${groupTable}\` (\`organizationId\`, \`status\`)`);
+  }
+  const idxOrgProduct = `${groupTable}_organizationId_productId_idx`;
+  if (!(await indexExists(groupTable, idxOrgProduct))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${idxOrgProduct}\` ON \`${groupTable}\` (\`organizationId\`, \`productId\`)`);
+  }
+
+  if (!(await tableExists(itemTable))) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`${itemTable}\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`organizationId\` INT NOT NULL,
+        \`scanGroupId\` INT NOT NULL,
+        \`epcItemId\` INT NOT NULL,
+        \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+
+  await ensureColumn(
+    itemTable,
+    'organizationId',
+    `ALTER TABLE \`${itemTable}\` ADD COLUMN \`organizationId\` INT NULL`,
+    `UPDATE \`${itemTable}\` SET \`organizationId\` = 0 WHERE \`organizationId\` IS NULL`,
+    `ALTER TABLE \`${itemTable}\` MODIFY \`organizationId\` INT NOT NULL`
+  );
+  await ensureColumn(itemTable, 'scanGroupId', `ALTER TABLE \`${itemTable}\` ADD COLUMN \`scanGroupId\` INT NULL`, null, `ALTER TABLE \`${itemTable}\` MODIFY \`scanGroupId\` INT NOT NULL`);
+  await ensureColumn(itemTable, 'epcItemId', `ALTER TABLE \`${itemTable}\` ADD COLUMN \`epcItemId\` INT NULL`, null, `ALTER TABLE \`${itemTable}\` MODIFY \`epcItemId\` INT NOT NULL`);
+  await ensureColumn(
+    itemTable,
+    'createdAt',
+    `ALTER TABLE \`${itemTable}\` ADD COLUMN \`createdAt\` DATETIME NULL`,
+    `UPDATE \`${itemTable}\` SET \`createdAt\` = NOW() WHERE \`createdAt\` IS NULL`,
+    `ALTER TABLE \`${itemTable}\` MODIFY \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`
+  );
+
+  const uniquePair = `${itemTable}_scanGroupId_epcItemId_key`;
+  if (!(await indexExists(itemTable, uniquePair))) {
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX \`${uniquePair}\` ON \`${itemTable}\` (\`scanGroupId\`, \`epcItemId\`)`);
+  }
+  const idxOrgGroup = `${itemTable}_organizationId_scanGroupId_idx`;
+  if (!(await indexExists(itemTable, idxOrgGroup))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${idxOrgGroup}\` ON \`${itemTable}\` (\`organizationId\`, \`scanGroupId\`)`);
+  }
+  const idxOrgItem = `${itemTable}_organizationId_epcItemId_idx`;
+  if (!(await indexExists(itemTable, idxOrgItem))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${idxOrgItem}\` ON \`${itemTable}\` (\`organizationId\`, \`epcItemId\`)`);
+  }
+}
+
 async function applyDbPatches() {
   await ensureProductSchemaCompat();
   await ensureProductSupportingCertificateSchemaCompat();
@@ -1120,6 +1223,7 @@ async function applyDbPatches() {
   await ensureCertificateSchemaCompat();
   await ensureCertificateSequenceSchemaCompat();
   await ensureEpcSchemaCompat();
+  await ensureEpcScanGroupSchemaCompat();
   await ensureOrganizationSettingsSchemaCompat();
   await ensureAccessControlSchemaCompat();
 }

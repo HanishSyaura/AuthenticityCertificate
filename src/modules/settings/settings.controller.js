@@ -7,6 +7,8 @@ async function getSettings(req, res) {
     const orgId = req.organization?.id;
     if (!orgId) return res.error('Organization required', 400);
     const row = await settingsService.ensureOrganizationSettings(orgId);
+    const notifyCfg = await settingsService.getEpcGeneratedEmailConfig(orgId);
+    const prodCfg = await settingsService.getEpcProductionOrdersEmailConfig(orgId);
     const org = await prisma.organization.findUnique({ where: { id: orgId } });
 
     res.success(
@@ -23,7 +25,11 @@ async function getSettings(req, res) {
               defaultLocale: row.defaultLocale,
               defaultTimezone: row.defaultTimezone,
               maintenanceMode: Boolean(row.maintenanceMode),
-              logoUrl: row.logoUrl ? String(row.logoUrl) : null
+              logoUrl: row.logoUrl ? String(row.logoUrl) : null,
+              epcGeneratedEmailNotifyEnabled: Boolean(notifyCfg?.isEnabled),
+              epcGeneratedEmailNotifyRoles: Array.isArray(notifyCfg?.roleNamesJson) ? notifyCfg.roleNamesJson : [],
+              epcProductionOrdersEmailNotifyEnabled: Boolean(prodCfg?.isEnabled),
+              epcProductionOrdersEmailNotifyRoles: Array.isArray(prodCfg?.roleNamesJson) ? prodCfg.roleNamesJson : []
             }
           : null
       },
@@ -55,6 +61,42 @@ const updateSchema = z.object({
       return s ? s : null;
     },
     z.string().min(1).max(512).nullable().optional()
+  ),
+  epcGeneratedEmailNotifyEnabled: z.boolean().optional(),
+  epcGeneratedEmailNotifyRoles: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return [];
+      if (Array.isArray(v)) return v;
+      const s = String(v || '').trim();
+      if (!s) return [];
+      return s
+        .split(',')
+        .map((x) => String(x || '').trim())
+        .filter(Boolean);
+    },
+    z
+      .array(z.string().trim().min(2).max(64).regex(/^[a-z][a-z0-9_.-]*$/))
+      .max(50)
+      .optional()
+  ),
+  epcProductionOrdersEmailNotifyEnabled: z.boolean().optional(),
+  epcProductionOrdersEmailNotifyRoles: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return [];
+      if (Array.isArray(v)) return v;
+      const s = String(v || '').trim();
+      if (!s) return [];
+      return s
+        .split(',')
+        .map((x) => String(x || '').trim())
+        .filter(Boolean);
+    },
+    z
+      .array(z.string().trim().min(2).max(64).regex(/^[a-z][a-z0-9_.-]*$/))
+      .max(50)
+      .optional()
   )
 });
 
@@ -76,7 +118,29 @@ async function updateSettings(req, res) {
       }
     }
 
+    if (
+      Object.prototype.hasOwnProperty.call(validated, 'epcGeneratedEmailNotifyRoles') ||
+      Object.prototype.hasOwnProperty.call(validated, 'epcGeneratedEmailNotifyEnabled')
+    ) {
+      await settingsService.upsertEpcGeneratedEmailConfig(orgId, {
+        isEnabled: validated.epcGeneratedEmailNotifyEnabled,
+        roleNames: validated.epcGeneratedEmailNotifyRoles
+      });
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(validated, 'epcProductionOrdersEmailNotifyRoles') ||
+      Object.prototype.hasOwnProperty.call(validated, 'epcProductionOrdersEmailNotifyEnabled')
+    ) {
+      await settingsService.upsertEpcProductionOrdersEmailConfig(orgId, {
+        isEnabled: validated.epcProductionOrdersEmailNotifyEnabled,
+        roleNames: validated.epcProductionOrdersEmailNotifyRoles
+      });
+    }
+
     const row = await settingsService.updateOrganizationSettings(orgId, validated);
+    const notifyCfg = await settingsService.getEpcGeneratedEmailConfig(orgId);
+    const prodCfg = await settingsService.getEpcProductionOrdersEmailConfig(orgId);
     const org = await prisma.organization.findUnique({ where: { id: orgId } });
 
     res.success(
@@ -93,7 +157,11 @@ async function updateSettings(req, res) {
               defaultLocale: row.defaultLocale,
               defaultTimezone: row.defaultTimezone,
               maintenanceMode: Boolean(row.maintenanceMode),
-              logoUrl: row.logoUrl ? String(row.logoUrl) : null
+              logoUrl: row.logoUrl ? String(row.logoUrl) : null,
+              epcGeneratedEmailNotifyEnabled: Boolean(notifyCfg?.isEnabled),
+              epcGeneratedEmailNotifyRoles: Array.isArray(notifyCfg?.roleNamesJson) ? notifyCfg.roleNamesJson : [],
+              epcProductionOrdersEmailNotifyEnabled: Boolean(prodCfg?.isEnabled),
+              epcProductionOrdersEmailNotifyRoles: Array.isArray(prodCfg?.roleNamesJson) ? prodCfg.roleNamesJson : []
             }
           : null
       },

@@ -36,15 +36,23 @@ async function list(req, res) {
 async function create(req, res) {
   try {
     const data = createSchema.parse(req.body);
-    const password = typeof data.password === 'string' && data.password.trim() ? data.password : DEFAULT_PASSWORD;
+    const usedDefaultPassword = !(typeof data.password === 'string' && data.password.trim());
+    const password = usedDefaultPassword ? DEFAULT_PASSWORD : data.password;
     if (String(password).length < 8) return res.error('Password must be at least 8 characters', 400);
     const user = await usersService.createUser({
       name: data.name,
       email: data.email,
       password,
-      role: data.role || 'admin'
+      role: data.role || 'admin',
+      mustResetPassword: usedDefaultPassword
     });
-    res.success(user, 'User created');
+    res.success(
+      {
+        ...user,
+        temporaryPassword: usedDefaultPassword ? DEFAULT_PASSWORD : undefined
+      },
+      'User created'
+    );
   } catch (e) {
     if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
     res.error(e.message, 400);
@@ -82,7 +90,7 @@ async function resetPassword(req, res) {
     const data = resetPasswordSchema.parse(req.body);
     const password = typeof data.password === 'string' && data.password.trim() ? data.password : DEFAULT_PASSWORD;
     if (String(password).length < 8) return res.error('Password must be at least 8 characters', 400);
-    await usersService.setUserPassword({ id, password });
+    await usersService.setUserPassword({ id, password, mustResetPassword: true });
     res.success({ id: Number(id) }, 'Password updated');
   } catch (e) {
     if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);

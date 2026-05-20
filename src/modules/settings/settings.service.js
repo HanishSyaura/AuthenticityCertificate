@@ -1,5 +1,61 @@
 const prisma = require('../../config/prisma');
 
+const EPC_GENERATED_EMAIL_KEY = 'epc_generated_email';
+const EPC_PRODUCTION_ORDERS_EMAIL_KEY = 'epc_production_orders_email';
+
+function normalizeRoleNames(roleNames) {
+  const roles = Array.isArray(roleNames) ? roleNames : [];
+  return Array.from(
+    new Set(
+      roles
+        .map((r) => String(r || '').trim())
+        .filter(Boolean)
+        .slice(0, 50)
+    )
+  );
+}
+
+async function getNotificationConfig(organizationId, key) {
+  const orgId = Number(organizationId);
+  if (!Number.isFinite(orgId) || orgId <= 0) return null;
+  const k = String(key || '').trim();
+  if (!k) return null;
+  try {
+    return await prisma.organizationNotificationConfig.findUnique({
+      where: { organizationId_key: { organizationId: orgId, key: k } }
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function upsertNotificationConfig(organizationId, key, { isEnabled, roleNames } = {}) {
+  const orgId = Number(organizationId);
+  if (!Number.isFinite(orgId) || orgId <= 0) return null;
+  const k = String(key || '').trim();
+  if (!k) return null;
+
+  const cleanRoles = normalizeRoleNames(roleNames);
+  const enabled = typeof isEnabled === 'boolean' ? isEnabled : cleanRoles.length > 0;
+  try {
+    return await prisma.organizationNotificationConfig.upsert({
+      where: { organizationId_key: { organizationId: orgId, key: k } },
+      create: {
+        organizationId: orgId,
+        key: k,
+        isEnabled: enabled,
+        roleNamesJson: cleanRoles
+      },
+      update: {
+        isEnabled: enabled,
+        roleNamesJson: cleanRoles
+      }
+    });
+  } catch {
+    return null;
+  }
+}
+
 async function getOrganizationSettingsRow(organizationId) {
   const orgId = Number(organizationId);
   if (!Number.isFinite(orgId) || orgId <= 0) return null;
@@ -56,5 +112,16 @@ async function updateOrganizationSettings(organizationId, input) {
 
 module.exports = {
   ensureOrganizationSettings,
-  updateOrganizationSettings
+  updateOrganizationSettings,
+  EPC_GENERATED_EMAIL_KEY,
+  EPC_PRODUCTION_ORDERS_EMAIL_KEY,
+  getNotificationConfig,
+  upsertNotificationConfig,
+  getEpcGeneratedEmailConfig: async (organizationId) => await getNotificationConfig(organizationId, EPC_GENERATED_EMAIL_KEY),
+  upsertEpcGeneratedEmailConfig: async (organizationId, input) =>
+    await upsertNotificationConfig(organizationId, EPC_GENERATED_EMAIL_KEY, input),
+  getEpcProductionOrdersEmailConfig: async (organizationId) =>
+    await getNotificationConfig(organizationId, EPC_PRODUCTION_ORDERS_EMAIL_KEY),
+  upsertEpcProductionOrdersEmailConfig: async (organizationId, input) =>
+    await upsertNotificationConfig(organizationId, EPC_PRODUCTION_ORDERS_EMAIL_KEY, input)
 };

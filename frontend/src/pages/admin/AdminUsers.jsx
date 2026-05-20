@@ -17,7 +17,6 @@ function formatDate(input) {
 
 export default function AdminUsers() {
   const { t } = useT();
-  const DEFAULT_PASSWORD = 'Password123!';
   const authUser = useAdminAuthStore((s) => s.user);
   const role = authUser?.role || 'admin';
   const perms = authUser?.permissions || [];
@@ -48,8 +47,8 @@ export default function AdminUsers() {
   const [selectedUserRoleIds, setSelectedUserRoleIds] = useState([]);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [newRole, setNewRole] = useState('admin');
+  const [createNotice, setCreateNotice] = useState('');
 
   useEffect(() => {
     if (canManageUsers) void fetchUsers();
@@ -173,7 +172,10 @@ export default function AdminUsers() {
             type="button"
             className="ac-btn px-3 py-2 text-xs"
             onClick={() => {
-              setPassword(DEFAULT_PASSWORD);
+              setName('');
+              setEmail('');
+              setNewRole('admin');
+              setCreateNotice('');
               setShowCreate(true);
             }}
           >
@@ -290,7 +292,7 @@ export default function AdminUsers() {
                       disabled,
                       onSelect: () => {
                         setResetUser(u);
-                        setResetPassword(DEFAULT_PASSWORD);
+                        setResetPassword('');
                         setShowReset(true);
                       }
                     },
@@ -319,6 +321,11 @@ export default function AdminUsers() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-5">
             <div className="mb-4 text-sm font-semibold text-zinc-900">{t('createUser')}</div>
+            {createNotice ? (
+              <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+                {createNotice}
+              </div>
+            ) : null}
             <div className="space-y-3">
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('name')}</div>
@@ -335,16 +342,6 @@ export default function AdminUsers() {
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
                 />
-              </div>
-              <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('password')}</div>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
-                />
-                <div className="mt-1 text-[11px] text-zinc-500">{t('minPasswordHint')}</div>
               </div>
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('role')}</div>
@@ -367,8 +364,8 @@ export default function AdminUsers() {
                   setShowCreate(false);
                   setName('');
                   setEmail('');
-                  setPassword('');
                   setNewRole('admin');
+                  setCreateNotice('');
                 }}
               >
                 {t('cancel')}
@@ -379,15 +376,17 @@ export default function AdminUsers() {
                 onClick={async () => {
                   const nm = String(name || '').trim();
                   const em = String(email || '').trim();
-                  const pw = String(password || '').trim() ? String(password || '') : DEFAULT_PASSWORD;
                   if (!nm || !em) return;
-                  if (pw.length < 8) return;
-                  await createUser({ name: nm, email: em, password: pw, role: newRole });
+                  const created = await createUser({ name: nm, email: em, role: newRole });
+                  const tmp = String(created?.temporaryPassword || '').trim();
+                  setCreateNotice(
+                    tmp
+                      ? t('userCreatedWithTempPassword', { password: tmp })
+                      : t('userCreatedWithDefaultPassword')
+                  );
                   if (String(query || '').trim()) setQuery('');
-                  setShowCreate(false);
                   setName('');
                   setEmail('');
-                  setPassword('');
                   setNewRole('admin');
                 }}
               >
@@ -412,6 +411,7 @@ export default function AdminUsers() {
                 type="password"
                 value={resetPassword}
                 onChange={(e) => setResetPassword(e.target.value)}
+                autoComplete="new-password"
                 className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
               />
               <div className="mt-1 text-[11px] text-zinc-500">{t('minPasswordHint')}</div>
@@ -431,9 +431,9 @@ export default function AdminUsers() {
               <button
                 type="button"
                 className="ac-btn px-3 py-2 text-xs"
-                disabled={!resetUser?.id || !resetPassword}
+                disabled={!resetUser?.id || String(resetPassword || '').trim().length < 8}
                 onClick={async () => {
-                  await resetUserPassword({ id: resetUser.id, newPassword: resetPassword });
+                  await resetUserPassword({ id: resetUser.id, newPassword: String(resetPassword || '').trim() });
                   setShowReset(false);
                   setResetUser(null);
                   setResetPassword('');

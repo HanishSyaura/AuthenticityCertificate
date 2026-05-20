@@ -4,6 +4,7 @@ const XLSX = require('xlsx');
 const { generateCertificateId, peekNextCertificateId } = require('../../utils/id-generator');
 const { matchPermission } = require('../../middleware/access.middleware');
 const settingsService = require('../settings/settings.service');
+const epcEmailNotificationService = require('../../services/epcEmailNotification.service');
 
 const EPC_BATCH_IMPORT_AUDIT_ACTION = 'SUBMIT_EPC_BATCH_IMPORT';
 
@@ -429,6 +430,17 @@ async function generateEpcBatch({ organizationId, corpPrefix, batchQty, remark }
     },
     { timeout: 12_000, maxWait: 5_000 }
   );
+
+  try {
+    void epcEmailNotificationService.notifyEpcBatchGenerated({
+      organizationId: orgId,
+      batch: result?.batch,
+      created: result?.created,
+      startNo: result?.startNo,
+      endNo: result?.endNo
+    });
+  } catch {
+  }
 
   return result;
 }
@@ -1623,6 +1635,16 @@ async function importProductionXlsx({ organizationId, batchId, base64 }) {
     return { batchId: id, rows: updates.length, updated };
   });
 
+  try {
+    void epcEmailNotificationService.notifyProductionOrdersImported({
+      organizationId: orgId,
+      batchId: id,
+      rows: result?.rows,
+      updated: result?.updated
+    });
+  } catch {
+  }
+
   return result;
 }
 
@@ -2540,6 +2562,291 @@ async function updateBatch({ organizationId, batchId, patch, actor }) {
   return result;
 }
 
+function normalizeIdList(raw, { max = 2000 } = {}) {
+  const ids = Array.isArray(raw) ? raw : [];
+  const list = ids
+    .map((v) => Number(v))
+    .filter((n) => Number.isFinite(n) && n > 0)
+    .map((n) => Math.floor(n));
+  const uniq = Array.from(new Set(list));
+  if (uniq.length === 0) {
+    const err = new Error('itemIds required');
+    err.status = 400;
+    throw err;
+  }
+  if (uniq.length > max) {
+    const err = new Error(`itemIds too many (max ${max})`);
+    err.status = 400;
+    throw err;
+  }
+  return uniq;
+}
+
+async function getScanGroupSummary({ organizationId, scanGroupId }) {
+  const orgId = Number(organizationId);
+  const id = Number(scanGroupId);
+  if (!Number.isFinite(id) || id <= 0) throw new Error('Invalid scan group id');
+
+  const group = await withTimeout(
+    prisma.epcScanGroup.findFirst({
+      where: { id, organizationId: orgId },
+      include: {
+        product: { select: { id: true, sku: true, name: true, code: true } },
+        _count: { select: { items: true } }
+      }
+    }),
+    1500
+  );
+  if (!group) {
+    const err = new Error('Scan group tidak dijumpai');
+    err.status = 404;
+    throw err;
+  }
+
+  const items = await withTimeout(
+    prisma.epcScanGroupItem.findMany({
+      where: { organizationId: orgId, scanGroupId: id },
+      select: {
+        epcItem: {
+          select: {
+            id: true,
+            batchId: true,
+            netWeight: true,
+            batch: {
+              select: {
+                id: true,
+                corpPrefix: true,
+                batchName: true,
+                product: { select: { id: true, sku: true, name: true, code: true } }
+              }
+            }
+          }
+        }
+      }
+    }),
+    5000
+  );
+
+  const batchMap = new Map();
+  for (const r of items) {
+    const it = r?.epcItem;
+    if (!it?.batchId) continue;
+    const bid = Number(it.batchId);
+    if (!Number.isFinite(bid) || bid <= 0) continue;
+    const b = it.batch || null;
+    const prev = batchMap.get(bid) || {
+      batchId: bid,
+      batchName: b?.batchName || null,
+      corpPrefix: b?.corpPrefix || null,
+      product: b?.product || null,
+      total: 0,
+      missingNetWeight: 0
+    };
+    prev.total += 1;
+    if (!it.netWeight) prev.missingNetWeight += 1;
+    batchMap.set(bid, prev);
+  }
+
+  const batches = Array.from(batchMap.values()).sort((a, b) => String(a.batchName || '').localeCompare(String(b.batchName || '')));
+
+  return {
+    group: {
+      id: group.id,
+      status: group.status,
+      product: group.product,
+      createdByEmail: group.createdByEmail || null,
+      assignedByEmail: group.assignedByEmail || null,
+      assignedAt: group.assignedAt || null,
+      createdAt: group.createdAt
+    },
+    totalItems: Number(group._count?.items) || 0,
+    totalBatches: batches.length,
+    batches
+  };
+}
+
+async function createScanGroup({ organizationId, itemIds, actor }) {
+  const orgId = Number(organizationId);
+  const ids = normalizeIdList(itemIds, { max: 2000 });
+
+  const found = await withTimeout(
+    prisma.epcItem.findMany({
+      where: { organizationId: orgId, id: { in: ids } },
+      select: { id: true }
+    }),
+    5000
+  );
+
+  if (found.length !== ids.length) {
+    const have = new Set(found.map((r) => Number(r.id)));
+    const missingCount = ids.filter((n) => !have.has(n)).length;
+    const err = new Error(`Some EPC items are missing (${missingCount}).`);
+    err.status = 400;
+    throw err;
+  }
+
+  const email = typeof actor?.email === 'string' ? actor.email.trim().toLowerCase() : null;
+
+  const group = await prisma.$transaction(async (tx) => {
+    const g = await withTimeout(
+      tx.epcScanGroup.create({
+        data: {
+          organizationId: orgId,
+          status: 'OPEN',
+          createdByEmail: email || null
+        },
+        select: { id: true }
+      }),
+      1500
+    );
+    await withTimeout(
+      tx.epcScanGroupItem.createMany({
+        data: ids.map((id) => ({ organizationId: orgId, scanGroupId: g.id, epcItemId: id })),
+        skipDuplicates: true
+      }),
+      5000
+    );
+    return g;
+  });
+
+  return await getScanGroupSummary({ organizationId: orgId, scanGroupId: group.id });
+}
+
+async function listScanGroups({ organizationId, status, limit, offset }) {
+  const orgId = Number(organizationId);
+  const take = Math.min(Math.max(Number(limit) || 50, 1), 200);
+  const skip = Math.max(Number(offset) || 0, 0);
+  const st = typeof status === 'string' && status.trim() ? status.trim().toUpperCase() : null;
+  const where = { organizationId: orgId, ...(st ? { status: st } : {}) };
+
+  const [items, total] = await Promise.all([
+    withTimeout(
+      prisma.epcScanGroup.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        include: {
+          product: { select: { id: true, sku: true, name: true, code: true } },
+          _count: { select: { items: true } }
+        }
+      }),
+      5000
+    ),
+    withTimeout(prisma.epcScanGroup.count({ where }), 5000)
+  ]);
+
+  return {
+    items: items.map((g) => ({
+      id: g.id,
+      status: g.status,
+      createdByEmail: g.createdByEmail || null,
+      assignedByEmail: g.assignedByEmail || null,
+      assignedAt: g.assignedAt || null,
+      createdAt: g.createdAt,
+      product: g.product,
+      totalItems: Number(g._count?.items) || 0
+    })),
+    total: Number(total) || 0
+  };
+}
+
+async function assignScanGroupProduct({ organizationId, scanGroupId, productId, actor }) {
+  const orgId = Number(organizationId);
+  const groupId = Number(scanGroupId);
+  const pid = Number(productId);
+  if (!Number.isFinite(groupId) || groupId <= 0) throw new Error('Invalid scan group id');
+  if (!Number.isFinite(pid) || pid <= 0) throw new Error('Invalid product id');
+
+  const overrideAllowed = canOverrideItem({ actor });
+  const email = typeof actor?.email === 'string' ? actor.email.trim().toLowerCase() : null;
+
+  const group = await withTimeout(
+    prisma.epcScanGroup.findFirst({
+      where: { id: groupId, organizationId: orgId },
+      select: { id: true, status: true }
+    }),
+    1500
+  );
+  if (!group) {
+    const err = new Error('Scan group tidak dijumpai');
+    err.status = 404;
+    throw err;
+  }
+  if (String(group.status || '').toUpperCase() !== 'OPEN') {
+    const err = new Error('Scan group sudah diproses');
+    err.status = 409;
+    throw err;
+  }
+
+  const product = await withTimeout(prisma.product.findFirst({ where: { id: pid, organizationId: orgId }, select: { id: true } }), 1500);
+  if (!product) {
+    const err = new Error('Product tidak dijumpai');
+    err.status = 404;
+    throw err;
+  }
+
+  const itemRows = await withTimeout(
+    prisma.epcScanGroupItem.findMany({
+      where: { organizationId: orgId, scanGroupId: groupId },
+      select: { epcItem: { select: { batchId: true } } }
+    }),
+    5000
+  );
+  const batchIds = Array.from(
+    new Set(
+      itemRows
+        .map((r) => Number(r?.epcItem?.batchId))
+        .filter((n) => Number.isFinite(n) && n > 0)
+        .map((n) => Math.floor(n))
+    )
+  );
+  if (batchIds.length === 0) {
+    const err = new Error('Scan group kosong');
+    err.status = 400;
+    throw err;
+  }
+
+  const batches = await withTimeout(
+    prisma.epcBatch.findMany({
+      where: { organizationId: orgId, id: { in: batchIds } },
+      select: { id: true, productId: true, batchName: true, corpPrefix: true }
+    }),
+    5000
+  );
+  const conflict = batches.filter((b) => b.productId != null && Number(b.productId) !== pid);
+  if (conflict.length > 0 && !overrideAllowed) {
+    const sample = conflict[0];
+    const err = new Error(`Batch "${sample.batchName || sample.id}" already assigned to a different product.`);
+    err.status = 409;
+    throw err;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await withTimeout(
+      tx.epcBatch.updateMany({
+        where: { organizationId: orgId, id: { in: batchIds } },
+        data: { productId: pid }
+      }),
+      5000
+    );
+    await withTimeout(
+      tx.epcScanGroup.update({
+        where: { id: groupId },
+        data: {
+          productId: pid,
+          status: 'ASSIGNED',
+          assignedByEmail: email || null,
+          assignedAt: new Date()
+        }
+      }),
+      1500
+    );
+  });
+
+  return await getScanGroupSummary({ organizationId: orgId, scanGroupId: groupId });
+}
+
 module.exports = {
   getAllowedCorpPrefixes,
   getNextCertificateId,
@@ -2564,6 +2871,10 @@ module.exports = {
   updateBatchDocuments,
   markProductionDone,
   updateBatch,
+  createScanGroup,
+  listScanGroups,
+  getScanGroupSummary,
+  assignScanGroupProduct,
   deleteBatch,
   importExistingEpc,
   recalculateCorpSequence,

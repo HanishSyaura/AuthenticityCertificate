@@ -84,6 +84,53 @@ export default function SystemSettingsCard({
           </div>
         </Field>
 
+        <Field label={t('epcGeneratedEmailNotify')} hint={t('epcGeneratedEmailNotifyHint')}>
+          <div className="flex items-center gap-3">
+            <Toggle
+              checked={Boolean(draft.epcGeneratedEmailNotifyEnabled)}
+              onChange={(v) => onChange({ epcGeneratedEmailNotifyEnabled: v })}
+              disabled={!canEdit}
+            />
+            <div className="text-sm text-zinc-700">{draft.epcGeneratedEmailNotifyEnabled ? t('enabled') : t('disabled')}</div>
+          </div>
+        </Field>
+
+        <Field label={t('notificationRoles')} hint={t('notificationRolesHint')} error={errors?.epcGeneratedEmailNotifyRoles} htmlFor="notify-epc-generated-roles">
+          <Input
+            id="notify-epc-generated-roles"
+            value={draft.epcGeneratedEmailNotifyRoles || ''}
+            onChange={(v) => onChange({ epcGeneratedEmailNotifyRoles: v })}
+            disabled={!canEdit}
+            placeholder="operator, epc_pic"
+          />
+        </Field>
+
+        <Field label={t('epcProductionOrdersEmailNotify')} hint={t('epcProductionOrdersEmailNotifyHint')}>
+          <div className="flex items-center gap-3">
+            <Toggle
+              checked={Boolean(draft.epcProductionOrdersEmailNotifyEnabled)}
+              onChange={(v) => onChange({ epcProductionOrdersEmailNotifyEnabled: v })}
+              disabled={!canEdit}
+            />
+            <div className="text-sm text-zinc-700">{draft.epcProductionOrdersEmailNotifyEnabled ? t('enabled') : t('disabled')}</div>
+          </div>
+        </Field>
+
+        <Field
+          label={t('notificationRoles')}
+          hint={t('notificationRolesHint')}
+          error={errors?.epcProductionOrdersEmailNotifyRoles}
+          htmlFor="notify-epc-production-roles"
+        >
+          <Input
+            id="notify-epc-production-roles"
+            value={draft.epcProductionOrdersEmailNotifyRoles || ''}
+            onChange={(v) => onChange({ epcProductionOrdersEmailNotifyRoles: v })}
+            disabled={!canEdit}
+            placeholder="operator, epc_pic"
+          />
+        </Field>
+
         <div className="sm:col-span-2">
           <Field label={t('brandLogo')} hint={t('brandLogoHint')} error={logoUploadError}>
             <div className="flex flex-wrap items-center gap-3">
@@ -134,7 +181,7 @@ export default function SystemSettingsCard({
         <button
           type="button"
           onClick={onSave}
-          disabled={!canEdit || !dirty || invalid || saving}
+          disabled={!canEdit || !dirty || saving}
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? t('saving') : t('saveSettings')}

@@ -163,8 +163,6 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange }) {
     let alive = true;
     if (!(data instanceof Uint8Array) || data.length === 0) return () => void 0;
     if (!numPages) return () => void 0;
-    if (!containerW) return () => void 0;
-    if (!containerH) return () => void 0;
     const doc = docRef.current;
     if (!doc) return () => void 0;
     const pageSafe = Math.max(1, Math.min(Number(page) || 1, numPages));
@@ -175,11 +173,22 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange }) {
         const canvas = canvasRef.current;
         if (!(canvas instanceof HTMLCanvasElement)) return;
 
+        const container = containerRef.current;
+        const rect = container?.getBoundingClientRect?.();
+        const rectW = Number(rect?.width || 0);
+        const rectH = Number(rect?.height || 0);
+        const fallbackW = typeof window !== 'undefined' ? Math.max(1, Math.floor(Number(window.innerWidth || 0))) : 0;
+        const fallbackH =
+          typeof window !== 'undefined' ? Math.max(1, Math.floor(Number(window.innerHeight || 0) - 120)) : 0;
+        const measuredW = rectW > 0 ? rectW : containerW > 0 ? containerW : fallbackW;
+        const measuredH = rectH > 0 ? rectH : containerH > 0 ? containerH : fallbackH;
+        if (!measuredW || !measuredH) return;
+
         const pdfPage = await doc.getPage(pageSafe);
         const baseViewport = pdfPage.getViewport({ scale: 1 });
         const pad = 24;
-        const availW = Math.max(1, Math.floor(containerW - pad * 2));
-        const availH = Math.max(1, Math.floor(containerH - pad * 2));
+        const availW = Math.max(1, Math.floor(measuredW - pad * 2));
+        const availH = Math.max(1, Math.floor(measuredH - pad * 2));
         const fitScale = Math.max(
           0.1,
           Math.min(availW / Math.max(1, baseViewport.width), availH / Math.max(1, baseViewport.height))
@@ -196,7 +205,7 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange }) {
         canvas.style.height = `${cssH}px`;
 
         const ctx = canvas.getContext('2d', { alpha: false });
-        if (!ctx) return;
+        if (!ctx) throw new Error('Canvas not supported');
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

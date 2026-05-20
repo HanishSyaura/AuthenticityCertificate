@@ -18,6 +18,7 @@ import AdminSettings from './pages/admin/AdminSettings';
 import AdminCertificateList from './pages/admin/AdminCertificateList';
 import AdminCertificateBuilder from './pages/admin/AdminCertificateBuilder';
 import AdminCertificateDesigner from './pages/admin/AdminCertificateDesigner';
+import AdminForceResetPassword from './pages/admin/AdminForceResetPassword';
 import NotFound from './pages/NotFound';
 
 function App() {
@@ -41,6 +42,7 @@ function App() {
           <Route index element={<AdminDashboard />} />
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="guide" element={<AdminGuide />} />
+          <Route path="force-reset" element={<AdminForceResetPassword />} />
           <Route
             path="records"
             element={
@@ -62,6 +64,8 @@ function App() {
             element={
               <AdminRequirePermission
                 anyOf={[
+                  'epc.read',
+                  'epc.write',
                   'epc.batch.view',
                   'epc.batch.create',
                   'epc.scan.access',

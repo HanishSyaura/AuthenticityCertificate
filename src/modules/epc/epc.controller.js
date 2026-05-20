@@ -90,6 +90,14 @@ const resetItemsProductionSchema = z.object({
   itemIds: z.array(z.number().int().positive()).min(1).max(500)
 });
 
+const createScanGroupSchema = z.object({
+  itemIds: z.array(z.number().int().positive()).min(1).max(2000)
+});
+
+const assignScanGroupProductSchema = z.object({
+  productId: z.number().int().positive()
+});
+
 const deleteItemsSchema = z.object({
   itemIds: z.array(z.number().int().positive()).min(1).max(1000),
   cleanup: z.boolean().optional()
@@ -279,6 +287,75 @@ async function resetItemsProduction(req, res) {
       const first = e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input';
       return res.error(first, 400);
     }
+    const status = Number(e.status) || 400;
+    res.error(e.message, status);
+  }
+}
+
+async function createScanGroup(req, res) {
+  try {
+    const data = createScanGroupSchema.parse(req.body || {});
+    const result = await epcService.createScanGroup({
+      organizationId: req.organization.id,
+      itemIds: data.itemIds,
+      actor: req.user
+    });
+    res.success(result, 'Scan group created');
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.error(e.errors?.[0]?.message || 'Invalid input', 400);
+    const status = Number(e.status) || 400;
+    res.error(e.message, status);
+  }
+}
+
+async function listScanGroups(req, res) {
+  try {
+    const { limit, offset } = parseLimitOffset(req.query);
+    const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
+    const data = await epcService.listScanGroups({
+      organizationId: req.organization.id,
+      status: status || null,
+      limit,
+      offset
+    });
+    res.success(data);
+  } catch (e) {
+    const status = Number(e.status) || 400;
+    res.error(e.message, status);
+  }
+}
+
+async function getScanGroup(req, res) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.error('Invalid scan group id', 400);
+    const data = await epcService.getScanGroupSummary({ organizationId: req.organization.id, scanGroupId: id });
+    res.success(data);
+  } catch (e) {
+    const status = Number(e.status) || 400;
+    res.error(e.message, status);
+  }
+}
+
+async function assignScanGroupProduct(req, res) {
+  try {
+    const owned = req.user?.permissions || [];
+    const role = String(req.user?.role || '').trim();
+    const canProduction = role === 'super_admin' || role === 'admin' || matchPermission(owned, 'epc.production.access') || matchPermission(owned, '*');
+    if (!canProduction) return res.error('Insufficient permissions', 403);
+
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.error('Invalid scan group id', 400);
+    const body = assignScanGroupProductSchema.parse(req.body || {});
+    const data = await epcService.assignScanGroupProduct({
+      organizationId: req.organization.id,
+      scanGroupId: id,
+      productId: body.productId,
+      actor: req.user
+    });
+    res.success(data, 'Product assigned');
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.error(e.errors?.[0]?.message || 'Invalid input', 400);
     const status = Number(e.status) || 400;
     res.error(e.message, status);
   }
@@ -694,6 +771,10 @@ module.exports = {
   getItemByEpc,
   resetItemsProduction,
   updateItemProduction,
+  createScanGroup,
+  listScanGroups,
+  getScanGroup,
+  assignScanGroupProduct,
   exportItems,
   deleteItems,
   listBatchItems,

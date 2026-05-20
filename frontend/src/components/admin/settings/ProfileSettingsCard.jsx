@@ -55,6 +55,7 @@ export default function ProfileSettingsCard({
               value={draft.currentPassword}
               onChange={(v) => onChange({ currentPassword: v })}
               type="password"
+              autoComplete="current-password"
             />
           </Field>
         ) : (
@@ -68,6 +69,7 @@ export default function ProfileSettingsCard({
             onChange={(v) => onChange({ newPassword: v })}
             type="password"
             placeholder={t('leaveBlankToKeepCurrentPassword')}
+            autoComplete="new-password"
           />
         </Field>
 
@@ -77,6 +79,7 @@ export default function ProfileSettingsCard({
             value={draft.confirmNewPassword}
             onChange={(v) => onChange({ confirmNewPassword: v })}
             type="password"
+            autoComplete="new-password"
           />
         </Field>
       </div>
@@ -85,7 +88,7 @@ export default function ProfileSettingsCard({
         <button
           type="button"
           onClick={onSave}
-          disabled={!dirty || invalid || saving}
+          disabled={!dirty || saving}
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? t('saving') : t('saveChanges')}

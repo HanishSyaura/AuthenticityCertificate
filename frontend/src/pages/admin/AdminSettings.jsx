@@ -23,6 +23,21 @@ function isValidEmail(v) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }
 
+function parseRoleCsv(v) {
+  const s = String(v || '').trim();
+  if (!s) return [];
+  return s
+    .split(',')
+    .map((x) => String(x || '').trim())
+    .filter(Boolean);
+}
+
+function isValidRoleName(v) {
+  const s = String(v || '').trim();
+  if (!s) return false;
+  return /^[a-z][a-z0-9_.-]*$/.test(s);
+}
+
 export default function AdminSettings() {
   const { t } = useT();
   const { token, user, setUser } = useAdminAuthStore((s) => ({ token: s.token, user: s.user, setUser: s.setUser }));
@@ -47,7 +62,11 @@ export default function AdminSettings() {
     defaultLocale: 'en',
     defaultTimezone: 'Asia/Kuala_Lumpur',
     maintenanceMode: false,
-    logoUrl: ''
+    logoUrl: '',
+    epcGeneratedEmailNotifyEnabled: false,
+    epcGeneratedEmailNotifyRoles: '',
+    epcProductionOrdersEmailNotifyEnabled: false,
+    epcProductionOrdersEmailNotifyRoles: ''
   });
   const [systemDraft, setSystemDraft] = useState({
     organizationName: '',
@@ -55,7 +74,11 @@ export default function AdminSettings() {
     defaultLocale: 'en',
     defaultTimezone: 'Asia/Kuala_Lumpur',
     maintenanceMode: false,
-    logoUrl: ''
+    logoUrl: '',
+    epcGeneratedEmailNotifyEnabled: false,
+    epcGeneratedEmailNotifyRoles: '',
+    epcProductionOrdersEmailNotifyEnabled: false,
+    epcProductionOrdersEmailNotifyRoles: ''
   });
   const [systemSaving, setSystemSaving] = useState(false);
   const [systemNotice, setSystemNotice] = useState({ kind: '', text: '' });
@@ -92,7 +115,7 @@ export default function AdminSettings() {
       setLoadError('');
       try {
         const api = createAdminApi({ token });
-        const [meRes, settingsRes] = await Promise.all([api.get('/auth/me'), api.get('/settings/')]);
+        const [meRes, settingsRes] = await Promise.all([api.get('/auth/me'), api.get('/settings')]);
 
         const me = meRes?.data?.data?.user;
         const org = settingsRes?.data?.data?.organization;
@@ -122,7 +145,15 @@ export default function AdminSettings() {
           defaultLocale: String(settings?.defaultLocale || 'en'),
           defaultTimezone: String(settings?.defaultTimezone || 'Asia/Kuala_Lumpur'),
           maintenanceMode: Boolean(settings?.maintenanceMode),
-          logoUrl: String(settings?.logoUrl || '')
+          logoUrl: String(settings?.logoUrl || ''),
+          epcGeneratedEmailNotifyEnabled: Boolean(settings?.epcGeneratedEmailNotifyEnabled),
+          epcGeneratedEmailNotifyRoles: Array.isArray(settings?.epcGeneratedEmailNotifyRoles)
+            ? settings.epcGeneratedEmailNotifyRoles.join(', ')
+            : String(settings?.epcGeneratedEmailNotifyRoles || ''),
+          epcProductionOrdersEmailNotifyEnabled: Boolean(settings?.epcProductionOrdersEmailNotifyEnabled),
+          epcProductionOrdersEmailNotifyRoles: Array.isArray(settings?.epcProductionOrdersEmailNotifyRoles)
+            ? settings.epcProductionOrdersEmailNotifyRoles.join(', ')
+            : String(settings?.epcProductionOrdersEmailNotifyRoles || '')
         };
         setSystemInitial(s0);
         setSystemDraft(s0);
@@ -167,6 +198,19 @@ export default function AdminSettings() {
     else if (!/^[A-Z0-9_-]+$/.test(code.toUpperCase())) errs.organizationCode = t('organizationCodeFormat');
     if (!String(draft.defaultLocale || '').trim()) errs.defaultLocale = t('localeRequired');
     if (!String(draft.defaultTimezone || '').trim()) errs.defaultTimezone = t('timezoneRequired');
+
+    const genRoles = parseRoleCsv(draft.epcGeneratedEmailNotifyRoles);
+    if (draft.epcGeneratedEmailNotifyEnabled) {
+      if (genRoles.length === 0) errs.epcGeneratedEmailNotifyRoles = t('notificationRolesRequired');
+    }
+    if (genRoles.some((r) => !isValidRoleName(r))) errs.epcGeneratedEmailNotifyRoles = t('invalidRoleList');
+
+    const prodRoles = parseRoleCsv(draft.epcProductionOrdersEmailNotifyRoles);
+    if (draft.epcProductionOrdersEmailNotifyEnabled) {
+      if (prodRoles.length === 0) errs.epcProductionOrdersEmailNotifyRoles = t('notificationRolesRequired');
+    }
+    if (prodRoles.some((r) => !isValidRoleName(r))) errs.epcProductionOrdersEmailNotifyRoles = t('invalidRoleList');
+
     return errs;
   }
 
@@ -281,7 +325,15 @@ export default function AdminSettings() {
         defaultLocale: String(settings?.defaultLocale || systemDraft.defaultLocale),
         defaultTimezone: String(settings?.defaultTimezone || systemDraft.defaultTimezone),
         maintenanceMode: Boolean(settings?.maintenanceMode),
-        logoUrl: String(settings?.logoUrl || '')
+        logoUrl: String(settings?.logoUrl || ''),
+        epcGeneratedEmailNotifyEnabled: Boolean(settings?.epcGeneratedEmailNotifyEnabled),
+        epcGeneratedEmailNotifyRoles: Array.isArray(settings?.epcGeneratedEmailNotifyRoles)
+          ? settings.epcGeneratedEmailNotifyRoles.join(', ')
+          : String(settings?.epcGeneratedEmailNotifyRoles || systemDraft.epcGeneratedEmailNotifyRoles || ''),
+        epcProductionOrdersEmailNotifyEnabled: Boolean(settings?.epcProductionOrdersEmailNotifyEnabled),
+        epcProductionOrdersEmailNotifyRoles: Array.isArray(settings?.epcProductionOrdersEmailNotifyRoles)
+          ? settings.epcProductionOrdersEmailNotifyRoles.join(', ')
+          : String(settings?.epcProductionOrdersEmailNotifyRoles || systemDraft.epcProductionOrdersEmailNotifyRoles || '')
       };
       setSystemInitial(next);
       setSystemDraft(next);
@@ -300,6 +352,8 @@ export default function AdminSettings() {
   if (loading) {
     return (
       <div className="p-4 sm:p-6 lg:p-8">
+        <div className="mb-2 text-base font-semibold text-zinc-900">{t('settings')}</div>
+        <div className="text-sm text-zinc-600">{t('settingsHint')}</div>
         <div className="animate-pulse">
           <div className="h-4 w-40 rounded bg-zinc-200" />
           <div className="mt-2 h-3 w-64 rounded bg-zinc-200" />

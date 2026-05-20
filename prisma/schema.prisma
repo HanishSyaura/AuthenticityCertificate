@@ -33,6 +33,8 @@ model Organization {
   epcItems        EpcItem[]
   epcBatchDocuments EpcBatchDocument[]
   epcItemDocuments  EpcItemDocument[]
+  epcScanGroups     EpcScanGroup[]
+  epcScanGroupItems EpcScanGroupItem[]
   productSupportingCertificates ProductSupportingCertificate[]
   certificates    Certificate[]
   scanLogs        ScanLog[]
@@ -91,6 +93,7 @@ model User {
   email          String        @unique
   password       String
   role           UserRoleEnum  @default(admin)
+  mustResetPassword Boolean    @default(false)
   organizationId Int?
   organization   Organization? @relation(fields: [organizationId], references: [id])
   createdAt      DateTime      @default(now())
@@ -144,6 +147,7 @@ model Product {
   batches               Batch[]
 
   epcBatches EpcBatch[]
+  epcScanGroups EpcScanGroup[]
   supportingCertificates ProductSupportingCertificate[]
 
   versionNo Int       @default(1)
@@ -311,6 +315,7 @@ model EpcItem {
   createdAt      DateTime  @default(now())
 
   documents EpcItemDocument[]
+  scanGroupItems EpcScanGroupItem[]
 
   @@unique([organizationId, epcCode])
   @@index([organizationId, createdAt])
@@ -351,6 +356,47 @@ model EpcItemDocument {
   @@unique([epcItemId, docType])
   @@index([organizationId, uploadedAt])
   @@index([epcItemId])
+}
+
+model EpcScanGroup {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  status String @default("OPEN") // OPEN | ASSIGNED | CANCELLED
+
+  productId Int?
+  product   Product? @relation(fields: [productId], references: [id])
+
+  createdByEmail  String?
+  assignedByEmail String?
+  assignedAt      DateTime?
+
+  createdAt DateTime @default(now())
+
+  items EpcScanGroupItem[]
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, status])
+  @@index([organizationId, productId])
+}
+
+model EpcScanGroupItem {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  scanGroupId Int
+  scanGroup   EpcScanGroup @relation(fields: [scanGroupId], references: [id])
+
+  epcItemId Int
+  epcItem   EpcItem @relation(fields: [epcItemId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([scanGroupId, epcItemId])
+  @@index([organizationId, scanGroupId])
+  @@index([organizationId, epcItemId])
 }
 
 model Certificate {

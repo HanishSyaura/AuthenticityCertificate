@@ -79,6 +79,7 @@ export default function AdminEpcScan() {
   const perms = user?.permissions || [];
   const canScanAccess = role === 'super_admin' || hasPermission(perms, 'epc.write') || hasPermission(perms, 'epc.scan.access') || hasPermission(perms, '*');
   const canOverride = role === 'super_admin' || role === 'admin' || hasPermission(perms, 'epc.override') || hasPermission(perms, '*');
+  const canProduction = role === 'super_admin' || role === 'admin' || hasPermission(perms, 'epc.production.access') || hasPermission(perms, '*');
 
   const api = useMemo(() => createAdminApi({ token }), [token]);
 
@@ -105,23 +106,24 @@ export default function AdminEpcScan() {
   const [pendingOnly, setPendingOnly] = useState(false);
   const [batchLoading, setBatchLoading] = useState(false);
 
+  const [groups, setGroups] = useState([]);
+  const [groupTotal, setGroupTotal] = useState(0);
+  const [groupOffset, setGroupOffset] = useState(0);
+  const groupLimit = 50;
+  const [groupStatus, setGroupStatus] = useState('OPEN');
+  const [groupLoading, setGroupLoading] = useState(false);
+  const [selectedGroupId, setSelectedGroupId] = useState(null);
+  const [groupDetail, setGroupDetail] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [assignProductId, setAssignProductId] = useState('');
+  const [assignLoading, setAssignLoading] = useState(false);
+
   const selectedRow = rows.find((r) => String(r.id) === String(selectedId)) || null;
 
-  const formatBatchLabel = useCallback(
-    (item) => {
-      const name = item?.batch?.batchName ? String(item.batch.batchName) : '';
-      const corp = item?.batch?.corpPrefix ? String(item.batch.corpPrefix) : '';
-      const id = item?.batchId ? String(item.batchId) : '';
-      if (name && corp) return `${name} (${corp})`;
-      if (name) return name;
-      if (corp && id) return `${corp} #${id}`;
-      if (id) return `#${id}`;
-      return '-';
-    },
-    []
-  );
-
-  const isItemInSelectedBatch = useCallback(() => true, []);
+  const productOptions = useMemo(() => {
+    return (Array.isArray(products) ? products : []).slice().sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')));
+  }, [products]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -229,6 +231,28 @@ export default function AdminEpcScan() {
     [api]
   );
 
+  const fetchGroups = useCallback(
+    async ({ status, limit, offset }) => {
+      const res = await api.get('/epc/scan-groups', {
+        params: {
+          status: status || undefined,
+          limit,
+          offset
+        }
+      });
+      return res?.data?.data || null;
+    },
+    [api]
+  );
+
+  const fetchGroupDetail = useCallback(
+    async (id) => {
+      const res = await api.get(`/epc/scan-groups/${Number(id)}`);
+      return res?.data?.data || null;
+    },
+    [api]
+  );
+
   const patchItem = async (itemId, patch) => {
     const body = { ...(patch || {}) };
     const res = await api.patch(`/epc/items/${Number(itemId)}/production`, body);
@@ -294,6 +318,79 @@ export default function AdminEpcScan() {
     };
   }, [selectedBatchId, batchQuery, pendingOnly, batchOffset, fetchBatchItems]);
 
+  useEffect(() => {
+    let mounted = true;
+    const run = async () => {
+      if (viewTab !== 'groups') return;
+      try {
+        setGroupLoading(true);
+        const data = await fetchGroups({ status: groupStatus, limit: groupLimit, offset: groupOffset });
+        if (!mounted) return;
+        setGroups(Array.isArray(data?.items) ? data.items : []);
+        setGroupTotal(Number(data?.total) || 0);
+      } catch {
+        if (!mounted) return;
+        setGroups([]);
+        setGroupTotal(0);
+      } finally {
+        if (mounted) setGroupLoading(false);
+      }
+    };
+    void run();
+    return () => {
+      mounted = false;
+    };
+  }, [viewTab, groupStatus, groupOffset, fetchGroups]);
+
+  useEffect(() => {
+    let mounted = true;
+    const run = async () => {
+      if (viewTab !== 'groups') return;
+      if (!selectedGroupId) {
+        setGroupDetail(null);
+        return;
+      }
+      try {
+        const data = await fetchGroupDetail(selectedGroupId);
+        if (!mounted) return;
+        setGroupDetail(data || null);
+      } catch {
+        if (!mounted) return;
+        setGroupDetail(null);
+      }
+    };
+    void run();
+    return () => {
+      mounted = false;
+    };
+  }, [viewTab, selectedGroupId, fetchGroupDetail]);
+
+  useEffect(() => {
+    let mounted = true;
+    const run = async () => {
+      if (!canProduction) return;
+      if (viewTab !== 'groups') return;
+      if (productsLoading) return;
+      if (products.length > 0) return;
+      try {
+        setProductsLoading(true);
+        const res = await api.get('/products/');
+        const list = Array.isArray(res?.data?.data) ? res.data.data : [];
+        if (!mounted) return;
+        setProducts(list);
+      } catch {
+        if (!mounted) return;
+        setProducts([]);
+      } finally {
+        if (mounted) setProductsLoading(false);
+      }
+    };
+    void run();
+    return () => {
+      mounted = false;
+    };
+  }, [api, canProduction, viewTab, products.length, productsLoading]);
+
   const handleScan = async (rawOverride) => {
     clearScanIdleTimer();
     const raw = String(rawOverride ?? scanValue ?? '').trim();
@@ -309,10 +406,6 @@ export default function AdminEpcScan() {
     try {
       if (step === 'epc') {
         const epcCode = raw;
-        if (!selectedBatchId) {
-          setTopError(t('scanSelectBatchFirst'));
-          return;
-        }
         if (scannedRef.current.has(epcCode)) {
           const ok = window.confirm(t('scanDuplicateConfirm', { epc: epcCode }));
           if (!ok) return;
@@ -323,10 +416,6 @@ export default function AdminEpcScan() {
 
         const item = await lookupEpc(epcCode);
         if (!item) throw new Error(t('scanEpcNotFound'));
-        if (!isItemInSelectedBatch(item)) {
-          setTopError(t('scanBatchMismatch', { epc: epcCode, otherBatch: formatBatchLabel(item) }));
-          return;
-        }
         scannedRef.current.add(epcCode);
         upsertRow(item, { rowError: '' });
         selectRow(item);
@@ -383,15 +472,6 @@ export default function AdminEpcScan() {
         }
 
         if (maybeNextItem?.epcCode) {
-          if (!isItemInSelectedBatch(maybeNextItem)) {
-            setTopError(
-              t('scanBatchMismatch', {
-                epc: String(maybeNextItem.epcCode || '').trim() || raw,
-                otherBatch: formatBatchLabel(maybeNextItem)
-              })
-            );
-            return;
-          }
           const epcCode = String(maybeNextItem.epcCode || '').trim();
           skipCaiq();
 
@@ -574,6 +654,15 @@ export default function AdminEpcScan() {
               >
                 {t('scanTabScanned')}
               </button>
+              <button
+                type="button"
+                className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+                  viewTab === 'groups' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
+                }`}
+                onClick={() => setViewTab('groups')}
+              >
+                {t('scanTabGroups')}
+              </button>
             </div>
             <div className="text-xs font-semibold text-zinc-600">
               {t('scanCurrentStep')}: <span className="text-zinc-900">{stepLabel}</span>
@@ -616,6 +705,45 @@ export default function AdminEpcScan() {
                 }}
               >
                 {t('scanResetScanned')}
+              </button>
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                disabled={!rows.length}
+                onClick={async () => {
+                  const ok = window.confirm(t('scanConsolidateConfirm'));
+                  if (!ok) return;
+                  const ids = (Array.isArray(rows) ? rows : [])
+                    .map((r) => Number(r?.id))
+                    .filter((n) => Number.isFinite(n) && n > 0);
+                  if (!ids.length) return;
+                  setTopError('');
+                  setTopHint(t('saving'));
+                  try {
+                    const res = await api.post('/epc/scan-groups', { itemIds: ids });
+                    const data = res?.data?.data || null;
+                    scannedRef.current = new Set();
+                    setRows([]);
+                    setCurrent(null);
+                    setSelectedId(null);
+                    setEditNetWeight('');
+                    setEditCaiq('');
+                    setStep('epc');
+                    setTopError('');
+                    setTopHint(t('scanGroupCreated', { id: data?.group?.id || '' }));
+                    setViewTab('groups');
+                    setGroupStatus('OPEN');
+                    setGroupOffset(0);
+                    setSelectedGroupId(data?.group?.id || null);
+                    inputRef.current?.focus();
+                  } catch (e) {
+                    const msg = e?.response?.data?.message || e?.message || t('saveFailed');
+                    setTopError(msg);
+                    setTopHint('');
+                  }
+                }}
+              >
+                {t('scanConsolidate')}
               </button>
               <button
                 type="button"
@@ -795,6 +923,190 @@ export default function AdminEpcScan() {
                   {t('next')}
                 </button>
               </div>
+            </div>
+          ) : viewTab === 'groups' ? (
+            <div>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+                      groupStatus === 'OPEN' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
+                    }`}
+                    onClick={() => {
+                      setGroupStatus('OPEN');
+                      setGroupOffset(0);
+                      setSelectedGroupId(null);
+                    }}
+                  >
+                    {t('scanGroupOpen')}
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+                      groupStatus === 'ASSIGNED' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
+                    }`}
+                    onClick={() => {
+                      setGroupStatus('ASSIGNED');
+                      setGroupOffset(0);
+                      setSelectedGroupId(null);
+                    }}
+                  >
+                    {t('scanGroupAssigned')}
+                  </button>
+                </div>
+                <div className="text-[11px] text-zinc-500">
+                  {t('total', { value: Number(groupTotal) || 0 })}{' '}
+                  <span className="text-zinc-400">
+                    • Page {Math.floor(groupOffset / groupLimit) + 1} / {Math.max(1, Math.ceil((Number(groupTotal) || 0) / groupLimit))}
+                  </span>
+                </div>
+              </div>
+
+              <DataTable
+                minWidth={980}
+                rows={groups}
+                rowKey={(it) => it.id}
+                loading={groupLoading}
+                loadingContent={t('loading')}
+                emptyContent={t('scanNoGroups')}
+                columns={[
+                  {
+                    id: 'open',
+                    header: '',
+                    cell: (it) => (
+                      <button type="button" className="ac-btn ac-btn-soft px-2 py-1 text-[11px]" onClick={() => setSelectedGroupId(it.id)}>
+                        {t('open')}
+                      </button>
+                    )
+                  },
+                  { id: 'id', header: 'ID', cell: (it) => <span className="font-mono text-xs">#{it.id}</span> },
+                  {
+                    id: 'createdAt',
+                    header: t('created'),
+                    cell: (it) => <span className="text-sm">{it.createdAt ? new Date(it.createdAt).toLocaleString() : '-'}</span>
+                  },
+                  { id: 'status', header: t('status'), cell: (it) => <span className="text-sm">{String(it.status || '-')}</span> },
+                  { id: 'items', header: t('qtyEpc'), cell: (it) => <span className="text-sm">{Number(it.totalItems) || 0}</span> },
+                  {
+                    id: 'product',
+                    header: t('product'),
+                    cell: (it) => <span className="text-sm">{it.product?.name ? `${it.product.name} (${it.product.sku})` : '-'}</span>
+                  },
+                  { id: 'actor', header: t('user'), cell: (it) => <span className="text-sm">{it.createdByEmail || '-'}</span> }
+                ]}
+              />
+
+              <div className="mt-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                  disabled={groupOffset <= 0 || groupLoading}
+                  onClick={() => setGroupOffset((v) => Math.max(0, v - groupLimit))}
+                >
+                  {t('prev')}
+                </button>
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                  disabled={groupLoading || groupOffset + groupLimit >= (Number(groupTotal) || 0)}
+                  onClick={() => setGroupOffset((v) => v + groupLimit)}
+                >
+                  {t('next')}
+                </button>
+              </div>
+
+              {groupDetail?.group?.id ? (
+                <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-4">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-semibold text-zinc-900">
+                        {t('scanGroup')}: <span className="font-mono">#{groupDetail.group.id}</span>
+                      </div>
+                      <div className="mt-1 text-xs text-zinc-600">
+                        {t('created')}: {groupDetail.group.createdAt ? new Date(groupDetail.group.createdAt).toLocaleString() : '-'} • {t('user')}:{' '}
+                        {groupDetail.group.createdByEmail || '-'}
+                      </div>
+                    </div>
+                    <div className="text-xs font-semibold text-zinc-600">
+                      {t('status')}: <span className="text-zinc-900">{String(groupDetail.group.status || '-')}</span>
+                    </div>
+                  </div>
+
+                  {canProduction && String(groupDetail.group.status || '').toUpperCase() === 'OPEN' ? (
+                    <div className="mb-4 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_auto]">
+                      <select
+                        value={assignProductId}
+                        onChange={(e) => setAssignProductId(e.target.value)}
+                        className="ac-input"
+                        disabled={assignLoading || productsLoading}
+                      >
+                        <option value="">{t('selectProduct')}</option>
+                        {productOptions.map((p) => (
+                          <option key={p.id} value={String(p.id)}>
+                            {p.name} ({p.sku})
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="ac-btn ac-btn-primary px-3 py-2 text-xs"
+                        disabled={assignLoading || !assignProductId}
+                        onClick={async () => {
+                          if (!assignProductId) return;
+                          setTopError('');
+                          setTopHint(t('saving'));
+                          try {
+                            setAssignLoading(true);
+                            const res = await api.post(`/epc/scan-groups/${Number(groupDetail.group.id)}/assign-product`, {
+                              productId: Number(assignProductId)
+                            });
+                            const data = res?.data?.data || null;
+                            setGroupDetail(data || null);
+                            setTopError('');
+                            setTopHint(t('scanAssignDone'));
+                            if (selectedGroupId) {
+                              const refreshed = await fetchGroups({ status: groupStatus, limit: groupLimit, offset: groupOffset });
+                              setGroups(Array.isArray(refreshed?.items) ? refreshed.items : []);
+                              setGroupTotal(Number(refreshed?.total) || 0);
+                            }
+                          } catch (e) {
+                            const msg = e?.response?.data?.message || e?.message || t('saveFailed');
+                            setTopError(msg);
+                            setTopHint('');
+                          } finally {
+                            setAssignLoading(false);
+                          }
+                        }}
+                      >
+                        {assignLoading ? t('saving') : t('scanAssignProduct')}
+                      </button>
+                    </div>
+                  ) : null}
+
+                  <DataTable
+                    minWidth={980}
+                    rows={Array.isArray(groupDetail.batches) ? groupDetail.batches : []}
+                    rowKey={(it) => it.batchId}
+                    emptyContent={t('scanNoGroupBatches')}
+                    columns={[
+                      { id: 'batchName', header: t('batchName'), cell: (it) => <span className="text-sm">{it.batchName || `#${it.batchId}`}</span> },
+                      { id: 'corp', header: t('corpCode'), cell: (it) => <span className="text-sm">{it.corpPrefix || '-'}</span> },
+                      { id: 'total', header: t('qtyEpc'), cell: (it) => <span className="text-sm">{Number(it.total) || 0}</span> },
+                      {
+                        id: 'missing',
+                        header: t('scanMissingNetWeight'),
+                        cell: (it) => <span className="text-sm">{Number(it.missingNetWeight) || 0}</span>
+                      },
+                      {
+                        id: 'currentProduct',
+                        header: t('product'),
+                        cell: (it) => <span className="text-sm">{it.product?.name ? `${it.product.name} (${it.product.sku})` : '-'}</span>
+                      }
+                    ]}
+                  />
+                </div>
+              ) : null}
             </div>
           ) : (
             <DataTable

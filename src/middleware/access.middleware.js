@@ -151,6 +151,7 @@ async function attachAccessContext(req, res, next) {
       name: row.name,
       role,
       kind,
+      mustResetPassword: kind === 'user' ? Boolean(row.mustResetPassword) : false,
       organizationId,
       roles: roleNames,
       permissions

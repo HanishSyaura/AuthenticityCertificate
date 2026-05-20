@@ -67,7 +67,8 @@ async function login(email, password) {
       id: user.id,
       email: user.email,
       name: user.name,
-      role
+      role,
+      mustResetPassword: Boolean(user?.mustResetPassword)
     }
   };
 }
@@ -106,7 +107,8 @@ async function getMe(tokenUser) {
     id: resolved.row.id,
     email: resolved.row.email,
     name: resolved.row.name,
-    role
+    role,
+    mustResetPassword: resolved.kind === 'user' ? Boolean(resolved.row.mustResetPassword) : false
   };
 }
 
@@ -128,6 +130,7 @@ async function updateMe(tokenUser, input) {
     const ok = await bcrypt.compare(String(input.currentPassword || ''), resolved.row.password);
     if (!ok) throw new Error('Invalid current password');
     update.password = await bcrypt.hash(String(input.newPassword), 10);
+    if (resolved.kind === 'user') update.mustResetPassword = false;
   }
 
   if (Object.keys(update).length === 0) {
@@ -146,7 +149,8 @@ async function updateMe(tokenUser, input) {
           id: saved.id,
           email: saved.email,
           name: saved.name,
-          role: saved.role
+          role: saved.role,
+          mustResetPassword: Boolean(saved.mustResetPassword)
         }
       };
     }
@@ -160,7 +164,8 @@ async function updateMe(tokenUser, input) {
         id: saved.id,
         email: saved.email,
         name: saved.name,
-        role: 'admin'
+        role: 'admin',
+        mustResetPassword: false
       }
     };
   } catch (e) {

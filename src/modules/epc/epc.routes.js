@@ -117,6 +117,29 @@ router.post(
   epcController.resetItemsProduction
 );
 
+router.post(
+  '/scan-groups',
+  requirePermission(['epc.write', 'epc.scan.access']),
+  auditAction('CREATE_EPC_SCAN_GROUP', { targetType: 'epc_scan_group' }),
+  epcController.createScanGroup
+);
+router.get(
+  '/scan-groups',
+  requirePermission(['epc.write', 'epc.scan.access', 'epc.production.access']),
+  epcController.listScanGroups
+);
+router.get(
+  '/scan-groups/:id',
+  requirePermission(['epc.write', 'epc.scan.access', 'epc.production.access']),
+  epcController.getScanGroup
+);
+router.post(
+  '/scan-groups/:id/assign-product',
+  requirePermission(['epc.write', 'epc.production.access']),
+  auditAction('ASSIGN_EPC_SCAN_GROUP_PRODUCT', { targetType: 'epc_scan_group', getTargetId: (req) => String(req.params?.id || '') }),
+  epcController.assignScanGroupProduct
+);
+
 router.patch(
   '/items/:id/production',
   requirePermission(['epc.write', 'epc.scan.access']),

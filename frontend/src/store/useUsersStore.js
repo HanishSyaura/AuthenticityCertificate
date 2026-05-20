@@ -39,7 +39,9 @@ const useUsersStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const res = await api.post('/users/', { name, email, password, role });
+      const body = { name, email, role };
+      if (typeof password === 'string') body.password = password;
+      const res = await api.post('/users/', body);
       const created = res?.data?.data;
       let nextUsers = null;
       if (created && isValidId(created.id)) {
@@ -67,7 +69,7 @@ const useUsersStore = create((set, get) => ({
         throw new Error(msg);
       }
       const api = getApi();
-      const res = await api.patch(`/users/${encodeURIComponent(id)}/role`, { role });
+      const res = await api.patch(`/users/${encodeURIComponent(id)}/role/`, { role });
       const updated = res?.data?.data;
       const users = get().users.map((u) => (String(u.id) === String(id) ? updated : u));
       set({ users, loading: false, lastSyncAt: Date.now() });
@@ -88,7 +90,7 @@ const useUsersStore = create((set, get) => ({
         throw new Error(msg);
       }
       const api = getApi();
-      await api.delete(`/users/${encodeURIComponent(id)}`);
+      await api.delete(`/users/${encodeURIComponent(id)}/`);
       const users = get().users.filter((u) => String(u.id) !== String(id));
       set({ users, loading: false, lastSyncAt: Date.now() });
       return true;
@@ -108,7 +110,7 @@ const useUsersStore = create((set, get) => ({
         throw new Error(msg);
       }
       const api = getApi();
-      const res = await api.post(`/users/${encodeURIComponent(id)}/reset-password`, { password: newPassword });
+      const res = await api.post(`/users/${encodeURIComponent(id)}/reset-password/`, { password: newPassword });
       set({ loading: false, lastSyncAt: Date.now() });
       return res?.data?.data || { ok: true };
     } catch (e) {

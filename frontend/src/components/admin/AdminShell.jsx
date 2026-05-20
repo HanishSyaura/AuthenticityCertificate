@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
 import useAdminSettingsStore from '../../store/useAdminSettingsStore';
 import { useT } from '../../i18n/useT';
@@ -51,6 +51,7 @@ function NavSection({ title, children, collapsed }) {
 
 export default function AdminShell() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useT();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -77,6 +78,13 @@ export default function AdminShell() {
   useEffect(() => {
     setNavigator(navigate);
   }, [navigate, setNavigator]);
+
+  useEffect(() => {
+    if (!token) return;
+    if (!user?.mustResetPassword) return;
+    if (location.pathname === '/admin/force-reset') return;
+    navigate('/admin/force-reset', { replace: true });
+  }, [location.pathname, navigate, token, user?.mustResetPassword]);
 
   useEffect(() => {
     try {

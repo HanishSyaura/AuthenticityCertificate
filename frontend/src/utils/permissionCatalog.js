@@ -23,6 +23,8 @@ export const PERMISSION_GROUPS = [
     id: 'epc',
     titleKey: 'permGroupEpc',
     keys: [
+      'epc.read',
+      'epc.write',
       'epc.batch.create',
       'epc.batch.view',
       'epc.scan.access',

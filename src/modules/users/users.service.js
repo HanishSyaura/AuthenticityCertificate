@@ -21,6 +21,7 @@ function sanitizeUser(u) {
     email: u.email,
     role: u.role,
     roles,
+    mustResetPassword: Boolean(u.mustResetPassword),
     createdAt: u.createdAt,
     updatedAt: u.updatedAt
   };
@@ -45,7 +46,7 @@ function parseUserId(id) {
   return uid;
 }
 
-async function createUser({ name, email, password, role }) {
+async function createUser({ name, email, password, role, mustResetPassword }) {
   const hashed = await bcrypt.hash(password, 10);
   const user = await prisma.$transaction(async (tx) => {
     const created = await withTimeout(
@@ -54,7 +55,8 @@ async function createUser({ name, email, password, role }) {
           name,
           email,
           password: hashed,
-          role
+          role,
+          mustResetPassword: Boolean(mustResetPassword)
         }
       }),
       1500
@@ -116,13 +118,13 @@ async function deleteUser({ id }) {
   return { id: uid, deleted: true };
 }
 
-async function setUserPassword({ id, password }) {
+async function setUserPassword({ id, password, mustResetPassword }) {
   const hashed = await bcrypt.hash(password, 10);
   const uid = parseUserId(id);
   const user = await withTimeout(
     prisma.user.update({
       where: { id: uid },
-      data: { password: hashed }
+      data: { password: hashed, mustResetPassword: typeof mustResetPassword === 'boolean' ? mustResetPassword : undefined }
     }),
     1500
   );
