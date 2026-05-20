@@ -49,7 +49,7 @@ async function generateCertificates(batchId, type, quantity = 1, organizationId)
   try {
     const exists = await withTimeout(
       prisma.batch.findFirst({ where: { id: batchPk, organizationId: orgId }, select: { id: true } }),
-      1200
+      5000
     );
     if (!exists) throw new Error('Batch not found');
   } catch (e) {
@@ -75,7 +75,7 @@ async function generateCertificates(batchId, type, quantity = 1, organizationId)
             status: 'PENDING'
           }
         }),
-        1200
+        5000
       );
       certificates.push(cert);
     } catch {
@@ -103,7 +103,7 @@ async function generateCertificates(batchId, type, quantity = 1, organizationId)
               status: 'PENDING'
             }
           }),
-          1200
+          5000
         );
         certificates.push(cert);
       } catch {
@@ -121,7 +121,7 @@ async function revokeCertificate(certificateId, organizationId) {
   const orgId = Number(organizationId);
   let cert = null;
   try {
-    cert = await withTimeout(prisma.certificate.findUnique({ where: { certificateId } }), 1200);
+    cert = await withTimeout(prisma.certificate.findUnique({ where: { certificateId } }), 5000);
   } catch {
   }
   if (cert && cert.organizationId !== orgId) throw new Error('Certificate belongs to a different organization');
@@ -132,7 +132,7 @@ async function revokeCertificate(certificateId, organizationId) {
         where: { certificateId },
         data: { status: 'REVOKED', revokedAt: new Date() }
       }),
-      1200
+      5000
     );
   } catch {
     const idx = memCerts.findIndex((c) => c.certificateId === certificateId && c.organizationId === orgId);
@@ -160,7 +160,7 @@ async function activateCertificate({ organizationId, certificateId, expiresAt, n
 
   let cert = null;
   try {
-    cert = await withTimeout(prisma.certificate.findUnique({ where: { certificateId: certId } }), 1200);
+    cert = await withTimeout(prisma.certificate.findUnique({ where: { certificateId: certId } }), 5000);
   } catch {
   }
   if (!cert) {
@@ -181,7 +181,7 @@ async function activateCertificate({ organizationId, certificateId, expiresAt, n
           expiresAt: exp
         }
       }),
-      1200
+      5000
     );
     return { certificate: updated, effectiveStatus: computeEffectiveStatus(updated) };
   } catch {
@@ -197,7 +197,7 @@ async function reissueCertificate({ organizationId, certificateId, reason }) {
   const fromId = String(certificateId);
   let from = null;
   try {
-    from = await withTimeout(prisma.certificate.findUnique({ where: { certificateId: fromId } }), 1200);
+    from = await withTimeout(prisma.certificate.findUnique({ where: { certificateId: fromId } }), 5000);
   } catch {
     from = memCerts.find((c) => c.certificateId === fromId && c.organizationId === orgId) || null;
   }
@@ -235,7 +235,7 @@ async function reissueCertificate({ organizationId, certificateId, reason }) {
           reissuedFromId: fromId
         }
       }),
-      1200
+      5000
     );
     await withTimeout(
       prisma.certificate.update({
@@ -246,7 +246,7 @@ async function reissueCertificate({ organizationId, certificateId, reason }) {
           reissuedToId: toId
         }
       }),
-      1200
+      5000
     );
   } catch {
     memCerts.unshift({
@@ -302,7 +302,7 @@ async function getCertificateDetails(certificateId) {
   });
 }
 
-async function getCertificateDetailsCached(certificateId, { ttlMs = 5000 } = {}) {
+async function getCertificateDetailsCached(certificateId, { ttlMs = 30000 } = {}) {
   const cached = getCache(certificateId);
   if (cached) return cached;
   const cert = await getCertificateDetails(certificateId);
@@ -318,10 +318,10 @@ async function getCertificateDetailsForAdmin({ organizationId, certificateId }) 
       where: { certificateId: certId, organizationId: orgId },
       include: {
         batch: { include: { product: true } },
-        identities: { where: { unassignedAt: null }, orderBy: { assignedAt: 'desc' } }
+        identities: { where: { unassignedAt: null }, orderBy: { assignedAt: 'desc' }, take: 5 }
       }
     }),
-    1500
+    5000
   );
   if (!cert) throw new Error('Certificate not found');
   return cert;
@@ -384,7 +384,7 @@ async function listCertificates({ organizationId, q, status, type, batchNo, prod
         }
       })
     ]),
-    2000
+    5000
   );
 
   return { total, items, limit: l, offset: o };

@@ -99,7 +99,7 @@ async function rawListProducts({ organizationId, status }) {
   const whereSql = where.length ? ` WHERE ${where.join(' AND ')}` : '';
   const sql = `SELECT ${selected.map((c) => `\`${c}\``).join(', ')} FROM \`${tableName}\`${whereSql}${orderBy}`;
 
-  const rows = await withTimeout(prisma.$queryRawUnsafe(sql, ...args), 1200);
+  const rows = await withTimeout(prisma.$queryRawUnsafe(sql, ...args), 10000);
   return Array.isArray(rows) ? rows.map(normalizeRawProduct) : [];
 }
 
@@ -140,7 +140,7 @@ async function createProduct(data) {
         certificateTemplateId: null
       }
     }),
-    1200
+    10000
   );
 }
 
@@ -155,7 +155,7 @@ async function getAllProducts({ organizationId, status }) {
         },
         orderBy: { createdAt: 'desc' }
       }),
-      1200
+      10000
     );
     return rows.map(withSkuFallback);
   } catch (e) {
@@ -205,17 +205,17 @@ async function updateProduct({ organizationId, productId, patch }) {
       where: { id: Number(productId), organizationId: Number(organizationId) },
       data
     }),
-    1500
+    5000
   );
   if (!res.count) throw new Error('Product not found');
   try {
-    const row = await withTimeout(prisma.product.findUnique({ where: { id: Number(productId) }, include: { batches: true } }), 1200);
+    const row = await withTimeout(prisma.product.findUnique({ where: { id: Number(productId) }, include: { batches: true } }), 5000);
     return row ? withSkuFallback(row) : row;
   } catch (e) {
     if (e?.code === 'P2022' && String(e?.message || '').toLowerCase().includes('sku')) {
       const product = await withTimeout(
         prisma.product.findUnique({ where: { id: Number(productId) }, select: productSelectWithoutSku }),
-        1200
+        5000
       );
       if (!product) return product;
       const batches = await withTimeout(
@@ -223,7 +223,7 @@ async function updateProduct({ organizationId, productId, patch }) {
           where: { productId: Number(productId), organizationId: Number(organizationId) },
           include: { certificates: true }
         }),
-        1200
+        5000
       );
       return { ...withSkuFallback(product), batches };
     }
@@ -237,17 +237,17 @@ async function deactivateProduct({ organizationId, productId }) {
       where: { id: Number(productId), organizationId: Number(organizationId) },
       data: { status: 'inactive' }
     }),
-    1500
+    5000
   );
   if (!res.count) throw new Error('Product not found');
   try {
-    const row = await withTimeout(prisma.product.findUnique({ where: { id: Number(productId) }, include: { batches: true } }), 1200);
+    const row = await withTimeout(prisma.product.findUnique({ where: { id: Number(productId) }, include: { batches: true } }), 5000);
     return row ? withSkuFallback(row) : row;
   } catch (e) {
     if (e?.code === 'P2022' && String(e?.message || '').toLowerCase().includes('sku')) {
       const product = await withTimeout(
         prisma.product.findUnique({ where: { id: Number(productId) }, select: productSelectWithoutSku }),
-        1200
+        5000
       );
       if (!product) return product;
       const batches = await withTimeout(
@@ -255,7 +255,7 @@ async function deactivateProduct({ organizationId, productId }) {
           where: { productId: Number(productId), organizationId: Number(organizationId) },
           include: { certificates: true }
         }),
-        1200
+        5000
       );
       return { ...withSkuFallback(product), batches };
     }
@@ -269,17 +269,17 @@ async function activateProduct({ organizationId, productId }) {
       where: { id: Number(productId), organizationId: Number(organizationId) },
       data: { status: 'active' }
     }),
-    1500
+    5000
   );
   if (!res.count) throw new Error('Product not found');
   try {
-    const row = await withTimeout(prisma.product.findUnique({ where: { id: Number(productId) }, include: { batches: true } }), 1200);
+    const row = await withTimeout(prisma.product.findUnique({ where: { id: Number(productId) }, include: { batches: true } }), 5000);
     return row ? withSkuFallback(row) : row;
   } catch (e) {
     if (e?.code === 'P2022' && String(e?.message || '').toLowerCase().includes('sku')) {
       const product = await withTimeout(
         prisma.product.findUnique({ where: { id: Number(productId) }, select: productSelectWithoutSku }),
-        1200
+        5000
       );
       if (!product) return product;
       const batches = await withTimeout(
@@ -287,7 +287,7 @@ async function activateProduct({ organizationId, productId }) {
           where: { productId: Number(productId), organizationId: Number(organizationId) },
           include: { certificates: true }
         }),
-        1200
+        5000
       );
       return { ...withSkuFallback(product), batches };
     }
@@ -301,7 +301,7 @@ async function deleteProduct({ organizationId, productId }) {
       where: { id: Number(productId), organizationId: Number(organizationId) },
       select: { id: true, status: true }
     }),
-    1200
+    5000
   );
   if (!existing) throw new Error('Product not found');
   if (String(existing.status || '').toLowerCase() !== 'inactive') throw new Error('Product must be inactive before delete');
@@ -442,7 +442,7 @@ async function createBatch(data) {
         productId: parseInt(data.productId)
       }
     }),
-    1200
+    10000
   );
 }
 
@@ -452,7 +452,7 @@ async function getBatchesByProduct({ organizationId, productId }) {
       where: { organizationId: Number(organizationId), productId: parseInt(productId) },
       include: { certificates: true }
     }),
-    1200
+    10000
   );
 }
 
@@ -468,7 +468,7 @@ async function getProductSupportingCertificates({ organizationId, productId }) {
         certificateTemplate: { select: { id: true, name: true, certificateId: true } }
       }
     }),
-    1200
+    10000
   );
 }
 
@@ -477,7 +477,7 @@ async function createProductSupportingCertificate({ organizationId, productId, i
   if (!Number.isFinite(pid) || pid <= 0) throw new Error('Product not found');
   const orgId = Number(organizationId);
 
-  const product = await withTimeout(prisma.product.findFirst({ where: { id: pid, organizationId: orgId }, select: { id: true } }), 1200);
+  const product = await withTimeout(prisma.product.findFirst({ where: { id: pid, organizationId: orgId }, select: { id: true } }), 10000);
   if (!product) throw new Error('Product not found');
 
   const maxRow = await withTimeout(
@@ -486,7 +486,7 @@ async function createProductSupportingCertificate({ organizationId, productId, i
       orderBy: [{ sortOrder: 'desc' }, { id: 'desc' }],
       select: { sortOrder: true }
     }),
-    1200
+    10000
   );
   const nextSort = Number.isFinite(Number(maxRow?.sortOrder)) ? Number(maxRow.sortOrder) + 10 : 10;
 
@@ -505,7 +505,7 @@ async function createProductSupportingCertificate({ organizationId, productId, i
         certificateTemplate: { select: { id: true, name: true, certificateId: true } }
       }
     }),
-    1500
+    10000
   );
   return created;
 }

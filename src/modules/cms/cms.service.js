@@ -1,5 +1,5 @@
 const prisma = require('../../config/prisma');
-const DEFAULT_TIMEOUT_MS = Number(process.env.CMS_DB_TIMEOUT_MS || 2000);
+const DEFAULT_TIMEOUT_MS = Number(process.env.CMS_DB_TIMEOUT_MS || 10000);
 
 async function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), ms))]);

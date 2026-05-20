@@ -18,13 +18,13 @@ function getGateConfig() {
   const windowMs = Number(windowRaw);
   const cooldownMs = Number(cooldownRaw);
   return {
-    threshold: Number.isFinite(threshold) && threshold > 0 ? Math.floor(threshold) : 3,
+    threshold: Number.isFinite(threshold) && threshold > 0 ? Math.floor(threshold) : 10,
     windowMs: Number.isFinite(windowMs) && windowMs > 0 ? Math.floor(windowMs) : 30_000,
-    cooldownMs: Number.isFinite(cooldownMs) && cooldownMs > 0 ? Math.floor(cooldownMs) : 10_000
+    cooldownMs: Number.isFinite(cooldownMs) && cooldownMs > 0 ? Math.floor(cooldownMs) : 15_000
   };
 }
 
-function markDbFailure({ cooldownMs, error } = {}) {
+function markDbFailure({ cooldownMs, error, context } = {}) {
   const cfg = getGateConfig();
   const windowMs = cfg.windowMs;
   const threshold = cfg.threshold;
@@ -37,14 +37,16 @@ function markDbFailure({ cooldownMs, error } = {}) {
   }
   failureCount += 1;
 
-  console.error(`[dbGate] DB failure detected (${failureCount}/${threshold}). Error: ${error?.message || error || 'Unknown error'}`);
+  const errorMsg = error?.message || error || 'Unknown error';
+  const ctxMsg = context ? ` [${context}]` : '';
+  console.error(`[dbGate] DB failure detected (${failureCount}/${threshold})${ctxMsg}. Error: ${errorMsg}`);
 
   if (failureCount < threshold) return;
 
   const next = t + Math.max(1000, cooldownEffective);
   if (next > disabledUntil) {
     disabledUntil = next;
-    console.error(`[dbGate] Circuit breaker TRIPPED. DB disabled until ${new Date(disabledUntil).toISOString()}`);
+    console.error(`[dbGate] Circuit breaker TRIPPED${ctxMsg}. DB disabled until ${new Date(disabledUntil).toISOString()}. Reason: ${errorMsg}`);
   }
 }
 

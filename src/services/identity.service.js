@@ -10,7 +10,7 @@ async function withTimeout(promise, ms) {
 function getDbTimeoutMs() {
   const raw = process.env.IDENTITY_DB_TIMEOUT_MS || process.env.DB_QUERY_TIMEOUT_MS;
   const ms = Number(raw);
-  return Number.isFinite(ms) && ms > 0 ? ms : 1200;
+  return Number.isFinite(ms) && ms > 0 ? ms : 10000;
 }
 
 function norm(v) {

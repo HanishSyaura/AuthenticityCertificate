@@ -28,7 +28,7 @@ async function login(email, password) {
     if (user) role = user.role;
     dbGate.markDbSuccess();
   } catch (e) {
-    if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e });
+    if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'authService.login:user' });
     throw e?.message === 'db_unavailable' ? e : e?.message === 'db_timeout' ? e : isPrismaError(e) ? e : new Error('db_timeout');
   }
 
@@ -47,7 +47,7 @@ async function login(email, password) {
       }
       dbGate.markDbSuccess();
     } catch (e) {
-      if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e });
+      if (e?.message === 'db_timeout' || isPrismaError(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'authService.login:admin' });
       throw e;
     }
   }
