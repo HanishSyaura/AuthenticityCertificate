@@ -18,7 +18,10 @@ function getPdfDocumentParams(data) {
     data,
     cMapUrl: `${base}pdfjs/cmaps/`,
     cMapPacked: true,
-    standardFontDataUrl: `${base}pdfjs/standard_fonts/`
+    standardFontDataUrl: `${base}pdfjs/standard_fonts/`,
+    disableRange: true,
+    disableStream: true,
+    disableIndexedDb: true
   };
 }
 
@@ -137,6 +140,7 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange }) {
         setNumPages(total);
         onNumPagesChangeRef.current?.(total);
       } catch (e) {
+        console.error('[PdfCanvasViewer] Load error:', e);
         const msg = e?.message ? String(e.message) : t('operationFailed');
         if (!alive) return;
         setError(msg);
@@ -226,6 +230,7 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange }) {
         } catch {
         }
       } catch (e) {
+        console.error('[PdfCanvasViewer] Render error:', e);
         const msg = e?.message ? String(e.message) : t('operationFailed');
         if (!alive) return;
         setError(msg);
@@ -326,6 +331,7 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
         setPdfData(nextData);
       } catch (e) {
         if (e?.name === 'AbortError') return;
+        console.error('[PdfLightbox] Fetch error:', e);
         const msg = e?.message ? String(e.message) : t('operationFailed');
         if (!alive) return;
         setError(msg);
