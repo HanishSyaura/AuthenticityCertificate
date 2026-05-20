@@ -71,6 +71,7 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange, onError }
   const [numPages, setNumPages] = useState(0);
   const [containerW, setContainerW] = useState(0);
   const [containerH, setContainerH] = useState(0);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     onNumPagesChangeRef.current = onNumPagesChange;
@@ -182,11 +183,18 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange, onError }
 
         const container = containerRef.current;
         const rect = container?.getBoundingClientRect?.();
-        const rectW = Number(rect?.width || 0);
-        const rectH = Number(rect?.height || 0);
+        const rectW = Math.floor(rect?.width || 0);
+        const rectH = Math.floor(rect?.height || 0);
+
+        // If container is 0, retry up to 5 times
+        if (rectW <= 0 && retryCount < 5) {
+          setTimeout(() => setRetryCount((c) => c + 1), 200);
+          return;
+        }
+
         const fallbackW = typeof window !== 'undefined' ? Math.max(1, Math.floor(Number(window.innerWidth || 0))) : 0;
-        const fallbackH =
-          typeof window !== 'undefined' ? Math.max(1, Math.floor(Number(window.innerHeight || 0) - 120)) : 0;
+        const fallbackH = typeof window !== 'undefined' ? Math.max(1, Math.floor(Number(window.innerHeight || 0) - 120)) : 0;
+        
         const measuredW = rectW > 0 ? rectW : containerW > 0 ? containerW : fallbackW;
         const measuredH = rectH > 0 ? rectH : containerH > 0 ? containerH : fallbackH;
         if (!measuredW || !measuredH) return;
@@ -252,7 +260,7 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange, onError }
         renderTaskRef.current = null;
       }
     };
-  }, [containerH, containerW, data, numPages, page, t, zoom]);
+  }, [containerH, containerW, data, numPages, page, t, zoom, retryCount]);
 
   if (error) {
     return <div className="flex h-full w-full items-center justify-center p-4 text-sm text-zinc-700">{error}</div>;
@@ -287,6 +295,17 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
   const [page, setPage] = useState(1);
   const [numPages, setNumPages] = useState(0);
   const [canvasFailed, setCanvasFailed] = useState(false);
+
+  useEffect(() => {
+    if (loading || canvasFailed || !pdfData) return undefined;
+    const tid = setTimeout(() => {
+      if (!numPages) {
+        console.warn('[PdfLightbox] Canvas render timeout, falling back to iframe');
+        setCanvasFailed(true);
+      }
+    }, 3500);
+    return () => clearTimeout(tid);
+  }, [loading, canvasFailed, pdfData, numPages]);
 
   const iframeSrc = useMemo(() => blobUrl || '', [blobUrl]);
   const useCanvas = useMemo(() => !canvasFailed, [canvasFailed]);
