@@ -15,11 +15,11 @@ describe('resolveCmsVideoSource', () => {
   });
 
   it('converts YouTube watch URL to embed', () => {
-    expect(resolveCmsVideoSource('https://www.youtube.com/watch?v=AbC_123')).toEqual({ kind: 'iframe', src: 'https://www.youtube.com/embed/AbC_123' });
+    expect(resolveCmsVideoSource('https://www.youtube.com/watch?v=AbC_123')).toEqual({ kind: 'iframe', src: 'https://www.youtube-nocookie.com/embed/AbC_123' });
   });
 
   it('converts youtu.be URL to embed', () => {
-    expect(resolveCmsVideoSource('https://youtu.be/AbC_123')).toEqual({ kind: 'iframe', src: 'https://www.youtube.com/embed/AbC_123' });
+    expect(resolveCmsVideoSource('https://youtu.be/AbC_123')).toEqual({ kind: 'iframe', src: 'https://www.youtube-nocookie.com/embed/AbC_123' });
   });
 
   it('converts Vimeo URL to embed', () => {

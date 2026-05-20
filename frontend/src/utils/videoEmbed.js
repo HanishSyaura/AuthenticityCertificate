@@ -20,7 +20,7 @@ function resolveYoutubeEmbed(urlObj) {
   if (host === 'youtu.be') {
     const id = String(urlObj.pathname || '').split('/').filter(Boolean)[0] || '';
     if (!id) return null;
-    return `https://www.youtube.com/embed/${encodeURIComponent(id)}`;
+    return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}`;
   }
 
   if (host === 'youtube.com' || host === 'www.youtube.com' || host === 'm.youtube.com' || host === 'youtube-nocookie.com' || host === 'www.youtube-nocookie.com') {
@@ -28,17 +28,17 @@ function resolveYoutubeEmbed(urlObj) {
     if (path === '/watch') {
       const v = urlObj.searchParams.get('v');
       if (!v) return null;
-      return `https://www.youtube.com/embed/${encodeURIComponent(v)}`;
+      return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(v)}`;
     }
     if (path.startsWith('/shorts/')) {
       const id = path.split('/').filter(Boolean)[1] || '';
       if (!id) return null;
-      return `https://www.youtube.com/embed/${encodeURIComponent(id)}`;
+      return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}`;
     }
     if (path.startsWith('/embed/')) {
       const id = path.split('/').filter(Boolean)[1] || '';
       if (!id) return null;
-      return `https://www.youtube.com/embed/${encodeURIComponent(id)}`;
+      return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}`;
     }
   }
 

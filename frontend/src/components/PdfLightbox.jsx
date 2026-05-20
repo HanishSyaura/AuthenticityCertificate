@@ -37,6 +37,7 @@ async function ensurePdfWorkerSrc(pdfjs) {
   }
   if (!workerSrcPromise) {
     workerSrcPromise = (async () => {
+      // Use the legacy worker for better compatibility with older mobile browsers
       const workerUrl = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString();
       const res = await fetch(workerUrl);
       if (!res.ok) throw new Error(`Failed to load pdf.worker (${res.status})`);
@@ -83,10 +84,10 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange, onError }
     if (!el) return;
 
     const measure = () => {
-      const w = Number(el.clientWidth || 0);
-      const h = Number(el.clientHeight || 0);
-      setContainerW(Number.isFinite(w) && w > 0 ? w : 0);
-      setContainerH(Number.isFinite(h) && h > 0 ? h : 0);
+      const w = Math.floor(el.clientWidth || 0);
+      const h = Math.floor(el.clientHeight || 0);
+      setContainerW(w);
+      setContainerH(h);
     };
     measure();
 
@@ -186,7 +187,6 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange, onError }
         const rectW = Math.floor(rect?.width || 0);
         const rectH = Math.floor(rect?.height || 0);
 
-        // If container is 0, retry up to 5 times
         if (rectW <= 0 && retryCount < 5) {
           setTimeout(() => setRetryCount((c) => c + 1), 200);
           return;
@@ -201,7 +201,7 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange, onError }
 
         const pdfPage = await doc.getPage(pageSafe);
         const baseViewport = pdfPage.getViewport({ scale: 1 });
-        const pad = 24;
+        const pad = 16;
         const availW = Math.max(1, Math.floor(measuredW - pad * 2));
         const availH = Math.max(1, Math.floor(measuredH - pad * 2));
         const fitScale = Math.max(
@@ -222,8 +222,10 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange, onError }
         const ctx = canvas.getContext('2d', { alpha: false });
         if (!ctx) throw new Error('Canvas not supported');
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        
         if (renderTaskRef.current) {
           try {
             renderTaskRef.current.cancel?.();
@@ -263,21 +265,36 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange, onError }
   }, [containerH, containerW, data, numPages, page, t, zoom, retryCount]);
 
   if (error) {
-    return <div className="flex h-full w-full items-center justify-center p-4 text-sm text-zinc-700">{error}</div>;
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center p-6 text-center">
+        <div className="mb-2 text-sm text-zinc-500">{error}</div>
+        <button 
+          onClick={() => window.location.reload()}
+          className="rounded bg-zinc-800 px-4 py-2 text-xs font-semibold text-white"
+        >
+          Refresh Page
+        </button>
+      </div>
+    );
   }
 
   if (loading && !numPages) {
-    return <div className="flex h-full w-full items-center justify-center p-4 text-sm text-zinc-700">{t('loading')}</div>;
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center p-6">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-800" />
+        <div className="mt-3 text-xs text-zinc-500">{t('loading')}</div>
+      </div>
+    );
   }
 
   if (!numPages) {
-    return <div className="flex h-full w-full items-center justify-center p-4 text-sm text-zinc-700">{t('operationFailed')}</div>;
+    return <div className="flex h-full w-full items-center justify-center p-4 text-sm text-zinc-500">{t('operationFailed')}</div>;
   }
 
   return (
-    <div ref={containerRef} className="h-full w-full overflow-auto bg-white">
-      <div className="flex min-h-full w-full items-center justify-center p-3">
-        <canvas ref={canvasRef} className="block max-w-none rounded-lg border border-zinc-200 bg-white shadow-sm shadow-zinc-900/5" />
+    <div ref={containerRef} className="h-full w-full overflow-auto bg-zinc-200/50">
+      <div className="flex min-h-full w-full items-center justify-center p-4">
+        <canvas ref={canvasRef} className="block max-w-none bg-white shadow-xl shadow-black/10" />
       </div>
     </div>
   );
@@ -287,16 +304,28 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
   const { t } = useT();
   const token = useAdminAuthStore((s) => s.token);
   const resolvedSrc = resolvePublicMediaUrl(src);
+  const [blobUrl, setBlobUrl] = useState('');
+  const [pdfData, setPdfData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [page, setPage] = useState(1);
+  const [numPages, setNumPages] = useState(0);
+  const [canvasFailed, setCanvasFailed] = useState(false);
 
-  // Use the direct URL for the iframe to be as stable as possible
-  const finalSrc = useMemo(() => {
-    if (!resolvedSrc) return '';
-    // If we have a token, we might need it for some restricted PDFs, 
-    // but for public verify page, direct URL is best.
-    return resolvedSrc;
-  }, [resolvedSrc]);
+  useEffect(() => {
+    if (loading || canvasFailed || !pdfData) return undefined;
+    const tid = setTimeout(() => {
+      if (!numPages) {
+        console.warn('[PdfLightbox] Canvas render timeout, falling back to iframe');
+        setCanvasFailed(true);
+      }
+    }, 4000);
+    return () => clearTimeout(tid);
+  }, [loading, canvasFailed, pdfData, numPages]);
+
+  const finalSrc = useMemo(() => blobUrl || resolvedSrc || '', [blobUrl, resolvedSrc]);
+  const useCanvas = useMemo(() => !canvasFailed, [canvasFailed]);
 
   useEffect(() => {
     if (!resolvedSrc) return undefined;
@@ -313,40 +342,163 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
     };
   }, [onClose, resolvedSrc]);
 
+  useEffect(() => {
+    if (!resolvedSrc) return undefined;
+    let alive = true;
+    const ctrl = new AbortController();
+    setError('');
+    setLoading(true);
+    setBlobUrl('');
+    setPdfData(null);
+    setZoom(1);
+    setPage(1);
+    setNumPages(0);
+    setCanvasFailed(false);
+
+    const run = async () => {
+      try {
+        const res = await fetch(resolvedSrc, {
+          signal: ctrl.signal,
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined
+        });
+        if (!res.ok) throw new Error(`Failed to fetch PDF (${res.status})`);
+        const blob = await res.blob();
+        const buf = await blob.arrayBuffer();
+        const nextData = new Uint8Array(buf);
+        const next = URL.createObjectURL(blob);
+        if (!alive) {
+          URL.revokeObjectURL(next);
+          return;
+        }
+        setBlobUrl(next);
+        setPdfData(nextData);
+      } catch (e) {
+        if (e?.name === 'AbortError') return;
+        console.error('[PdfLightbox] Fetch error:', e);
+        const msg = e?.message ? String(e.message) : t('operationFailed');
+        if (!alive) return;
+        setError(msg);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    };
+
+    void run();
+    return () => {
+      alive = false;
+      ctrl.abort();
+    };
+  }, [resolvedSrc, t, token]);
+
+  useEffect(() => {
+    return () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [blobUrl]);
+
   if (!resolvedSrc) return null;
 
   const portalTarget = typeof document !== 'undefined' ? document.body : null;
   if (!portalTarget) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] bg-black/70 sm:p-4" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="flex h-full w-full flex-col sm:mx-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-5xl" onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-black/80 px-3 py-3 text-white backdrop-blur sm:rounded-t-xl sm:bg-transparent sm:px-4 sm:py-2 sm:backdrop-blur-0">
-          <button type="button" aria-label="Close" className="flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-xl text-white hover:bg-black/70" onClick={() => onClose?.()}>
-            ×
-          </button>
-          <div className="min-w-0 flex-1 truncate text-center text-sm font-semibold sm:text-left">{title}</div>
-          <div className="flex items-center gap-4">
+    <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm sm:p-4" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="flex h-full w-full flex-col overflow-hidden sm:mx-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-5xl sm:rounded-xl sm:shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        {/* Professional Toolbar */}
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-zinc-900 px-3 py-2 text-white">
+          <div className="flex items-center gap-2">
+            <button 
+              type="button" 
+              aria-label="Close" 
+              className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-white/10" 
+              onClick={() => onClose?.()}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+            <div className="hidden min-w-0 flex-1 truncate text-sm font-medium sm:block">{title}</div>
+          </div>
+
+          {useCanvas && numPages > 0 && (
+            <div className="flex items-center gap-1 sm:gap-4">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded hover:bg-white/10 disabled:opacity-30"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                >
+                  ‹
+                </button>
+                <span className="text-xs font-medium tabular-nums">
+                  {page} / {numPages}
+                </span>
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded hover:bg-white/10 disabled:opacity-30"
+                  onClick={() => setPage((p) => Math.min(numPages, p + 1))}
+                  disabled={page >= numPages}
+                >
+                  ›
+                </button>
+              </div>
+              <div className="h-4 w-px bg-white/20" />
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded hover:bg-white/10"
+                  onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
+                >
+                  −
+                </button>
+                <span className="min-w-[3rem] text-center text-xs font-medium tabular-nums">
+                  {Math.round(zoom * 100)}%
+                </span>
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded hover:bg-white/10"
+                  onClick={() => setZoom((z) => Math.min(3, z + 0.25))}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
             <a 
               href={finalSrc} 
               download 
-              className="hidden rounded bg-white/20 px-3 py-1 text-xs font-semibold text-white hover:bg-white/30 sm:block"
+              className="hidden rounded bg-white/10 px-3 py-1.5 text-xs font-semibold hover:bg-white/20 sm:block"
             >
               Download
             </a>
-            <a href={finalSrc} target="_blank" rel="noreferrer" className="text-xs font-semibold text-white underline">
-              {t('openInNewTab')}
+            <a href={finalSrc} target="_blank" rel="noreferrer" className="flex h-8 w-8 items-center justify-center rounded hover:bg-white/10" title={t('openInNewTab')}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
+              </svg>
             </a>
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-hidden bg-zinc-100 sm:rounded-b-xl">
-          <iframe 
-            title={title} 
-            src={finalSrc} 
-            className="h-full w-full border-none bg-white"
-            onLoad={() => setLoading(false)}
-          />
+        <div className="min-h-0 flex-1 bg-zinc-200">
+          {useCanvas && pdfData instanceof Uint8Array ? (
+            <PdfCanvasViewer
+              data={pdfData}
+              zoom={zoom}
+              page={page}
+              onNumPagesChange={setNumPages}
+              onError={() => setCanvasFailed(true)}
+            />
+          ) : (
+            <iframe 
+              title={title} 
+              src={finalSrc} 
+              className="h-full w-full border-none bg-white"
+              onLoad={() => setLoading(false)}
+            />
+          )}
         </div>
       </div>
     </div>,
