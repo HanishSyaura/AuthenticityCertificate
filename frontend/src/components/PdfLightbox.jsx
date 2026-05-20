@@ -235,7 +235,14 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange, onError }
         }
         const task = pdfPage.render({ canvasContext: ctx, viewport });
         renderTaskRef.current = task;
-        await task.promise;
+        
+        // Add a timeout for the render task
+        const renderTimeout = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Render timeout')), 5000)
+        );
+
+        await Promise.race([task.promise, renderTimeout]);
+        
         if (!alive) return;
         renderTaskRef.current = null;
         try {
@@ -316,11 +323,12 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
   useEffect(() => {
     if (loading || canvasFailed || !pdfData) return undefined;
     const tid = setTimeout(() => {
-      if (!numPages) {
-        console.warn('[PdfLightbox] Canvas render timeout, falling back to iframe');
+      // If it stays on page 0 or the first page doesn't render, trigger fallback
+      if (!numPages || numPages === 0) {
+        console.warn('[PdfLightbox] Rendering is stuck, falling back to native viewer');
         setCanvasFailed(true);
       }
-    }, 4000);
+    }, 4500);
     return () => clearTimeout(tid);
   }, [loading, canvasFailed, pdfData, numPages]);
 
