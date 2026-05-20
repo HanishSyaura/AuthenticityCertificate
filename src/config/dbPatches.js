@@ -955,6 +955,7 @@ async function ensureAccessControlSchemaCompat() {
     ['epc.delete', 'Delete EPC'],
     ['epc.cleanup.delete', 'Delete EPC (cleanup related data)'],
     ['epc.cleanup.delete_all_generated', 'Delete all generated EPC (cleanup related data)'],
+    ['epc.batch_import.access', 'Batch import access'],
     ['epc.production.access', 'Production orders access'],
     ['epc.override', 'Override production fields'],
     ['certificates.read', 'Read certificates'],

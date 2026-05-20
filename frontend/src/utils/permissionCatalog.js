@@ -35,6 +35,7 @@ export const PERMISSION_GROUPS = [
       'epc.delete',
       'epc.cleanup.delete',
       'epc.cleanup.delete_all_generated',
+      'epc.batch_import.access',
       'epc.production.access',
       'epc.override'
     ]

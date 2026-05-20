@@ -113,6 +113,7 @@ async function deleteUser({ id }) {
     if (!existing) throw new Error('User not found');
     await tx.auditLog.updateMany({ where: { userId: uid }, data: { userId: null } });
     await tx.fraudFlag.updateMany({ where: { resolvedByUserId: uid }, data: { resolvedByUserId: null } });
+    await tx.userRole.deleteMany({ where: { userId: uid } });
     await tx.user.delete({ where: { id: uid } });
   });
   return { id: uid, deleted: true };

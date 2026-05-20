@@ -58,10 +58,11 @@ async function ensurePdfWorkerSrc(pdfjs) {
   return src;
 }
 
-function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange }) {
+function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange, onError }) {
   const { t } = useT();
   const containerRef = useRef(null);
   const onNumPagesChangeRef = useRef(onNumPagesChange);
+  const onErrorRef = useRef(onError);
   const docRef = useRef(null);
   const canvasRef = useRef(null);
   const renderTaskRef = useRef(null);
@@ -73,7 +74,8 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange }) {
 
   useEffect(() => {
     onNumPagesChangeRef.current = onNumPagesChange;
-  }, [onNumPagesChange]);
+    onErrorRef.current = onError;
+  }, [onNumPagesChange, onError]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -144,6 +146,7 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange }) {
         const msg = e?.message ? String(e.message) : t('operationFailed');
         if (!alive) return;
         setError(msg);
+        onErrorRef.current?.(msg);
       } finally {
         if (alive) setLoading(false);
       }
@@ -234,6 +237,7 @@ function PdfCanvasViewer({ data, zoom = 1, page = 1, onNumPagesChange }) {
         const msg = e?.message ? String(e.message) : t('operationFailed');
         if (!alive) return;
         setError(msg);
+        onErrorRef.current?.(msg);
       }
     };
 
@@ -282,9 +286,10 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
   const [zoom, setZoom] = useState(1);
   const [page, setPage] = useState(1);
   const [numPages, setNumPages] = useState(0);
+  const [canvasFailed, setCanvasFailed] = useState(false);
 
   const iframeSrc = useMemo(() => blobUrl || '', [blobUrl]);
-  const useCanvas = useMemo(() => true, []);
+  const useCanvas = useMemo(() => !canvasFailed, [canvasFailed]);
   useEffect(() => {
     if (!resolvedSrc) return undefined;
     const prevOverflow = document?.body?.style?.overflow ?? '';
@@ -311,6 +316,7 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
     setZoom(1);
     setPage(1);
     setNumPages(0);
+    setCanvasFailed(false);
 
     const run = async () => {
       try {
@@ -422,6 +428,7 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
                 setNumPages(Number(n) || 0);
                 setPage((p) => Math.max(1, Math.min(Number(n) || 1, Number(p || 1))));
               }}
+              onError={() => setCanvasFailed(true)}
             />
           ) : iframeSrc ? (
             <iframe title={title} src={iframeSrc} className="h-full w-full bg-white" />

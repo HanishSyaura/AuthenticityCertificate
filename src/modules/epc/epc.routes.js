@@ -13,7 +13,7 @@ router.use(requireOrganization);
 
 router.get(
   '/corp-codes',
-  requirePermission(['epc.read', 'epc.write', 'epc.batch.view', 'epc.batch.create', 'epc.scan.access', 'epc.production.access']),
+  requirePermission(['epc.read', 'epc.write', 'epc.batch.view', 'epc.batch.create', 'epc.scan.access', 'epc.production.access', 'epc.batch_import.access']),
   epcController.getCorpCodes
 );
 
@@ -36,13 +36,13 @@ router.post(
 
 router.get(
   '/batches',
-  requirePermission(['epc.read', 'epc.write', 'epc.batch.view', 'epc.batch.create', 'epc.scan.access', 'epc.production.access']),
+  requirePermission(['epc.read', 'epc.write', 'epc.batch.view', 'epc.batch.create', 'epc.scan.access', 'epc.production.access', 'epc.batch_import.access']),
   epcController.listBatches
 );
 
 router.get(
   '/stats',
-  requirePermission(['epc.read', 'epc.write', 'epc.batch.view', 'epc.batch.create', 'epc.scan.access', 'epc.production.access']),
+  requirePermission(['epc.read', 'epc.write', 'epc.batch.view', 'epc.batch.create', 'epc.scan.access', 'epc.production.access', 'epc.batch_import.access']),
   epcController.getEpcStats
 );
 
@@ -55,7 +55,7 @@ router.patch(
 
 router.put(
   '/batches/:id/documents',
-  requirePermission(['epc.write', 'epc.production.access']),
+  requirePermission(['epc.write', 'epc.production.access', 'epc.batch_import.access']),
   auditAction('UPDATE_EPC_BATCH_DOCUMENTS', { targetType: 'epc_batch', getTargetId: (req) => String(req.params?.id || '') }),
   epcController.updateBatchDocuments
 );
@@ -83,19 +83,19 @@ router.post(
 
 router.get(
   '/items',
-  requirePermission(['epc.read', 'epc.write', 'epc.batch.view', 'epc.batch.create', 'epc.scan.access', 'epc.production.access']),
+  requirePermission(['epc.read', 'epc.write', 'epc.batch.view', 'epc.batch.create', 'epc.scan.access', 'epc.production.access', 'epc.batch_import.access']),
   epcController.listItems
 );
 
 router.get(
   '/items/by-epc',
-  requirePermission(['epc.read', 'epc.write', 'epc.batch.view', 'epc.batch.create', 'epc.scan.access', 'epc.production.access']),
+  requirePermission(['epc.read', 'epc.write', 'epc.batch.view', 'epc.batch.create', 'epc.scan.access', 'epc.production.access', 'epc.batch_import.access']),
   epcController.getItemByEpc
 );
 
 router.post(
   '/items/export-xlsx',
-  requirePermission(['epc.write', 'epc.export.xlsx', 'epc.production.access']),
+  requirePermission(['epc.write', 'epc.export.xlsx', 'epc.production.access', 'epc.batch_import.access']),
   auditAction('EXPORT_EPC_ITEMS_XLSX', { targetType: 'epc_item' }),
   epcController.exportItems
 );
@@ -149,44 +149,44 @@ router.patch(
 
 router.get(
   '/batches/:id/items',
-  requirePermission(['epc.read', 'epc.write', 'epc.batch.view', 'epc.batch.create', 'epc.scan.access', 'epc.production.access']),
+  requirePermission(['epc.read', 'epc.write', 'epc.batch.view', 'epc.batch.create', 'epc.scan.access', 'epc.production.access', 'epc.batch_import.access']),
   epcController.listBatchItems
 );
 
-router.get('/batches/:id/export-xlsx', requirePermission(['epc.write', 'epc.export.xlsx', 'epc.production.access']), epcController.exportBatch);
+router.get('/batches/:id/export-xlsx', requirePermission(['epc.write', 'epc.export.xlsx', 'epc.production.access', 'epc.batch_import.access']), epcController.exportBatch);
 router.get('/batches/:id/export-verify-url-xlsx', requirePermission(['epc.write', 'epc.encoding']), epcController.exportBatchVerifyUrls);
 router.get('/batches/:id/export-production-template-xlsx', requirePermission(['epc.write', 'epc.batch.create']), epcController.exportBatchProductionTemplate);
 
 router.get(
   '/batch-import/template-xlsx',
-  requirePermission(['epc.write', 'epc.production.access']),
+  requirePermission(['epc.write', 'epc.batch_import.access']),
   epcController.exportBatchImportTemplate
 );
 
 router.post(
   '/batch-import/preview-xlsx',
-  requirePermission(['epc.write', 'epc.production.access']),
+  requirePermission(['epc.write', 'epc.batch_import.access']),
   auditAction('PREVIEW_EPC_BATCH_IMPORT_XLSX', { targetType: 'epc_batch' }),
   epcController.previewBatchImportNew
 );
 
 router.post(
   '/batch-import/submit',
-  requirePermission(['epc.write', 'epc.production.access']),
+  requirePermission(['epc.write', 'epc.batch_import.access']),
   auditAction('SUBMIT_EPC_BATCH_IMPORT', { targetType: 'epc_batch', getMetadata: (req, res) => res.locals?.auditMetadata || null }),
   epcController.submitBatchImportNew
 );
 
 router.post(
   '/batches/:id/batch-import/preview-xlsx',
-  requirePermission(['epc.write', 'epc.production.access']),
+  requirePermission(['epc.write', 'epc.batch_import.access']),
   auditAction('PREVIEW_EPC_BATCH_IMPORT_XLSX', { targetType: 'epc_batch', getTargetId: (req) => String(req.params?.id || '') }),
   epcController.previewBatchImport
 );
 
 router.post(
   '/batches/:id/batch-import/submit',
-  requirePermission(['epc.write', 'epc.production.access']),
+  requirePermission(['epc.write', 'epc.batch_import.access']),
   auditAction('SUBMIT_EPC_BATCH_IMPORT', {
     targetType: 'epc_batch',
     getTargetId: (req) => String(req.params?.id || ''),
@@ -197,13 +197,13 @@ router.post(
 
 router.get(
   '/batch-import/history',
-  requirePermission(['epc.write', 'epc.production.access']),
+  requirePermission(['epc.write', 'epc.batch_import.access']),
   epcController.listBatchImportHistory
 );
 
 router.get(
   '/batch-import/history/:id',
-  requirePermission(['epc.write', 'epc.production.access']),
+  requirePermission(['epc.write', 'epc.batch_import.access']),
   epcController.getBatchImportHistory
 );
 

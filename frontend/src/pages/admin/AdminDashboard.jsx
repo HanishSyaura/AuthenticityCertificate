@@ -30,7 +30,7 @@ export default function AdminDashboard() {
   const canReadEpc = useMemo(() => {
     if (role === 'super_admin') return true;
     if (hasPermission(perms, '*')) return true;
-    return ['epc.read', 'epc.write', 'epc.batch.view', 'epc.batch.create', 'epc.scan.access', 'epc.production.access'].some((k) =>
+    return ['epc.read', 'epc.write', 'epc.batch.view', 'epc.batch.create', 'epc.scan.access', 'epc.production.access', 'epc.batch_import.access'].some((k) =>
       hasPermission(perms, k)
     );
   }, [perms, role]);

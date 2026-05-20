@@ -106,6 +106,7 @@ export default function AdminShell() {
     hasPermission(perms, 'epc.batch.create') ||
     hasPermission(perms, 'epc.scan.access') ||
     hasPermission(perms, 'epc.production.access') ||
+    hasPermission(perms, 'epc.batch_import.access') ||
     hasPermission(perms, 'epc.export.xlsx') ||
     hasPermission(perms, 'epc.encoding') ||
     hasPermission(perms, 'epc.sequence.reset') ||

@@ -75,6 +75,7 @@ function App() {
                   'epc.sequence.reset',
                   'epc.delete',
                   'epc.production.access',
+                  'epc.batch_import.access',
                   'epc.override'
                 ]}
               >
