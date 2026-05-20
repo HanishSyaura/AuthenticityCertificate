@@ -287,28 +287,17 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
   const { t } = useT();
   const token = useAdminAuthStore((s) => s.token);
   const resolvedSrc = resolvePublicMediaUrl(src);
-  const [blobUrl, setBlobUrl] = useState('');
-  const [pdfData, setPdfData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [zoom, setZoom] = useState(1);
-  const [page, setPage] = useState(1);
-  const [numPages, setNumPages] = useState(0);
-  const [canvasFailed, setCanvasFailed] = useState(false);
 
-  useEffect(() => {
-    if (loading || canvasFailed || !pdfData) return undefined;
-    const tid = setTimeout(() => {
-      if (!numPages) {
-        console.warn('[PdfLightbox] Canvas render timeout, falling back to iframe');
-        setCanvasFailed(true);
-      }
-    }, 3500);
-    return () => clearTimeout(tid);
-  }, [loading, canvasFailed, pdfData, numPages]);
+  // Use the direct URL for the iframe to be as stable as possible
+  const finalSrc = useMemo(() => {
+    if (!resolvedSrc) return '';
+    // If we have a token, we might need it for some restricted PDFs, 
+    // but for public verify page, direct URL is best.
+    return resolvedSrc;
+  }, [resolvedSrc]);
 
-  const iframeSrc = useMemo(() => blobUrl || '', [blobUrl]);
-  const useCanvas = useMemo(() => !canvasFailed, [canvasFailed]);
   useEffect(() => {
     if (!resolvedSrc) return undefined;
     const prevOverflow = document?.body?.style?.overflow ?? '';
@@ -324,60 +313,6 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
     };
   }, [onClose, resolvedSrc]);
 
-  useEffect(() => {
-    if (!resolvedSrc) return undefined;
-    let alive = true;
-    const ctrl = new AbortController();
-    setError('');
-    setLoading(true);
-    setBlobUrl('');
-    setPdfData(null);
-    setZoom(1);
-    setPage(1);
-    setNumPages(0);
-    setCanvasFailed(false);
-
-    const run = async () => {
-      try {
-        const res = await fetch(resolvedSrc, {
-          signal: ctrl.signal,
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined
-        });
-        if (!res.ok) throw new Error(`Failed to fetch PDF (${res.status})`);
-        const blob = await res.blob();
-        const buf = await blob.arrayBuffer();
-        const nextData = new Uint8Array(buf);
-        const next = URL.createObjectURL(blob);
-        if (!alive) {
-          URL.revokeObjectURL(next);
-          return;
-        }
-        setBlobUrl(next);
-        setPdfData(nextData);
-      } catch (e) {
-        if (e?.name === 'AbortError') return;
-        console.error('[PdfLightbox] Fetch error:', e);
-        const msg = e?.message ? String(e.message) : t('operationFailed');
-        if (!alive) return;
-        setError(msg);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    };
-
-    void run();
-    return () => {
-      alive = false;
-      ctrl.abort();
-    };
-  }, [resolvedSrc, t, token]);
-
-  useEffect(() => {
-    return () => {
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
-    };
-  }, [blobUrl]);
-
   if (!resolvedSrc) return null;
 
   const portalTarget = typeof document !== 'undefined' ? document.body : null;
@@ -386,76 +321,32 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
   return createPortal(
     <div className="fixed inset-0 z-[9999] bg-black/70 sm:p-4" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="flex h-full w-full flex-col sm:mx-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-5xl" onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-black/80 px-3 py-3 text-white backdrop-blur sm:rounded-t-xl sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-0">
-          <button type="button" aria-label="Close" className="rounded bg-black/50 px-3 py-1 text-sm text-white" onClick={() => onClose?.()}>
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 bg-black/80 px-3 py-3 text-white backdrop-blur sm:rounded-t-xl sm:bg-transparent sm:px-4 sm:py-2 sm:backdrop-blur-0">
+          <button type="button" aria-label="Close" className="flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-xl text-white hover:bg-black/70" onClick={() => onClose?.()}>
             ×
           </button>
           <div className="min-w-0 flex-1 truncate text-center text-sm font-semibold sm:text-left">{title}</div>
-          {useCanvas ? (
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="rounded bg-black/50 px-2 py-1 text-xs font-semibold text-white disabled:opacity-50"
-                onClick={() => setPage((p) => Math.max(1, Number(p || 1) - 1))}
-                disabled={page <= 1}
-              >
-                ‹
-              </button>
-              <button
-                type="button"
-                className="rounded bg-black/50 px-2 py-1 text-[11px] font-semibold text-white"
-                onClick={() => setZoom(1)}
-              >
-                {numPages ? `${page}/${numPages}` : `${page}/-`} · {Math.round((Number(zoom) || 1) * 100)}%
-              </button>
-              <button
-                type="button"
-                className="rounded bg-black/50 px-2 py-1 text-xs font-semibold text-white disabled:opacity-50"
-                onClick={() => setPage((p) => Math.min(Math.max(1, Number(numPages) || 1), Number(p || 1) + 1))}
-                disabled={numPages ? page >= numPages : false}
-              >
-                ›
-              </button>
-              <button
-                type="button"
-                className="rounded bg-black/50 px-2 py-1 text-xs font-semibold text-white"
-                onClick={() => setZoom((z) => Math.max(0.5, Number(z || 1) - 0.25))}
-              >
-                −
-              </button>
-              <button
-                type="button"
-                className="rounded bg-black/50 px-2 py-1 text-xs font-semibold text-white"
-                onClick={() => setZoom((z) => Math.min(4, Number(z || 1) + 0.25))}
-              >
-                +
-              </button>
-            </div>
-          ) : null}
-          <a href={iframeSrc || resolvedSrc} target="_blank" rel="noreferrer" className="text-xs font-semibold text-white underline">
-            {t('openInNewTab')}
-          </a>
+          <div className="flex items-center gap-4">
+            <a 
+              href={finalSrc} 
+              download 
+              className="hidden rounded bg-white/20 px-3 py-1 text-xs font-semibold text-white hover:bg-white/30 sm:block"
+            >
+              Download
+            </a>
+            <a href={finalSrc} target="_blank" rel="noreferrer" className="text-xs font-semibold text-white underline">
+              {t('openInNewTab')}
+            </a>
+          </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-hidden bg-white sm:rounded-xl">
-          {useCanvas && pdfData instanceof Uint8Array ? (
-            <PdfCanvasViewer
-              data={pdfData}
-              zoom={zoom}
-              page={page}
-              onNumPagesChange={(n) => {
-                setNumPages(Number(n) || 0);
-                setPage((p) => Math.max(1, Math.min(Number(n) || 1, Number(p || 1))));
-              }}
-              onError={() => setCanvasFailed(true)}
-            />
-          ) : iframeSrc ? (
-            <iframe title={title} src={iframeSrc} className="h-full w-full bg-white" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center rounded bg-white p-4 text-sm text-zinc-700">
-              {loading ? t('loading') : error || t('operationFailed')}
-            </div>
-          )}
+        <div className="min-h-0 flex-1 overflow-hidden bg-zinc-100 sm:rounded-b-xl">
+          <iframe 
+            title={title} 
+            src={finalSrc} 
+            className="h-full w-full border-none bg-white"
+            onLoad={() => setLoading(false)}
+          />
         </div>
       </div>
     </div>,
