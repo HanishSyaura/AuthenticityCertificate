@@ -27,6 +27,7 @@ dotenv.config();
 
 require('./services/videoProcessing.service');
 require('./services/pdfPreview.service');
+require('./services/webpVariants.service');
 const jobQueue = require('./services/jobQueue.service');
 
 {

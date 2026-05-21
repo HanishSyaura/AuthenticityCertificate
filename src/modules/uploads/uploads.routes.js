@@ -67,7 +67,7 @@ function storage() {
   });
 }
 
-const DEFAULT_MAX_UPLOAD_MB = 500;
+const DEFAULT_MAX_UPLOAD_MB = 50;
 const MAX_UPLOAD_MB_RAW = process.env.MAX_UPLOAD_MB || process.env.UPLOAD_MAX_MB || '';
 const MAX_UPLOAD_MB = Number.isFinite(Number.parseInt(MAX_UPLOAD_MB_RAW, 10))
   ? Math.max(1, Number.parseInt(MAX_UPLOAD_MB_RAW, 10))
@@ -160,7 +160,8 @@ function uploadMedia(req, res) {
       if (!created) return res.error('Failed to upload', 400);
 
       if (isVideo) {
-        const disabled = ['1', 'true', 'yes', 'on'].includes(String(process.env.DISABLE_VIDEO_TRANSCODE || '').toLowerCase());
+        const disabled =
+          !jobQueue.hasRedis() || ['1', 'true', 'yes', 'on'].includes(String(process.env.DISABLE_VIDEO_TRANSCODE || '').toLowerCase());
         if (!disabled) {
           try {
             const job = await jobQueue.addJob(
@@ -194,8 +195,13 @@ function uploadMedia(req, res) {
 
       if (isImg && filePath) {
         try {
-          const baseName = path.parse(String(fileName || '')).name;
-          await generateWebpVariants({ filePath, destDir, baseName });
+          if (jobQueue.hasRedis()) {
+            await jobQueue.addJob(
+              'generate_webp_variants',
+              { mediaAssetId: created.id },
+              { jobId: `generate_webp_variants__${created.id}`, attempts: 2, backoff: { type: 'exponential', delay: 2000 } }
+            );
+          }
         } catch {}
       }
       res.success(created, 'Uploaded');
