@@ -18,7 +18,7 @@ export function createAdminApi({ token }) {
 
   const api = axios.create({
     baseURL,
-    timeout: 8000
+    timeout: 30_000
   });
 
   api.interceptors.request.use((config) => {

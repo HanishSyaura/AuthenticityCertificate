@@ -124,9 +124,44 @@ function workerConfig() {
   return { concurrency, lockDuration, lockRenewTime };
 }
 
+function jobRetentionConfig() {
+  const keepCompleted = clampInt(process.env.BULLMQ_KEEP_COMPLETED, 10, 10_000, 500);
+  const keepFailed = clampInt(process.env.BULLMQ_KEEP_FAILED, 10, 10_000, 500);
+  return { keepCompleted, keepFailed };
+}
+
+function shouldRunWorker() {
+  const raw = process.env.BULLMQ_RUN_WORKER;
+  if (raw == null) return true;
+  const s = String(raw).trim().toLowerCase();
+  if (!s) return true;
+  return !['0', 'false', 'no', 'off'].includes(s);
+}
+
 function ensureQueue() {
   if (!hasRedis()) return null;
-  if (queue && worker) return queue;
+  if (queue) {
+    if (!worker && shouldRunWorker()) {
+      const cfg = queueConfig();
+      const wcfg = workerConfig();
+      worker = new Worker(
+        cfg.name,
+        async (job) => {
+          const fn = handlers.get(job.name);
+          if (!fn) throw new Error(`No handler for job ${job.name}`);
+          return await fn(job.data);
+        },
+        {
+          connection: redisConnection,
+          prefix: cfg.prefix,
+          concurrency: wcfg.concurrency,
+          lockDuration: wcfg.lockDuration,
+          lockRenewTime: wcfg.lockRenewTime
+        }
+      );
+    }
+    return queue;
+  }
 
   const cfg = queueConfig();
   const wcfg = workerConfig();
@@ -135,21 +170,23 @@ function ensureQueue() {
   });
 
   queue = new Queue(cfg.name, { connection: redisConnection, prefix: cfg.prefix });
-  worker = new Worker(
-    cfg.name,
-    async (job) => {
-      const fn = handlers.get(job.name);
-      if (!fn) throw new Error(`No handler for job ${job.name}`);
-      return await fn(job.data);
-    },
-    {
-      connection: redisConnection,
-      prefix: cfg.prefix,
-      concurrency: wcfg.concurrency,
-      lockDuration: wcfg.lockDuration,
-      lockRenewTime: wcfg.lockRenewTime
-    }
-  );
+  if (shouldRunWorker()) {
+    worker = new Worker(
+      cfg.name,
+      async (job) => {
+        const fn = handlers.get(job.name);
+        if (!fn) throw new Error(`No handler for job ${job.name}`);
+        return await fn(job.data);
+      },
+      {
+        connection: redisConnection,
+        prefix: cfg.prefix,
+        concurrency: wcfg.concurrency,
+        lockDuration: wcfg.lockDuration,
+        lockRenewTime: wcfg.lockRenewTime
+      }
+    );
+  }
 
   return queue;
 }
@@ -161,9 +198,10 @@ function registerHandler(name, fn) {
 async function addJob(name, data, options = null) {
   if (hasRedis()) {
     const q = ensureQueue();
+    const retention = jobRetentionConfig();
     const opts = {
-      removeOnComplete: true,
-      removeOnFail: false,
+      removeOnComplete: { count: retention.keepCompleted },
+      removeOnFail: { count: retention.keepFailed },
       ...(options && typeof options === 'object' ? options : {})
     };
     const job = await q.add(name, data, opts);

@@ -29,7 +29,34 @@ require('./services/videoProcessing.service');
 require('./services/pdfPreview.service');
 const jobQueue = require('./services/jobQueue.service');
 
+{
+  const rawConc = Number.parseInt(String(process.env.SHARP_CONCURRENCY || '').trim(), 10);
+  const conc = Number.isFinite(rawConc) ? Math.min(4, Math.max(1, rawConc)) : 1;
+  try {
+    sharp.concurrency(conc);
+  } catch {}
+  const rawCacheMb = Number.parseInt(String(process.env.SHARP_CACHE_MB || '').trim(), 10);
+  const cacheMb = Number.isFinite(rawCacheMb) ? Math.min(512, Math.max(16, rawCacheMb)) : 64;
+  try {
+    sharp.cache({ memory: cacheMb });
+  } catch {}
+}
+
+const appMode = String(process.env.APP_MODE || 'web').trim().toLowerCase();
+
 if (jobQueue.hasRedis()) jobQueue.initQueue();
+
+if (appMode === 'worker') {
+  applyDbPatches()
+    .then(() => {
+      console.log('Worker started');
+    })
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+  return;
+}
 
 const app = express();
 const PORT = process.env.PORT || 5000;

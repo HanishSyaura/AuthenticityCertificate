@@ -768,6 +768,13 @@ async function exportItemsXlsx({ organizationId, itemIds, q, createdFrom, create
   const ids = Array.from(new Set((Array.isArray(itemIds) ? itemIds : []).map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0)));
   const query = typeof q === 'string' ? q.trim() : '';
   const bid = batchId != null ? Number(batchId) : NaN;
+  const maxRowsRaw = Number.parseInt(String(process.env.EPC_EXPORT_MAX_ROWS || '').trim(), 10);
+  const maxRows = Number.isFinite(maxRowsRaw) ? Math.min(10_000, Math.max(100, maxRowsRaw)) : 5000;
+  if (ids.length > maxRows) {
+    const err = new Error(`Terlalu banyak item untuk export. Maksimum ${maxRows} item.`);
+    err.status = 413;
+    throw err;
+  }
 
   const where = {
     organizationId: orgId,
@@ -784,12 +791,21 @@ async function exportItemsXlsx({ organizationId, itemIds, q, createdFrom, create
     ...(query ? { epcCode: { contains: query } } : {})
   };
 
+  if (!ids.length) {
+    const total = await withTimeout(prisma.epcItem.count({ where }), 12_000);
+    if (Number(total) > maxRows) {
+      const err = new Error(`Terlalu banyak item untuk export. Maksimum ${maxRows} item.`);
+      err.status = 413;
+      throw err;
+    }
+  }
+
   const items = await withTimeout(
     prisma.epcItem.findMany({
       where,
       include: { batch: { select: { remark: true } } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: ids.length ? undefined : 10_000
+      take: maxRows
     }),
     12_000
   );
@@ -1505,12 +1521,30 @@ function parseXlsxBase64(base64) {
   const raw = String(base64 || '');
   const commaIdx = raw.indexOf(',');
   const b64 = commaIdx >= 0 ? raw.slice(commaIdx + 1) : raw;
+  const maxMbRaw = Number.parseInt(String(process.env.EPC_XLSX_MAX_MB || process.env.EPC_IMPORT_MAX_MB || '').trim(), 10);
+  const maxMb = Number.isFinite(maxMbRaw) ? Math.min(200, Math.max(1, maxMbRaw)) : 10;
+  const maxBytes = maxMb * 1024 * 1024;
+  const trimmed = String(b64 || '').trim();
+  const pad = trimmed.endsWith('==') ? 2 : trimmed.endsWith('=') ? 1 : 0;
+  const approxBytes = Math.max(0, Math.floor((trimmed.length * 3) / 4) - pad);
+  if (approxBytes > maxBytes) {
+    const err = new Error(`Fail terlalu besar. Maksimum ${maxMb}MB.`);
+    err.status = 413;
+    throw err;
+  }
   const buf = Buffer.from(b64, 'base64');
   const wb = XLSX.read(buf, { type: 'buffer' });
   const sheetName = wb.SheetNames?.find((n) => String(n || '').toLowerCase() === 'epc') || wb.SheetNames?.[0] || null;
   if (!sheetName) return { sheetName: null, rows: [] };
   const ws = wb.Sheets[sheetName];
   const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  const maxRowsRaw = Number.parseInt(String(process.env.EPC_XLSX_MAX_ROWS || '').trim(), 10);
+  const maxRows = Number.isFinite(maxRowsRaw) ? Math.min(50_000, Math.max(1, maxRowsRaw)) : 10_000;
+  if (Array.isArray(rows) && rows.length > maxRows) {
+    const err = new Error(`Terlalu banyak row dalam Excel. Maksimum ${maxRows} row.`);
+    err.status = 413;
+    throw err;
+  }
   return { sheetName, rows };
 }
 

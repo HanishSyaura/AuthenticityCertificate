@@ -39,16 +39,14 @@ function isProcessableImage(file) {
 async function generateWebpVariants({ filePath, destDir, baseName }) {
   const widths = [320, 640, 1024];
   const img = sharp(filePath).rotate();
-  await Promise.all(
-    widths.map(async (w) => {
-      const outPath = path.join(destDir, `${baseName}-w${w}.webp`);
-      await img
-        .clone()
-        .resize({ width: w, withoutEnlargement: true })
-        .webp({ quality: 80 })
-        .toFile(outPath);
-    })
-  );
+  for (const w of widths) {
+    const outPath = path.join(destDir, `${baseName}-w${w}.webp`);
+    await img
+      .clone()
+      .resize({ width: w, withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toFile(outPath);
+  }
 }
 
 function storage() {
