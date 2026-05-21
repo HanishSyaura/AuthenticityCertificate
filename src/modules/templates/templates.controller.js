@@ -72,7 +72,7 @@ async function create(req, res) {
     });
     res.success(created, 'Template created');
   } catch (e) {
-    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    if (e instanceof z.ZodError) return res.error(e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input', 400);
     res.error(e.message, 400);
   }
 }
@@ -85,7 +85,7 @@ async function update(req, res) {
     const updated = await templatesService.updateTemplate({ organizationId: req.organization.id, id, patch: data, lang });
     res.success(updated, 'Template updated');
   } catch (e) {
-    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    if (e instanceof z.ZodError) return res.error(e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input', 400);
     res.error(e.message, 400);
   }
 }

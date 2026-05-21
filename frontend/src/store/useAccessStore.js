@@ -54,7 +54,7 @@ const useAccessStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const res = await api.post('/access/roles', { name, description });
+      const res = await api.post('/access/roles/', { name, description });
       const created = res?.data?.data;
       const roles = [created, ...get().roles].filter(Boolean);
       set({ roles, loading: false, lastSyncAt: Date.now() });
@@ -70,7 +70,7 @@ const useAccessStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const res = await api.put(`/access/roles/${encodeURIComponent(roleId)}/permissions`, { permissionKeys });
+      const res = await api.put(`/access/roles/${encodeURIComponent(roleId)}/permissions/`, { permissionKeys });
       const payload = res?.data?.data;
       const roles = get().roles.map((r) => (String(r.id) === String(roleId) ? { ...r, permissions: payload.permissions } : r));
       set({ roles, loading: false, lastSyncAt: Date.now() });

@@ -302,7 +302,7 @@ async function createScanGroup(req, res) {
     });
     res.success(result, 'Scan group created');
   } catch (e) {
-    if (e instanceof z.ZodError) return res.error(e.errors?.[0]?.message || 'Invalid input', 400);
+    if (e instanceof z.ZodError) return res.error(e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input', 400);
     const status = Number(e.status) || 400;
     res.error(e.message, status);
   }
@@ -355,7 +355,7 @@ async function assignScanGroupProduct(req, res) {
     });
     res.success(data, 'Product assigned');
   } catch (e) {
-    if (e instanceof z.ZodError) return res.error(e.errors?.[0]?.message || 'Invalid input', 400);
+    if (e instanceof z.ZodError) return res.error(e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input', 400);
     const status = Number(e.status) || 400;
     res.error(e.message, status);
   }
@@ -388,7 +388,7 @@ async function exportItems(req, res) {
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.status(200).send(buffer);
   } catch (e) {
-    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    if (e instanceof z.ZodError) return res.error(e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input', 400);
     res.error(e.message, 400);
   }
 }
@@ -402,7 +402,7 @@ async function deleteItems(req, res) {
     const result = await epcService.deleteItems({ organizationId: req.organization.id, itemIds: data.itemIds, cleanup: data.cleanup });
     res.success(result, 'EPC items deleted');
   } catch (e) {
-    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    if (e instanceof z.ZodError) return res.error(e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input', 400);
     const status = Number(e.status) || 400;
     res.error(e.message, status);
   }
@@ -692,7 +692,7 @@ async function updateBatch(req, res) {
     const updated = await epcService.updateBatch({ organizationId: req.organization.id, batchId, patch: data, actor: req.user });
     res.success(updated, 'Batch updated');
   } catch (e) {
-    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    if (e instanceof z.ZodError) return res.error(e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input', 400);
     res.error(e.message, 400);
   }
 }
@@ -704,7 +704,7 @@ async function updateBatchDocuments(req, res) {
     const updated = await epcService.updateBatchDocuments({ organizationId: req.organization.id, batchId, documents: data.documents });
     res.success(updated, 'Batch documents updated');
   } catch (e) {
-    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    if (e instanceof z.ZodError) return res.error(e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input', 400);
     res.error(e.message, 400);
   }
 }
@@ -730,7 +730,7 @@ async function recalculateSequence(req, res) {
     const result = await epcService.recalculateCorpSequence({ organizationId: req.organization.id, corpPrefix: data.corpPrefix });
     res.success(result, 'Sequence recalculated');
   } catch (e) {
-    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    if (e instanceof z.ZodError) return res.error(e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input', 400);
     res.error(e.message, 400);
   }
 }
@@ -741,7 +741,7 @@ async function deleteAll(req, res) {
     const result = await epcService.deleteAllBatches({ organizationId: req.organization.id, corpPrefix: data.corpPrefix });
     res.success(result, 'All EPC batches deleted');
   } catch (e) {
-    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    if (e instanceof z.ZodError) return res.error(e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input', 400);
     res.error(e.message, 400);
   }
 }
@@ -755,7 +755,7 @@ async function deleteAllGenerated(req, res) {
     const result = await epcService.deleteAllGeneratedBatches({ organizationId: req.organization.id, corpPrefix: data.corpPrefix });
     res.success(result, 'All generated EPC batches deleted');
   } catch (e) {
-    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    if (e instanceof z.ZodError) return res.error(e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input', 400);
     res.error(e.message, 400);
   }
 }

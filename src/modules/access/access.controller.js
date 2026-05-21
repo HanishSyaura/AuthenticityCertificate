@@ -73,7 +73,7 @@ async function createRole(req, res) {
       'OK'
     );
   } catch (e) {
-    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    if (e instanceof z.ZodError) return res.error(e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input', 400);
     if (e?.code === 'P2002') return res.error('Role name already exists', 400);
     res.error('Service temporarily unavailable', 503);
   }
@@ -114,7 +114,7 @@ async function updateRole(req, res) {
       'OK'
     );
   } catch (e) {
-    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    if (e instanceof z.ZodError) return res.error(e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input', 400);
     if (e?.code === 'P2002') return res.error('Role name already exists', 400);
     res.error('Service temporarily unavailable', 503);
   }
@@ -146,7 +146,7 @@ async function setRolePermissions(req, res) {
 
     res.success({ roleId, permissions: permissions.map((p) => p.key).sort() }, 'OK');
   } catch (e) {
-    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    if (e instanceof z.ZodError) return res.error(e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input', 400);
     res.error('Service temporarily unavailable', 503);
   }
 }
@@ -185,7 +185,7 @@ async function setUserRoles(req, res) {
     if (!updated) return res.error('User not found', 404);
     res.success(updated, 'OK');
   } catch (e) {
-    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    if (e instanceof z.ZodError) return res.error(e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input', 400);
     res.error('Service temporarily unavailable', 503);
   }
 }

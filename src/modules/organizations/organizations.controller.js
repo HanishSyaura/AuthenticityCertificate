@@ -21,7 +21,7 @@ async function create(req, res) {
     const org = await orgService.createOrganization({ name: data.name, code: data.code.toUpperCase() });
     res.success(org, 'Organization created');
   } catch (e) {
-    if (e instanceof z.ZodError) return res.error(e.errors[0].message, 400);
+    if (e instanceof z.ZodError) return res.error(e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input', 400);
     res.error(e.message, 400);
   }
 }
