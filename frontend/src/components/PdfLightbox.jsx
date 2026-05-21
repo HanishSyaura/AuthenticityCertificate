@@ -26,8 +26,7 @@ function getPdfDocumentParams(data) {
     disableAutoFetch: true,
     disableFontFace: true,
     useSystemFonts: true,
-    disableIndexedDb: true,
-    disableWorker: true
+    disableIndexedDb: true
   };
 }
 
@@ -74,7 +73,17 @@ function PdfCanvasViewer({ data, page, zoom, onNumPagesChange, onRenderStateChan
       try {
         if (!(data instanceof Uint8Array) || data.length === 0) throw new Error(t('operationFailed'));
         const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-        const doc = await pdfjs.getDocument(getPdfDocumentParams(data)).promise;
+        try {
+          const workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString();
+          if (workerSrc) pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+        } catch {
+        }
+        let doc = null;
+        try {
+          doc = await pdfjs.getDocument({ ...getPdfDocumentParams(data), disableWorker: false }).promise;
+        } catch (e) {
+          doc = await pdfjs.getDocument({ ...getPdfDocumentParams(data), disableWorker: true }).promise;
+        }
         if (!alive) {
           try {
             doc.destroy?.();
@@ -86,6 +95,7 @@ function PdfCanvasViewer({ data, page, zoom, onNumPagesChange, onRenderStateChan
         setNumPages(Number(doc?.numPages) || 0);
       } catch (e) {
         const msg = e?.message ? String(e.message) : t('operationFailed');
+        console.error('[PdfCanvasViewer] load failed', e);
         if (!alive) return;
         setError(msg);
         onRenderStateChange?.({ rendered: false, error: msg });
@@ -174,6 +184,7 @@ function PdfCanvasViewer({ data, page, zoom, onNumPagesChange, onRenderStateChan
         onRenderStateChange?.({ rendered: true, error: '' });
       } catch (e) {
         const msg = e?.message ? String(e.message) : t('operationFailed');
+        console.error('[PdfCanvasViewer] render failed', e);
         if (!alive) return;
         setError(msg);
         onRenderStateChange?.({ rendered: false, error: msg });
@@ -291,6 +302,7 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
       } catch (e) {
         if (e?.name === 'AbortError') return;
         const msg = e?.message ? String(e.message) : t('operationFailed');
+        console.error('[PdfLightbox] fetch failed', e);
         if (!alive) return;
         setError(msg);
       } finally {
@@ -316,15 +328,6 @@ export default function PdfLightbox({ src, title = 'PDF', onClose }) {
       }
     };
   }, []);
-
-  useEffect(() => {
-    if (loading || error || !pdfData) return undefined;
-    if (rendered) return undefined;
-    const tid = setTimeout(() => {
-      if (!rendered) setError(t('operationFailed'));
-    }, 6000);
-    return () => clearTimeout(tid);
-  }, [error, loading, pdfData, rendered, t]);
 
   if (!resolvedSrc) return null;
 
