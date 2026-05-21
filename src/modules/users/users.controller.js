@@ -6,8 +6,7 @@ const DEFAULT_PASSWORD = process.env.DEFAULT_PASSWORD && String(process.env.DEFA
 const createSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
-  password: z.string().min(8).optional(),
-  role: z.enum(['super_admin', 'admin', 'operator']).optional()
+  password: z.string().min(8).optional()
 });
 
 const roleSchema = z.object({
@@ -43,7 +42,7 @@ async function create(req, res) {
       name: data.name,
       email: data.email,
       password,
-      role: data.role || 'admin',
+      role: 'admin',
       mustResetPassword: usedDefaultPassword
     });
     res.success(

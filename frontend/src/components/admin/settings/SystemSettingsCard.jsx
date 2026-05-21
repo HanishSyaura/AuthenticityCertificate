@@ -46,19 +46,6 @@ export default function SystemSettingsCard({
       ) : null}
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label={t('organizationName')} error={errors?.organizationName} htmlFor="system-org-name">
-          <Input id="system-org-name" value={draft.organizationName} onChange={(v) => onChange({ organizationName: v })} disabled={!canEdit} />
-        </Field>
-
-        <Field label={t('organizationCode')} error={errors?.organizationCode} hint={t('organizationCodeHint')} htmlFor="system-org-code">
-          <Input
-            id="system-org-code"
-            value={draft.organizationCode}
-            onChange={(v) => onChange({ organizationCode: v.toUpperCase() })}
-            disabled={!canEdit}
-          />
-        </Field>
-
         <Field label={t('defaultLocale')} error={errors?.defaultLocale} htmlFor="system-locale">
           <Select
             id="system-locale"

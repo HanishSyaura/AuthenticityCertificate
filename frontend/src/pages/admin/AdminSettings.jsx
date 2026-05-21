@@ -68,16 +68,12 @@ export default function AdminSettings() {
   const [profileErrors, setProfileErrors] = useState({});
 
   const [systemInitial, setSystemInitial] = useState({
-    organizationName: '',
-    organizationCode: '',
     defaultLocale: 'en',
     defaultTimezone: 'Asia/Kuala_Lumpur',
     maintenanceMode: false,
     logoUrl: ''
   });
   const [systemDraft, setSystemDraft] = useState({
-    organizationName: '',
-    organizationCode: '',
     defaultLocale: 'en',
     defaultTimezone: 'Asia/Kuala_Lumpur',
     maintenanceMode: false,
@@ -92,7 +88,6 @@ export default function AdminSettings() {
   const [smtpInitial, setSmtpInitial] = useState({
     smtpHost: '',
     smtpPort: '587',
-    smtpSecure: false,
     smtpUser: '',
     smtpPass: '',
     smtpPassSet: false,
@@ -108,7 +103,6 @@ export default function AdminSettings() {
   const [smtpDraft, setSmtpDraft] = useState({
     smtpHost: '',
     smtpPort: '587',
-    smtpSecure: false,
     smtpUser: '',
     smtpPass: '',
     smtpPassSet: false,
@@ -159,7 +153,7 @@ export default function AdminSettings() {
       setLoadError('');
       try {
         const api = createAdminApi({ token });
-        const [meRes, settingsRes] = await Promise.all([api.get('/auth/me'), api.get('/settings')]);
+        const [meRes, settingsRes] = await Promise.all([api.get('/auth/me'), api.get('/settings/')]);
 
         const me = meRes?.data?.data?.user;
         const org = settingsRes?.data?.data?.organization;
@@ -184,8 +178,6 @@ export default function AdminSettings() {
         }));
 
         const s0 = {
-          organizationName: String(org?.name || ''),
-          organizationCode: String(org?.code || ''),
           defaultLocale: String(settings?.defaultLocale || 'en'),
           defaultTimezone: String(settings?.defaultTimezone || 'Asia/Kuala_Lumpur'),
           maintenanceMode: Boolean(settings?.maintenanceMode),
@@ -198,7 +190,6 @@ export default function AdminSettings() {
         const smtp0 = {
           smtpHost: String(settings?.smtpHost || ''),
           smtpPort: String(settings?.smtpPort || '587'),
-          smtpSecure: Boolean(settings?.smtpSecure),
           smtpUser: String(settings?.smtpUser || ''),
           smtpPass: '',
           smtpPassSet: Boolean(settings?.smtpPassSet),
@@ -262,10 +253,6 @@ export default function AdminSettings() {
 
   function validateSystem(draft) {
     const errs = {};
-    if (!String(draft.organizationName || '').trim()) errs.organizationName = t('organizationNameRequired');
-    const code = String(draft.organizationCode || '').trim();
-    if (!code) errs.organizationCode = t('organizationCodeRequired');
-    else if (!/^[A-Z0-9_-]+$/.test(code.toUpperCase())) errs.organizationCode = t('organizationCodeFormat');
     if (!String(draft.defaultLocale || '').trim()) errs.defaultLocale = t('localeRequired');
     if (!String(draft.defaultTimezone || '').trim()) errs.defaultTimezone = t('timezoneRequired');
 
@@ -283,8 +270,7 @@ export default function AdminSettings() {
       String(draft.smtpFromEmail || '').trim() ||
       String(draft.smtpReplyTo || '').trim() ||
       String(draft.adminAppUrl || '').trim() ||
-      String(draft.smtpPass || '').trim() ||
-      Boolean(draft.smtpSecure);
+      String(draft.smtpPass || '').trim();
 
     if (!hasAny) return errs;
 
@@ -462,8 +448,6 @@ export default function AdminSettings() {
       const org = res?.data?.data?.organization;
       const settings = res?.data?.data?.settings;
       const next = {
-        organizationName: String(org?.name || systemDraft.organizationName),
-        organizationCode: String(org?.code || systemDraft.organizationCode),
         defaultLocale: String(settings?.defaultLocale || systemDraft.defaultLocale),
         defaultTimezone: String(settings?.defaultTimezone || systemDraft.defaultTimezone),
         maintenanceMode: Boolean(settings?.maintenanceMode),
@@ -493,7 +477,6 @@ export default function AdminSettings() {
     const keys = [
       'smtpHost',
       'smtpPort',
-      'smtpSecure',
       'smtpUser',
       'smtpFromName',
       'smtpFromEmail',
@@ -514,13 +497,12 @@ export default function AdminSettings() {
     setSmtpSaving(true);
     try {
       const api = createAdminApi({ token });
-      const res = await api.put('/settings', payload);
+      const res = await api.put('/settings/', payload);
       const org = res?.data?.data?.organization;
       const settings = res?.data?.data?.settings;
       const next = {
         smtpHost: String(settings?.smtpHost || ''),
         smtpPort: String(settings?.smtpPort || '587'),
-        smtpSecure: Boolean(settings?.smtpSecure),
         smtpUser: String(settings?.smtpUser || ''),
         smtpPass: '',
         smtpPassSet: Boolean(settings?.smtpPassSet),

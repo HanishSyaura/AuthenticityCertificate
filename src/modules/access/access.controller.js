@@ -161,7 +161,11 @@ async function deleteRole(req, res) {
     if (role.isSystem) return res.error('System role cannot be deleted', 400);
     if (Array.isArray(role.users) && role.users.length > 0) return res.error('Role is assigned to users', 400);
 
-    await prisma.role.delete({ where: { id: roleId } });
+    await prisma.$transaction(async (tx) => {
+      await tx.rolePermission.deleteMany({ where: { roleId } });
+      await tx.userRole.deleteMany({ where: { roleId } });
+      await tx.role.delete({ where: { id: roleId } });
+    });
     res.success({ id: roleId, deleted: true }, 'OK');
   } catch {
     res.error('Service temporarily unavailable', 503);

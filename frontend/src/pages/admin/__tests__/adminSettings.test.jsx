@@ -23,7 +23,7 @@ function setupApi({ meRole = 'super_admin' } = {}) {
         data: { data: { user: { id: 1, name: 'Admin', email: 'admin@local.test', role: meRole } } }
       });
     }
-    if (path === '/settings') {
+    if (path === '/settings/') {
       return Promise.resolve({
         data: {
           data: {

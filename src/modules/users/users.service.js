@@ -139,10 +139,34 @@ async function setUserRoles({ id, roleIds }) {
   const ids = Array.isArray(roleIds) ? roleIds.map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0) : [];
 
   const user = await prisma.$transaction(async (tx) => {
+    const existing = await tx.user.findUnique({ where: { id: uid }, select: { role: true } });
+    if (!existing) return null;
+
     await tx.userRole.deleteMany({ where: { userId: uid } });
     for (const rid of Array.from(new Set(ids))) {
       await tx.userRole.create({ data: { userId: uid, roleId: rid } });
     }
+
+    let nextRole = 'operator';
+    try {
+      const sysRoles = await tx.role.findMany({
+        where: { id: { in: Array.from(new Set(ids)) }, isSystem: true },
+        select: { name: true }
+      });
+      const sysNames = new Set(
+        (Array.isArray(sysRoles) ? sysRoles : [])
+          .map((r) => String(r?.name || '').trim())
+          .filter(Boolean)
+      );
+      if (sysNames.has('super_admin')) nextRole = 'super_admin';
+      else if (sysNames.has('admin')) nextRole = 'admin';
+      else if (sysNames.has('operator')) nextRole = 'operator';
+      else nextRole = 'operator';
+    } catch {
+      nextRole = String(existing.role || 'operator');
+    }
+
+    await tx.user.update({ where: { id: uid }, data: { role: nextRole } });
     const full = await tx.user.findUnique({
       where: { id: uid },
       include: { roles: { select: { role: { select: { id: true, name: true } } } } }

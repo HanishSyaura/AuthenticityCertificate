@@ -148,13 +148,6 @@ export default function EmailSmtpSettingsCard({
             />
           </Field>
 
-          <Field label={t('smtpSecure')} hint={t('smtpSecureHint')}>
-            <div className="flex items-center gap-3">
-              <Toggle checked={Boolean(draft.smtpSecure)} onChange={(v) => onChange({ smtpSecure: v })} disabled={!canEdit} />
-              <div className="text-sm text-zinc-700">{draft.smtpSecure ? t('enabled') : t('disabled')}</div>
-            </div>
-          </Field>
-
           <div className="sm:col-span-2">
             <Field label={t('adminAppUrl')} error={errors?.adminAppUrl} hint={t('adminAppUrlHint')} htmlFor="smtp-admin-app-url">
               <Input

@@ -116,7 +116,7 @@ const VerifyLoadingScreen = ({ meta, mode = 'auto' }) => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 1500);
         const base = getPublicApiBaseUrl();
-        const res = await fetch(`${base}/settings`, { signal: controller.signal });
+        const res = await fetch(`${base}/settings/`, { signal: controller.signal });
         clearTimeout(timeout);
         const json = await res.json();
         const nextRaw = json?.success ? String(json?.data?.settings?.logoUrl || '').trim() : '';

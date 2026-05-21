@@ -23,7 +23,7 @@ export default function AdminUsers() {
   const canManageUsers = role === 'super_admin' || hasPermission(perms, 'users.manage');
   const canManageAccess = role === 'super_admin' || hasPermission(perms, 'access.manage');
 
-  const { users, loading, error, lastSyncAt, fetchUsers, createUser, updateUserRole, deleteUser, resetUserPassword } =
+  const { users, loading, error, lastSyncAt, fetchUsers, createUser, deleteUser, resetUserPassword } =
     useUsersStore((s) => ({
     users: s.users,
     loading: s.loading,
@@ -31,7 +31,6 @@ export default function AdminUsers() {
     lastSyncAt: s.lastSyncAt,
     fetchUsers: s.fetchUsers,
     createUser: s.createUser,
-    updateUserRole: s.updateUserRole,
     deleteUser: s.deleteUser,
     resetUserPassword: s.resetUserPassword
   }));
@@ -47,7 +46,6 @@ export default function AdminUsers() {
   const [selectedUserRoleIds, setSelectedUserRoleIds] = useState([]);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [newRole, setNewRole] = useState('admin');
   const [selectedCreateRoleIds, setSelectedCreateRoleIds] = useState([]);
   const [createNotice, setCreateNotice] = useState('');
 
@@ -88,10 +86,13 @@ export default function AdminUsers() {
     return roles.find((r) => String(r.id) === String(selectedRoleId)) || null;
   }, [roles, selectedRoleId]);
 
-  const createSysRoleId = useMemo(() => {
-    const r = roles.find((x) => x?.isSystem && String(x?.name) === String(newRole));
-    return r?.id ?? null;
-  }, [newRole, roles]);
+  useEffect(() => {
+    if (!showCreate) return;
+    if (!canManageAccess) return;
+    if (selectedCreateRoleIds.length > 0) return;
+    const adminRole = roles.find((r) => r?.isSystem && String(r?.name) === 'admin');
+    if (adminRole?.id) setSelectedCreateRoleIds([adminRole.id]);
+  }, [canManageAccess, roles, selectedCreateRoleIds.length, showCreate]);
 
   const permissionsByKey = useMemo(() => {
     const m = new Map();
@@ -180,7 +181,6 @@ export default function AdminUsers() {
             onClick={() => {
               setName('');
               setEmail('');
-              setNewRole('admin');
               setSelectedCreateRoleIds([]);
               setCreateNotice('');
               setShowCreate(true);
@@ -233,21 +233,7 @@ export default function AdminUsers() {
               const disabled = String(u.email) === String(authUser?.email);
               return (
                 <div>
-                  <select
-                    value={u.role}
-                    disabled={disabled}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={async (e) => {
-                      const role = e.target.value;
-                      if (!u?.id) return;
-                      await updateUserRole({ id: u.id, role });
-                    }}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-2 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-400 disabled:bg-zinc-50 disabled:text-zinc-500"
-                  >
-                    <option value="super_admin">super_admin</option>
-                    <option value="admin">admin</option>
-                    <option value="operator">operator</option>
-                  </select>
+                  <div className="text-xs text-zinc-700">{Array.isArray(u.roles) && u.roles.length > 0 ? u.roles.join(', ') : u.role}</div>
                   {canManageAccess ? (
                     <button
                       type="button"
@@ -266,9 +252,6 @@ export default function AdminUsers() {
                     >
                       {t('editAccess')}
                     </button>
-                  ) : null}
-                  {Array.isArray(u.roles) && u.roles.length > 0 ? (
-                    <div className="mt-1 text-[11px] text-zinc-500">{u.roles.join(', ')}</div>
                   ) : null}
                 </div>
               );
@@ -351,53 +334,26 @@ export default function AdminUsers() {
                   className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
                 />
               </div>
-              <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('role')}</div>
-                <select
-                  value={newRole}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setNewRole(next);
-                    setSelectedCreateRoleIds((prev) => {
-                      const keep = new Set(prev);
-                      const currentSys = roles.find((x) => x?.isSystem && String(x?.name) === String(newRole));
-                      const nextSys = roles.find((x) => x?.isSystem && String(x?.name) === String(next));
-                      if (currentSys?.id) keep.delete(currentSys.id);
-                      if (nextSys?.id) keep.add(nextSys.id);
-                      return Array.from(keep);
-                    });
-                  }}
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
-                >
-                  <option value="admin">admin</option>
-                  <option value="operator">operator</option>
-                  <option value="super_admin">super_admin</option>
-                </select>
-              </div>
-
               {canManageAccess && roles.length > 0 ? (
                 <div>
                   <div className="mb-1 text-xs font-semibold text-zinc-600">{t('accessRoles')}</div>
                   <div className="max-h-44 overflow-auto rounded-xl border border-zinc-200 bg-white">
                     {roles.map((r) => {
-                      const sysLocked = Boolean(r?.isSystem && createSysRoleId && String(r.id) === String(createSysRoleId));
-                      const checked = sysLocked ? true : selectedCreateRoleIds.includes(r.id);
+                      const checked = selectedCreateRoleIds.includes(r.id);
                       return (
                         <label
                           key={r.id}
                           className={`flex items-center gap-2 border-b border-zinc-100 px-4 py-2 text-sm last:border-b-0 ${
-                            sysLocked ? 'bg-zinc-50' : ''
+                            ''
                           }`}
                         >
                           <input
                             type="checkbox"
                             checked={checked}
-                            disabled={sysLocked}
                             onChange={(e) => {
                               const next = new Set(selectedCreateRoleIds);
                               if (e.target.checked) next.add(r.id);
                               else next.delete(r.id);
-                              if (createSysRoleId) next.add(createSysRoleId);
                               setSelectedCreateRoleIds(Array.from(next));
                             }}
                           />
@@ -419,7 +375,6 @@ export default function AdminUsers() {
                   setShowCreate(false);
                   setName('');
                   setEmail('');
-                  setNewRole('admin');
                   setSelectedCreateRoleIds([]);
                   setCreateNotice('');
                 }}
@@ -433,11 +388,9 @@ export default function AdminUsers() {
                   const nm = String(name || '').trim();
                   const em = String(email || '').trim();
                   if (!nm || !em) return;
-                  const created = await createUser({ name: nm, email: em, role: newRole });
+                  const created = await createUser({ name: nm, email: em });
                   if (canManageAccess && created?.id && roles.length > 0) {
                     const next = new Set(selectedCreateRoleIds);
-                    const sys = roles.find((x) => x?.isSystem && String(x?.name) === String(newRole));
-                    if (sys?.id) next.add(sys.id);
                     if (next.size > 0) {
                       await setUserRoles({ userId: created.id, roleIds: Array.from(next) });
                       await fetchUsers();
@@ -452,7 +405,6 @@ export default function AdminUsers() {
                   if (String(query || '').trim()) setQuery('');
                   setName('');
                   setEmail('');
-                  setNewRole('admin');
                   setSelectedCreateRoleIds([]);
                 }}
               >

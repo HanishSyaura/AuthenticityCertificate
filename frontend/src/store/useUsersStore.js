@@ -35,11 +35,11 @@ const useUsersStore = create((set, get) => ({
     }
   },
 
-  createUser: async ({ name, email, password, role }) => {
+  createUser: async ({ name, email, password }) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const body = { name, email, role };
+      const body = { name, email };
       if (typeof password === 'string') body.password = password;
       const res = await api.post('/users/', body);
       const created = res?.data?.data;

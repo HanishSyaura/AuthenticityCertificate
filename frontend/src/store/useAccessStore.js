@@ -87,7 +87,7 @@ const useAccessStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      await api.delete(`/access/roles/${encodeURIComponent(roleId)}`);
+      await api.delete(`/access/roles/${encodeURIComponent(roleId)}/`);
       const roles = get().roles.filter((r) => String(r.id) !== String(roleId));
       set({ roles, loading: false, lastSyncAt: Date.now() });
       return true;

@@ -47,7 +47,7 @@ export default function AdminEpc() {
   );
   const canBatchCreate = allow('epc.write', 'epc.batch.create');
   const canBatchView = allow('epc.read', 'epc.write', 'epc.batch.view', 'epc.scan.access', 'epc.production.access', 'epc.batch_import.access');
-  const canScan = allow('epc.write', 'epc.scan.access');
+  const canScan = allow('epc.scan.access');
   const canExportXlsx = allow('epc.write', 'epc.export.xlsx', 'epc.production.access', 'epc.batch_import.access');
   const canEncoding = allow('epc.write', 'epc.encoding');
   const canDelete = useMemo(() => {

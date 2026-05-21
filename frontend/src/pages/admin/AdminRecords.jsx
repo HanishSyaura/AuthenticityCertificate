@@ -5,8 +5,6 @@ import { useT } from '../../i18n/useT';
 import { stripHtmlToText } from '../../utils/richText';
 import DataTable from '../../components/ui/DataTable';
 import RowActionsMenu from '../../components/ui/RowActionsMenu';
-import useTourStore from '../../store/useTourStore';
-import { getProductModuleTourSteps } from '../../tour/productModuleTour';
 
 function formatDate(input) {
   if (!input) return '';
@@ -18,7 +16,6 @@ function formatDate(input) {
 export default function AdminRecords() {
   const { t } = useT();
   const navigate = useNavigate();
-  const { openTour } = useTourStore((s) => ({ openTour: s.openTour }));
   const {
     products,
     categories,
@@ -246,14 +243,6 @@ export default function AdminRecords() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="ac-btn ac-btn-soft px-3 py-2"
-            onClick={() => openTour({ steps: getProductModuleTourSteps(), storageKey: 'ac_seen_product_module_tour_v1' })}
-            data-tour="records-open-guide"
-          >
-            Guide
-          </button>
           {activeTab === 'categories' ? (
             <button type="button" className="ac-btn px-3 py-2" data-tour="records-add-category" onClick={() => setShowCreateCategory(true)}>
               {t('addCategory')}

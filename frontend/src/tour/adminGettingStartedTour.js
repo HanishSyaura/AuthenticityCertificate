@@ -1,3 +1,5 @@
+import { getProductModuleTourSteps } from './productModuleTour';
+
 export function getAdminGettingStartedTourSteps(t) {
   return [
     {
@@ -12,42 +14,7 @@ export function getAdminGettingStartedTourSteps(t) {
       body: t('tourAdminVerifyBody'),
       action: { type: 'navigate', to: '/admin/dashboard', options: { replace: false } }
     },
-    {
-      selector: '[data-tour="records-header"]',
-      title: t('productModule'),
-      body: t('tourAdminRecordsHeaderBody'),
-      action: { type: 'navigate', to: '/admin/records', options: { replace: false } }
-    },
-    {
-      selector: '[data-tour="records-tabs"]',
-      title: t('tourAdminRecordsTabsTitle'),
-      body: t('tourAdminRecordsTabsBody'),
-      action: { type: 'navigate', to: '/admin/records', options: { replace: false } }
-    },
-    {
-      selector: '[data-tour="records-tab-categories"]',
-      title: t('categoriesTab'),
-      body: t('tourAdminRecordsTabsBody'),
-      action: { type: 'records.setTab', tab: 'categories' }
-    },
-    {
-      selector: '[data-tour="records-add-category"]',
-      title: t('tourAdminRecordsCategoryTitle'),
-      body: t('tourAdminRecordsCategoryBody'),
-      action: { type: 'records.setTab', tab: 'categories' }
-    },
-    {
-      selector: '[data-tour="records-tab-products"]',
-      title: t('productsTab'),
-      body: t('tourAdminRecordsTabsBody'),
-      action: { type: 'records.setTab', tab: 'products' }
-    },
-    {
-      selector: '[data-tour="records-create-product"]',
-      title: t('tourAdminRecordsProductTitle'),
-      body: t('tourAdminRecordsProductBody'),
-      action: { type: 'records.setTab', tab: 'products' }
-    },
+    ...getProductModuleTourSteps(),
     {
       selector: '[data-tour="epc-header"]',
       title: t('epc'),
