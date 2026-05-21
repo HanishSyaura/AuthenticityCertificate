@@ -13,7 +13,8 @@ function setupApi({ meRole = 'super_admin' } = {}) {
   const api = {
     get: vi.fn(),
     patch: vi.fn(),
-    put: vi.fn()
+    put: vi.fn(),
+    post: vi.fn()
   };
 
   api.get.mockImplementation((path) => {
@@ -27,7 +28,7 @@ function setupApi({ meRole = 'super_admin' } = {}) {
         data: {
           data: {
             organization: { id: 1, name: 'Main Organization', code: 'MAIN' },
-            settings: { defaultLocale: 'en', defaultTimezone: 'UTC', maintenanceMode: false }
+            settings: { defaultLocale: 'en', defaultTimezone: 'UTC', maintenanceMode: false, smtpHost: null, smtpPassSet: false }
           }
         }
       });
@@ -43,10 +44,12 @@ function setupApi({ meRole = 'super_admin' } = {}) {
     data: {
       data: {
         organization: { id: 1, name: 'Main Organization', code: 'MAIN' },
-        settings: { defaultLocale: 'en', defaultTimezone: 'UTC', maintenanceMode: false }
+        settings: { defaultLocale: 'en', defaultTimezone: 'UTC', maintenanceMode: false, smtpHost: null, smtpPassSet: false }
       }
     }
   });
+
+  api.post.mockResolvedValue({ data: { success: true, data: { ok: true } } });
 
   createAdminApiMock.mockReturnValue(api);
   return api;
@@ -55,6 +58,11 @@ function setupApi({ meRole = 'super_admin' } = {}) {
 describe('AdminSettings', () => {
   beforeEach(() => {
     createAdminApiMock.mockReset();
+    try {
+      localStorage.setItem('ac_admin_settings_tab_v1', 'profile');
+    } catch {
+      void 0;
+    }
     useAdminAuthStore.setState({
       token: 'test-token',
       user: { id: 1, email: 'admin@local.test', name: 'Admin', role: 'super_admin' }
@@ -68,10 +76,11 @@ describe('AdminSettings', () => {
     expect(screen.getByText(/Settings/i)).toBeInTheDocument();
 
     await screen.findByText(/Profile settings/i);
-    expect(screen.getByText(/System settings/i)).toBeInTheDocument();
-
     const saveProfile = screen.getByRole('button', { name: /Save Changes/i });
     expect(saveProfile).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /^System$/i }));
+    await screen.findByText(/System settings/i);
   });
 
   it('disables email editing for operator', async () => {
@@ -95,6 +104,8 @@ describe('AdminSettings', () => {
     setupApi({ meRole: 'admin' });
     render(<AdminSettings />);
 
+    await screen.findByText(/Profile settings/i);
+    fireEvent.click(screen.getByRole('button', { name: /^System$/i }));
     await screen.findByText(/System settings/i);
     const saveSystem = screen.getByRole('button', { name: /Save Settings/i });
     expect(saveSystem).toBeDisabled();

@@ -14,5 +14,6 @@ router.get('', requirePermission('settings.read'), settingsController.getSetting
 router.get('/', requirePermission('settings.read'), settingsController.getSettings);
 router.put('', requirePermission('settings.write'), settingsController.updateSettings);
 router.put('/', requirePermission('settings.write'), settingsController.updateSettings);
+router.post('/smtp/test', requirePermission('settings.write'), settingsController.sendSmtpTestEmail);
 
 module.exports = router;

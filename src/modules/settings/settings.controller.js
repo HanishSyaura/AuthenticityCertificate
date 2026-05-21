@@ -1,6 +1,21 @@
 const { z } = require('zod');
 const prisma = require('../../config/prisma');
 const settingsService = require('./settings.service');
+const emailService = require('../../services/email.service');
+
+function isValidEmail(v) {
+  const s = String(v || '').trim();
+  if (!s) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
+function extractEmail(v) {
+  const s = String(v || '').trim();
+  if (!s) return '';
+  const m = s.match(/<([^<>]+)>/);
+  if (m) return String(m[1] || '').trim();
+  return s;
+}
 
 async function getSettings(req, res) {
   try {
@@ -26,6 +41,13 @@ async function getSettings(req, res) {
               defaultTimezone: row.defaultTimezone,
               maintenanceMode: Boolean(row.maintenanceMode),
               logoUrl: row.logoUrl ? String(row.logoUrl) : null,
+              smtpHost: row.smtpHost ? String(row.smtpHost) : null,
+              smtpPort: row.smtpPort == null ? null : Number(row.smtpPort) || null,
+              smtpSecure: row.smtpSecure == null ? null : Boolean(row.smtpSecure),
+              smtpUser: row.smtpUser ? String(row.smtpUser) : null,
+              smtpFrom: row.smtpFrom ? String(row.smtpFrom) : null,
+              smtpReplyTo: row.smtpReplyTo ? String(row.smtpReplyTo) : null,
+              smtpPassSet: Boolean(row.smtpPassEnc),
               epcGeneratedEmailNotifyEnabled: Boolean(notifyCfg?.isEnabled),
               epcGeneratedEmailNotifyRoles: Array.isArray(notifyCfg?.roleNamesJson) ? notifyCfg.roleNamesJson : [],
               epcProductionOrdersEmailNotifyEnabled: Boolean(prodCfg?.isEnabled),
@@ -67,6 +89,75 @@ const updateSchema = z.object({
     },
     z.string().min(1).max(512).nullable().optional()
   ),
+  smtpHost: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      const s = String(v).trim();
+      return s ? s : null;
+    },
+    z.string().min(1).max(191).nullable().optional()
+  ),
+  smtpPort: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      const s = String(v).trim();
+      if (!s) return null;
+      const n = Number(s);
+      return Number.isFinite(n) ? n : s;
+    },
+    z.number().int().min(1).max(65535).nullable().optional()
+  ),
+  smtpSecure: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      if (typeof v === 'boolean') return v;
+      const s = String(v).trim().toLowerCase();
+      if (!s) return null;
+      if (s === '1' || s === 'true' || s === 'yes') return true;
+      if (s === '0' || s === 'false' || s === 'no') return false;
+      return v;
+    },
+    z.boolean().nullable().optional()
+  ),
+  smtpUser: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      const s = String(v).trim();
+      return s ? s : null;
+    },
+    z.string().min(1).max(191).nullable().optional()
+  ),
+  smtpPass: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      const s = String(v);
+      return s.trim() ? s : null;
+    },
+    z.string().min(1).max(512).nullable().optional()
+  ),
+  smtpFrom: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      const s = String(v).trim();
+      return s ? s : null;
+    },
+    z.string().min(1).max(191).nullable().optional()
+  ),
+  smtpReplyTo: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      const s = String(v).trim();
+      return s ? s : null;
+    },
+    z.string().min(1).max(191).nullable().optional()
+  ),
   epcGeneratedEmailNotifyEnabled: z.boolean().optional(),
   epcGeneratedEmailNotifyRoles: z.preprocess(
     (v) => {
@@ -105,11 +196,24 @@ const updateSchema = z.object({
   )
 });
 
+const smtpTestSchema = z.object({
+  to: z.string().trim().min(3).max(320)
+});
+
 async function updateSettings(req, res) {
   try {
     const orgId = req.organization?.id;
     if (!orgId) return res.error('Organization required', 400);
     const validated = updateSchema.parse(req.body || {});
+
+    if (validated.smtpFrom != null) {
+      const fromEmail = extractEmail(validated.smtpFrom);
+      if (!isValidEmail(fromEmail)) return res.error('Invalid SMTP From address', 400);
+    }
+    if (validated.smtpReplyTo != null) {
+      const replyEmail = extractEmail(validated.smtpReplyTo);
+      if (!isValidEmail(replyEmail)) return res.error('Invalid SMTP Reply-To address', 400);
+    }
 
     if (validated.organizationName || validated.organizationCode) {
       const data = {};
@@ -163,6 +267,13 @@ async function updateSettings(req, res) {
               defaultTimezone: row.defaultTimezone,
               maintenanceMode: Boolean(row.maintenanceMode),
               logoUrl: row.logoUrl ? String(row.logoUrl) : null,
+              smtpHost: row.smtpHost ? String(row.smtpHost) : null,
+              smtpPort: row.smtpPort == null ? null : Number(row.smtpPort) || null,
+              smtpSecure: row.smtpSecure == null ? null : Boolean(row.smtpSecure),
+              smtpUser: row.smtpUser ? String(row.smtpUser) : null,
+              smtpFrom: row.smtpFrom ? String(row.smtpFrom) : null,
+              smtpReplyTo: row.smtpReplyTo ? String(row.smtpReplyTo) : null,
+              smtpPassSet: Boolean(row.smtpPassEnc),
               epcGeneratedEmailNotifyEnabled: Boolean(notifyCfg?.isEnabled),
               epcGeneratedEmailNotifyRoles: Array.isArray(notifyCfg?.roleNamesJson) ? notifyCfg.roleNamesJson : [],
               epcProductionOrdersEmailNotifyEnabled: Boolean(prodCfg?.isEnabled),
@@ -186,7 +297,36 @@ async function updateSettings(req, res) {
   }
 }
 
+async function sendSmtpTestEmail(req, res) {
+  try {
+    const orgId = req.organization?.id;
+    if (!orgId) return res.error('Organization required', 400);
+    const validated = smtpTestSchema.parse(req.body || {});
+    const toEmail = extractEmail(validated.to);
+    if (!isValidEmail(toEmail)) return res.error('Invalid email address', 400);
+
+    const result = await emailService.sendEmailNow({
+      organizationId: orgId,
+      to: [toEmail],
+      subject: 'SMTP test email',
+      text: 'SMTP test email sent from Settings.'
+    });
+    if (result?.skipped && result.reason === 'smtp_not_configured') {
+      return res.error('SMTP not configured', 400);
+    }
+    return res.success({ ok: Boolean(result?.ok), skipped: Boolean(result?.skipped), reason: result?.reason || null }, 'OK');
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.error(error.errors[0].message, 400);
+    }
+    const msg = String(error?.message || '');
+    if (msg === 'nodemailer_missing') return res.error('Email service not available', 503);
+    return res.error('Service temporarily unavailable', 503);
+  }
+}
+
 module.exports = {
   getSettings,
-  updateSettings
+  updateSettings,
+  sendSmtpTestEmail
 };

@@ -83,6 +83,7 @@ async function notifyEpcBatchGenerated({ organizationId, batch, created, startNo
   ].filter(Boolean);
 
   await emailService.sendEmail({
+    organizationId: orgId,
     to,
     subject,
     text: lines.join('\n')
@@ -118,6 +119,7 @@ async function notifyProductionOrdersImported({ organizationId, batchId, rows, u
   ].filter(Boolean);
 
   await emailService.sendEmail({
+    organizationId: orgId,
     to,
     subject,
     text: lines.join('\n')

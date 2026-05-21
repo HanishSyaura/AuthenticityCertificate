@@ -4,7 +4,10 @@ try {
 } catch {
 }
 
+const crypto = require('crypto');
 const jobQueue = require('./jobQueue.service');
+const prisma = require('../config/prisma');
+const { decryptText } = require('../utils/secretCrypto');
 
 function isValidEmail(v) {
   const s = String(v || '').trim();
@@ -12,7 +15,7 @@ function isValidEmail(v) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }
 
-function smtpConfig() {
+function envSmtpConfig() {
   const host = String(process.env.SMTP_HOST || '').trim();
   if (!host) return null;
   const portRaw = process.env.SMTP_PORT;
@@ -38,29 +41,90 @@ function smtpConfig() {
   };
 }
 
+function normalizeOrgSmtpRow(row) {
+  if (!row) return null;
+  const host = row.smtpHost ? String(row.smtpHost).trim() : '';
+  if (!host) return null;
+  const portRaw = row.smtpPort == null ? null : Number(row.smtpPort);
+  const port = Number.isFinite(portRaw) && portRaw > 0 ? portRaw : 587;
+  const secure = row.smtpSecure == null ? port === 465 : Boolean(row.smtpSecure);
+  const user = row.smtpUser ? String(row.smtpUser).trim() : '';
+  const pass = row.smtpPassEnc ? decryptText(String(row.smtpPassEnc)) : '';
+  const from = row.smtpFrom ? String(row.smtpFrom).trim() : '';
+  const replyTo = row.smtpReplyTo ? String(row.smtpReplyTo).trim() : '';
+
+  return {
+    host,
+    port,
+    secure,
+    auth: user && pass ? { user, pass } : null,
+    from: from || user || null,
+    replyTo: replyTo || null,
+    connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 15_000) || 15_000,
+    socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 30_000) || 30_000
+  };
+}
+
+const orgCfgCache = new Map();
+
+async function orgSmtpConfig(organizationId) {
+  const orgId = Number(organizationId);
+  if (!Number.isFinite(orgId) || orgId <= 0) return null;
+  const cached = orgCfgCache.get(orgId);
+  if (cached && Date.now() - cached.ts < 30_000) return cached.cfg;
+  try {
+    const rows = await prisma.$queryRaw`
+      SELECT smtpHost, smtpPort, smtpSecure, smtpUser, smtpPassEnc, smtpFrom, smtpReplyTo
+      FROM OrganizationSettings
+      WHERE organizationId = ${orgId}
+      LIMIT 1
+    `;
+    const cfg = normalizeOrgSmtpRow(rows?.[0] || null);
+    orgCfgCache.set(orgId, { ts: Date.now(), cfg });
+    return cfg;
+  } catch {
+    orgCfgCache.set(orgId, { ts: Date.now(), cfg: null });
+    return null;
+  }
+}
+
+async function smtpConfig({ organizationId } = {}) {
+  const orgCfg = await orgSmtpConfig(organizationId);
+  if (orgCfg) return orgCfg;
+  return envSmtpConfig();
+}
+
 function isEmailConfigured() {
-  const cfg = smtpConfig();
+  const cfg = envSmtpConfig();
   return !!cfg && !!cfg.host && !!cfg.from;
 }
 
-let cachedTransport = null;
-let cachedKey = '';
+const cachedTransports = new Map();
 
-function getTransport() {
-  const cfg = smtpConfig();
+function hashSecret(s) {
+  const v = String(s || '');
+  if (!v) return '';
+  return crypto.createHash('sha256').update(v).digest('hex');
+}
+
+async function getTransport({ organizationId } = {}) {
+  const cfg = await smtpConfig({ organizationId });
   if (!cfg) return null;
   if (!nodemailer) throw new Error('nodemailer_missing');
+  const passHash = cfg.auth?.pass ? hashSecret(cfg.auth.pass) : '';
   const key = JSON.stringify({
     host: cfg.host,
     port: cfg.port,
     secure: cfg.secure,
     authUser: cfg.auth?.user || '',
+    authPassHash: passHash,
     connectionTimeout: cfg.connectionTimeout,
     socketTimeout: cfg.socketTimeout
   });
-  if (cachedTransport && cachedKey === key) return { transport: cachedTransport, cfg };
+  const existing = cachedTransports.get(key);
+  if (existing) return { transport: existing, cfg };
 
-  cachedTransport = nodemailer.createTransport({
+  const transport = nodemailer.createTransport({
     host: cfg.host,
     port: cfg.port,
     secure: cfg.secure,
@@ -69,8 +133,8 @@ function getTransport() {
     greetingTimeout: cfg.connectionTimeout,
     socketTimeout: cfg.socketTimeout
   });
-  cachedKey = key;
-  return { transport: cachedTransport, cfg };
+  cachedTransports.set(key, transport);
+  return { transport, cfg };
 }
 
 function normalizeAddressList(list) {
@@ -79,8 +143,8 @@ function normalizeAddressList(list) {
   return Array.from(new Set(emails));
 }
 
-async function sendEmailNow({ to, cc, bcc, subject, text, html, replyTo } = {}) {
-  const t = getTransport();
+async function sendEmailNow({ organizationId, to, cc, bcc, subject, text, html, replyTo } = {}) {
+  const t = await getTransport({ organizationId });
   if (!t) return { skipped: true, reason: 'smtp_not_configured' };
   const toList = normalizeAddressList(to);
   const ccList = normalizeAddressList(cc);

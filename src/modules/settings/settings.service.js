@@ -1,4 +1,5 @@
 const prisma = require('../../config/prisma');
+const { encryptText } = require('../../utils/secretCrypto');
 
 const EPC_GENERATED_EMAIL_KEY = 'epc_generated_email';
 const EPC_PRODUCTION_ORDERS_EMAIL_KEY = 'epc_production_orders_email';
@@ -61,7 +62,22 @@ async function getOrganizationSettingsRow(organizationId) {
   if (!Number.isFinite(orgId) || orgId <= 0) return null;
 
   const rows = await prisma.$queryRaw`
-    SELECT id, organizationId, defaultLocale, defaultTimezone, maintenanceMode, logoUrl, createdAt, updatedAt
+    SELECT
+      id,
+      organizationId,
+      defaultLocale,
+      defaultTimezone,
+      maintenanceMode,
+      logoUrl,
+      smtpHost,
+      smtpPort,
+      smtpSecure,
+      smtpUser,
+      smtpPassEnc,
+      smtpFrom,
+      smtpReplyTo,
+      createdAt,
+      updatedAt
     FROM OrganizationSettings
     WHERE organizationId = ${orgId}
     LIMIT 1
@@ -96,6 +112,22 @@ async function updateOrganizationSettings(organizationId, input) {
   const hasLogoUrl = Object.prototype.hasOwnProperty.call(input, 'logoUrl');
   const logoUrl = typeof input.logoUrl === 'string' ? input.logoUrl.trim() : input.logoUrl === null ? null : null;
 
+  const hasSmtpHost = Object.prototype.hasOwnProperty.call(input, 'smtpHost');
+  const smtpHost = typeof input.smtpHost === 'string' ? input.smtpHost.trim() : input.smtpHost === null ? null : null;
+  const hasSmtpPort = Object.prototype.hasOwnProperty.call(input, 'smtpPort');
+  const smtpPort = Number.isFinite(Number(input.smtpPort)) ? Number(input.smtpPort) : input.smtpPort === null ? null : null;
+  const hasSmtpSecure = Object.prototype.hasOwnProperty.call(input, 'smtpSecure');
+  const smtpSecure = typeof input.smtpSecure === 'boolean' ? input.smtpSecure : input.smtpSecure === null ? null : null;
+  const hasSmtpUser = Object.prototype.hasOwnProperty.call(input, 'smtpUser');
+  const smtpUser = typeof input.smtpUser === 'string' ? input.smtpUser.trim() : input.smtpUser === null ? null : null;
+  const hasSmtpPass = Object.prototype.hasOwnProperty.call(input, 'smtpPass');
+  const smtpPassEnc =
+    typeof input.smtpPass === 'string' ? encryptText(String(input.smtpPass)) : input.smtpPass === null ? null : null;
+  const hasSmtpFrom = Object.prototype.hasOwnProperty.call(input, 'smtpFrom');
+  const smtpFrom = typeof input.smtpFrom === 'string' ? input.smtpFrom.trim() : input.smtpFrom === null ? null : null;
+  const hasSmtpReplyTo = Object.prototype.hasOwnProperty.call(input, 'smtpReplyTo');
+  const smtpReplyTo = typeof input.smtpReplyTo === 'string' ? input.smtpReplyTo.trim() : input.smtpReplyTo === null ? null : null;
+
   await prisma.$executeRaw`
     UPDATE OrganizationSettings
     SET
@@ -103,6 +135,13 @@ async function updateOrganizationSettings(organizationId, input) {
       defaultTimezone = COALESCE(${defaultTimezone}, defaultTimezone),
       maintenanceMode = COALESCE(${maintenanceMode}, maintenanceMode),
       logoUrl = CASE WHEN ${hasLogoUrl} THEN ${logoUrl} ELSE logoUrl END,
+      smtpHost = CASE WHEN ${hasSmtpHost} THEN ${smtpHost} ELSE smtpHost END,
+      smtpPort = CASE WHEN ${hasSmtpPort} THEN ${smtpPort} ELSE smtpPort END,
+      smtpSecure = CASE WHEN ${hasSmtpSecure} THEN ${smtpSecure} ELSE smtpSecure END,
+      smtpUser = CASE WHEN ${hasSmtpUser} THEN ${smtpUser} ELSE smtpUser END,
+      smtpPassEnc = CASE WHEN ${hasSmtpPass} THEN ${smtpPassEnc} ELSE smtpPassEnc END,
+      smtpFrom = CASE WHEN ${hasSmtpFrom} THEN ${smtpFrom} ELSE smtpFrom END,
+      smtpReplyTo = CASE WHEN ${hasSmtpReplyTo} THEN ${smtpReplyTo} ELSE smtpReplyTo END,
       updatedAt = NOW()
     WHERE organizationId = ${orgId}
   `;

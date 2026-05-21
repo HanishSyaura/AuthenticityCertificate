@@ -10,6 +10,11 @@ const useAdminAuthStore = create((set) => ({
   loading: false,
   error: null,
 
+  setToken: (token) => {
+    writeJson(ADMIN_KEYS.token, token);
+    set({ token });
+  },
+
   setUser: (user) => {
     writeJson(ADMIN_KEYS.user, user);
     set({ user });

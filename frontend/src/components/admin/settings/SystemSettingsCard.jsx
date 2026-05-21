@@ -23,20 +23,22 @@ export default function SystemSettingsCard({
 }) {
   const { t } = useT();
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-4">
+    <div className="ac-card p-5">
       <div className="text-sm font-semibold text-zinc-900">{title}</div>
       <div className="mt-1 text-xs text-zinc-500">{hint}</div>
 
       {!canEdit ? (
-        <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+        <div className="mt-4 rounded-xl border border-zinc-200/80 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
           {t('onlySuperAdminCanEdit')}
         </div>
       ) : null}
 
       {notice?.text ? (
         <div
-          className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
-            notice.kind === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700'
+          className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
+            notice.kind === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              : 'border-red-200 bg-red-50 text-red-700'
           }`}
         >
           {notice.text}
@@ -168,7 +170,7 @@ export default function SystemSettingsCard({
                 type="button"
                 disabled={!canEdit || logoUploading || !draft.logoUrl}
                 onClick={() => onChange({ logoUrl: '' })}
-                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="ac-btn ac-btn-soft px-3 py-2"
               >
                 {t('remove')}
               </button>
@@ -182,7 +184,7 @@ export default function SystemSettingsCard({
           type="button"
           onClick={onSave}
           disabled={!canEdit || !dirty || saving}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="ac-btn px-4 py-2"
         >
           {saving ? t('saving') : t('saveSettings')}
         </button>

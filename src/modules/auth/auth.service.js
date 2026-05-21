@@ -133,6 +133,7 @@ async function updateMe(tokenUser, input) {
 
   const role = resolved.kind === 'user' ? resolved.row.role : 'admin';
   const canEditEmail = role === 'super_admin' || role === 'admin';
+  const jwtSecret = process.env.JWT_SECRET;
 
   const update = {};
   if (typeof input.name === 'string') update.name = input.name.trim();
@@ -159,7 +160,13 @@ async function updateMe(tokenUser, input) {
         prisma.user.update({ where: { id: resolved.row.id }, data: update }),
         getDbTimeoutMs()
       );
+      const nextRole = saved.role;
+      const nextToken =
+        update.email && jwtSecret
+          ? jwt.sign({ id: saved.id, email: saved.email, role: nextRole }, String(jwtSecret), { expiresIn: '1d' })
+          : null;
       return {
+        token: nextToken,
         user: {
           id: saved.id,
           email: saved.email,
@@ -174,7 +181,12 @@ async function updateMe(tokenUser, input) {
       prisma.admin.update({ where: { id: resolved.row.id }, data: update }),
       getDbTimeoutMs()
     );
+    const nextToken =
+      update.email && jwtSecret
+        ? jwt.sign({ id: saved.id, email: saved.email, role: 'admin' }, String(jwtSecret), { expiresIn: '1d' })
+        : null;
     return {
+      token: nextToken,
       user: {
         id: saved.id,
         email: saved.email,

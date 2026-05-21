@@ -833,6 +833,13 @@ async function ensureOrganizationSettingsSchemaCompat() {
         \`defaultLocale\` VARCHAR(20) NULL,
         \`defaultTimezone\` VARCHAR(64) NULL,
         \`maintenanceMode\` TINYINT(1) NOT NULL DEFAULT 0,
+        \`smtpHost\` VARCHAR(191) NULL,
+        \`smtpPort\` INT NULL,
+        \`smtpSecure\` TINYINT(1) NULL,
+        \`smtpUser\` VARCHAR(191) NULL,
+        \`smtpPassEnc\` TEXT NULL,
+        \`smtpFrom\` VARCHAR(191) NULL,
+        \`smtpReplyTo\` VARCHAR(191) NULL,
         \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (\`id\`)
@@ -859,6 +866,56 @@ async function ensureOrganizationSettingsSchemaCompat() {
     'OrganizationSettings',
     'logoUrl',
     'ALTER TABLE `OrganizationSettings` ADD COLUMN `logoUrl` VARCHAR(512) NULL',
+    null,
+    null
+  );
+
+  await ensureColumn(
+    'OrganizationSettings',
+    'smtpHost',
+    'ALTER TABLE `OrganizationSettings` ADD COLUMN `smtpHost` VARCHAR(191) NULL',
+    null,
+    null
+  );
+  await ensureColumn(
+    'OrganizationSettings',
+    'smtpPort',
+    'ALTER TABLE `OrganizationSettings` ADD COLUMN `smtpPort` INT NULL',
+    null,
+    null
+  );
+  await ensureColumn(
+    'OrganizationSettings',
+    'smtpSecure',
+    'ALTER TABLE `OrganizationSettings` ADD COLUMN `smtpSecure` TINYINT(1) NULL',
+    null,
+    null
+  );
+  await ensureColumn(
+    'OrganizationSettings',
+    'smtpUser',
+    'ALTER TABLE `OrganizationSettings` ADD COLUMN `smtpUser` VARCHAR(191) NULL',
+    null,
+    null
+  );
+  await ensureColumn(
+    'OrganizationSettings',
+    'smtpPassEnc',
+    'ALTER TABLE `OrganizationSettings` ADD COLUMN `smtpPassEnc` TEXT NULL',
+    null,
+    null
+  );
+  await ensureColumn(
+    'OrganizationSettings',
+    'smtpFrom',
+    'ALTER TABLE `OrganizationSettings` ADD COLUMN `smtpFrom` VARCHAR(191) NULL',
+    null,
+    null
+  );
+  await ensureColumn(
+    'OrganizationSettings',
+    'smtpReplyTo',
+    'ALTER TABLE `OrganizationSettings` ADD COLUMN `smtpReplyTo` VARCHAR(191) NULL',
     null,
     null
   );
