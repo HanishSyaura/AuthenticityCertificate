@@ -4,6 +4,9 @@ import { useT } from '../i18n/useT';
 import useAdminAuthStore from '../store/useAdminAuthStore';
 import { resolvePublicMediaUrl } from '../utils/apiBase';
 
+let workerSrcPromise = null;
+let workerSrcBlobUrl = '';
+
 function clamp(n, min, max) {
   const v = Number(n) || 0;
   return Math.max(min, Math.min(max, v));
@@ -28,6 +31,39 @@ function getPdfDocumentParams(data) {
     useSystemFonts: true,
     disableIndexedDb: true
   };
+}
+
+async function ensurePdfWorkerSrc(pdfjs) {
+  const existing = pdfjs?.GlobalWorkerOptions?.workerSrc;
+  if (typeof existing === 'string' && existing.trim()) return existing.trim();
+  if (workerSrcBlobUrl) {
+    try {
+      pdfjs.GlobalWorkerOptions.workerSrc = workerSrcBlobUrl;
+    } catch {
+    }
+    return workerSrcBlobUrl;
+  }
+  if (!workerSrcPromise) {
+    workerSrcPromise = (async () => {
+      const workerUrl = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString();
+      const res = await fetch(workerUrl);
+      if (!res.ok) throw new Error(`Failed to load pdf.worker (${res.status})`);
+      const code = await res.text();
+      const blob = new Blob([code], { type: 'text/javascript' });
+      const blobUrl = URL.createObjectURL(blob);
+      workerSrcBlobUrl = blobUrl;
+      return blobUrl;
+    })().catch((e) => {
+      workerSrcPromise = null;
+      throw e;
+    });
+  }
+  const src = await workerSrcPromise;
+  try {
+    pdfjs.GlobalWorkerOptions.workerSrc = src;
+  } catch {
+  }
+  return src;
 }
 
 function PdfCanvasViewer({ data, page, zoom, onNumPagesChange, onRenderStateChange }) {
@@ -73,17 +109,8 @@ function PdfCanvasViewer({ data, page, zoom, onNumPagesChange, onRenderStateChan
       try {
         if (!(data instanceof Uint8Array) || data.length === 0) throw new Error(t('operationFailed'));
         const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-        try {
-          const workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString();
-          if (workerSrc) pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
-        } catch {
-        }
-        let doc = null;
-        try {
-          doc = await pdfjs.getDocument({ ...getPdfDocumentParams(data), disableWorker: false }).promise;
-        } catch (e) {
-          doc = await pdfjs.getDocument({ ...getPdfDocumentParams(data), disableWorker: true }).promise;
-        }
+        await ensurePdfWorkerSrc(pdfjs);
+        const doc = await pdfjs.getDocument(getPdfDocumentParams(data)).promise;
         if (!alive) {
           try {
             doc.destroy?.();
