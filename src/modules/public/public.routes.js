@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const fs = require('fs/promises');
 
 const certificateService = require('../certificate/certificate.service');
 const scanlog = require('../../services/scanlog.service');
@@ -9,6 +11,8 @@ const prisma = require('../../config/prisma');
 const fraudService = require('../../services/fraud.service');
 const dbGate = require('../../services/dbGate.service');
 const webhookService = require('../../services/webhook.service');
+const { pickWritableUploadRoot } = require('../../utils/uploadsRoot');
+const { renderPdfPreviewOne } = require('../../services/pdfPreview.service');
 
 function normalizeLang(lang) {
   const l = String(lang || 'en').toLowerCase();
@@ -96,6 +100,62 @@ router.get('/settings', async (req, res) => {
   } catch (e) {
     if (shouldTriggerDbGate(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'GET /settings' });
     return res.success({ organization: null, settings: { logoUrl: null } }, 'OK');
+  }
+});
+
+async function statSafe(absPath) {
+  try {
+    return await fs.stat(absPath);
+  } catch {
+    return null;
+  }
+}
+
+function parsePdfSrc(src) {
+  const raw = String(src || '').trim();
+  if (!raw) return null;
+  let pathname = raw;
+  try {
+    pathname = new URL(raw).pathname || raw;
+  } catch {}
+  const m = String(pathname).match(/\/(?:api\/)?(?:v1\/)?(?:public\/)?uploads\/media\/(\d+)\/([^/?#]+)$/i);
+  if (!m) return null;
+  const orgId = Number(m[1]);
+  const fileName = decodeURIComponent(String(m[2] || '').trim());
+  if (!Number.isFinite(orgId) || orgId <= 0) return null;
+  if (!fileName || fileName.includes('/') || fileName.includes('\\') || fileName.includes('..')) return null;
+  if (!fileName.toLowerCase().endsWith('.pdf')) return null;
+  return { orgId, fileName };
+}
+
+router.get('/pdf-preview', async (req, res) => {
+  try {
+    const parsed = parsePdfSrc(req.query?.src);
+    if (!parsed) return res.error('Invalid PDF src', 400);
+    const { orgId, fileName } = parsed;
+
+    const asset = await prisma.mediaAsset.findFirst({ where: { organizationId: orgId, fileName } });
+    if (!asset) return res.error('PDF not found', 404);
+
+    const uploadsRoot = pickWritableUploadRoot();
+    const pdfAbs = path.join(uploadsRoot, 'media', String(orgId), fileName);
+    const pdfStat = await statSafe(pdfAbs);
+    if (!pdfStat) return res.error('PDF not found', 404);
+
+    const base = path.parse(fileName).name;
+    const manifestAbs = path.join(uploadsRoot, 'media', String(orgId), `${base}.preview.json`);
+    const manifestStat = await statSafe(manifestAbs);
+
+    if (!manifestStat || manifestStat.mtimeMs < pdfStat.mtimeMs) {
+      await renderPdfPreviewOne({ mediaAssetId: asset.id });
+    }
+
+    const text = await fs.readFile(manifestAbs, 'utf8');
+    const json = JSON.parse(text);
+    return res.success(json, 'OK');
+  } catch (e) {
+    const msg = e?.message || String(e);
+    return res.error(msg, 500);
   }
 });
 
