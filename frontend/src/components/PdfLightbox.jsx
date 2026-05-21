@@ -29,7 +29,8 @@ function getPdfDocumentParams(data) {
     disableAutoFetch: true,
     disableFontFace: true,
     useSystemFonts: true,
-    disableIndexedDb: true
+    disableIndexedDb: true,
+    disableWorker: true
   };
 }
 
@@ -109,7 +110,6 @@ function PdfCanvasViewer({ data, page, zoom, onNumPagesChange, onRenderStateChan
       try {
         if (!(data instanceof Uint8Array) || data.length === 0) throw new Error(t('operationFailed'));
         const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-        await ensurePdfWorkerSrc(pdfjs);
         const doc = await pdfjs.getDocument(getPdfDocumentParams(data)).promise;
         if (!alive) {
           try {
@@ -121,7 +121,7 @@ function PdfCanvasViewer({ data, page, zoom, onNumPagesChange, onRenderStateChan
         docRef.current = doc;
         setNumPages(Number(doc?.numPages) || 0);
       } catch (e) {
-        const msg = e?.message ? String(e.message) : t('operationFailed');
+        const msg = e?.message ? String(e.message) : e ? String(e) : t('operationFailed');
         console.error('[PdfCanvasViewer] load failed', e);
         if (!alive) return;
         setError(msg);
