@@ -333,6 +333,19 @@ async function updateSettings(req, res) {
   }
 }
 
+async function listNotificationRoles(_req, res) {
+  try {
+    const enumRoles = ['super_admin', 'admin', 'operator'];
+    const rows = await prisma.role.findMany({ orderBy: { name: 'asc' }, select: { name: true } });
+    const names = rows.map((r) => String(r?.name || '').trim()).filter(Boolean);
+    const all = Array.from(new Set([...enumRoles, ...names]));
+    all.sort((a, b) => a.localeCompare(b));
+    return res.success(all, 'OK');
+  } catch {
+    return res.success(['super_admin', 'admin', 'operator'], 'OK');
+  }
+}
+
 async function sendSmtpTestEmail(req, res) {
   try {
     const orgId = req.organization?.id;
@@ -363,6 +376,7 @@ async function sendSmtpTestEmail(req, res) {
 
 module.exports = {
   getSettings,
+  listNotificationRoles,
   updateSettings,
   sendSmtpTestEmail
 };

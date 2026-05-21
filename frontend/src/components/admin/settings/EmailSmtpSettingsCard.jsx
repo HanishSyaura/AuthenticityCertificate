@@ -2,10 +2,71 @@ import React, { useEffect, useState } from 'react';
 import { Field, Input, Toggle } from './SettingsControls';
 import { useT } from '../../../i18n/useT';
 
+function parseRoleCsv(v) {
+  const s = String(v || '').trim();
+  if (!s) return [];
+  return s
+    .split(',')
+    .map((x) => String(x || '').trim())
+    .filter(Boolean);
+}
+
+function RoleMultiSelect({ id, value, options, disabled, placeholder, onChange }) {
+  const selected = new Set(parseRoleCsv(value));
+  const list = Array.isArray(options) ? options.map((x) => String(x || '').trim()).filter(Boolean) : [];
+
+  return (
+    <details className="relative">
+      <summary
+        className={`ac-input-compact flex cursor-pointer list-none items-center justify-between ${
+          disabled ? 'opacity-60' : ''
+        }`}
+        onClick={(e) => {
+          if (disabled) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
+      >
+        <span className={`truncate ${selected.size ? 'text-zinc-900' : 'text-zinc-400'}`}>
+          {selected.size ? Array.from(selected).join(', ') : placeholder}
+        </span>
+        <span className="ml-3 text-xs text-zinc-500">▾</span>
+      </summary>
+      <div className="absolute z-20 mt-2 w-full rounded-xl border border-zinc-200 bg-white p-2 shadow-lg">
+        {list.length === 0 ? (
+          <div className="px-2 py-2 text-xs text-zinc-500">No roles available</div>
+        ) : (
+          <div className="max-h-52 overflow-auto">
+            {list.map((name) => (
+              <label key={name} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-zinc-50">
+                <input
+                  type="checkbox"
+                  checked={selected.has(name)}
+                  disabled={disabled}
+                  onChange={() => {
+                    const next = new Set(selected);
+                    if (next.has(name)) next.delete(name);
+                    else next.add(name);
+                    onChange(Array.from(next).join(', '));
+                  }}
+                />
+                <span className="text-zinc-800">{name}</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+      <input type="hidden" id={id} value={String(value || '')} readOnly />
+    </details>
+  );
+}
+
 export default function EmailSmtpSettingsCard({
   title,
   hint,
   canEdit,
+  notificationRoleOptions,
   draft,
   errors,
   notice,
@@ -174,12 +235,13 @@ export default function EmailSmtpSettingsCard({
             </div>
             <div className="mt-3">
               <Field label={t('notificationRoles')} hint={t('notificationRolesHint')} error={errors?.epcGeneratedEmailNotifyRoles} htmlFor="smtp-notify-roles-1">
-                <Input
+                <RoleMultiSelect
                   id="smtp-notify-roles-1"
                   value={draft.epcGeneratedEmailNotifyRoles || ''}
-                  onChange={(v) => onChange({ epcGeneratedEmailNotifyRoles: v })}
+                  options={notificationRoleOptions}
                   disabled={!canEdit}
-                  placeholder="operator, epc_pic"
+                  placeholder={t('selectRoles')}
+                  onChange={(v) => onChange({ epcGeneratedEmailNotifyRoles: v })}
                 />
               </Field>
             </div>
@@ -203,12 +265,13 @@ export default function EmailSmtpSettingsCard({
                 error={errors?.epcProductionOrdersEmailNotifyRoles}
                 htmlFor="smtp-notify-roles-2"
               >
-                <Input
+                <RoleMultiSelect
                   id="smtp-notify-roles-2"
                   value={draft.epcProductionOrdersEmailNotifyRoles || ''}
-                  onChange={(v) => onChange({ epcProductionOrdersEmailNotifyRoles: v })}
+                  options={notificationRoleOptions}
                   disabled={!canEdit}
-                  placeholder="operator, epc_pic"
+                  placeholder={t('selectRoles')}
+                  onChange={(v) => onChange({ epcProductionOrdersEmailNotifyRoles: v })}
                 />
               </Field>
             </div>

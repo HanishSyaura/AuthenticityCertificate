@@ -123,6 +123,7 @@ export default function AdminSettings() {
   const [smtpTestErrors, setSmtpTestErrors] = useState({});
   const [smtpTestNotice, setSmtpTestNotice] = useState({ kind: '', text: '' });
   const [smtpTestSending, setSmtpTestSending] = useState(false);
+  const [notificationRoleOptions, setNotificationRoleOptions] = useState([]);
 
   const localeOptions = useMemo(
     () => [
@@ -153,11 +154,16 @@ export default function AdminSettings() {
       setLoadError('');
       try {
         const api = createAdminApi({ token });
-        const [meRes, settingsRes] = await Promise.all([api.get('/auth/me'), api.get('/settings/')]);
+        const [meRes, settingsRes, roleRes] = await Promise.all([
+          api.get('/auth/me'),
+          api.get('/settings/'),
+          api.get('/settings/notification-roles').catch(() => null)
+        ]);
 
         const me = meRes?.data?.data?.user;
         const org = settingsRes?.data?.data?.organization;
         const settings = settingsRes?.data?.data?.settings;
+        const roles = Array.isArray(roleRes?.data?.data) ? roleRes.data.data : [];
 
         if (!mounted) return;
 
@@ -211,6 +217,7 @@ export default function AdminSettings() {
         setSmtpClearPassword(false);
         setSmtpErrors({});
         setSmtpNotice({ kind: '', text: '' });
+        setNotificationRoleOptions(Array.isArray(roles) ? roles.map((r) => String(r || '').trim()).filter(Boolean) : []);
       } catch (e) {
         if (!mounted) return;
         const msg = e?.response?.data?.message || e?.message || t('failedToLoadSettings');
@@ -673,6 +680,7 @@ export default function AdminSettings() {
               title={t('smtpSettings')}
               hint={t('smtpSettingsHint')}
               canEdit={canEditEmail}
+              notificationRoleOptions={notificationRoleOptions}
               draft={smtpDraft}
               errors={smtpErrors}
               notice={smtpNotice}

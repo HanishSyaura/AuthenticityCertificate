@@ -12,6 +12,7 @@ router.use(attachOrganization);
 
 router.get('', requirePermission('settings.read'), settingsController.getSettings);
 router.get('/', requirePermission('settings.read'), settingsController.getSettings);
+router.get('/notification-roles', requirePermission('settings.read'), settingsController.listNotificationRoles);
 router.put('', requirePermission('settings.write'), settingsController.updateSettings);
 router.put('/', requirePermission('settings.write'), settingsController.updateSettings);
 router.post('/smtp/test', requirePermission('settings.write'), settingsController.sendSmtpTestEmail);

@@ -50,6 +50,7 @@ model Organization {
   templateTranslations CertificateTemplateTranslation[]
   mediaAssets     MediaAsset[]
   auditLogs       AuditLog[]
+  notificationConfigs OrganizationNotificationConfig[]
 }
 
 model ApiKey {
@@ -680,4 +681,18 @@ model UserRole {
 
   @@unique([userId, roleId])
   @@index([roleId])
+}
+
+model OrganizationNotificationConfig {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  key            String       @db.VarChar(191)
+  isEnabled      Boolean      @default(true)
+  roleNamesJson  Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, key], map: "OrganizationNotificationConfig_organizationId_key_key")
+  @@index([organizationId], map: "OrganizationNotificationConfig_organizationId_idx")
 }
