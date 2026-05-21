@@ -91,9 +91,11 @@ async function updateUserRole({ id, role }) {
     );
 
     try {
-      await tx.userRole.deleteMany({ where: { userId: uid } });
+      await tx.userRole.deleteMany({ where: { userId: uid, role: { isSystem: true } } });
       const sysRole = await tx.role.findUnique({ where: { name: String(role || '').trim() } });
-      if (sysRole) await tx.userRole.create({ data: { userId: uid, roleId: sysRole.id } });
+      if (sysRole) {
+        await tx.userRole.create({ data: { userId: uid, roleId: sysRole.id } });
+      }
     } catch {
     }
 

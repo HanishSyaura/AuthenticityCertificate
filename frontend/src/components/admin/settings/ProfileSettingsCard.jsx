@@ -50,20 +50,6 @@ export default function ProfileSettingsCard({
       </div>
 
       <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {showCurrent ? (
-          <Field label={t('currentPassword')} error={errors?.currentPassword} htmlFor="profile-current-password">
-            <Input
-              id="profile-current-password"
-              value={draft.currentPassword}
-              onChange={(v) => onChange({ currentPassword: v })}
-              type="password"
-              autoComplete="current-password"
-            />
-          </Field>
-        ) : (
-          <div className="hidden sm:block" />
-        )}
-
         <Field label={t('newPassword')} error={errors?.newPassword} htmlFor="profile-new-password">
           <Input
             id="profile-new-password"
@@ -84,6 +70,20 @@ export default function ProfileSettingsCard({
             autoComplete="new-password"
           />
         </Field>
+
+        {showCurrent ? (
+          <div className="sm:col-span-2">
+            <Field label={t('currentPassword')} error={errors?.currentPassword} htmlFor="profile-current-password">
+              <Input
+                id="profile-current-password"
+                value={draft.currentPassword}
+                onChange={(v) => onChange({ currentPassword: v })}
+                type="password"
+                autoComplete="current-password"
+              />
+            </Field>
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-5 flex justify-end">

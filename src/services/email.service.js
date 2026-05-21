@@ -50,15 +50,20 @@ function normalizeOrgSmtpRow(row) {
   const secure = row.smtpSecure == null ? port === 465 : Boolean(row.smtpSecure);
   const user = row.smtpUser ? String(row.smtpUser).trim() : '';
   const pass = row.smtpPassEnc ? decryptText(String(row.smtpPassEnc)) : '';
-  const from = row.smtpFrom ? String(row.smtpFrom).trim() : '';
+  const fromName = row.smtpFromName ? String(row.smtpFromName).trim() : '';
+  const fromEmail = row.smtpFromEmail ? String(row.smtpFromEmail).trim() : '';
   const replyTo = row.smtpReplyTo ? String(row.smtpReplyTo).trim() : '';
+
+  const safeFromName = fromName.replace(/["\r\n<>]+/g, '').trim();
+  const from =
+    safeFromName && fromEmail ? `${safeFromName} <${fromEmail}>` : fromEmail ? fromEmail : user ? user : '';
 
   return {
     host,
     port,
     secure,
     auth: user && pass ? { user, pass } : null,
-    from: from || user || null,
+    from: from || null,
     replyTo: replyTo || null,
     connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 15_000) || 15_000,
     socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 30_000) || 30_000
@@ -74,7 +79,7 @@ async function orgSmtpConfig(organizationId) {
   if (cached && Date.now() - cached.ts < 30_000) return cached.cfg;
   try {
     const rows = await prisma.$queryRaw`
-      SELECT smtpHost, smtpPort, smtpSecure, smtpUser, smtpPassEnc, smtpFrom, smtpReplyTo
+      SELECT smtpHost, smtpPort, smtpSecure, smtpUser, smtpPassEnc, smtpFromName, smtpFromEmail, smtpReplyTo
       FROM OrganizationSettings
       WHERE organizationId = ${orgId}
       LIMIT 1

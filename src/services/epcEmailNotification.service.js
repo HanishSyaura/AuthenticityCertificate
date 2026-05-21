@@ -44,14 +44,20 @@ async function resolveRecipientEmails({ organizationId, roleNames }) {
   return Array.from(new Set(emails)).slice(0, 100);
 }
 
-function adminBaseUrl() {
+async function adminBaseUrl(organizationId) {
+  const orgId = Number(organizationId);
+  if (Number.isFinite(orgId) && orgId > 0) {
+    const row = await settingsService.ensureOrganizationSettings(orgId);
+    const s = String(row?.adminAppUrl || '').trim();
+    if (s) return s.replace(/\/+$/, '');
+  }
   const s = String(process.env.ADMIN_APP_URL || process.env.APP_URL || '').trim();
   if (!s) return '';
   return s.replace(/\/+$/, '');
 }
 
-function buildAdminEpcLink() {
-  const base = adminBaseUrl();
+async function buildAdminEpcLink(organizationId) {
+  const base = await adminBaseUrl(organizationId);
   if (!base) return '';
   return `${base}/admin/epc`;
 }
@@ -72,7 +78,7 @@ async function notifyEpcBatchGenerated({ organizationId, batch, created, startNo
   const qty = Number(created) || Number(batch?.batchQty) || 0;
 
   const subject = `[${String(org?.code || 'ORG')}] EPC generated: ${batchName}`;
-  const link = buildAdminEpcLink();
+  const link = await buildAdminEpcLink(orgId);
   const lines = [
     'EPC batch generated.',
     `Organization: ${String(org?.name || '') || String(org?.code || '') || orgId}`,
@@ -108,7 +114,7 @@ async function notifyProductionOrdersImported({ organizationId, batchId, rows, u
   const batchName = String(batch?.batchName || '').trim() || `Batch #${id}`;
 
   const subject = `[${String(org?.code || 'ORG')}] Production orders updated: ${batchName}`;
-  const link = buildAdminEpcLink();
+  const link = await buildAdminEpcLink(orgId);
   const lines = [
     'Production orders uploaded.',
     `Organization: ${String(org?.name || '') || String(org?.code || '') || orgId}`,

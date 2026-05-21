@@ -74,8 +74,10 @@ async function getOrganizationSettingsRow(organizationId) {
       smtpSecure,
       smtpUser,
       smtpPassEnc,
-      smtpFrom,
+      smtpFromName,
+      smtpFromEmail,
       smtpReplyTo,
+      adminAppUrl,
       createdAt,
       updatedAt
     FROM OrganizationSettings
@@ -123,10 +125,14 @@ async function updateOrganizationSettings(organizationId, input) {
   const hasSmtpPass = Object.prototype.hasOwnProperty.call(input, 'smtpPass');
   const smtpPassEnc =
     typeof input.smtpPass === 'string' ? encryptText(String(input.smtpPass)) : input.smtpPass === null ? null : null;
-  const hasSmtpFrom = Object.prototype.hasOwnProperty.call(input, 'smtpFrom');
-  const smtpFrom = typeof input.smtpFrom === 'string' ? input.smtpFrom.trim() : input.smtpFrom === null ? null : null;
+  const hasSmtpFromName = Object.prototype.hasOwnProperty.call(input, 'smtpFromName');
+  const smtpFromName = typeof input.smtpFromName === 'string' ? input.smtpFromName.trim() : input.smtpFromName === null ? null : null;
+  const hasSmtpFromEmail = Object.prototype.hasOwnProperty.call(input, 'smtpFromEmail');
+  const smtpFromEmail = typeof input.smtpFromEmail === 'string' ? input.smtpFromEmail.trim() : input.smtpFromEmail === null ? null : null;
   const hasSmtpReplyTo = Object.prototype.hasOwnProperty.call(input, 'smtpReplyTo');
   const smtpReplyTo = typeof input.smtpReplyTo === 'string' ? input.smtpReplyTo.trim() : input.smtpReplyTo === null ? null : null;
+  const hasAdminAppUrl = Object.prototype.hasOwnProperty.call(input, 'adminAppUrl');
+  const adminAppUrl = typeof input.adminAppUrl === 'string' ? input.adminAppUrl.trim() : input.adminAppUrl === null ? null : null;
 
   await prisma.$executeRaw`
     UPDATE OrganizationSettings
@@ -140,8 +146,10 @@ async function updateOrganizationSettings(organizationId, input) {
       smtpSecure = CASE WHEN ${hasSmtpSecure} THEN ${smtpSecure} ELSE smtpSecure END,
       smtpUser = CASE WHEN ${hasSmtpUser} THEN ${smtpUser} ELSE smtpUser END,
       smtpPassEnc = CASE WHEN ${hasSmtpPass} THEN ${smtpPassEnc} ELSE smtpPassEnc END,
-      smtpFrom = CASE WHEN ${hasSmtpFrom} THEN ${smtpFrom} ELSE smtpFrom END,
+      smtpFromName = CASE WHEN ${hasSmtpFromName} THEN ${smtpFromName} ELSE smtpFromName END,
+      smtpFromEmail = CASE WHEN ${hasSmtpFromEmail} THEN ${smtpFromEmail} ELSE smtpFromEmail END,
       smtpReplyTo = CASE WHEN ${hasSmtpReplyTo} THEN ${smtpReplyTo} ELSE smtpReplyTo END,
+      adminAppUrl = CASE WHEN ${hasAdminAppUrl} THEN ${adminAppUrl} ELSE adminAppUrl END,
       updatedAt = NOW()
     WHERE organizationId = ${orgId}
   `;

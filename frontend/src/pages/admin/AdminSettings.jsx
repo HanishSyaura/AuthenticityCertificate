@@ -73,11 +73,7 @@ export default function AdminSettings() {
     defaultLocale: 'en',
     defaultTimezone: 'Asia/Kuala_Lumpur',
     maintenanceMode: false,
-    logoUrl: '',
-    epcGeneratedEmailNotifyEnabled: false,
-    epcGeneratedEmailNotifyRoles: '',
-    epcProductionOrdersEmailNotifyEnabled: false,
-    epcProductionOrdersEmailNotifyRoles: ''
+    logoUrl: ''
   });
   const [systemDraft, setSystemDraft] = useState({
     organizationName: '',
@@ -85,11 +81,7 @@ export default function AdminSettings() {
     defaultLocale: 'en',
     defaultTimezone: 'Asia/Kuala_Lumpur',
     maintenanceMode: false,
-    logoUrl: '',
-    epcGeneratedEmailNotifyEnabled: false,
-    epcGeneratedEmailNotifyRoles: '',
-    epcProductionOrdersEmailNotifyEnabled: false,
-    epcProductionOrdersEmailNotifyRoles: ''
+    logoUrl: ''
   });
   const [systemSaving, setSystemSaving] = useState(false);
   const [systemNotice, setSystemNotice] = useState({ kind: '', text: '' });
@@ -104,8 +96,14 @@ export default function AdminSettings() {
     smtpUser: '',
     smtpPass: '',
     smtpPassSet: false,
-    smtpFrom: '',
-    smtpReplyTo: ''
+    smtpFromName: '',
+    smtpFromEmail: '',
+    smtpReplyTo: '',
+    adminAppUrl: '',
+    epcGeneratedEmailNotifyEnabled: false,
+    epcGeneratedEmailNotifyRoles: '',
+    epcProductionOrdersEmailNotifyEnabled: false,
+    epcProductionOrdersEmailNotifyRoles: ''
   });
   const [smtpDraft, setSmtpDraft] = useState({
     smtpHost: '',
@@ -114,8 +112,14 @@ export default function AdminSettings() {
     smtpUser: '',
     smtpPass: '',
     smtpPassSet: false,
-    smtpFrom: '',
-    smtpReplyTo: ''
+    smtpFromName: '',
+    smtpFromEmail: '',
+    smtpReplyTo: '',
+    adminAppUrl: '',
+    epcGeneratedEmailNotifyEnabled: false,
+    epcGeneratedEmailNotifyRoles: '',
+    epcProductionOrdersEmailNotifyEnabled: false,
+    epcProductionOrdersEmailNotifyRoles: ''
   });
   const [smtpClearPassword, setSmtpClearPassword] = useState(false);
   const [smtpSaving, setSmtpSaving] = useState(false);
@@ -185,15 +189,7 @@ export default function AdminSettings() {
           defaultLocale: String(settings?.defaultLocale || 'en'),
           defaultTimezone: String(settings?.defaultTimezone || 'Asia/Kuala_Lumpur'),
           maintenanceMode: Boolean(settings?.maintenanceMode),
-          logoUrl: String(settings?.logoUrl || ''),
-          epcGeneratedEmailNotifyEnabled: Boolean(settings?.epcGeneratedEmailNotifyEnabled),
-          epcGeneratedEmailNotifyRoles: Array.isArray(settings?.epcGeneratedEmailNotifyRoles)
-            ? settings.epcGeneratedEmailNotifyRoles.join(', ')
-            : String(settings?.epcGeneratedEmailNotifyRoles || ''),
-          epcProductionOrdersEmailNotifyEnabled: Boolean(settings?.epcProductionOrdersEmailNotifyEnabled),
-          epcProductionOrdersEmailNotifyRoles: Array.isArray(settings?.epcProductionOrdersEmailNotifyRoles)
-            ? settings.epcProductionOrdersEmailNotifyRoles.join(', ')
-            : String(settings?.epcProductionOrdersEmailNotifyRoles || '')
+          logoUrl: String(settings?.logoUrl || '')
         };
         setSystemInitial(s0);
         setSystemDraft(s0);
@@ -206,8 +202,18 @@ export default function AdminSettings() {
           smtpUser: String(settings?.smtpUser || ''),
           smtpPass: '',
           smtpPassSet: Boolean(settings?.smtpPassSet),
-          smtpFrom: String(settings?.smtpFrom || ''),
-          smtpReplyTo: String(settings?.smtpReplyTo || '')
+          smtpFromName: String(settings?.smtpFromName || ''),
+          smtpFromEmail: String(settings?.smtpFromEmail || ''),
+          smtpReplyTo: String(settings?.smtpReplyTo || ''),
+          adminAppUrl: String(settings?.adminAppUrl || ''),
+          epcGeneratedEmailNotifyEnabled: Boolean(settings?.epcGeneratedEmailNotifyEnabled),
+          epcGeneratedEmailNotifyRoles: Array.isArray(settings?.epcGeneratedEmailNotifyRoles)
+            ? settings.epcGeneratedEmailNotifyRoles.join(', ')
+            : String(settings?.epcGeneratedEmailNotifyRoles || ''),
+          epcProductionOrdersEmailNotifyEnabled: Boolean(settings?.epcProductionOrdersEmailNotifyEnabled),
+          epcProductionOrdersEmailNotifyRoles: Array.isArray(settings?.epcProductionOrdersEmailNotifyRoles)
+            ? settings.epcProductionOrdersEmailNotifyRoles.join(', ')
+            : String(settings?.epcProductionOrdersEmailNotifyRoles || '')
         };
         setSmtpInitial(smtp0);
         setSmtpDraft(smtp0);
@@ -263,6 +269,53 @@ export default function AdminSettings() {
     if (!String(draft.defaultLocale || '').trim()) errs.defaultLocale = t('localeRequired');
     if (!String(draft.defaultTimezone || '').trim()) errs.defaultTimezone = t('timezoneRequired');
 
+    return errs;
+  }
+
+  function validateSmtp(draft) {
+    const errs = {};
+    const host = String(draft.smtpHost || '').trim();
+    const hasAny =
+      host ||
+      String(draft.smtpPort || '').trim() ||
+      String(draft.smtpUser || '').trim() ||
+      String(draft.smtpFromName || '').trim() ||
+      String(draft.smtpFromEmail || '').trim() ||
+      String(draft.smtpReplyTo || '').trim() ||
+      String(draft.adminAppUrl || '').trim() ||
+      String(draft.smtpPass || '').trim() ||
+      Boolean(draft.smtpSecure);
+
+    if (!hasAny) return errs;
+
+    if (!host) errs.smtpHost = t('required');
+    const port = Number(String(draft.smtpPort || '').trim());
+    if (!Number.isFinite(port) || port <= 0 || port > 65535) errs.smtpPort = t('invalidPort');
+
+    const user = String(draft.smtpUser || '').trim();
+    const fromEmail = String(draft.smtpFromEmail || '').trim();
+    if (!fromEmail) errs.smtpFromEmail = t('required');
+    else if (!isValidEmail(extractEmail(fromEmail))) errs.smtpFromEmail = t('invalidEmailAddress');
+
+    const reply = String(draft.smtpReplyTo || '').trim();
+    if (reply) {
+      const replyEmail = extractEmail(reply);
+      if (!isValidEmail(replyEmail)) errs.smtpReplyTo = t('invalidEmailAddress');
+    }
+
+    const appUrl = String(draft.adminAppUrl || '').trim();
+    if (appUrl) {
+      try {
+        const u = new URL(appUrl);
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') errs.adminAppUrl = t('invalidUrl');
+      } catch {
+        errs.adminAppUrl = t('invalidUrl');
+      }
+    }
+
+    const pass = String(draft.smtpPass || '');
+    if (user && !pass.trim() && !draft.smtpPassSet && !smtpClearPassword) errs.smtpPass = t('required');
+
     const genRoles = parseRoleCsv(draft.epcGeneratedEmailNotifyRoles);
     if (draft.epcGeneratedEmailNotifyEnabled) {
       if (genRoles.length === 0) errs.epcGeneratedEmailNotifyRoles = t('notificationRolesRequired');
@@ -275,43 +328,6 @@ export default function AdminSettings() {
     }
     if (prodRoles.some((r) => !isValidRoleName(r))) errs.epcProductionOrdersEmailNotifyRoles = t('invalidRoleList');
 
-    return errs;
-  }
-
-  function validateSmtp(draft) {
-    const errs = {};
-    const host = String(draft.smtpHost || '').trim();
-    const hasAny =
-      host ||
-      String(draft.smtpPort || '').trim() ||
-      String(draft.smtpUser || '').trim() ||
-      String(draft.smtpFrom || '').trim() ||
-      String(draft.smtpReplyTo || '').trim() ||
-      String(draft.smtpPass || '').trim() ||
-      Boolean(draft.smtpSecure);
-
-    if (!hasAny) return errs;
-
-    if (!host) errs.smtpHost = t('required');
-    const port = Number(String(draft.smtpPort || '').trim());
-    if (!Number.isFinite(port) || port <= 0 || port > 65535) errs.smtpPort = t('invalidPort');
-
-    const user = String(draft.smtpUser || '').trim();
-    const from = String(draft.smtpFrom || '').trim();
-    if (!from) errs.smtpFrom = t('required');
-    else {
-      const fromEmail = extractEmail(from);
-      if (!isValidEmail(fromEmail)) errs.smtpFrom = t('invalidEmailAddress');
-    }
-
-    const reply = String(draft.smtpReplyTo || '').trim();
-    if (reply) {
-      const replyEmail = extractEmail(reply);
-      if (!isValidEmail(replyEmail)) errs.smtpReplyTo = t('invalidEmailAddress');
-    }
-
-    const pass = String(draft.smtpPass || '');
-    if (user && !pass.trim() && !draft.smtpPassSet && !smtpClearPassword) errs.smtpPass = t('required');
     return errs;
   }
 
@@ -451,15 +467,7 @@ export default function AdminSettings() {
         defaultLocale: String(settings?.defaultLocale || systemDraft.defaultLocale),
         defaultTimezone: String(settings?.defaultTimezone || systemDraft.defaultTimezone),
         maintenanceMode: Boolean(settings?.maintenanceMode),
-        logoUrl: String(settings?.logoUrl || ''),
-        epcGeneratedEmailNotifyEnabled: Boolean(settings?.epcGeneratedEmailNotifyEnabled),
-        epcGeneratedEmailNotifyRoles: Array.isArray(settings?.epcGeneratedEmailNotifyRoles)
-          ? settings.epcGeneratedEmailNotifyRoles.join(', ')
-          : String(settings?.epcGeneratedEmailNotifyRoles || systemDraft.epcGeneratedEmailNotifyRoles || ''),
-        epcProductionOrdersEmailNotifyEnabled: Boolean(settings?.epcProductionOrdersEmailNotifyEnabled),
-        epcProductionOrdersEmailNotifyRoles: Array.isArray(settings?.epcProductionOrdersEmailNotifyRoles)
-          ? settings.epcProductionOrdersEmailNotifyRoles.join(', ')
-          : String(settings?.epcProductionOrdersEmailNotifyRoles || systemDraft.epcProductionOrdersEmailNotifyRoles || '')
+        logoUrl: String(settings?.logoUrl || '')
       };
       setSystemInitial(next);
       setSystemDraft(next);
@@ -482,7 +490,20 @@ export default function AdminSettings() {
     if (Object.keys(errs).length > 0) return;
 
     const payload = {};
-    const keys = ['smtpHost', 'smtpPort', 'smtpSecure', 'smtpUser', 'smtpFrom', 'smtpReplyTo'];
+    const keys = [
+      'smtpHost',
+      'smtpPort',
+      'smtpSecure',
+      'smtpUser',
+      'smtpFromName',
+      'smtpFromEmail',
+      'smtpReplyTo',
+      'adminAppUrl',
+      'epcGeneratedEmailNotifyEnabled',
+      'epcGeneratedEmailNotifyRoles',
+      'epcProductionOrdersEmailNotifyEnabled',
+      'epcProductionOrdersEmailNotifyRoles'
+    ];
     for (const k of keys) {
       if (smtpDraft[k] !== smtpInitial[k]) payload[k] = smtpDraft[k];
     }
@@ -503,8 +524,18 @@ export default function AdminSettings() {
         smtpUser: String(settings?.smtpUser || ''),
         smtpPass: '',
         smtpPassSet: Boolean(settings?.smtpPassSet),
-        smtpFrom: String(settings?.smtpFrom || ''),
-        smtpReplyTo: String(settings?.smtpReplyTo || '')
+        smtpFromName: String(settings?.smtpFromName || ''),
+        smtpFromEmail: String(settings?.smtpFromEmail || ''),
+        smtpReplyTo: String(settings?.smtpReplyTo || ''),
+        adminAppUrl: String(settings?.adminAppUrl || ''),
+        epcGeneratedEmailNotifyEnabled: Boolean(settings?.epcGeneratedEmailNotifyEnabled),
+        epcGeneratedEmailNotifyRoles: Array.isArray(settings?.epcGeneratedEmailNotifyRoles)
+          ? settings.epcGeneratedEmailNotifyRoles.join(', ')
+          : String(settings?.epcGeneratedEmailNotifyRoles || smtpDraft.epcGeneratedEmailNotifyRoles || ''),
+        epcProductionOrdersEmailNotifyEnabled: Boolean(settings?.epcProductionOrdersEmailNotifyEnabled),
+        epcProductionOrdersEmailNotifyRoles: Array.isArray(settings?.epcProductionOrdersEmailNotifyRoles)
+          ? settings.epcProductionOrdersEmailNotifyRoles.join(', ')
+          : String(settings?.epcProductionOrdersEmailNotifyRoles || smtpDraft.epcProductionOrdersEmailNotifyRoles || '')
       };
       setSmtpInitial(next);
       setSmtpDraft(next);
@@ -659,7 +690,7 @@ export default function AdminSettings() {
             <EmailSmtpSettingsCard
               title={t('smtpSettings')}
               hint={t('smtpSettingsHint')}
-              canEdit={canEditSystem}
+              canEdit={canEditEmail}
               draft={smtpDraft}
               errors={smtpErrors}
               notice={smtpNotice}

@@ -17,6 +17,17 @@ function extractEmail(v) {
   return s;
 }
 
+function isValidHttpUrl(v) {
+  const s = String(v || '').trim();
+  if (!s) return false;
+  try {
+    const u = new URL(s);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 async function getSettings(req, res) {
   try {
     const orgId = req.organization?.id;
@@ -45,8 +56,10 @@ async function getSettings(req, res) {
               smtpPort: row.smtpPort == null ? null : Number(row.smtpPort) || null,
               smtpSecure: row.smtpSecure == null ? null : Boolean(row.smtpSecure),
               smtpUser: row.smtpUser ? String(row.smtpUser) : null,
-              smtpFrom: row.smtpFrom ? String(row.smtpFrom) : null,
+              smtpFromName: row.smtpFromName ? String(row.smtpFromName) : null,
+              smtpFromEmail: row.smtpFromEmail ? String(row.smtpFromEmail) : null,
               smtpReplyTo: row.smtpReplyTo ? String(row.smtpReplyTo) : null,
+              adminAppUrl: row.adminAppUrl ? String(row.adminAppUrl) : null,
               smtpPassSet: Boolean(row.smtpPassEnc),
               epcGeneratedEmailNotifyEnabled: Boolean(notifyCfg?.isEnabled),
               epcGeneratedEmailNotifyRoles: Array.isArray(notifyCfg?.roleNamesJson) ? notifyCfg.roleNamesJson : [],
@@ -140,7 +153,16 @@ const updateSchema = z.object({
     },
     z.string().min(1).max(512).nullable().optional()
   ),
-  smtpFrom: z.preprocess(
+  smtpFromName: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      const s = String(v).trim();
+      return s ? s : null;
+    },
+    z.string().min(1).max(191).nullable().optional()
+  ),
+  smtpFromEmail: z.preprocess(
     (v) => {
       if (v === undefined) return undefined;
       if (v === null) return null;
@@ -157,6 +179,15 @@ const updateSchema = z.object({
       return s ? s : null;
     },
     z.string().min(1).max(191).nullable().optional()
+  ),
+  adminAppUrl: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      const s = String(v).trim();
+      return s ? s : null;
+    },
+    z.string().min(1).max(512).nullable().optional()
   ),
   epcGeneratedEmailNotifyEnabled: z.boolean().optional(),
   epcGeneratedEmailNotifyRoles: z.preprocess(
@@ -206,13 +237,16 @@ async function updateSettings(req, res) {
     if (!orgId) return res.error('Organization required', 400);
     const validated = updateSchema.parse(req.body || {});
 
-    if (validated.smtpFrom != null) {
-      const fromEmail = extractEmail(validated.smtpFrom);
-      if (!isValidEmail(fromEmail)) return res.error('Invalid SMTP From address', 400);
+    if (validated.smtpFromEmail != null) {
+      const fromEmail = extractEmail(validated.smtpFromEmail);
+      if (!isValidEmail(fromEmail)) return res.error('Invalid From email', 400);
     }
     if (validated.smtpReplyTo != null) {
       const replyEmail = extractEmail(validated.smtpReplyTo);
       if (!isValidEmail(replyEmail)) return res.error('Invalid SMTP Reply-To address', 400);
+    }
+    if (validated.adminAppUrl != null && !isValidHttpUrl(validated.adminAppUrl)) {
+      return res.error('Invalid Frontend URL', 400);
     }
 
     if (validated.organizationName || validated.organizationCode) {
@@ -271,8 +305,10 @@ async function updateSettings(req, res) {
               smtpPort: row.smtpPort == null ? null : Number(row.smtpPort) || null,
               smtpSecure: row.smtpSecure == null ? null : Boolean(row.smtpSecure),
               smtpUser: row.smtpUser ? String(row.smtpUser) : null,
-              smtpFrom: row.smtpFrom ? String(row.smtpFrom) : null,
+              smtpFromName: row.smtpFromName ? String(row.smtpFromName) : null,
+              smtpFromEmail: row.smtpFromEmail ? String(row.smtpFromEmail) : null,
               smtpReplyTo: row.smtpReplyTo ? String(row.smtpReplyTo) : null,
+              adminAppUrl: row.adminAppUrl ? String(row.adminAppUrl) : null,
               smtpPassSet: Boolean(row.smtpPassEnc),
               epcGeneratedEmailNotifyEnabled: Boolean(notifyCfg?.isEnabled),
               epcGeneratedEmailNotifyRoles: Array.isArray(notifyCfg?.roleNamesJson) ? notifyCfg.roleNamesJson : [],

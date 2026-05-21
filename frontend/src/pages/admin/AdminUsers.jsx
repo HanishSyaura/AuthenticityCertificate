@@ -48,6 +48,7 @@ export default function AdminUsers() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [newRole, setNewRole] = useState('admin');
+  const [selectedCreateRoleIds, setSelectedCreateRoleIds] = useState([]);
   const [createNotice, setCreateNotice] = useState('');
 
   useEffect(() => {
@@ -86,6 +87,11 @@ export default function AdminUsers() {
     if (!selectedRoleId) return null;
     return roles.find((r) => String(r.id) === String(selectedRoleId)) || null;
   }, [roles, selectedRoleId]);
+
+  const createSysRoleId = useMemo(() => {
+    const r = roles.find((x) => x?.isSystem && String(x?.name) === String(newRole));
+    return r?.id ?? null;
+  }, [newRole, roles]);
 
   const permissionsByKey = useMemo(() => {
     const m = new Map();
@@ -175,8 +181,10 @@ export default function AdminUsers() {
               setName('');
               setEmail('');
               setNewRole('admin');
+              setSelectedCreateRoleIds([]);
               setCreateNotice('');
               setShowCreate(true);
+              if (canManageAccess && roles.length === 0) void fetchRoles();
             }}
           >
             {t('createUser')}
@@ -347,7 +355,18 @@ export default function AdminUsers() {
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('role')}</div>
                 <select
                   value={newRole}
-                  onChange={(e) => setNewRole(e.target.value)}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setNewRole(next);
+                    setSelectedCreateRoleIds((prev) => {
+                      const keep = new Set(prev);
+                      const currentSys = roles.find((x) => x?.isSystem && String(x?.name) === String(newRole));
+                      const nextSys = roles.find((x) => x?.isSystem && String(x?.name) === String(next));
+                      if (currentSys?.id) keep.delete(currentSys.id);
+                      if (nextSys?.id) keep.add(nextSys.id);
+                      return Array.from(keep);
+                    });
+                  }}
                   className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
                 >
                   <option value="admin">admin</option>
@@ -355,6 +374,42 @@ export default function AdminUsers() {
                   <option value="super_admin">super_admin</option>
                 </select>
               </div>
+
+              {canManageAccess && roles.length > 0 ? (
+                <div>
+                  <div className="mb-1 text-xs font-semibold text-zinc-600">{t('accessRoles')}</div>
+                  <div className="max-h-44 overflow-auto rounded-xl border border-zinc-200 bg-white">
+                    {roles.map((r) => {
+                      const sysLocked = Boolean(r?.isSystem && createSysRoleId && String(r.id) === String(createSysRoleId));
+                      const checked = sysLocked ? true : selectedCreateRoleIds.includes(r.id);
+                      return (
+                        <label
+                          key={r.id}
+                          className={`flex items-center gap-2 border-b border-zinc-100 px-4 py-2 text-sm last:border-b-0 ${
+                            sysLocked ? 'bg-zinc-50' : ''
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={sysLocked}
+                            onChange={(e) => {
+                              const next = new Set(selectedCreateRoleIds);
+                              if (e.target.checked) next.add(r.id);
+                              else next.delete(r.id);
+                              if (createSysRoleId) next.add(createSysRoleId);
+                              setSelectedCreateRoleIds(Array.from(next));
+                            }}
+                          />
+                          <span className="font-medium text-zinc-900">{r.name}</span>
+                          {r.isSystem ? <span className="text-[11px] text-zinc-500">{t('systemTag')}</span> : null}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-1 text-[11px] text-zinc-500">{t('accessRolesHint')}</div>
+                </div>
+              ) : null}
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -365,6 +420,7 @@ export default function AdminUsers() {
                   setName('');
                   setEmail('');
                   setNewRole('admin');
+                  setSelectedCreateRoleIds([]);
                   setCreateNotice('');
                 }}
               >
@@ -378,6 +434,15 @@ export default function AdminUsers() {
                   const em = String(email || '').trim();
                   if (!nm || !em) return;
                   const created = await createUser({ name: nm, email: em, role: newRole });
+                  if (canManageAccess && created?.id && roles.length > 0) {
+                    const next = new Set(selectedCreateRoleIds);
+                    const sys = roles.find((x) => x?.isSystem && String(x?.name) === String(newRole));
+                    if (sys?.id) next.add(sys.id);
+                    if (next.size > 0) {
+                      await setUserRoles({ userId: created.id, roleIds: Array.from(next) });
+                      await fetchUsers();
+                    }
+                  }
                   const tmp = String(created?.temporaryPassword || '').trim();
                   setCreateNotice(
                     tmp
@@ -388,6 +453,7 @@ export default function AdminUsers() {
                   setName('');
                   setEmail('');
                   setNewRole('admin');
+                  setSelectedCreateRoleIds([]);
                 }}
               >
                 {t('create')}

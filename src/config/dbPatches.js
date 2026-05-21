@@ -838,8 +838,10 @@ async function ensureOrganizationSettingsSchemaCompat() {
         \`smtpSecure\` TINYINT(1) NULL,
         \`smtpUser\` VARCHAR(191) NULL,
         \`smtpPassEnc\` TEXT NULL,
-        \`smtpFrom\` VARCHAR(191) NULL,
+        \`smtpFromName\` VARCHAR(191) NULL,
+        \`smtpFromEmail\` VARCHAR(191) NULL,
         \`smtpReplyTo\` VARCHAR(191) NULL,
+        \`adminAppUrl\` VARCHAR(512) NULL,
         \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (\`id\`)
@@ -907,8 +909,15 @@ async function ensureOrganizationSettingsSchemaCompat() {
   );
   await ensureColumn(
     'OrganizationSettings',
-    'smtpFrom',
-    'ALTER TABLE `OrganizationSettings` ADD COLUMN `smtpFrom` VARCHAR(191) NULL',
+    'smtpFromName',
+    'ALTER TABLE `OrganizationSettings` ADD COLUMN `smtpFromName` VARCHAR(191) NULL',
+    null,
+    null
+  );
+  await ensureColumn(
+    'OrganizationSettings',
+    'smtpFromEmail',
+    'ALTER TABLE `OrganizationSettings` ADD COLUMN `smtpFromEmail` VARCHAR(191) NULL',
     null,
     null
   );
@@ -919,6 +928,33 @@ async function ensureOrganizationSettingsSchemaCompat() {
     null,
     null
   );
+  await ensureColumn(
+    'OrganizationSettings',
+    'adminAppUrl',
+    'ALTER TABLE `OrganizationSettings` ADD COLUMN `adminAppUrl` VARCHAR(512) NULL',
+    null,
+    null
+  );
+
+  if (await columnExists('OrganizationSettings', 'smtpFrom')) {
+    await prisma.$executeRawUnsafe(`
+      UPDATE OrganizationSettings
+      SET smtpFromEmail = CASE
+        WHEN smtpFrom LIKE '%<%>%' THEN TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(smtpFrom, '>', 1), '<', -1))
+        ELSE TRIM(smtpFrom)
+      END
+      WHERE (smtpFromEmail IS NULL OR smtpFromEmail = '')
+        AND smtpFrom IS NOT NULL
+        AND TRIM(smtpFrom) <> ''
+    `);
+    await prisma.$executeRawUnsafe(`
+      UPDATE OrganizationSettings
+      SET smtpFromName = TRIM(SUBSTRING_INDEX(smtpFrom, '<', 1))
+      WHERE (smtpFromName IS NULL OR smtpFromName = '')
+        AND smtpFrom LIKE '%<%>%'
+        AND TRIM(SUBSTRING_INDEX(smtpFrom, '<', 1)) <> ''
+    `);
+  }
 
   const idx = 'OrganizationSettings_organizationId_key';
   if (!(await indexExists('OrganizationSettings', idx))) {
