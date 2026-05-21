@@ -310,7 +310,6 @@ app.use('/api/templates', templatesRoutes);
 app.use('/api/uploads', uploadsRoutes);
 app.use('/api/organizations', organizationsRoutes);
 app.use('/settings', settingsRoutes);
-app.use('/settings', settingsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/access', accessRoutes);
 app.use('/api/access', accessRoutes);

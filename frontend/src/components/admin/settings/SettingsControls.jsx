@@ -23,7 +23,7 @@ export function Input({ id, value, onChange, disabled, type = 'text', placeholde
       type={type}
       placeholder={placeholder}
       autoComplete={autoComplete}
-      className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/30 disabled:bg-zinc-50 disabled:text-zinc-500"
+      className="ac-input-compact"
     />
   );
 }
@@ -35,7 +35,7 @@ export function Select({ id, value, onChange, disabled, options }) {
       value={value}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
-      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/30 disabled:bg-zinc-50 disabled:text-zinc-500"
+      className="ac-input-compact bg-white"
     >
       {options.map((opt) => (
         <option key={opt.value} value={opt.value}>
@@ -56,7 +56,7 @@ export function Toggle({ checked, onChange, disabled }) {
         if (!disabled) onChange(!checked);
       }}
       className={`relative inline-flex h-6 w-11 items-center rounded-full border transition ${
-        checked ? 'border-blue-600 bg-blue-600' : 'border-zinc-300 bg-zinc-200'
+        checked ? 'border-brand-600 bg-brand-600' : 'border-zinc-300 bg-zinc-200'
       } ${disabled ? 'opacity-60' : 'hover:shadow-sm'}`}
     >
       <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${checked ? 'translate-x-5' : 'translate-x-1'}`} />

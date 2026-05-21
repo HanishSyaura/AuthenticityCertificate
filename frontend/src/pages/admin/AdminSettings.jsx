@@ -542,14 +542,16 @@ export default function AdminSettings() {
   if (loading) {
     return (
       <div className="ac-page">
-        <div className="mb-2 text-base font-semibold text-zinc-900">{t('settings')}</div>
-        <div className="text-sm text-zinc-600">{t('settingsHint')}</div>
-        <div className="animate-pulse">
-          <div className="h-4 w-40 rounded bg-zinc-200" />
-          <div className="mt-2 h-3 w-64 rounded bg-zinc-200" />
-          <div className="mt-6 space-y-3">
-            <div className="h-40 rounded-xl border border-zinc-200 bg-white" />
-            <div className="h-40 rounded-xl border border-zinc-200 bg-white" />
+        <div className="mx-auto w-full max-w-5xl">
+          <div className="mb-2 text-base font-semibold text-zinc-900">{t('settings')}</div>
+          <div className="text-sm text-zinc-600">{t('settingsHint')}</div>
+          <div className="animate-pulse">
+            <div className="h-4 w-40 rounded bg-zinc-200" />
+            <div className="mt-2 h-3 w-64 rounded bg-zinc-200" />
+            <div className="mt-6 space-y-3">
+              <div className="h-40 rounded-xl border border-zinc-200 bg-white" />
+              <div className="h-40 rounded-xl border border-zinc-200 bg-white" />
+            </div>
           </div>
         </div>
       </div>
@@ -559,127 +561,130 @@ export default function AdminSettings() {
   if (loadError) {
     return (
       <div className="ac-page">
-        <div className="mb-2 text-base font-semibold text-zinc-900">{t('settings')}</div>
-        <div className="text-sm text-zinc-600">{t('settingsHint')}</div>
-        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{loadError}</div>
+        <div className="mx-auto w-full max-w-5xl">
+          <div className="mb-2 text-base font-semibold text-zinc-900">{t('settings')}</div>
+          <div className="text-sm text-zinc-600">{t('settingsHint')}</div>
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{loadError}</div>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="ac-page">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-base font-semibold text-zinc-900">{t('settings')}</h2>
-          <p className="mt-1 text-sm text-zinc-600">{t('settingsHint')}</p>
-        </div>
-      </div>
-
-      <div className="mb-4 flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="inline-flex rounded-xl border border-zinc-200/80 bg-white p-1">
-            <button
-              type="button"
-              className={
-                activeTab === 'profile'
-                  ? 'rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white'
-                  : 'rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50'
-              }
-              onClick={() => setActiveTab('profile')}
-            >
-              {t('profileTab')}
-            </button>
-            <button
-              type="button"
-              className={
-                activeTab === 'system'
-                  ? 'rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white'
-                  : 'rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50'
-              }
-              onClick={() => setActiveTab('system')}
-            >
-              {t('systemTab')}
-            </button>
-            <button
-              type="button"
-              className={
-                activeTab === 'email'
-                  ? 'rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white'
-                  : 'rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50'
-              }
-              onClick={() => setActiveTab('email')}
-            >
-              {t('emailTab')}
-            </button>
+      <div className="mx-auto w-full max-w-5xl">
+        <div className="ac-topbar">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-zinc-900">{t('settings')}</h2>
+              <p className="mt-1 text-sm text-zinc-600">{t('settingsHint')}</p>
+            </div>
+            <div className="inline-flex w-full flex-wrap rounded-xl border border-zinc-200/80 bg-white p-1 sm:w-auto">
+              <button
+                type="button"
+                className={
+                  activeTab === 'profile'
+                    ? 'rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white'
+                    : 'rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50'
+                }
+                onClick={() => setActiveTab('profile')}
+              >
+                {t('profileTab')}
+              </button>
+              <button
+                type="button"
+                className={
+                  activeTab === 'system'
+                    ? 'rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white'
+                    : 'rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50'
+                }
+                onClick={() => setActiveTab('system')}
+              >
+                {t('systemTab')}
+              </button>
+              <button
+                type="button"
+                className={
+                  activeTab === 'email'
+                    ? 'rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white'
+                    : 'rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50'
+                }
+                onClick={() => setActiveTab('email')}
+              >
+                {t('emailTab')}
+              </button>
+            </div>
           </div>
         </div>
+
+        <div className="mt-4">
+          {activeTab === 'profile' ? (
+            <ProfileSettingsCard
+              title={t('profile')}
+              hint={t('profileHint')}
+              canEditEmail={canEditEmail}
+              draft={profileDraft}
+              errors={profileErrors}
+              notice={profileNotice}
+              dirty={profileDirty}
+              invalid={profileInvalid}
+              saving={profileSaving}
+              onChange={(patch) => setProfileDraft((d) => ({ ...d, ...patch }))}
+              onSave={saveProfile}
+            />
+          ) : null}
+
+          {activeTab === 'system' ? (
+            <SystemSettingsCard
+              title={t('systemSettings')}
+              hint={t('systemSettingsHint')}
+              canEdit={canEditSystem}
+              draft={systemDraft}
+              errors={systemErrors}
+              notice={systemNotice}
+              dirty={systemDirty}
+              invalid={systemInvalid}
+              saving={systemSaving}
+              logoUploading={logoUploading}
+              logoUploadError={logoUploadError}
+              localeOptions={localeOptions}
+              timezoneOptions={timezoneOptions}
+              onChange={(patch) => setSystemDraft((d) => ({ ...d, ...patch }))}
+              onUploadLogo={uploadLogo}
+              onSave={saveSystem}
+            />
+          ) : null}
+
+          {activeTab === 'email' ? (
+            <EmailSmtpSettingsCard
+              title={t('smtpSettings')}
+              hint={t('smtpSettingsHint')}
+              canEdit={canEditSystem}
+              draft={smtpDraft}
+              errors={smtpErrors}
+              notice={smtpNotice}
+              dirty={smtpDirty}
+              invalid={smtpInvalid}
+              saving={smtpSaving}
+              testDraft={smtpTestDraft}
+              testErrors={smtpTestErrors}
+              testNotice={smtpTestNotice}
+              testSending={smtpTestSending}
+              onChange={(patch) => {
+                setSmtpDraft((d) => ({ ...d, ...patch }));
+                if (Object.prototype.hasOwnProperty.call(patch, 'smtpPass')) setSmtpClearPassword(false);
+              }}
+              onClearPassword={() => {
+                setSmtpDraft((d) => ({ ...d, smtpPass: '' }));
+                setSmtpClearPassword(true);
+              }}
+              onSave={saveSmtp}
+              onChangeTest={(patch) => setSmtpTestDraft((d) => ({ ...d, ...patch }))}
+              onSendTest={sendSmtpTest}
+            />
+          ) : null}
+        </div>
       </div>
-
-      {activeTab === 'profile' ? (
-        <ProfileSettingsCard
-          title={t('profile')}
-          hint={t('profileHint')}
-          canEditEmail={canEditEmail}
-          draft={profileDraft}
-          errors={profileErrors}
-          notice={profileNotice}
-          dirty={profileDirty}
-          invalid={profileInvalid}
-          saving={profileSaving}
-          onChange={(patch) => setProfileDraft((d) => ({ ...d, ...patch }))}
-          onSave={saveProfile}
-        />
-      ) : null}
-
-      {activeTab === 'system' ? (
-        <SystemSettingsCard
-          title={t('systemSettings')}
-          hint={t('systemSettingsHint')}
-          canEdit={canEditSystem}
-          draft={systemDraft}
-          errors={systemErrors}
-          notice={systemNotice}
-          dirty={systemDirty}
-          invalid={systemInvalid}
-          saving={systemSaving}
-          logoUploading={logoUploading}
-          logoUploadError={logoUploadError}
-          localeOptions={localeOptions}
-          timezoneOptions={timezoneOptions}
-          onChange={(patch) => setSystemDraft((d) => ({ ...d, ...patch }))}
-          onUploadLogo={uploadLogo}
-          onSave={saveSystem}
-        />
-      ) : null}
-
-      {activeTab === 'email' ? (
-        <EmailSmtpSettingsCard
-          title={t('smtpSettings')}
-          hint={t('smtpSettingsHint')}
-          canEdit={canEditSystem}
-          draft={smtpDraft}
-          errors={smtpErrors}
-          notice={smtpNotice}
-          dirty={smtpDirty}
-          invalid={smtpInvalid}
-          saving={smtpSaving}
-          testDraft={smtpTestDraft}
-          testErrors={smtpTestErrors}
-          testNotice={smtpTestNotice}
-          testSending={smtpTestSending}
-          onChange={(patch) => {
-            setSmtpDraft((d) => ({ ...d, ...patch }));
-            if (Object.prototype.hasOwnProperty.call(patch, 'smtpPass')) setSmtpClearPassword(false);
-          }}
-          onClearPassword={() => {
-            setSmtpDraft((d) => ({ ...d, smtpPass: '' }));
-            setSmtpClearPassword(true);
-          }}
-          onSave={saveSmtp}
-          onChangeTest={(patch) => setSmtpTestDraft((d) => ({ ...d, ...patch }))}
-          onSendTest={sendSmtpTest}
-        />
-      ) : null}
     </div>
   );
 }

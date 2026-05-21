@@ -132,12 +132,10 @@ export default function EmailSmtpSettingsCard({
           </div>
         ) : null}
 
-        <div className="mt-3 flex flex-wrap items-end gap-3">
-          <div className="min-w-[240px] flex-1">
-            <Field label={t('to')} error={testErrors?.to} htmlFor="smtp-test-to">
-              <Input id="smtp-test-to" value={testDraft.to} onChange={(v) => onChangeTest({ to: v })} disabled={testSending} type="email" />
-            </Field>
-          </div>
+        <div className="mt-3 grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_auto]">
+          <Field label={t('to')} error={testErrors?.to} htmlFor="smtp-test-to">
+            <Input id="smtp-test-to" value={testDraft.to} onChange={(v) => onChangeTest({ to: v })} disabled={testSending} type="email" />
+          </Field>
           <button type="button" className="ac-btn ac-btn-soft px-3 py-2" onClick={onSendTest} disabled={testSending || !canEdit}>
             {testSending ? t('sending') : t('sendTestEmail')}
           </button>
@@ -146,4 +144,3 @@ export default function EmailSmtpSettingsCard({
     </div>
   );
 }
-

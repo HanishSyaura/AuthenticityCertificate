@@ -86,57 +86,74 @@ export default function SystemSettingsCard({
           </div>
         </Field>
 
-        <Field label={t('epcGeneratedEmailNotify')} hint={t('epcGeneratedEmailNotifyHint')}>
-          <div className="flex items-center gap-3">
-            <Toggle
-              checked={Boolean(draft.epcGeneratedEmailNotifyEnabled)}
-              onChange={(v) => onChange({ epcGeneratedEmailNotifyEnabled: v })}
-              disabled={!canEdit}
-            />
-            <div className="text-sm text-zinc-700">{draft.epcGeneratedEmailNotifyEnabled ? t('enabled') : t('disabled')}</div>
+        <div className="sm:col-span-2 rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <div className="text-xs font-medium text-zinc-700">{t('epcGeneratedEmailNotify')}</div>
+              <div className="mt-0.5 text-[11px] text-zinc-500">{t('epcGeneratedEmailNotifyHint')}</div>
+              <div className="mt-2 flex items-center gap-3">
+                <Toggle
+                  checked={Boolean(draft.epcGeneratedEmailNotifyEnabled)}
+                  onChange={(v) => onChange({ epcGeneratedEmailNotifyEnabled: v })}
+                  disabled={!canEdit}
+                />
+                <div className="text-sm text-zinc-700">{draft.epcGeneratedEmailNotifyEnabled ? t('enabled') : t('disabled')}</div>
+              </div>
+            </div>
+
+            <Field
+              label={t('notificationRoles')}
+              hint={t('notificationRolesHint')}
+              error={errors?.epcGeneratedEmailNotifyRoles}
+              htmlFor="notify-epc-generated-roles"
+            >
+              <Input
+                id="notify-epc-generated-roles"
+                value={draft.epcGeneratedEmailNotifyRoles || ''}
+                onChange={(v) => onChange({ epcGeneratedEmailNotifyRoles: v })}
+                disabled={!canEdit}
+                placeholder="operator, epc_pic"
+              />
+            </Field>
           </div>
-        </Field>
 
-        <Field label={t('notificationRoles')} hint={t('notificationRolesHint')} error={errors?.epcGeneratedEmailNotifyRoles} htmlFor="notify-epc-generated-roles">
-          <Input
-            id="notify-epc-generated-roles"
-            value={draft.epcGeneratedEmailNotifyRoles || ''}
-            onChange={(v) => onChange({ epcGeneratedEmailNotifyRoles: v })}
-            disabled={!canEdit}
-            placeholder="operator, epc_pic"
-          />
-        </Field>
+          <div className="mt-4 grid grid-cols-1 gap-4 border-t border-zinc-200/70 pt-4 sm:grid-cols-2">
+            <div>
+              <div className="text-xs font-medium text-zinc-700">{t('epcProductionOrdersEmailNotify')}</div>
+              <div className="mt-0.5 text-[11px] text-zinc-500">{t('epcProductionOrdersEmailNotifyHint')}</div>
+              <div className="mt-2 flex items-center gap-3">
+                <Toggle
+                  checked={Boolean(draft.epcProductionOrdersEmailNotifyEnabled)}
+                  onChange={(v) => onChange({ epcProductionOrdersEmailNotifyEnabled: v })}
+                  disabled={!canEdit}
+                />
+                <div className="text-sm text-zinc-700">
+                  {draft.epcProductionOrdersEmailNotifyEnabled ? t('enabled') : t('disabled')}
+                </div>
+              </div>
+            </div>
 
-        <Field label={t('epcProductionOrdersEmailNotify')} hint={t('epcProductionOrdersEmailNotifyHint')}>
-          <div className="flex items-center gap-3">
-            <Toggle
-              checked={Boolean(draft.epcProductionOrdersEmailNotifyEnabled)}
-              onChange={(v) => onChange({ epcProductionOrdersEmailNotifyEnabled: v })}
-              disabled={!canEdit}
-            />
-            <div className="text-sm text-zinc-700">{draft.epcProductionOrdersEmailNotifyEnabled ? t('enabled') : t('disabled')}</div>
+            <Field
+              label={t('notificationRoles')}
+              hint={t('notificationRolesHint')}
+              error={errors?.epcProductionOrdersEmailNotifyRoles}
+              htmlFor="notify-epc-production-roles"
+            >
+              <Input
+                id="notify-epc-production-roles"
+                value={draft.epcProductionOrdersEmailNotifyRoles || ''}
+                onChange={(v) => onChange({ epcProductionOrdersEmailNotifyRoles: v })}
+                disabled={!canEdit}
+                placeholder="operator, epc_pic"
+              />
+            </Field>
           </div>
-        </Field>
-
-        <Field
-          label={t('notificationRoles')}
-          hint={t('notificationRolesHint')}
-          error={errors?.epcProductionOrdersEmailNotifyRoles}
-          htmlFor="notify-epc-production-roles"
-        >
-          <Input
-            id="notify-epc-production-roles"
-            value={draft.epcProductionOrdersEmailNotifyRoles || ''}
-            onChange={(v) => onChange({ epcProductionOrdersEmailNotifyRoles: v })}
-            disabled={!canEdit}
-            placeholder="operator, epc_pic"
-          />
-        </Field>
+        </div>
 
         <div className="sm:col-span-2">
           <Field label={t('brandLogo')} hint={t('brandLogoHint')} error={logoUploadError}>
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex h-16 w-48 items-center justify-center overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
+              <div className="flex h-16 w-48 items-center justify-center overflow-hidden rounded-xl border border-zinc-200/80 bg-zinc-50">
                 {draft.logoUrl ? (
                   <img src={draft.logoUrl} alt={t('brandLogo')} className="h-full w-full object-contain" />
                 ) : (
@@ -145,7 +162,7 @@ export default function SystemSettingsCard({
               </div>
 
               <label
-                className={`inline-flex cursor-pointer items-center rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-800 hover:bg-zinc-50 ${
+                className={`ac-btn ac-btn-soft cursor-pointer px-3 py-2 ${
                   !canEdit || logoUploading ? 'cursor-not-allowed opacity-50 hover:bg-white' : ''
                 }`}
               >
