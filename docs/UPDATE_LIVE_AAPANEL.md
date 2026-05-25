@@ -259,15 +259,15 @@ npm ci || npm install
 npm run build
 cd ..
 
-echo "== Restart =="
-pm2 restart birdnestauth-api
+echo "== Restart (API + worker) =="
+pm2 restart birdnestauth-api || true
+pm2 restart birdnestauth-worker || true
+pm2 restart all
 
 echo "== Health check =="
 curl -s http://127.0.0.1:5000/health
 echo
 ```
-
-<br />
 
 Update Video file
 

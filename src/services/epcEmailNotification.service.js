@@ -106,12 +106,11 @@ async function buildEncodingXlsxAttachment({ organizationId, batchId }) {
   const rows = (items || []).map((it) => {
     const epcCode = String(it?.epcCode || '').trim();
     return {
-      epcCode,
       url: epcCode ? `${verifyUrlPrefix}${encodeURIComponent(epcCode)}` : ''
     };
   });
 
-  const ws = XLSX.utils.json_to_sheet(rows, { header: ['epcCode', 'url'] });
+  const ws = XLSX.utils.json_to_sheet(rows, { header: ['url'] });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'encoding');
   const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
