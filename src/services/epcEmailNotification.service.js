@@ -26,19 +26,33 @@ async function resolveRecipientEmails({ organizationId, roleNames }) {
   if (roles.length === 0) return [];
 
   const enumRoles = splitEnumRoles(roles);
+  const clauses = [];
+  clauses.push({ organizationId: orgId, roles: { some: { role: { name: { in: roles } } } } });
+  if (enumRoles.length) {
+    const nonSuper = enumRoles.filter((r) => r !== 'super_admin');
+    if (nonSuper.length) clauses.push({ organizationId: orgId, role: { in: nonSuper } });
+    if (enumRoles.includes('super_admin')) clauses.push({ role: 'super_admin', OR: [{ organizationId: orgId }, { organizationId: null }] });
+  }
+
   const users = await prisma.user.findMany({
     where: {
-      organizationId: orgId,
       deletedAt: null,
-      OR: [
-        { roles: { some: { role: { name: { in: roles } } } } },
-        ...(enumRoles.length ? [{ role: { in: enumRoles } }] : [])
-      ]
+      OR: clauses
     },
     select: { email: true }
   });
 
-  const emails = (users || [])
+  let admins = [];
+  const includeAdmins = roles.includes('admin') || roles.includes('super_admin');
+  if (includeAdmins) {
+    try {
+      admins = await prisma.admin.findMany({ select: { email: true } });
+    } catch {
+      admins = [];
+    }
+  }
+
+  const emails = [...(users || []), ...(admins || [])]
     .map((u) => String(u?.email || '').trim())
     .filter((e) => isValidEmail(e));
   return Array.from(new Set(emails)).slice(0, 100);

@@ -373,11 +373,6 @@ app.use((err, req, res, next) => {
 });
 
 async function start() {
-  try {
-    await applyDbPatches();
-  } catch (e) {
-    console.error('[dbPatches] Failed to apply DB patches: ' + (e?.message || e));
-  }
   const server = app.listen(PORT);
   server.on('listening', () => {
     console.log(`Server is running on port ${PORT}`);
