@@ -1266,8 +1266,98 @@ async function getEpcStats({ organizationId }) {
   return { generatedCount: Number(generatedCount) || 0, activeCount, inactiveCount };
 }
 
-async function listItems({ organizationId, q, batchId, pendingOnly, createdFrom, createdTo, limit, offset }) {
+async function listItems({ organizationId, q, batchId, pendingOnly, status, createdFrom, createdTo, limit, offset }) {
   const orgId = Number(organizationId);
+  const statusNorm = status ? String(status).trim().toUpperCase() : '';
+
+  if (statusNorm === 'ACTIVE' || statusNorm === 'INACTIVE') {
+    const parts = [Prisma.sql`i.organizationId = ${orgId}`];
+    if (batchId) parts.push(Prisma.sql`i.batchId = ${Number(batchId)}`);
+    if (createdFrom) parts.push(Prisma.sql`i.createdAt >= ${createdFrom}`);
+    if (createdTo) parts.push(Prisma.sql`i.createdAt <= ${createdTo}`);
+    if (pendingOnly) parts.push(Prisma.sql`(i.netWeight IS NULL OR i.netWeight = '')`);
+    if (q) parts.push(Prisma.sql`i.epcCode LIKE ${`%${q}%`}`);
+
+    const statusClause =
+      statusNorm === 'ACTIVE'
+        ? Prisma.sql`EXISTS (
+            SELECT 1
+            FROM \`TagIdentity\` t
+            WHERE t.organizationId = i.organizationId
+              AND t.epc = i.epcCode
+              AND t.unassignedAt IS NULL
+          )`
+        : Prisma.sql`NOT EXISTS (
+            SELECT 1
+            FROM \`TagIdentity\` t
+            WHERE t.organizationId = i.organizationId
+              AND t.epc = i.epcCode
+              AND t.unassignedAt IS NULL
+          )`;
+    parts.push(statusClause);
+
+    const whereSql = Prisma.join(parts, Prisma.sql` AND `);
+
+    const [totalRows, idRows] = await withTimeout(
+      Promise.all([
+        prisma.$queryRaw(
+          Prisma.sql`
+            SELECT COUNT(i.id) AS total
+            FROM \`EpcItem\` i
+            WHERE ${whereSql}
+          `
+        ),
+        prisma.$queryRaw(
+          Prisma.sql`
+            SELECT i.id
+            FROM \`EpcItem\` i
+            WHERE ${whereSql}
+            ORDER BY i.createdAt DESC
+            LIMIT ${limit} OFFSET ${offset}
+          `
+        )
+      ]),
+      2500
+    );
+
+    const total = Number(Array.isArray(totalRows) ? totalRows?.[0]?.total : 0) || 0;
+    const ids = (Array.isArray(idRows) ? idRows : [])
+      .map((r) => Number(r?.id))
+      .filter((n) => Number.isFinite(n) && n > 0);
+
+    if (!ids.length) return { items: [], total, limit, offset };
+
+    const items = await withTimeout(
+      prisma.epcItem.findMany({
+        where: { organizationId: orgId, id: { in: ids } },
+        include: {
+          batch: {
+            select: {
+              id: true,
+              corpPrefix: true,
+              origin: true,
+              batchName: true,
+              batchQty: true,
+              remark: true,
+              certificateId: true,
+              certificateTemplateId: true,
+              certificateTemplate: { select: { id: true, name: true } },
+              sku: true,
+              createdAt: true,
+              product: { select: { id: true, sku: true, name: true, code: true } }
+            }
+          }
+        }
+      }),
+      2500
+    );
+
+    const byId = new Map((Array.isArray(items) ? items : []).map((it) => [Number(it.id), it]));
+    const ordered = ids.map((id) => byId.get(id)).filter(Boolean);
+    const itemsWithStatus = ordered.map((it) => ({ ...it, status: statusNorm }));
+    return { items: itemsWithStatus, total, limit, offset };
+  }
+
   const where = {
     organizationId: orgId,
     ...(batchId ? { batchId: Number(batchId) } : {}),

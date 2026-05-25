@@ -92,13 +92,14 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
-  fetchItems: async ({ q, createdFrom, createdTo, batchId, limit = 50, offset = 0 } = {}) => {
+  fetchItems: async ({ q, status, createdFrom, createdTo, batchId, limit = 50, offset = 0 } = {}) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
       const res = await api.get('/epc/items', {
         params: {
           q: q || undefined,
+          status: status || undefined,
           createdFrom: createdFrom || undefined,
           createdTo: createdTo || undefined,
           batchId: batchId != null ? Number(batchId) : undefined,

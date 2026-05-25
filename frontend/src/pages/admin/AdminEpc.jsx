@@ -126,6 +126,7 @@ export default function AdminEpc() {
   const [generateOpen, setGenerateOpen] = useState(false);
   const [listQuery, setListQuery] = useState('');
   const [listBatchId, setListBatchId] = useState('');
+  const [listStatus, setListStatus] = useState('');
   const [createdFrom, setCreatedFrom] = useState('');
   const [createdTo, setCreatedTo] = useState('');
   const [listOffset, setListOffset] = useState(0);
@@ -360,17 +361,18 @@ export default function AdminEpc() {
     if (tab !== 'batches' || !canBatchView) return;
     void fetchItems({
       q: listQuery,
+      status: listStatus || undefined,
       createdFrom: createdFrom || undefined,
       createdTo: createdTo || undefined,
       batchId: String(listBatchId || '').trim() || undefined,
       limit: listLimit,
       offset: listOffset
     });
-  }, [canBatchView, createdFrom, createdTo, fetchItems, listBatchId, listLimit, listOffset, listQuery, tab]);
+  }, [canBatchView, createdFrom, createdTo, fetchItems, listBatchId, listLimit, listOffset, listQuery, listStatus, tab]);
 
   useEffect(() => {
     setSelectedItemIds(new Set());
-  }, [items, listOffset, listQuery, listBatchId, createdFrom, createdTo]);
+  }, [items, listOffset, listQuery, listBatchId, listStatus, createdFrom, createdTo]);
 
   const pageItemIds = useMemo(
     () =>
@@ -464,6 +466,7 @@ export default function AdminEpc() {
                     setListOffset(0);
                     await fetchItems({
                       q: listQuery,
+                      status: listStatus || undefined,
                       createdFrom: createdFrom || undefined,
                       createdTo: createdTo || undefined,
                       batchId: String(listBatchId || '').trim() || undefined,
@@ -488,6 +491,7 @@ export default function AdminEpc() {
                     setListOffset(0);
                     await fetchItems({
                       q: listQuery,
+                      status: listStatus || undefined,
                       createdFrom: createdFrom || undefined,
                       createdTo: createdTo || undefined,
                       batchId: String(listBatchId || '').trim() || undefined,
@@ -508,7 +512,7 @@ export default function AdminEpc() {
           </div>
 
           <div className="p-4">
-            <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_180px_240px_240px_auto]">
+            <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_180px_180px_240px_240px_auto]">
               <div className="flex flex-col gap-1">
                 <label htmlFor="searchEpcCode" className="text-[11px] text-zinc-500">
                   {t('searchEpcCode')}
@@ -538,6 +542,24 @@ export default function AdminEpc() {
                   placeholder={t('batchId')}
                   className="ac-input"
                 />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label htmlFor="epcStatus" className="text-[11px] text-zinc-500">
+                  {t('status')}
+                </label>
+                <select
+                  id="epcStatus"
+                  value={listStatus}
+                  onChange={(e) => {
+                    setListStatus(e.target.value);
+                    setListOffset(0);
+                  }}
+                  className="ac-input"
+                >
+                  <option value="">{t('allStatuses')}</option>
+                  <option value="ACTIVE">{t('active')}</option>
+                  <option value="INACTIVE">{t('inactive')}</option>
+                </select>
               </div>
               <div className="flex flex-col gap-1">
                 <label htmlFor="createdFrom" className="text-[11px] text-zinc-500">
@@ -581,6 +603,7 @@ export default function AdminEpc() {
                   onClick={() =>
                     fetchItems({
                       q: listQuery,
+                      status: listStatus || undefined,
                       createdFrom: createdFrom || undefined,
                       createdTo: createdTo || undefined,
                       batchId: String(listBatchId || '').trim() || undefined,
@@ -1633,8 +1656,10 @@ export default function AdminEpc() {
                   setListOffset(0);
                   await fetchItems({
                     q: listQuery,
+                    status: listStatus || undefined,
                     createdFrom: createdFrom || undefined,
                     createdTo: createdTo || undefined,
+                    batchId: String(listBatchId || '').trim() || undefined,
                     limit: listLimit,
                     offset: 0
                   });
