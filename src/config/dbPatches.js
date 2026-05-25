@@ -1321,6 +1321,34 @@ async function ensureUserSchemaCompat() {
   );
 }
 
+async function ensureOrganizationNotificationConfigSchemaCompat() {
+  const tableName = 'OrganizationNotificationConfig';
+  const exists = await tableExists(tableName);
+  if (!exists) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`${tableName}\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`organizationId\` INT NOT NULL,
+        \`key\` VARCHAR(191) NOT NULL,
+        \`isEnabled\` TINYINT(1) NOT NULL DEFAULT 1,
+        \`roleNamesJson\` JSON NULL,
+        \`createdAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        \`updatedAt\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+        PRIMARY KEY (\`id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+
+  const uniq = 'OrganizationNotificationConfig_organizationId_key_key';
+  if (!(await indexExists(tableName, uniq))) {
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX \`${uniq}\` ON \`${tableName}\` (\`organizationId\`, \`key\`)`);
+  }
+  const idx = 'OrganizationNotificationConfig_organizationId_idx';
+  if (!(await indexExists(tableName, idx))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${idx}\` ON \`${tableName}\` (\`organizationId\`)`);
+  }
+}
+
 async function applyDbPatches() {
   await ensureProductSchemaCompat();
   await ensureProductSupportingCertificateSchemaCompat();
@@ -1335,6 +1363,7 @@ async function applyDbPatches() {
   await ensureOrganizationSettingsSchemaCompat();
   await ensureAccessControlSchemaCompat();
   await ensureUserSchemaCompat();
+  await ensureOrganizationNotificationConfigSchemaCompat();
 }
 
 module.exports = { applyDbPatches };

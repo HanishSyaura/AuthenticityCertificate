@@ -265,20 +265,22 @@ async function updateSettings(req, res) {
       Object.prototype.hasOwnProperty.call(validated, 'epcGeneratedEmailNotifyRoles') ||
       Object.prototype.hasOwnProperty.call(validated, 'epcGeneratedEmailNotifyEnabled')
     ) {
-      await settingsService.upsertEpcGeneratedEmailConfig(orgId, {
+      const saved = await settingsService.upsertEpcGeneratedEmailConfig(orgId, {
         isEnabled: validated.epcGeneratedEmailNotifyEnabled,
         roleNames: validated.epcGeneratedEmailNotifyRoles
       });
+      if (!saved) return res.error('Failed to save notification settings', 503);
     }
 
     if (
       Object.prototype.hasOwnProperty.call(validated, 'epcProductionOrdersEmailNotifyRoles') ||
       Object.prototype.hasOwnProperty.call(validated, 'epcProductionOrdersEmailNotifyEnabled')
     ) {
-      await settingsService.upsertEpcProductionOrdersEmailConfig(orgId, {
+      const saved = await settingsService.upsertEpcProductionOrdersEmailConfig(orgId, {
         isEnabled: validated.epcProductionOrdersEmailNotifyEnabled,
         roleNames: validated.epcProductionOrdersEmailNotifyRoles
       });
+      if (!saved) return res.error('Failed to save notification settings', 503);
     }
 
     const row = await settingsService.updateOrganizationSettings(orgId, validated);

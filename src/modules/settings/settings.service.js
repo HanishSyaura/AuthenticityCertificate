@@ -22,9 +22,18 @@ async function getNotificationConfig(organizationId, key) {
   const k = String(key || '').trim();
   if (!k) return null;
   try {
-    return await prisma.organizationNotificationConfig.findUnique({
-      where: { organizationId_key: { organizationId: orgId, key: k } }
-    });
+    if (prisma.organizationNotificationConfig?.findUnique) {
+      return await prisma.organizationNotificationConfig.findUnique({
+        where: { organizationId_key: { organizationId: orgId, key: k } }
+      });
+    }
+    const rows = await prisma.$queryRaw`
+      SELECT id, organizationId, \`key\`, isEnabled, roleNamesJson, createdAt, updatedAt
+      FROM OrganizationNotificationConfig
+      WHERE organizationId = ${orgId} AND \`key\` = ${k}
+      LIMIT 1
+    `;
+    return rows?.[0] || null;
   } catch {
     return null;
   }
@@ -39,19 +48,33 @@ async function upsertNotificationConfig(organizationId, key, { isEnabled, roleNa
   const cleanRoles = normalizeRoleNames(roleNames);
   const enabled = typeof isEnabled === 'boolean' ? isEnabled : cleanRoles.length > 0;
   try {
-    return await prisma.organizationNotificationConfig.upsert({
-      where: { organizationId_key: { organizationId: orgId, key: k } },
-      create: {
-        organizationId: orgId,
-        key: k,
-        isEnabled: enabled,
-        roleNamesJson: cleanRoles
-      },
-      update: {
-        isEnabled: enabled,
-        roleNamesJson: cleanRoles
-      }
-    });
+    if (prisma.organizationNotificationConfig?.upsert) {
+      return await prisma.organizationNotificationConfig.upsert({
+        where: { organizationId_key: { organizationId: orgId, key: k } },
+        create: {
+          organizationId: orgId,
+          key: k,
+          isEnabled: enabled,
+          roleNamesJson: cleanRoles
+        },
+        update: {
+          isEnabled: enabled,
+          roleNamesJson: cleanRoles
+        }
+      });
+    }
+
+    const enabledFlag = enabled ? 1 : 0;
+    const rolesJson = cleanRoles.length ? JSON.stringify(cleanRoles) : null;
+    await prisma.$executeRaw`
+      INSERT INTO OrganizationNotificationConfig (organizationId, \`key\`, isEnabled, roleNamesJson, createdAt, updatedAt)
+      VALUES (${orgId}, ${k}, ${enabledFlag}, ${rolesJson}, NOW(), NOW())
+      ON DUPLICATE KEY UPDATE
+        isEnabled = VALUES(isEnabled),
+        roleNamesJson = VALUES(roleNamesJson),
+        updatedAt = NOW()
+    `;
+    return await getNotificationConfig(orgId, k);
   } catch {
     return null;
   }
