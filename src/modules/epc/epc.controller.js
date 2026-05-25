@@ -189,7 +189,8 @@ async function listItems(req, res) {
     const batchId = req.query.batchId ? Number(req.query.batchId) : null;
     const pendingOnly = String(req.query.pending || '').trim() === '1';
     const statusRaw = typeof req.query.status === 'string' ? req.query.status.trim() : '';
-    const status = statusRaw ? statusRaw.toUpperCase() : '';
+    const status = statusRaw ? statusRaw.toUpperCase().replace(/[^A-Z]/g, '') : '';
+    if (statusRaw && !status) return res.error('Invalid status', 400);
     if (status && status !== 'ACTIVE' && status !== 'INACTIVE') return res.error('Invalid status', 400);
     const fromRaw = typeof req.query.createdFrom === 'string' ? req.query.createdFrom.trim() : '';
     const toRaw = typeof req.query.createdTo === 'string' ? req.query.createdTo.trim() : '';
