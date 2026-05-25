@@ -1349,6 +1349,38 @@ async function ensureOrganizationNotificationConfigSchemaCompat() {
   }
 }
 
+async function ensureSingleOrganizationMeta() {
+  const desiredCode = String(process.env.SINGLE_ORG_CODE || 'DAMADINGJIYANWO').trim().toUpperCase();
+  const desiredName = String(process.env.SINGLE_ORG_NAME || 'DAMADINGJIYANWO').trim();
+  if (!desiredCode && !desiredName) return;
+
+  let count = 0;
+  try {
+    count = await prisma.organization.count();
+  } catch {
+    return;
+  }
+  if (Number(count) !== 1) return;
+
+  let org = null;
+  try {
+    org = await prisma.organization.findFirst({ orderBy: { createdAt: 'asc' } });
+  } catch {
+    return;
+  }
+  if (!org) return;
+
+  const update = {};
+  if (desiredCode && String(org.code || '').trim().toUpperCase() !== desiredCode) update.code = desiredCode;
+  if (desiredName && String(org.name || '').trim() !== desiredName) update.name = desiredName;
+  if (Object.keys(update).length === 0) return;
+
+  try {
+    await prisma.organization.update({ where: { id: org.id }, data: update });
+  } catch {
+  }
+}
+
 async function applyDbPatches() {
   await ensureProductSchemaCompat();
   await ensureProductSupportingCertificateSchemaCompat();
@@ -1364,6 +1396,7 @@ async function applyDbPatches() {
   await ensureAccessControlSchemaCompat();
   await ensureUserSchemaCompat();
   await ensureOrganizationNotificationConfigSchemaCompat();
+  await ensureSingleOrganizationMeta();
 }
 
 module.exports = { applyDbPatches };

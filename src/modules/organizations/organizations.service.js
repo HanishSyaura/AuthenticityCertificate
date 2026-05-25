@@ -44,8 +44,8 @@ async function getOrCreateDefault() {
   );
   if (existing) return sanitize(existing);
 
-  const code = String(process.env.SINGLE_ORG_CODE || 'MAIN').trim().toUpperCase();
-  const name = String(process.env.SINGLE_ORG_NAME || 'Main Organization').trim();
+  const code = String(process.env.SINGLE_ORG_CODE || 'DAMADINGJIYANWO').trim().toUpperCase();
+  const name = String(process.env.SINGLE_ORG_NAME || 'DAMADINGJIYANWO').trim();
   const created = await withTimeout(prisma.organization.create({ data: { code, name } }), 1500);
   return sanitize(created);
 }

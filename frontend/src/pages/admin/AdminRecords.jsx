@@ -4,6 +4,7 @@ import useRecordsStore from '../../store/useRecordsStore';
 import { useT } from '../../i18n/useT';
 import { stripHtmlToText } from '../../utils/richText';
 import DataTable from '../../components/ui/DataTable';
+import TablePager from '../../components/ui/TablePager';
 import RowActionsMenu from '../../components/ui/RowActionsMenu';
 
 function formatDate(input) {
@@ -56,6 +57,10 @@ export default function AdminRecords() {
   const [productCategoryFilter, setProductCategoryFilter] = useState('all');
   const [categoryQuery, setCategoryQuery] = useState('');
   const [categoryStatusFilter, setCategoryStatusFilter] = useState('all');
+  const [productOffset, setProductOffset] = useState(0);
+  const [productLimit, setProductLimit] = useState(50);
+  const [categoryOffset, setCategoryOffset] = useState(0);
+  const [categoryLimit, setCategoryLimit] = useState(50);
   const [showCreate, setShowCreate] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showCreateCategory, setShowCreateCategory] = useState(false);
@@ -164,6 +169,16 @@ export default function AdminRecords() {
     });
   }, [products, query, categoryByCode, productStatusFilter, productCategoryFilter]);
 
+  useEffect(() => {
+    setProductOffset(0);
+  }, [query, productCategoryFilter, productStatusFilter]);
+
+  const pagedProducts = useMemo(() => {
+    const total = filteredProducts.length;
+    const safeOffset = total === 0 ? 0 : Math.max(0, Math.min(productOffset, Math.max(0, total - 1)));
+    return filteredProducts.slice(safeOffset, safeOffset + productLimit);
+  }, [filteredProducts, productLimit, productOffset]);
+
   const visibleProductIds = useMemo(() => filteredProducts.map((p) => p.id).filter((v) => v != null), [filteredProducts]);
   const visibleSelectedCount = useMemo(
     () => visibleProductIds.filter((id) => selectedProductIds.has(id)).length,
@@ -212,6 +227,16 @@ export default function AdminRecords() {
       return nameStr.includes(q) || codeStr.includes(q);
     });
   }, [categories, categoryQuery, categoryStatusFilter]);
+
+  useEffect(() => {
+    setCategoryOffset(0);
+  }, [categoryQuery, categoryStatusFilter]);
+
+  const pagedCategories = useMemo(() => {
+    const total = filteredCategories.length;
+    const safeOffset = total === 0 ? 0 : Math.max(0, Math.min(categoryOffset, Math.max(0, total - 1)));
+    return filteredCategories.slice(safeOffset, safeOffset + categoryLimit);
+  }, [categoryLimit, categoryOffset, filteredCategories]);
 
   const categoryOptions = useMemo(() => {
     return (Array.isArray(categories) ? categories : [])
@@ -375,7 +400,7 @@ export default function AdminRecords() {
         <div data-tour="records-products-table">
           <DataTable
             minWidth={1300}
-            rows={filteredProducts}
+            rows={pagedProducts}
             rowKey={(p) => p.id}
             loading={loading}
             loadingContent={t('loading')}
@@ -450,6 +475,19 @@ export default function AdminRecords() {
               ) : null
             }
             onRowClick={(p) => navigate(`/admin/records/${p.id}`)}
+            bottom={
+              <TablePager
+                offset={productOffset}
+                limit={productLimit}
+                total={filteredProducts.length}
+                loading={loading}
+                onOffsetChange={(next) => setProductOffset(next)}
+                onLimitChange={(next) => {
+                  setProductLimit(next);
+                  setProductOffset(0);
+                }}
+              />
+            }
             columns={[
             {
               id: 'select',
@@ -609,7 +647,7 @@ export default function AdminRecords() {
         <div data-tour="records-categories-table">
           <DataTable
             minWidth={900}
-            rows={filteredCategories}
+            rows={pagedCategories}
             rowKey={(c) => c.id}
             loading={loading}
             loadingContent={t('loading')}
@@ -618,6 +656,19 @@ export default function AdminRecords() {
                 <div className="text-sm font-semibold text-zinc-900">{t('noCategories')}</div>
                 <div className="mt-1 text-sm text-zinc-600">{t('noCategoriesHint')}</div>
               </div>
+            }
+            bottom={
+              <TablePager
+                offset={categoryOffset}
+                limit={categoryLimit}
+                total={filteredCategories.length}
+                loading={loading}
+                onOffsetChange={(next) => setCategoryOffset(next)}
+                onLimitChange={(next) => {
+                  setCategoryLimit(next);
+                  setCategoryOffset(0);
+                }}
+              />
             }
             columns={[
             { id: 'name', header: t('name'), cell: (c) => <span className="font-medium text-zinc-900">{c.name}</span> },

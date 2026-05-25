@@ -5,6 +5,7 @@ import useAdminAuthStore from '../../store/useAdminAuthStore';
 import { createAdminApi } from '../../utils/adminApi';
 import { hasPermission } from '../../utils/permissions';
 import DataTable from '../../components/ui/DataTable';
+import TablePager from '../../components/ui/TablePager';
 
 function nextMissingStep(item) {
   if (!item?.netWeight) return 'netWeight';
@@ -101,7 +102,7 @@ export default function AdminEpcScan() {
   const [batchItems, setBatchItems] = useState([]);
   const [batchTotal, setBatchTotal] = useState(0);
   const [batchOffset, setBatchOffset] = useState(0);
-  const batchLimit = 50;
+  const [batchLimit, setBatchLimit] = useState(50);
   const [batchQuery, setBatchQuery] = useState('');
   const [pendingOnly, setPendingOnly] = useState(false);
   const [batchLoading, setBatchLoading] = useState(false);
@@ -109,7 +110,7 @@ export default function AdminEpcScan() {
   const [groups, setGroups] = useState([]);
   const [groupTotal, setGroupTotal] = useState(0);
   const [groupOffset, setGroupOffset] = useState(0);
-  const groupLimit = 50;
+  const [groupLimit, setGroupLimit] = useState(50);
   const [groupStatus, setGroupStatus] = useState('OPEN');
   const [groupLoading, setGroupLoading] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
@@ -885,6 +886,7 @@ export default function AdminEpcScan() {
                 emptyContent={t('scanNoBatchItems')}
                 columns={[
                   {
+                  {
                     id: 'use',
                     header: '',
                     cell: (it) => (
@@ -905,23 +907,18 @@ export default function AdminEpcScan() {
                 ]}
               />
 
-              <div className="mt-3 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                  disabled={batchOffset <= 0 || batchLoading}
-                  onClick={() => setBatchOffset((v) => Math.max(0, v - batchLimit))}
-                >
-                  {t('prev')}
-                </button>
-                <button
-                  type="button"
-                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                  disabled={batchLoading || batchOffset + batchLimit >= (Number(batchTotal) || 0)}
-                  onClick={() => setBatchOffset((v) => v + batchLimit)}
-                >
-                  {t('next')}
-                </button>
+              <div className="mt-3">
+                <TablePager
+                  offset={batchOffset}
+                  limit={batchLimit}
+                  total={Number(batchTotal) || 0}
+                  loading={batchLoading}
+                  onOffsetChange={(next) => setBatchOffset(next)}
+                  onLimitChange={(next) => {
+                    setBatchLimit(next);
+                    setBatchOffset(0);
+                  }}
+                />
               </div>
             </div>
           ) : viewTab === 'groups' ? (
@@ -997,23 +994,18 @@ export default function AdminEpcScan() {
                 ]}
               />
 
-              <div className="mt-3 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                  disabled={groupOffset <= 0 || groupLoading}
-                  onClick={() => setGroupOffset((v) => Math.max(0, v - groupLimit))}
-                >
-                  {t('prev')}
-                </button>
-                <button
-                  type="button"
-                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                  disabled={groupLoading || groupOffset + groupLimit >= (Number(groupTotal) || 0)}
-                  onClick={() => setGroupOffset((v) => v + groupLimit)}
-                >
-                  {t('next')}
-                </button>
+              <div className="mt-3">
+                <TablePager
+                  offset={groupOffset}
+                  limit={groupLimit}
+                  total={Number(groupTotal) || 0}
+                  loading={groupLoading}
+                  onOffsetChange={(next) => setGroupOffset(next)}
+                  onLimitChange={(next) => {
+                    setGroupLimit(next);
+                    setGroupOffset(0);
+                  }}
+                />
               </div>
 
               {groupDetail?.group?.id ? (

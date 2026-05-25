@@ -8,6 +8,7 @@ import useUploadsStore from '../../store/useUploadsStore';
 import { useT } from '../../i18n/useT';
 import { tRaw } from '../../i18n/tRaw';
 import DataTable from '../../components/ui/DataTable';
+import TablePager from '../../components/ui/TablePager';
 import { hasPermission } from '../../utils/permissions';
 
 function formatDateTime(input) {
@@ -128,7 +129,7 @@ export default function AdminEpc() {
   const [createdFrom, setCreatedFrom] = useState('');
   const [createdTo, setCreatedTo] = useState('');
   const [listOffset, setListOffset] = useState(0);
-  const listLimit = 50;
+  const [listLimit, setListLimit] = useState(50);
   const [selectedItemIds, setSelectedItemIds] = useState(() => new Set());
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState(null);
@@ -190,7 +191,7 @@ export default function AdminEpc() {
   const [importHistory, setImportHistory] = useState([]);
   const [importHistoryTotal, setImportHistoryTotal] = useState(0);
   const [importHistoryOffset, setImportHistoryOffset] = useState(0);
-  const importHistoryLimit = 20;
+  const [importHistoryLimit, setImportHistoryLimit] = useState(20);
   const [importHistoryOpen, setImportHistoryOpen] = useState(false);
   const [importHistoryDetail, setImportHistoryDetail] = useState(null);
   const [viewBatchOpen, setViewBatchOpen] = useState(false);
@@ -682,23 +683,18 @@ export default function AdminEpc() {
               ]}
             />
 
-            <div className="mt-3 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                disabled={loading || listOffset <= 0}
-                onClick={() => setListOffset((o) => Math.max(0, o - listLimit))}
-              >
-                {t('prev')}
-              </button>
-              <button
-                type="button"
-                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                disabled={loading || listOffset + listLimit >= (Number(itemTotal) || 0)}
-                onClick={() => setListOffset((o) => o + listLimit)}
-              >
-                {t('next')}
-              </button>
+            <div className="mt-3">
+              <TablePager
+                offset={listOffset}
+                limit={listLimit}
+                total={Number(itemTotal) || 0}
+                loading={loading}
+                onOffsetChange={(next) => setListOffset(next)}
+                onLimitChange={(next) => {
+                  setListLimit(next);
+                  setListOffset(0);
+                }}
+              />
             </div>
           </div>
         </div>
@@ -1146,23 +1142,18 @@ export default function AdminEpc() {
                 ]}
               />
 
-              <div className="mt-3 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                  disabled={loading || importHistoryOffset <= 0}
-                  onClick={() => setImportHistoryOffset((o) => Math.max(0, o - importHistoryLimit))}
-                >
-                  {t('prev')}
-                </button>
-                <button
-                  type="button"
-                  className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                  disabled={loading || importHistoryOffset + importHistoryLimit >= (Number(importHistoryTotal) || 0)}
-                  onClick={() => setImportHistoryOffset((o) => o + importHistoryLimit)}
-                >
-                  {t('next')}
-                </button>
+              <div className="mt-3">
+                <TablePager
+                  offset={importHistoryOffset}
+                  limit={importHistoryLimit}
+                  total={Number(importHistoryTotal) || 0}
+                  loading={loading}
+                  onOffsetChange={(next) => setImportHistoryOffset(next)}
+                  onLimitChange={(next) => {
+                    setImportHistoryLimit(next);
+                    setImportHistoryOffset(0);
+                  }}
+                />
               </div>
             </div>
           </div>

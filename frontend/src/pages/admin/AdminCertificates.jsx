@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import useCertificatesStore from '../../store/useCertificatesStore';
 import { useT } from '../../i18n/useT';
 import DataTable from '../../components/ui/DataTable';
+import TablePager from '../../components/ui/TablePager';
 import RowActionsMenu from '../../components/ui/RowActionsMenu';
 
 function formatDate(input) {
@@ -52,12 +53,6 @@ export default function AdminCertificates() {
   const [assignNfc, setAssignNfc] = useState('');
   const [assignEpc, setAssignEpc] = useState('');
   const [assignExp, setAssignExp] = useState('');
-
-  const showing = useMemo(() => {
-    const from = total === 0 ? 0 : offset + 1;
-    const to = Math.min(total, offset + limit);
-    return { from, to };
-  }, [total, offset, limit]);
 
   useEffect(() => {
     void fetchCertificates({});
@@ -126,27 +121,14 @@ export default function AdminCertificates() {
           </div>
         }
         bottom={
-          <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-600">
-            <div>{t('showingCount', { from: showing.from, to: showing.to, total })}</div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                disabled={offset <= 0 || loading}
-                onClick={() => void fetchCertificates({ q, status, type, offset: Math.max(0, offset - limit) })}
-              >
-                {t('prev')}
-              </button>
-              <button
-                type="button"
-                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                disabled={offset + limit >= total || loading}
-                onClick={() => void fetchCertificates({ q, status, type, offset: offset + limit })}
-              >
-                {t('next')}
-              </button>
-            </div>
-          </div>
+          <TablePager
+            offset={offset}
+            limit={limit}
+            total={total}
+            loading={loading}
+            onOffsetChange={(next) => void fetchCertificates({ q, status, type, offset: next })}
+            onLimitChange={(next) => void fetchCertificates({ q, status, type, limit: next, offset: 0 })}
+          />
         }
         columns={[
           {

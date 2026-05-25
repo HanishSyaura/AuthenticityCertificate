@@ -5,6 +5,7 @@ import useEpcStore from '../../store/useEpcStore';
 import useUploadsStore from '../../store/useUploadsStore';
 import { useT } from '../../i18n/useT';
 import DataTable from '../../components/ui/DataTable';
+import TablePager from '../../components/ui/TablePager';
 import RowActionsMenu from '../../components/ui/RowActionsMenu';
 import { MAX_UPLOAD_MB } from '../../utils/uploadLimits';
 
@@ -73,6 +74,8 @@ export default function AdminCertificateList() {
   const [newBgError, setNewBgError] = useState(null);
   const [newBgFileKey, setNewBgFileKey] = useState(0);
   const [newError, setNewError] = useState(null);
+  const [tableOffset, setTableOffset] = useState(0);
+  const [tableLimit, setTableLimit] = useState(50);
 
   const { templates, loading, error, fetchTemplates, createTemplate, duplicateTemplate } = useCertTemplatesStore((s) => ({
     templates: s.templates,
@@ -121,6 +124,13 @@ export default function AdminCertificateList() {
     return list.filter((tpl) => !getTemplateId(tpl));
   }, [templates]);
 
+  const pagedTemplates = useMemo(() => {
+    const list = Array.isArray(templates) ? templates : [];
+    const total = list.length;
+    const safeOffset = total === 0 ? 0 : Math.max(0, Math.min(tableOffset, Math.max(0, total - 1)));
+    return list.slice(safeOffset, safeOffset + tableLimit);
+  }, [tableLimit, tableOffset, templates]);
+
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3" data-tour="cert-header">
@@ -153,7 +163,7 @@ export default function AdminCertificateList() {
       <div data-tour="cert-table">
         <DataTable
           minWidth={720}
-          rows={Array.isArray(templates) ? templates : []}
+          rows={pagedTemplates}
           rowKey={(tpl) => getTemplateId(tpl) || tpl?.id || tpl?.templateId || tpl?.template_id}
           loading={loading}
           loadingContent={t('loading')}
@@ -168,6 +178,19 @@ export default function AdminCertificateList() {
             if (!id) return;
             navigate(`/admin/certificates/${id}`);
           }}
+          bottom={
+            <TablePager
+              offset={tableOffset}
+              limit={tableLimit}
+              total={Array.isArray(templates) ? templates.length : 0}
+              loading={loading}
+              onOffsetChange={(next) => setTableOffset(next)}
+              onLimitChange={(next) => {
+                setTableLimit(next);
+                setTableOffset(0);
+              }}
+            />
+          }
           columns={[
           {
             id: 'name',

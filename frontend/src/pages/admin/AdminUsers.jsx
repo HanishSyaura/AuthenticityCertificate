@@ -6,6 +6,7 @@ import { useT } from '../../i18n/useT';
 import { hasPermission } from '../../utils/permissions';
 import { PERMISSION_GROUPS, VISIBLE_PERMISSION_KEYS } from '../../utils/permissionCatalog';
 import DataTable from '../../components/ui/DataTable';
+import TablePager from '../../components/ui/TablePager';
 import RowActionsMenu from '../../components/ui/RowActionsMenu';
 
 function formatDate(input) {
@@ -36,6 +37,8 @@ export default function AdminUsers() {
   }));
 
   const [query, setQuery] = useState('');
+  const [tableOffset, setTableOffset] = useState(0);
+  const [tableLimit, setTableLimit] = useState(50);
   const [showCreate, setShowCreate] = useState(false);
   const [showReset, setShowReset] = useState(false);
   const [resetUser, setResetUser] = useState(null);
@@ -80,6 +83,16 @@ export default function AdminUsers() {
       return n.includes(q) || e.includes(q);
     });
   }, [users, query]);
+
+  useEffect(() => {
+    setTableOffset(0);
+  }, [query]);
+
+  const paged = useMemo(() => {
+    const total = filtered.length;
+    const safeOffset = total === 0 ? 0 : Math.max(0, Math.min(tableOffset, Math.max(0, total - 1)));
+    return filtered.slice(safeOffset, safeOffset + tableLimit);
+  }, [filtered, tableLimit, tableOffset]);
 
   const selectedRole = useMemo(() => {
     if (!selectedRoleId) return null;
@@ -205,7 +218,7 @@ export default function AdminUsers() {
 
       <DataTable
         minWidth={820}
-        rows={filtered}
+        rows={paged}
         rowKey={(u) => u.id}
         loading={loading}
         loadingContent={t('loading')}
@@ -214,6 +227,19 @@ export default function AdminUsers() {
             <div className="text-sm font-semibold text-zinc-900">{t('noUsers')}</div>
             <div className="mt-1 text-xs text-zinc-600">{t('noUsersHint')}</div>
           </div>
+        }
+        bottom={
+          <TablePager
+            offset={tableOffset}
+            limit={tableLimit}
+            total={filtered.length}
+            loading={loading}
+            onOffsetChange={(next) => setTableOffset(next)}
+            onLimitChange={(next) => {
+              setTableLimit(next);
+              setTableOffset(0);
+            }}
+          />
         }
         columns={[
           {
