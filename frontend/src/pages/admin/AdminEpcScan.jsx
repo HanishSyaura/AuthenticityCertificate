@@ -886,7 +886,6 @@ export default function AdminEpcScan() {
                 emptyContent={t('scanNoBatchItems')}
                 columns={[
                   {
-                  {
                     id: 'use',
                     header: '',
                     cell: (it) => (
