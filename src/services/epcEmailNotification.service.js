@@ -1,6 +1,7 @@
 const prisma = require('../config/prisma');
 const emailService = require('./email.service');
 const settingsService = require('../modules/settings/settings.service');
+const XLSX = require('xlsx');
 
 function isValidEmail(v) {
   const s = String(v || '').trim();
@@ -60,6 +61,66 @@ function buildEmailHtml({ title, intro, rows, linkLabel, linkUrl }) {
       </div>
     </div>
   `.trim();
+}
+
+function formatTimestamp(d, timeZone) {
+  const date = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(date.getTime())) return '';
+  try {
+    const tz = String(timeZone || '').trim();
+    const fmt = new Intl.DateTimeFormat('en-GB', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      ...(tz ? { timeZone: tz } : {})
+    });
+    return fmt.format(date);
+  } catch {
+    return date.toISOString();
+  }
+}
+
+async function buildEncodingXlsxAttachment({ organizationId, batchId }) {
+  const orgId = Number(organizationId);
+  const id = Number(batchId);
+  if (!Number.isFinite(orgId) || orgId <= 0) return null;
+  if (!Number.isFinite(id) || id <= 0) return null;
+
+  const batch = await prisma.epcBatch.findFirst({
+    where: { id, organizationId: orgId },
+    include: { product: { select: { name: true } } }
+  });
+  if (!batch) return null;
+
+  const items = await prisma.epcItem.findMany({
+    where: { organizationId: orgId, batchId: id },
+    orderBy: { runningNo: 'asc' },
+    select: { epcCode: true }
+  });
+
+  const verifyUrlPrefix = (process.env.PUBLIC_VERIFY_URL_PREFIX || '').trim() || 'https://wmscertauth.clbgroups.com/verify?epc=';
+  const rows = (items || []).map((it) => {
+    const epcCode = String(it?.epcCode || '').trim();
+    return {
+      epcCode,
+      url: epcCode ? `${verifyUrlPrefix}${encodeURIComponent(epcCode)}` : ''
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows, { header: ['epcCode', 'url'] });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'encoding');
+  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+  const safePart = (v, fallback) => String(v || fallback).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 64) || fallback;
+  const safeProduct = safePart(batch.product?.name, 'product');
+  const safeBatch = safePart(batch.batchName, 'batch');
+  const filename = `${safeProduct}_${safeBatch}_encoding.xlsx`;
+  return { filename, contentBase64: Buffer.from(buffer).toString('base64'), contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
 }
 
 function splitEnumRoles(roleNames) {
@@ -141,20 +202,34 @@ async function notifyEpcBatchGenerated({ organizationId, batch, created, startNo
   const to = await resolveRecipientEmails({ organizationId: orgId, roleNames: roles });
   if (to.length === 0) return;
 
-  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { name: true, code: true } });
+  const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { code: true } });
   const batchName = String(batch?.batchName || batch?.name || '').trim() || `Batch #${batch?.id || ''}`.trim();
   const qty = Number(created) || Number(batch?.batchQty) || 0;
+  const generatedAt = batch?.createdAt ? new Date(batch.createdAt) : new Date();
+  let timeZone = null;
+  try {
+    const s = await settingsService.ensureOrganizationSettings(orgId);
+    timeZone = s?.defaultTimezone || null;
+  } catch {
+  }
 
   const subject = `[${String(org?.code || 'ORG')}] EPC generated: ${batchName}`;
   const link = await buildAdminEpcLink(orgId);
   const lines = [
     'EPC batch generated.',
-    `Organization: ${String(org?.name || '') || String(org?.code || '') || orgId}`,
     `Batch: ${batchName}`,
+    `Generated at: ${formatTimestamp(generatedAt, timeZone)}`,
     qty ? `Quantity: ${qty}` : null,
     startNo && endNo ? `Running no range: ${startNo} - ${endNo}` : null,
     link ? `Admin: ${link}` : null
   ].filter(Boolean);
+
+  let attachment = null;
+  try {
+    attachment = await buildEncodingXlsxAttachment({ organizationId: orgId, batchId: batch?.id });
+  } catch {
+    attachment = null;
+  }
 
   await emailService.sendEmail({
     organizationId: orgId,
@@ -165,14 +240,15 @@ async function notifyEpcBatchGenerated({ organizationId, batch, created, startNo
       title: subject,
       intro: 'EPC batch generated.',
       rows: [
-        { label: 'Organization', value: String(org?.name || '') || String(org?.code || '') || String(orgId) },
         { label: 'Batch', value: batchName },
+        { label: 'Generated at', value: formatTimestamp(generatedAt, timeZone) },
         ...(qty ? [{ label: 'Quantity', value: String(qty) }] : []),
         ...(startNo && endNo ? [{ label: 'Running no range', value: `${startNo} - ${endNo}` }] : [])
       ],
       linkLabel: 'Open Admin',
       linkUrl: link
-    })
+    }),
+    attachments: attachment ? [attachment] : undefined
   });
 }
 

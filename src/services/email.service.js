@@ -148,7 +148,7 @@ function normalizeAddressList(list) {
   return Array.from(new Set(emails));
 }
 
-async function sendEmailNow({ organizationId, to, cc, bcc, subject, text, html, replyTo } = {}) {
+async function sendEmailNow({ organizationId, to, cc, bcc, subject, text, html, replyTo, attachments } = {}) {
   const t = await getTransport({ organizationId });
   if (!t) return { skipped: true, reason: 'smtp_not_configured' };
   const toList = normalizeAddressList(to);
@@ -165,6 +165,24 @@ async function sendEmailNow({ organizationId, to, cc, bcc, subject, text, html, 
   const from = t.cfg.from;
   if (!from) return { skipped: true, reason: 'smtp_from_missing' };
 
+  const attachmentsInput = Array.isArray(attachments) ? attachments : [];
+  const normalizedAttachments = attachmentsInput
+    .slice(0, 5)
+    .map((a) => {
+      const filename = String(a?.filename || '').trim();
+      if (!filename) return null;
+      const contentType = a?.contentType ? String(a.contentType).trim() : undefined;
+      if (a?.contentBase64) {
+        const b64 = String(a.contentBase64 || '').trim();
+        if (!b64) return null;
+        return { filename, content: Buffer.from(b64, 'base64'), ...(contentType ? { contentType } : {}) };
+      }
+      const content = a?.content;
+      if (content == null) return null;
+      return { filename, content, ...(contentType ? { contentType } : {}) };
+    })
+    .filter(Boolean);
+
   const info = await t.transport.sendMail({
     from,
     to: toList.length ? toList.join(', ') : undefined,
@@ -173,7 +191,8 @@ async function sendEmailNow({ organizationId, to, cc, bcc, subject, text, html, 
     subject: s,
     text: hasText ? String(text) : undefined,
     html: hasHtml ? String(html) : undefined,
-    replyTo: String(replyTo || t.cfg.replyTo || '').trim() || undefined
+    replyTo: String(replyTo || t.cfg.replyTo || '').trim() || undefined,
+    attachments: normalizedAttachments.length ? normalizedAttachments : undefined
   });
   return { ok: true, messageId: info?.messageId ? String(info.messageId) : null };
 }
