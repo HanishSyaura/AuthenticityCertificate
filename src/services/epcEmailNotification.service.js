@@ -8,6 +8,60 @@ function isValidEmail(v) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }
 
+function escapeHtml(v) {
+  const s = String(v ?? '');
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildHtmlTable(rows) {
+  const clean = Array.isArray(rows) ? rows.filter((r) => r && r.value != null && String(r.value).trim()) : [];
+  if (clean.length === 0) return '';
+  const tr = clean
+    .map(
+      (r) => `
+        <tr>
+          <td style="padding:8px 12px;border:1px solid #e5e7eb;background:#f9fafb;white-space:nowrap;">${escapeHtml(r.label)}</td>
+          <td style="padding:8px 12px;border:1px solid #e5e7eb;">${escapeHtml(r.value)}</td>
+        </tr>`
+    )
+    .join('');
+  return `<table style="border-collapse:collapse;width:100%;margin:12px 0;">${tr}</table>`;
+}
+
+function buildEmailHtml({ title, intro, rows, linkLabel, linkUrl }) {
+  const table = buildHtmlTable(rows);
+  const safeTitle = escapeHtml(title || '');
+  const safeIntro = escapeHtml(intro || '');
+  const link =
+    linkUrl && String(linkUrl).trim()
+      ? `<div style="margin-top:14px;">
+          <a href="${escapeHtml(linkUrl)}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:10px 14px;border-radius:10px;">
+            ${escapeHtml(linkLabel || 'Open')}
+          </a>
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:#6b7280;word-break:break-all;">
+          ${escapeHtml(String(linkUrl))}
+        </div>`
+      : '';
+
+  return `
+    <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5;color:#111827;">
+      <div style="max-width:640px;margin:0 auto;padding:18px;">
+        <div style="font-size:18px;font-weight:700;margin-bottom:6px;">${safeTitle}</div>
+        ${safeIntro ? `<div style="font-size:14px;color:#374151;margin-bottom:10px;">${safeIntro}</div>` : ''}
+        ${table}
+        ${link}
+        <div style="margin-top:16px;font-size:12px;color:#6b7280;">This is an automated notification.</div>
+      </div>
+    </div>
+  `.trim();
+}
+
 function splitEnumRoles(roleNames) {
   const enums = new Set(['super_admin', 'admin', 'operator']);
   const inEnum = [];
@@ -106,7 +160,19 @@ async function notifyEpcBatchGenerated({ organizationId, batch, created, startNo
     organizationId: orgId,
     to,
     subject,
-    text: lines.join('\n')
+    text: lines.join('\n'),
+    html: buildEmailHtml({
+      title: subject,
+      intro: 'EPC batch generated.',
+      rows: [
+        { label: 'Organization', value: String(org?.name || '') || String(org?.code || '') || String(orgId) },
+        { label: 'Batch', value: batchName },
+        ...(qty ? [{ label: 'Quantity', value: String(qty) }] : []),
+        ...(startNo && endNo ? [{ label: 'Running no range', value: `${startNo} - ${endNo}` }] : [])
+      ],
+      linkLabel: 'Open Admin',
+      linkUrl: link
+    })
   });
 }
 
@@ -142,7 +208,19 @@ async function notifyProductionOrdersImported({ organizationId, batchId, rows, u
     organizationId: orgId,
     to,
     subject,
-    text: lines.join('\n')
+    text: lines.join('\n'),
+    html: buildEmailHtml({
+      title: subject,
+      intro: 'Production orders uploaded.',
+      rows: [
+        { label: 'Organization', value: String(org?.name || '') || String(org?.code || '') || String(orgId) },
+        { label: 'Batch', value: batchName },
+        ...(Number.isFinite(Number(rows)) ? [{ label: 'Rows', value: String(Number(rows)) }] : []),
+        ...(Number.isFinite(Number(updated)) ? [{ label: 'Updated EPC items', value: String(Number(updated)) }] : [])
+      ],
+      linkLabel: 'Open Admin',
+      linkUrl: link
+    })
   });
 }
 
