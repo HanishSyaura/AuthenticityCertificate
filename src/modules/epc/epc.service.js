@@ -1271,32 +1271,22 @@ async function listItems({ organizationId, q, batchId, pendingOnly, status, crea
   const statusNorm = status ? String(status).trim().toUpperCase() : '';
 
   if (statusNorm === 'ACTIVE' || statusNorm === 'INACTIVE') {
-    const parts = [Prisma.sql`i.organizationId = ${orgId}`];
-    if (batchId) parts.push(Prisma.sql`i.batchId = ${Number(batchId)}`);
-    if (createdFrom) parts.push(Prisma.sql`i.createdAt >= ${createdFrom}`);
-    if (createdTo) parts.push(Prisma.sql`i.createdAt <= ${createdTo}`);
-    if (pendingOnly) parts.push(Prisma.sql`(i.netWeight IS NULL OR i.netWeight = '')`);
-    if (q) parts.push(Prisma.sql`i.epcCode LIKE ${`%${q}%`}`);
-
-    const statusClause =
+    const statusFilter =
       statusNorm === 'ACTIVE'
-        ? Prisma.sql`EXISTS (
+        ? Prisma.sql`AND EXISTS (
             SELECT 1
             FROM \`TagIdentity\` t
             WHERE t.organizationId = i.organizationId
               AND t.epc = i.epcCode
               AND t.unassignedAt IS NULL
           )`
-        : Prisma.sql`NOT EXISTS (
+        : Prisma.sql`AND NOT EXISTS (
             SELECT 1
             FROM \`TagIdentity\` t
             WHERE t.organizationId = i.organizationId
               AND t.epc = i.epcCode
               AND t.unassignedAt IS NULL
           )`;
-    parts.push(statusClause);
-
-    const whereSql = Prisma.join(parts, Prisma.sql` AND `);
 
     const [totalRows, idRows] = await withTimeout(
       Promise.all([
@@ -1304,14 +1294,26 @@ async function listItems({ organizationId, q, batchId, pendingOnly, status, crea
           Prisma.sql`
             SELECT COUNT(i.id) AS total
             FROM \`EpcItem\` i
-            WHERE ${whereSql}
+            WHERE i.organizationId = ${orgId}
+            ${batchId ? Prisma.sql`AND i.batchId = ${Number(batchId)}` : Prisma.sql``}
+            ${createdFrom ? Prisma.sql`AND i.createdAt >= ${createdFrom}` : Prisma.sql``}
+            ${createdTo ? Prisma.sql`AND i.createdAt <= ${createdTo}` : Prisma.sql``}
+            ${pendingOnly ? Prisma.sql`AND (i.netWeight IS NULL OR i.netWeight = '')` : Prisma.sql``}
+            ${q ? Prisma.sql`AND i.epcCode LIKE ${`%${q}%`}` : Prisma.sql``}
+            ${statusFilter}
           `
         ),
         prisma.$queryRaw(
           Prisma.sql`
             SELECT i.id
             FROM \`EpcItem\` i
-            WHERE ${whereSql}
+            WHERE i.organizationId = ${orgId}
+            ${batchId ? Prisma.sql`AND i.batchId = ${Number(batchId)}` : Prisma.sql``}
+            ${createdFrom ? Prisma.sql`AND i.createdAt >= ${createdFrom}` : Prisma.sql``}
+            ${createdTo ? Prisma.sql`AND i.createdAt <= ${createdTo}` : Prisma.sql``}
+            ${pendingOnly ? Prisma.sql`AND (i.netWeight IS NULL OR i.netWeight = '')` : Prisma.sql``}
+            ${q ? Prisma.sql`AND i.epcCode LIKE ${`%${q}%`}` : Prisma.sql``}
+            ${statusFilter}
             ORDER BY i.createdAt DESC
             LIMIT ${limit} OFFSET ${offset}
           `
