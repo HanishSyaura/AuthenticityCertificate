@@ -561,7 +561,7 @@ export default function CmsInspectorPanel({
                   <label className="block text-xs font-medium text-zinc-700">{t('certTemplate')}</label>
                   <select
                     value={selectedBlock.content?.certificateTemplateId != null ? String(selectedBlock.content.certificateTemplateId) : ''}
-                    onChange={(e) => updateSelectedContent({ certificateTemplateId: e.target.value ? Number(e.target.value) : null })}
+                    onChange={(e) => updateSelectedContent({ certificateTemplateId: e.target.value ? Number(e.target.value) : undefined })}
                     className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                   >
                     <option value="">{t('none')}</option>
@@ -589,17 +589,37 @@ export default function CmsInspectorPanel({
                 <div className="mt-1 text-[11px] text-zinc-500">{t('videoUrlHint')}</div>
               ) : null}
               {selectedBlock.type === 'image' ? (
-                <div className="mt-2">
-                  <label className="block text-xs font-medium text-zinc-700">{t('imageMode')}</label>
-                  <select
-                    value={selectedBlock.content?.mode || 'fit'}
-                    onChange={(e) => updateSelectedContent({ mode: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                  >
-                    <option value="fit">{t('actualOrFit')}</option>
-                    <option value="stretch">{t('stretch')}</option>
-                  </select>
-                </div>
+                <>
+                  <div className="mt-2">
+                    <label className="block text-xs font-medium text-zinc-700">{t('imageMode')}</label>
+                    <select
+                      value={selectedBlock.content?.mode || 'fit'}
+                      onChange={(e) => updateSelectedContent({ mode: e.target.value })}
+                      className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                    >
+                      <option value="fit">{t('actualOrFit')}</option>
+                      <option value="stretch">{t('stretch')}</option>
+                    </select>
+                  </div>
+                  <div className="mt-2">
+                    <label className="block text-xs font-medium text-zinc-700">{t('links')}</label>
+                    <input
+                      value={String(selectedBlock.content?.linkUrl || '')}
+                      onChange={(e) => updateSelectedContent({ linkUrl: e.target.value })}
+                      className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
+                      placeholder="https://..."
+                    />
+                    <label className="mt-2 inline-flex items-center gap-2 text-sm text-zinc-700">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedBlock.content?.openInNewTab)}
+                        onChange={(e) => updateSelectedContent({ openInNewTab: e.target.checked })}
+                        className="h-4 w-4 rounded border-zinc-300"
+                      />
+                      <span className="text-xs">{t('openInNewTab')}</span>
+                    </label>
+                  </div>
+                </>
               ) : null}
               <div className="mt-2">
                 <label className="block text-xs font-medium text-zinc-700">{t('file')}</label>

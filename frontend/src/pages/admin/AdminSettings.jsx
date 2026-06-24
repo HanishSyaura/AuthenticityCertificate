@@ -71,12 +71,16 @@ export default function AdminSettings() {
     defaultLocale: 'en',
     defaultTimezone: 'Asia/Kuala_Lumpur',
     maintenanceMode: false,
+    appTitle: '',
+    faviconUrl: '',
     logoUrl: ''
   });
   const [systemDraft, setSystemDraft] = useState({
     defaultLocale: 'en',
     defaultTimezone: 'Asia/Kuala_Lumpur',
     maintenanceMode: false,
+    appTitle: '',
+    faviconUrl: '',
     logoUrl: ''
   });
   const [systemSaving, setSystemSaving] = useState(false);
@@ -84,6 +88,8 @@ export default function AdminSettings() {
   const [systemErrors, setSystemErrors] = useState({});
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoUploadError, setLogoUploadError] = useState('');
+  const [faviconUploading, setFaviconUploading] = useState(false);
+  const [faviconUploadError, setFaviconUploadError] = useState('');
 
   const [smtpInitial, setSmtpInitial] = useState({
     smtpHost: '',
@@ -187,6 +193,8 @@ export default function AdminSettings() {
           defaultLocale: String(settings?.defaultLocale || 'en'),
           defaultTimezone: String(settings?.defaultTimezone || 'Asia/Kuala_Lumpur'),
           maintenanceMode: Boolean(settings?.maintenanceMode),
+          appTitle: String(settings?.appTitle || ''),
+          faviconUrl: String(settings?.faviconUrl || ''),
           logoUrl: String(settings?.logoUrl || '')
         };
         setSystemInitial(s0);
@@ -390,6 +398,33 @@ export default function AdminSettings() {
     }
   }
 
+  async function uploadFavicon(file) {
+    if (!file) return;
+    setFaviconUploadError('');
+    setSystemNotice({ kind: '', text: '' });
+    setFaviconUploading(true);
+    try {
+      if (isFileTooLarge(file)) {
+        throw new Error(t('fileTooLargeMaxMb', { mb: MAX_UPLOAD_MB }));
+      }
+      const api = createAdminApi({ token });
+      const form = new FormData();
+      form.append('file', file);
+      const res = await api.post('/uploads/media', form, {
+        timeout: 300_000
+      });
+      const created = res?.data?.data;
+      const url = created?.url ? String(created.url) : '';
+      if (!url) throw new Error(t('uploadResponseInvalid'));
+      setSystemDraft((d) => ({ ...d, faviconUrl: url }));
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || t('faviconUploadFailed');
+      setFaviconUploadError(String(msg));
+    } finally {
+      setFaviconUploading(false);
+    }
+  }
+
   async function saveProfile() {
     const errs = validateProfile(profileDraft);
     setProfileErrors(errs);
@@ -458,6 +493,8 @@ export default function AdminSettings() {
         defaultLocale: String(settings?.defaultLocale || systemDraft.defaultLocale),
         defaultTimezone: String(settings?.defaultTimezone || systemDraft.defaultTimezone),
         maintenanceMode: Boolean(settings?.maintenanceMode),
+        appTitle: String(settings?.appTitle || ''),
+        faviconUrl: String(settings?.faviconUrl || ''),
         logoUrl: String(settings?.logoUrl || '')
       };
       setSystemInitial(next);
@@ -465,6 +502,7 @@ export default function AdminSettings() {
       setSystemErrors({});
       setSystemNotice({ kind: 'success', text: t('systemSettingsUpdated') });
       setLogoUploadError('');
+      setFaviconUploadError('');
       setSettingsResponse({ organization: org || null, settings: settings || null });
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || t('failedToUpdateSystemSettings');
@@ -667,10 +705,13 @@ export default function AdminSettings() {
               saving={systemSaving}
               logoUploading={logoUploading}
               logoUploadError={logoUploadError}
+              faviconUploading={faviconUploading}
+              faviconUploadError={faviconUploadError}
               localeOptions={localeOptions}
               timezoneOptions={timezoneOptions}
               onChange={(patch) => setSystemDraft((d) => ({ ...d, ...patch }))}
               onUploadLogo={uploadLogo}
+              onUploadFavicon={uploadFavicon}
               onSave={saveSystem}
             />
           ) : null}

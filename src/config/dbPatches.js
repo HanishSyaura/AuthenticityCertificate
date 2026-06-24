@@ -833,6 +833,9 @@ async function ensureOrganizationSettingsSchemaCompat() {
         \`defaultLocale\` VARCHAR(20) NULL,
         \`defaultTimezone\` VARCHAR(64) NULL,
         \`maintenanceMode\` TINYINT(1) NOT NULL DEFAULT 0,
+        \`appTitle\` VARCHAR(191) NULL,
+        \`faviconUrl\` VARCHAR(512) NULL,
+        \`logoUrl\` VARCHAR(512) NULL,
         \`smtpHost\` VARCHAR(191) NULL,
         \`smtpPort\` INT NULL,
         \`smtpSecure\` TINYINT(1) NULL,
@@ -868,6 +871,22 @@ async function ensureOrganizationSettingsSchemaCompat() {
     'OrganizationSettings',
     'logoUrl',
     'ALTER TABLE `OrganizationSettings` ADD COLUMN `logoUrl` VARCHAR(512) NULL',
+    null,
+    null
+  );
+
+  await ensureColumn(
+    'OrganizationSettings',
+    'appTitle',
+    'ALTER TABLE `OrganizationSettings` ADD COLUMN `appTitle` VARCHAR(191) NULL',
+    null,
+    null
+  );
+
+  await ensureColumn(
+    'OrganizationSettings',
+    'faviconUrl',
+    'ALTER TABLE `OrganizationSettings` ADD COLUMN `faviconUrl` VARCHAR(512) NULL',
     null,
     null
   );

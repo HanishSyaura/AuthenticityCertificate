@@ -147,6 +147,21 @@ function sanitizeClass(input) {
   return kept.join(' ');
 }
 
+function sanitizeLinkUrl(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return '';
+  if (/^javascript:/i.test(raw)) return '';
+  try {
+    const base = typeof window !== 'undefined' ? window.location.origin : 'https://example.invalid';
+    const u = new URL(raw, base);
+    const proto = String(u.protocol || '').toLowerCase();
+    if (proto === 'http:' || proto === 'https:' || proto === 'mailto:' || proto === 'tel:') return u.toString();
+    return '';
+  } catch {
+    return '';
+  }
+}
+
 function sanitizeLimitedHtml(input) {
   const raw = String(input ?? '');
   if (!raw) return '';
@@ -635,39 +650,55 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
           const webpSrcSet = resolvedUrl ? buildUploadsWebpSrcSet(resolvedUrl) : null;
           const renderedW = Math.max(1, Math.round((Number(block.__rect?.w || 0) || 0) * (Number(scale) || 1)));
           const sizes = `${renderedW}px`;
+          const linkUrl = sanitizeLinkUrl(block.content?.linkUrl);
+          const openInNewTab = Boolean(block.content?.openInNewTab);
+
+          const rendered = resolvedUrl ? (
+            webpSrcSet ? (
+              <picture className="block h-full w-full">
+                <source type="image/webp" srcSet={webpSrcSet} sizes={sizes} />
+                <img
+                  src={resolvedUrl}
+                  alt=""
+                  className={`${isStretch ? 'h-full w-full object-fill' : 'h-full w-full object-contain'} ${linkUrl ? 'cursor-pointer' : 'cursor-zoom-in'}`}
+                  loading={isEager ? 'eager' : 'lazy'}
+                  decoding="async"
+                  fetchPriority={isEager ? 'high' : 'low'}
+                  draggable={false}
+                  onClick={linkUrl ? undefined : () => setLightboxSrc(resolvedUrl)}
+                />
+              </picture>
+            ) : (
+              <img
+                src={resolvedUrl}
+                alt=""
+                className={`${isStretch ? 'h-full w-full object-fill' : 'h-full w-full object-contain'} ${linkUrl ? 'cursor-pointer' : 'cursor-zoom-in'}`}
+                loading={isEager ? 'eager' : 'lazy'}
+                decoding="async"
+                fetchPriority={isEager ? 'high' : 'low'}
+                draggable={false}
+                onClick={linkUrl ? undefined : () => setLightboxSrc(resolvedUrl)}
+              />
+            )
+          ) : (
+            <div className="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 text-xs text-zinc-500">
+              {t('image')}
+            </div>
+          );
+
           return (
             <div key={block.id} style={style} className="overflow-hidden">
-              {resolvedUrl ? (
-                webpSrcSet ? (
-                  <picture className="block h-full w-full">
-                    <source type="image/webp" srcSet={webpSrcSet} sizes={sizes} />
-                    <img
-                      src={resolvedUrl}
-                      alt=""
-                      className={`${isStretch ? 'h-full w-full object-fill' : 'h-full w-full object-contain'} cursor-zoom-in`}
-                      loading={isEager ? 'eager' : 'lazy'}
-                      decoding="async"
-                      fetchPriority={isEager ? 'high' : 'low'}
-                      draggable={false}
-                      onClick={() => setLightboxSrc(resolvedUrl)}
-                    />
-                  </picture>
-                ) : (
-                  <img
-                    src={resolvedUrl}
-                    alt=""
-                    className={`${isStretch ? 'h-full w-full object-fill' : 'h-full w-full object-contain'} cursor-zoom-in`}
-                    loading={isEager ? 'eager' : 'lazy'}
-                    decoding="async"
-                    fetchPriority={isEager ? 'high' : 'low'}
-                    draggable={false}
-                    onClick={() => setLightboxSrc(resolvedUrl)}
-                  />
-                )
+              {linkUrl ? (
+                <a
+                  href={linkUrl}
+                  target={openInNewTab ? '_blank' : undefined}
+                  rel={openInNewTab ? 'noreferrer noopener' : undefined}
+                  className="block h-full w-full"
+                >
+                  {rendered}
+                </a>
               ) : (
-                <div className="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 text-xs text-zinc-500">
-                  {t('image')}
-                </div>
+                rendered
               )}
             </div>
           );

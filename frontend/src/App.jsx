@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import VerifyPage from './pages/VerifyPage';
 import CmsPreviewPage from './pages/CmsPreviewPage';
+import BrandingInitializer from './components/BrandingInitializer';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminShell from './components/admin/AdminShell';
 import AdminProtected from './components/admin/AdminProtected';
@@ -24,6 +25,7 @@ import NotFound from './pages/NotFound';
 function App() {
   return (
     <Router>
+      <BrandingInitializer />
       <Routes>
         <Route path="/" element={<VerifyPage />} />
         <Route path="/verify" element={<VerifyPage />} />

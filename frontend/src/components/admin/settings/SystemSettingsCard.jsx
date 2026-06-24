@@ -16,10 +16,13 @@ export default function SystemSettingsCard({
   saving,
   logoUploading,
   logoUploadError,
+  faviconUploading,
+  faviconUploadError,
   localeOptions,
   timezoneOptions,
   onChange,
   onUploadLogo,
+  onUploadFavicon,
   onSave
 }) {
   const { t } = useT();
@@ -73,6 +76,62 @@ export default function SystemSettingsCard({
             <div className="text-sm text-zinc-700">{draft.maintenanceMode ? t('enabled') : t('disabled')}</div>
           </div>
         </Field>
+
+        <div className="sm:col-span-2">
+          <Field label={t('appTitle')} hint={t('appTitleHint')} error={errors?.appTitle} htmlFor="system-app-title">
+            <Input
+              id="system-app-title"
+              value={draft.appTitle}
+              onChange={(v) => onChange({ appTitle: v })}
+              disabled={!canEdit}
+              placeholder={t('appTitlePlaceholder')}
+            />
+          </Field>
+        </div>
+
+        <div className="sm:col-span-2">
+          <Field label={t('favicon')} hint={t('faviconHint')} error={faviconUploadError}>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-zinc-200/80 bg-zinc-50">
+                {draft.faviconUrl ? (
+                  <img src={resolvePublicMediaUrl(draft.faviconUrl)} alt={t('favicon')} className="h-full w-full object-contain" />
+                ) : (
+                  <div className="text-[11px] text-zinc-500">{t('none')}</div>
+                )}
+              </div>
+
+              <label
+                className={`ac-btn ac-btn-soft cursor-pointer px-3 py-2 ${
+                  !canEdit || faviconUploading ? 'cursor-not-allowed opacity-50 hover:bg-white' : ''
+                }`}
+              >
+                {faviconUploading ? t('uploading') : t('uploadImage')}
+                <input
+                  type="file"
+                  accept="image/*,.ico"
+                  disabled={!canEdit || faviconUploading}
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] || null;
+                    e.target.value = '';
+                    if (f) onUploadFavicon?.(f);
+                  }}
+                />
+              </label>
+
+              <div className="text-[11px] text-zinc-500">{t('maxFileSize', { mb: MAX_UPLOAD_MB })}</div>
+
+              <button
+                type="button"
+                disabled={!canEdit || faviconUploading || !draft.faviconUrl}
+                onClick={() => onChange({ faviconUrl: '' })}
+                className="ac-btn ac-btn-soft px-3 py-2"
+              >
+                {t('remove')}
+              </button>
+            </div>
+          </Field>
+        </div>
 
         <div className="sm:col-span-2">
           <Field label={t('brandLogo')} hint={t('brandLogoHint')} error={logoUploadError}>

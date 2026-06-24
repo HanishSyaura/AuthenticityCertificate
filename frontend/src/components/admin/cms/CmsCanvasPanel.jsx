@@ -560,7 +560,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
                         y: 20,
                         w: baseW - 40,
                         h: 260,
-                        content: { variant: 'supporting', certificateTemplateId: null }
+                        content: { variant: 'supporting' }
                       }
                     ];
                     setLayout(next);

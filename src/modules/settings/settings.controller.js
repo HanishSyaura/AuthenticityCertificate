@@ -51,6 +51,8 @@ async function getSettings(req, res) {
               defaultLocale: row.defaultLocale,
               defaultTimezone: row.defaultTimezone,
               maintenanceMode: Boolean(row.maintenanceMode),
+              appTitle: row.appTitle ? String(row.appTitle) : null,
+              faviconUrl: row.faviconUrl ? String(row.faviconUrl) : null,
               logoUrl: row.logoUrl ? String(row.logoUrl) : null,
               smtpHost: row.smtpHost ? String(row.smtpHost) : null,
               smtpPort: row.smtpPort == null ? null : Number(row.smtpPort) || null,
@@ -93,6 +95,24 @@ const updateSchema = z.object({
   defaultLocale: z.string().trim().min(2).max(20).optional(),
   defaultTimezone: z.string().trim().min(3).max(64).optional(),
   maintenanceMode: z.boolean().optional(),
+  appTitle: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      const s = String(v).trim();
+      return s ? s : null;
+    },
+    z.string().min(1).max(191).nullable().optional()
+  ),
+  faviconUrl: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      const s = String(v).trim();
+      return s ? s : null;
+    },
+    z.string().min(1).max(512).nullable().optional()
+  ),
   logoUrl: z.preprocess(
     (v) => {
       if (v === undefined) return undefined;
@@ -302,6 +322,8 @@ async function updateSettings(req, res) {
               defaultLocale: row.defaultLocale,
               defaultTimezone: row.defaultTimezone,
               maintenanceMode: Boolean(row.maintenanceMode),
+              appTitle: row.appTitle ? String(row.appTitle) : null,
+              faviconUrl: row.faviconUrl ? String(row.faviconUrl) : null,
               logoUrl: row.logoUrl ? String(row.logoUrl) : null,
               smtpHost: row.smtpHost ? String(row.smtpHost) : null,
               smtpPort: row.smtpPort == null ? null : Number(row.smtpPort) || null,

@@ -52,11 +52,11 @@ router.get('/settings', async (req, res) => {
   try {
     const orgId = Number(req.organization?.id || 0);
     if (!Number.isFinite(orgId) || orgId <= 0) {
-      return res.success({ organization: null, settings: { logoUrl: null } }, 'OK');
+      return res.success({ organization: null, settings: { logoUrl: null, appTitle: null, faviconUrl: null } }, 'OK');
     }
 
     if (!dbGate.shouldUseDb()) {
-      return res.success({ organization: null, settings: { logoUrl: null } }, 'OK');
+      return res.success({ organization: null, settings: { logoUrl: null, appTitle: null, faviconUrl: null } }, 'OK');
     }
 
     const dbTimeoutMs = getPublicDbTimeoutMs();
@@ -67,7 +67,7 @@ router.get('/settings', async (req, res) => {
       ]),
       Promise.race([
         prisma.$queryRaw`
-          SELECT logoUrl, defaultLocale, defaultTimezone, maintenanceMode
+          SELECT logoUrl, defaultLocale, defaultTimezone, maintenanceMode, appTitle, faviconUrl
           FROM OrganizationSettings
           WHERE organizationId = ${orgId}
           LIMIT 1
@@ -92,14 +92,16 @@ router.get('/settings', async (req, res) => {
           defaultLocale: row?.defaultLocale ? String(row.defaultLocale) : null,
           defaultTimezone: row?.defaultTimezone ? String(row.defaultTimezone) : null,
           maintenanceMode: Boolean(row?.maintenanceMode),
-          logoUrl: row?.logoUrl ? String(row.logoUrl) : null
+          logoUrl: row?.logoUrl ? String(row.logoUrl) : null,
+          appTitle: row?.appTitle ? String(row.appTitle) : null,
+          faviconUrl: row?.faviconUrl ? String(row.faviconUrl) : null
         }
       },
       'OK'
     );
   } catch (e) {
     if (shouldTriggerDbGate(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'GET /settings' });
-    return res.success({ organization: null, settings: { logoUrl: null } }, 'OK');
+    return res.success({ organization: null, settings: { logoUrl: null, appTitle: null, faviconUrl: null } }, 'OK');
   }
 });
 

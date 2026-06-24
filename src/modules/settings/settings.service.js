@@ -91,6 +91,8 @@ async function getOrganizationSettingsRow(organizationId) {
       defaultLocale,
       defaultTimezone,
       maintenanceMode,
+      appTitle,
+      faviconUrl,
       logoUrl,
       smtpHost,
       smtpPort,
@@ -134,6 +136,10 @@ async function updateOrganizationSettings(organizationId, input) {
   const defaultLocale = typeof input.defaultLocale === 'string' ? input.defaultLocale.trim() : null;
   const defaultTimezone = typeof input.defaultTimezone === 'string' ? input.defaultTimezone.trim() : null;
   const maintenanceMode = typeof input.maintenanceMode === 'boolean' ? input.maintenanceMode : null;
+  const hasAppTitle = Object.prototype.hasOwnProperty.call(input, 'appTitle');
+  const appTitle = typeof input.appTitle === 'string' ? input.appTitle.trim() : input.appTitle === null ? null : null;
+  const hasFaviconUrl = Object.prototype.hasOwnProperty.call(input, 'faviconUrl');
+  const faviconUrl = typeof input.faviconUrl === 'string' ? input.faviconUrl.trim() : input.faviconUrl === null ? null : null;
   const hasLogoUrl = Object.prototype.hasOwnProperty.call(input, 'logoUrl');
   const logoUrl = typeof input.logoUrl === 'string' ? input.logoUrl.trim() : input.logoUrl === null ? null : null;
 
@@ -163,6 +169,8 @@ async function updateOrganizationSettings(organizationId, input) {
       defaultLocale = COALESCE(${defaultLocale}, defaultLocale),
       defaultTimezone = COALESCE(${defaultTimezone}, defaultTimezone),
       maintenanceMode = COALESCE(${maintenanceMode}, maintenanceMode),
+      appTitle = CASE WHEN ${hasAppTitle} THEN ${appTitle} ELSE appTitle END,
+      faviconUrl = CASE WHEN ${hasFaviconUrl} THEN ${faviconUrl} ELSE faviconUrl END,
       logoUrl = CASE WHEN ${hasLogoUrl} THEN ${logoUrl} ELSE logoUrl END,
       smtpHost = CASE WHEN ${hasSmtpHost} THEN ${smtpHost} ELSE smtpHost END,
       smtpPort = CASE WHEN ${hasSmtpPort} THEN ${smtpPort} ELSE smtpPort END,
