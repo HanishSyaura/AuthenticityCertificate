@@ -10,6 +10,7 @@ import { tRaw } from '../../i18n/tRaw';
 import DataTable from '../../components/ui/DataTable';
 import TablePager from '../../components/ui/TablePager';
 import { hasPermission } from '../../utils/permissions';
+import { resolvePublicMediaUrl } from '../../utils/apiBase';
 
 function formatDateTime(input) {
   if (!input) return '';
@@ -1297,12 +1298,13 @@ export default function AdminEpc() {
                   {DOC_TYPES.map((docType) => {
                     const matching = (Array.isArray(viewBatch?.documents) ? viewBatch.documents : []).find((d) => String(d?.docType || '').trim() === docType);
                     const url = String(matching?.mediaUrl || '').trim();
+                    const viewUrl = url ? resolvePublicMediaUrl(url) : '';
                     return (
                       <div key={docType} className="rounded-xl border border-zinc-200 bg-white p-3">
                         <div className="text-xs font-semibold text-zinc-900">{getDocTypeLabel(docType)}</div>
                         <div className="mt-2">
-                          {url ? (
-                            <a href={url} target="_blank" rel="noreferrer" className="text-[11px] font-semibold underline">
+                          {viewUrl ? (
+                            <a href={viewUrl} target="_blank" rel="noreferrer" className="text-[11px] font-semibold underline">
                               {t('view')}
                             </a>
                           ) : (
@@ -1515,13 +1517,14 @@ export default function AdminEpc() {
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {DOC_TYPES.map((docType) => {
                     const url = String(importDocUrls?.[docType] || '').trim();
+                    const viewUrl = url ? resolvePublicMediaUrl(url) : '';
                     const uploading = Boolean(importDocUploading?.[docType]);
                     return (
                       <div key={docType} className="rounded-xl border border-zinc-200 bg-white p-3">
                         <div className="text-xs font-semibold text-zinc-900">{getDocTypeLabel(docType)}</div>
                         <div className="mt-2 flex flex-wrap items-center gap-3">
-                          {url ? (
-                            <a href={url} target="_blank" rel="noreferrer" className="text-[11px] font-semibold underline">
+                          {viewUrl ? (
+                            <a href={viewUrl} target="_blank" rel="noreferrer" className="text-[11px] font-semibold underline">
                               {t('view')}
                             </a>
                           ) : (

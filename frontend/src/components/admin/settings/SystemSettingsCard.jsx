@@ -2,6 +2,7 @@ import React from 'react';
 import { Field, Input, Select, Toggle } from './SettingsControls';
 import { MAX_UPLOAD_MB } from '../../../utils/uploadLimits';
 import { useT } from '../../../i18n/useT';
+import { resolvePublicMediaUrl } from '../../../utils/apiBase';
 
 export default function SystemSettingsCard({
   title,
@@ -78,7 +79,7 @@ export default function SystemSettingsCard({
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex h-16 w-48 items-center justify-center overflow-hidden rounded-xl border border-zinc-200/80 bg-zinc-50">
                 {draft.logoUrl ? (
-                  <img src={draft.logoUrl} alt={t('brandLogo')} className="h-full w-full object-contain" />
+                  <img src={resolvePublicMediaUrl(draft.logoUrl)} alt={t('brandLogo')} className="h-full w-full object-contain" />
                 ) : (
                   <div className="text-xs text-zinc-500">{t('noLogo')}</div>
                 )}

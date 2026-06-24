@@ -8,6 +8,7 @@ import TourOverlay from '../tour/TourOverlay';
 import useTourStore from '../../store/useTourStore';
 import { getAdminGettingStartedTourSteps } from '../../tour/adminGettingStartedTour';
 import { hasPermission } from '../../utils/permissions';
+import { resolvePublicMediaUrl } from '../../utils/apiBase';
 
 function NavItem({ to, label, tourId, collapsed }) {
   const shortLabel = (label || '').trim();
@@ -125,7 +126,7 @@ export default function AdminShell() {
           <div className={`flex h-14 items-center gap-2 border-b border-slate-800 ${sidebarCollapsed ? 'px-3' : 'px-4'}`}>
             {settings?.logoUrl ? (
               <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded bg-white/10">
-                <img src={settings.logoUrl} alt="Brand logo" className="h-full w-full object-contain" />
+                <img src={resolvePublicMediaUrl(settings.logoUrl)} alt="Brand logo" className="h-full w-full object-contain" />
               </div>
             ) : (
               <div className="h-7 w-7 rounded bg-orange-500" />

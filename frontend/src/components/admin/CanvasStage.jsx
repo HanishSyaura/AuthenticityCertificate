@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { buildUploadsWebpSrcSet } from '../../utils/mediaVariants';
+import { resolvePublicMediaUrl } from '../../utils/apiBase';
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
@@ -33,6 +34,7 @@ export default function CanvasStage({
   const [activePointer, setActivePointer] = useState(false);
   const canSelect = mode === 'edit' || mode === 'select';
   const canTransform = mode === 'edit';
+  const resolvedBackgroundUrl = backgroundUrl ? resolvePublicMediaUrl(backgroundUrl) : '';
 
   const applyUpdate = useCallback((updater) => {
     if (!canTransform) return;
@@ -188,9 +190,9 @@ export default function CanvasStage({
           }}
         >
           {backgroundUrl ? (
-            /\.(mp4|webm|ogg)(\?.*)?$/i.test(String(backgroundUrl || '')) ? (
+            /\.(mp4|webm|ogg)(\?.*)?$/i.test(String(resolvedBackgroundUrl || '')) ? (
               <video
-                src={backgroundUrl}
+                src={resolvedBackgroundUrl}
                 className={
                   backgroundMode === 'actual'
                     ? 'absolute left-1/2 top-1/2 max-w-none -translate-x-1/2 -translate-y-1/2 rounded-xl object-center'
@@ -205,7 +207,7 @@ export default function CanvasStage({
               />
             ) : (
               (() => {
-                const webpSrcSet = buildUploadsWebpSrcSet(backgroundUrl);
+                const webpSrcSet = buildUploadsWebpSrcSet(resolvedBackgroundUrl);
                 const sizes = `${Math.max(1, Math.round((Number(width) || 0) * (Number(scale) || 1)))}px`;
                 const imgClass =
                   backgroundMode === 'actual'
@@ -220,7 +222,7 @@ export default function CanvasStage({
                 if (!webpSrcSet) {
                   return (
                     <img
-                      src={backgroundUrl}
+                      src={resolvedBackgroundUrl}
                       alt="Background"
                       className={
                         backgroundMode === 'actual'
@@ -240,7 +242,7 @@ export default function CanvasStage({
                   <picture className={pictureClass}>
                     <source type="image/webp" srcSet={webpSrcSet} sizes={sizes} />
                     <img
-                      src={backgroundUrl}
+                      src={resolvedBackgroundUrl}
                       alt="Background"
                       className={imgClass}
                       loading="eager"

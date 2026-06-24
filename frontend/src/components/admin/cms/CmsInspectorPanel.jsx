@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useT } from '../../../i18n/useT';
 import useUploadsStore from '../../../store/useUploadsStore';
 import { isFileTooLarge, MAX_UPLOAD_MB } from '../../../utils/uploadLimits';
+import { resolvePublicMediaUrl } from '../../../utils/apiBase';
 import RichTextEditor from '../RichTextEditor';
 import ImageCropModal from './ImageCropModal';
 
@@ -650,7 +651,8 @@ export default function CmsInspectorPanel({
                       setUploadError(null);
                       setCropLoading(true);
                       try {
-                        const abs = new URL(rawUrl, window.location.origin).toString();
+                        const resolved = resolvePublicMediaUrl(rawUrl);
+                        const abs = new URL(resolved, window.location.origin).toString();
                         const res = await fetch(abs, { credentials: 'include' });
                         if (!res.ok) throw new Error(t('failedToLoadImageWithStatus', { status: res.status }));
                         const blob = await res.blob();

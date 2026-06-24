@@ -4,10 +4,10 @@ Dokumen ini untuk update **backend + frontend** setiap kali anda buat perubahan 
 
 Asumsi:
 
-- Project folder: `/www/wwwroot/birdnestauth.clbgroups.com`
-- Branch deploy: `damadingji`
-- Backend jalan guna PM2 process name: `birdnestauth-api` (ubah ikut PM2 actual name)
-- Backend port internal: `5000`
+- Project folder: `/www/wwwroot/nfc.cert.demo.clbgroups.com/app`
+- Branch deploy: `demo`
+- Backend jalan guna PM2 process name: `nfccertdemo-api` (ubah ikut PM2 actual name)
+- Backend port internal: `5015`
 - Nginx serve frontend build dari `frontend/dist`
 
 > Nota keselamatan: Jangan commit `.env`. `.env` hanya di server.
@@ -21,12 +21,12 @@ Paste satu blok ini dalam SSH:
 ```bash
 set -e
 
-cd /www/wwwroot/birdnestauth.clbgroups.com
+cd /www/wwwroot/nfc.cert.demo.clbgroups.com/app
 
 echo "== 1) Pull latest code =="
 git fetch origin
-git checkout damadingji
-git pull origin damadingji
+git checkout demo
+git pull origin demo
 
 echo "== 1b) Confirm branch + commit =="
 git rev-parse --abbrev-ref HEAD
@@ -36,38 +36,34 @@ echo "== 2) Backend deps + Prisma =="
 npm ci || npm install
 npx prisma generate
 
-if [ -d "prisma/migrations" ] && [ "$(ls -A prisma/migrations 2>/dev/null)" ]; then
-  echo "== 2b) Apply migrations =="
-  npx prisma migrate deploy
-else
-  echo "== Skip migrate deploy (no prisma/migrations) =="
-fi
+echo "== 2b) Sync DB schema (Prisma) =="
+npx prisma db push
 
 echo "== 3) Restart backend =="
-pm2 restart birdnestauth-api
+pm2 restart nfccertdemo-api
 
 echo "== 4) Frontend deps + build =="
 cd frontend
 npm ci || npm install
 
 if [ ! -f ".env.production" ]; then
-  echo "VITE_API_BASE_URL=https://birdnestauth.clbgroups.com/api" > .env.production
+  echo "VITE_API_BASE_URL=" > .env.production
 fi
 
 rm -rf dist
 npm run build
 
 echo "== 5) Quick checks =="
-curl -s http://127.0.0.1:5000/health
+curl -s http://127.0.0.1:5015/health
 echo
-pm2 status birdnestauth-api
+pm2 status nfccertdemo-api
 ```
 
 Lepas run, test di browser:
 
-- `https://birdnestauth.clbgroups.com/health`
-- `https://birdnestauth.clbgroups.com/admin/epc`
-- `https://birdnestauth.clbgroups.com/verify/<CERTIFICATE_ID>`
+- `https://nfc.cert.demo.clbgroups.com/health`
+- `https://nfc.cert.demo.clbgroups.com/admin/login`
+- `https://nfc.cert.demo.clbgroups.com/verify/<CERTIFICATE_ID>`
 
 Kalau UI masih “sama” (masih nampak page EPC lama):
 
@@ -84,7 +80,7 @@ Kalau UI masih “sama” (masih nampak page EPC lama):
 1. Check apa yang berubah:
 
 ```bash
-cd /www/wwwroot/birdnestauth.clbgroups.com
+cd /www/wwwroot/nfc.cert.demo.clbgroups.com/app
 git status
 ```
 
@@ -102,10 +98,10 @@ git pull
 
 ```bash
 set -e
-cd /www/wwwroot/birdnestauth.clbgroups.com
+cd /www/wwwroot/nfc.cert.demo.clbgroups.com/app
 git fetch origin
-git checkout damadingji
-git pull origin damadingji
+git checkout demo
+git pull origin demo
 cd frontend
 npm ci || npm install
 rm -rf dist
@@ -117,14 +113,16 @@ npm run build
 ## D) Bila backend berubah sahaja
 
 ```bash
-cd /www/wwwroot/birdnestauth.clbgroups.com
+cd /www/wwwroot/nfc.cert.demo.clbgroups.com/app
 git fetch origin
-git checkout damadingji
-git pull origin damadingji
+git checkout demo
+git pull origin demo
 npm ci || npm install
 npx prisma generate
-pm2 restart birdnestauth-api
-curl -s http://127.0.0.1:5000/health
+echo "== Sync DB schema (Prisma) =="
+npx prisma db push
+pm2 restart nfccertdemo-api
+curl -s http://127.0.0.1:5015/health
 echo
 ```
 
@@ -135,18 +133,18 @@ echo
 - Check PM2 log:
 
 ```bash
-pm2 logs birdnestauth-api --lines 200
+pm2 logs nfccertdemo-api --lines 200
 ```
 
 - Check Nginx error log:
 
 ```bash
-tail -n 200 /www/wwwlogs/birdnestauth.clbgroups.com.error.log
+tail -n 200 /www/wwwlogs/nfc.cert.demo.clbgroups.com.error.log
 ```
 
 - Kalau `502 Bad Gateway`:
-  - Pastikan backend hidup: `pm2 status birdnestauth-api`
-  - Pastikan port: `curl -s http://127.0.0.1:5000/health`
+  - Pastikan backend hidup: `pm2 status nfccertdemo-api`
+  - Pastikan port: `curl -s http://127.0.0.1:5015/health`
 - Kalau route admin refresh jadi 404:
   - Pastikan Nginx ada `try_files $uri $uri/ /index.html;` untuk `location /`
 
@@ -187,7 +185,7 @@ Lepas save:
 ```bash
 npx prisma validate
 npx prisma generate
-pm2 restart birdnestauth-api
+pm2 restart nfccertdemo-api
 ```
 
 Contoh (Part Product Management — tambah `origin`, `description`, `certificateTemplateId` pada table `Product`):
@@ -236,21 +234,23 @@ cara update semua:
 ```Shell
 set -e
 
-cd /www/wwwroot/birdnestauth.clbgroups.com/AuthenticityCertificate
+cd /www/wwwroot/nfc.cert.demo.clbgroups.com/app
 
 echo "== Clean local changes =="
 git reset --hard
 git clean -fd
 
-echo "== Pull damadingji =="
+echo "== Pull demo =="
 git fetch origin
-git checkout damadingji
-git reset --hard origin/damadingji
+git checkout demo
+git reset --hard origin/demo
 git log -1 --oneline
 
 echo "== Backend deps + prisma =="
 npm ci || npm install
 npx prisma generate
+echo "== Sync DB schema (Prisma) =="
+npx prisma db push
 
 echo "== Frontend build =="
 cd frontend
@@ -259,12 +259,11 @@ npm ci || npm install
 npm run build
 cd ..
 
-echo "== Restart (API + worker) =="
-pm2 restart birdnestauth-api || true
-pm2 restart birdnestauth-worker || true
+echo "== Restart (API) =="
+pm2 restart nfccertdemo-api || true
 
 echo "== Health check =="
-curl -s http://127.0.0.1:5000/health
+curl -s http://127.0.0.1:5015/health
 echo
 ```
 
@@ -273,8 +272,7 @@ Update Video file
 A) Ambil filename MP4 terbaru
 
 ```Shell
-ls -t /www/wwwroot/birdnestauth.clbgroups.com/_uploads/media/1/*.
-mp4 2>/dev/null | head -n 5
+ls -t /www/wwwroot/nfc.cert.demo.clbgroups.com/app/uploads/media/1/*.mp4 2>/dev/null | head -n 5
 ```
 
 Copy yang paling atas (itu paling baru).
@@ -282,29 +280,24 @@ Copy yang paling atas (itu paling baru).
 B) Check status DB untuk filename tu Ganti NEW\.mp4 :
 
 ```Shell
-cd /www/wwwroot/birdnestauth.clbgroups.com/AuthenticityCertificate
-node - <<'NODE'
+cd /www/wwwroot/nfc.cert.demo.clbgroups.com/app
+node - <<'NODE'
 require('dotenv').config();
-const prisma = require('./src/config/prisma');
-(async () => {
-  const fileName = 'NEW.mp4';
-  const row = await prisma.mediaAsset.findFirst({ where: { 
-  fileName } });
-  console.log(row?.id, row?.processingStatus, row?.
-  processingError, row?.processingJobId, row?.posterUrl, row?.
-  sizeBytes, row?.processedAt);
-  await prisma.$disconnect();
-})().catch((e)=>{ console.error(e); process.exit(1); });
+const prisma = require('./src/config/prisma');
+(async () => {
+  const fileName = 'NEW.mp4';
+  const row = await prisma.mediaAsset.findFirst({ where: { fileName } });
+  console.log(row?.id, row?.processingStatus, row?.processingError, row?.processingJobId, row?.posterUrl, row?.sizeBytes, row?.processedAt);
+  await prisma.$disconnect();
+})().catch((e)=>{ console.error(e); process.exit(1); });
 NODE
 ```
 
 C) Bila status dah ready , verify format iPhone (720p + yuv420p) Guna path penuh file:
 
 ```Shell
-FILE="/www/wwwroot/birdnestauth.clbgroups.com/_uploads/media/1/
-NEW.mp4"
-ffprobe -v error -show_streams -select_streams v:0 -of json 
-"$FILE" | head -n 50
+FILE="/www/wwwroot/nfc.cert.demo.clbgroups.com/app/uploads/media/1/NEW.mp4"
+ffprobe -v error -show_streams -select_streams v:0 -of json "$FILE" | head -n 50
 ```
 
 Target:
@@ -315,20 +308,19 @@ Target:
 Kalau kau nak check “semua yang masih processing”, run:
 
 ```Shell
-cd /www/wwwroot/birdnestauth.clbgroups.com/AuthenticityCertificate
-node - <<'NODE'
+cd /www/wwwroot/nfc.cert.demo.clbgroups.com/app
+node - <<'NODE'
 require('dotenv').config();
-const prisma = require('./src/config/prisma');
-(async () => {
-  const rows = await prisma.mediaAsset.findMany({
-    where: { processingStatus: 'processing', deletedAt: null },
-    orderBy: { createdAt: 'desc' },
-    take: 20
-  });
-  console.log(rows.map(r => ({ id: r.id, fileName: r.fileName, 
-  jobId: r.processingJobId, createdAt: r.createdAt })));
-  await prisma.$disconnect();
-})().catch((e)=>{ console.error(e); process.exit(1); });
+const prisma = require('./src/config/prisma');
+(async () => {
+  const rows = await prisma.mediaAsset.findMany({
+    where: { processingStatus: 'processing', deletedAt: null },
+    orderBy: { createdAt: 'desc' },
+    take: 20
+  });
+  console.log(rows.map(r => ({ id: r.id, fileName: r.fileName, jobId: r.processingJobId, createdAt: r.createdAt })));
+  await prisma.$disconnect();
+})().catch((e)=>{ console.error(e); process.exit(1); });
 NODE
 ```
 

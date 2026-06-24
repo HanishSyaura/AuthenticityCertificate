@@ -3,7 +3,7 @@ import CanvasStage from '../CanvasStage';
 import PublicRenderer from '../../PublicRenderer';
 import { useT } from '../../../i18n/useT';
 import axios from 'axios';
-import { getPublicApiBaseUrl } from '../../../utils/apiBase';
+import { getPublicApiBaseUrl, resolvePublicMediaUrl } from '../../../utils/apiBase';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
 import { createAdminApi } from '../../../utils/adminApi';
 
@@ -369,9 +369,10 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
           );
         }
         if (it.type === 'image') {
+          const src = resolvePublicMediaUrl(it.content?.url || '');
           return (
             <div className="h-full w-full">
-              <img src={it.content?.url || ''} alt="" className="h-full w-full object-cover" draggable={false} />
+              <img src={src} alt="" className="h-full w-full object-cover" draggable={false} />
             </div>
           );
         }

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useT } from '../i18n/useT';
-import { getPublicApiBaseUrl, resolveApiAssetUrl } from '../utils/apiBase';
+import { getPublicApiBaseUrl, resolvePublicMediaUrl } from '../utils/apiBase';
 
 function IconShield(props) {
   return (
@@ -120,7 +120,7 @@ const VerifyLoadingScreen = ({ meta, mode = 'auto' }) => {
         clearTimeout(timeout);
         const json = await res.json();
         const nextRaw = json?.success ? String(json?.data?.settings?.logoUrl || '').trim() : '';
-        const next = nextRaw ? resolveApiAssetUrl(nextRaw) : '';
+        const next = nextRaw ? resolvePublicMediaUrl(nextRaw) : '';
         if (!alive) return;
         if (next) setBrandLogoUrl(next);
         try {
