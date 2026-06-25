@@ -5,7 +5,6 @@ import PublicRenderer from '../components/PublicRenderer';
 import VerifyLoadingScreen from '../components/VerifyLoadingScreen';
 import { useT } from '../i18n/useT';
 import LanguageSwitcher from '../components/LanguageSwitcher';
-import { resolvePublicMediaUrl } from '../utils/apiBase';
 
 function IconShieldCheck(props) {
   return (
@@ -144,11 +143,6 @@ const VerifyPage = () => {
   }
 
   if (certificate) {
-    const batchDocs = Array.isArray(certificate?.batchDocuments) ? certificate.batchDocuments : [];
-    const docOrder = ['moh_health_certificate', 'export_permit', 'dvs_health_certificate', 'dvs_coo_certificate'];
-    const hasSupportingDocBlocks = Array.isArray(certificate?.layout)
-      ? certificate.layout.some((b) => b && typeof b === 'object' && b.type === 'supporting_document')
-      : false;
     if (Array.isArray(certificate?.layout)) {
       const pageBg = String(certificate?.certificateTemplate?.backgroundColor || '').trim() || '#ffffff';
       return (
@@ -166,33 +160,6 @@ const VerifyPage = () => {
           <div className="relative z-10 w-full">
             <PublicRenderer layout={certificate.layout} data={certificate} responsive responsiveMode="viewport" baseWidth={390} />
           </div>
-          {!hasSupportingDocBlocks && batchDocs.length ? (
-            <div className="mx-auto w-full max-w-screen-md px-4 pb-10 pt-6">
-              <div className="rounded-2xl border border-zinc-200 bg-white p-4">
-                <div className="text-sm font-semibold text-zinc-900">{t('supportingCertificates')}</div>
-                <div className="mt-3 space-y-2 text-sm">
-                  {docOrder.map((docType) => {
-                    const row = batchDocs.find((d) => String(d?.docType || '').trim() === docType);
-                    const url = row?.mediaUrl ? String(row.mediaUrl).trim() : '';
-                    const resolvedUrl = resolvePublicMediaUrl(url);
-                    const label =
-                      docType === 'moh_health_certificate'
-                        ? t('mohHealthCertificate')
-                        : docType === 'export_permit'
-                          ? t('exportPermit')
-                          : docType === 'dvs_health_certificate'
-                            ? t('dvsHealthCertificate')
-                            : t('dvsCooCertificate');
-                    return resolvedUrl ? (
-                      <a key={docType} href={resolvedUrl} target="_blank" rel="noreferrer" className="block underline">
-                        {label}
-                      </a>
-                    ) : null;
-                  })}
-                </div>
-              </div>
-            </div>
-          ) : null}
         </div>
       );
     }
@@ -256,33 +223,6 @@ const VerifyPage = () => {
                       data={certificate}
                     />
                   </div>
-                  {!hasSupportingDocBlocks && batchDocs.length ? (
-                    <div className="mx-auto w-full max-w-screen-md px-4 pb-10 pt-6">
-                      <div className="rounded-2xl border border-zinc-200 bg-white p-4">
-                        <div className="text-sm font-semibold text-zinc-900">{t('supportingCertificates')}</div>
-                        <div className="mt-3 space-y-2 text-sm">
-                          {docOrder.map((docType) => {
-                            const row = batchDocs.find((d) => String(d?.docType || '').trim() === docType);
-                            const url = row?.mediaUrl ? String(row.mediaUrl).trim() : '';
-                            const resolvedUrl = resolvePublicMediaUrl(url);
-                            const label =
-                              docType === 'moh_health_certificate'
-                                ? t('mohHealthCertificate')
-                                : docType === 'export_permit'
-                                  ? t('exportPermit')
-                                  : docType === 'dvs_health_certificate'
-                                    ? t('dvsHealthCertificate')
-                                    : t('dvsCooCertificate');
-                            return resolvedUrl ? (
-                              <a key={docType} href={resolvedUrl} target="_blank" rel="noreferrer" className="block underline">
-                                {label}
-                              </a>
-                            ) : null;
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
                 </div>
               );
             })()
