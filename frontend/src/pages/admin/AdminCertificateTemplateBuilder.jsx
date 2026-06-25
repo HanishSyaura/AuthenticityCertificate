@@ -6,6 +6,7 @@ import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import useI18nStore from '../../store/useI18nStore';
 import useUploadsStore from '../../store/useUploadsStore';
 import useEpcStore from '../../store/useEpcStore';
+import { normalizePublicMediaPath } from '../../utils/apiBase';
 import { stripHtmlToText, toQuillHtml } from '../../utils/richText';
 import { sanitizeLimitedHtml } from '../../utils/sanitizeLimitedHtml';
 import { MAX_UPLOAD_MB } from '../../utils/uploadLimits';
@@ -1301,7 +1302,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                         <label className="block text-xs font-medium text-zinc-700">{t('backgroundUrl')}</label>
                         <input
                           value={selected.background || ''}
-                          onChange={(e) => queueBasePatch({ background: e.target.value })}
+                          onChange={(e) => queueBasePatch({ background: normalizePublicMediaPath(e.target.value) })}
                           disabled={layoutLocked}
                           className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                         />
@@ -1318,7 +1319,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                               setBgUploading(true);
                               try {
                                 const res = await uploadMedia({ file });
-                                queueBasePatch({ background: res?.url || '' });
+                                queueBasePatch({ background: normalizePublicMediaPath(res?.url || '') });
                                 setBgFileKey((k) => k + 1);
                               } catch (err) {
                                 setBgError(err?.message || String(err));
@@ -1905,7 +1906,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                     setBgUploading(true);
                     try {
                       const created = await uploadMedia({ file });
-                      if (created?.url) await updateSelected({ background: created.url });
+                      if (created?.url) await updateSelected({ background: normalizePublicMediaPath(created.url) });
                       setBgFileKey((k) => k + 1);
                     } catch (err) {
                       const msg = err?.response?.data?.message || err?.message || t('uploadFailed');

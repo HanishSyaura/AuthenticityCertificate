@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { buildUploadsWebpSrcSet } from '../../utils/mediaVariants';
 import { resolvePublicMediaUrl } from '../../utils/apiBase';
 
 function clamp(n, min, max) {
@@ -206,53 +205,21 @@ export default function CanvasStage({
                 loop
               />
             ) : (
-              (() => {
-                const webpSrcSet = buildUploadsWebpSrcSet(resolvedBackgroundUrl);
-                const sizes = `${Math.max(1, Math.round((Number(width) || 0) * (Number(scale) || 1)))}px`;
-                const imgClass =
+              <img
+                src={resolvedBackgroundUrl}
+                alt="Background"
+                className={
                   backgroundMode === 'actual'
-                    ? 'max-w-none rounded-xl object-center'
+                    ? 'absolute left-1/2 top-1/2 max-w-none -translate-x-1/2 -translate-y-1/2 rounded-xl object-center'
                     : backgroundMode === 'fit'
-                      ? 'h-full w-full rounded-xl object-contain object-center'
-                      : 'h-full w-full rounded-xl object-fill object-center';
-                const pictureClass =
-                  backgroundMode === 'actual'
-                    ? 'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'
-                    : 'absolute inset-0 h-full w-full';
-                if (!webpSrcSet) {
-                  return (
-                    <img
-                      src={resolvedBackgroundUrl}
-                      alt="Background"
-                      className={
-                        backgroundMode === 'actual'
-                          ? 'absolute left-1/2 top-1/2 max-w-none -translate-x-1/2 -translate-y-1/2 rounded-xl object-center'
-                          : backgroundMode === 'fit'
-                            ? 'absolute inset-0 h-full w-full rounded-xl object-contain object-center'
-                            : 'absolute inset-0 h-full w-full rounded-xl object-fill object-center'
-                      }
-                      loading="eager"
-                      decoding="async"
-                      fetchPriority="high"
-                      draggable={false}
-                    />
-                  );
+                      ? 'absolute inset-0 h-full w-full rounded-xl object-contain object-center'
+                      : 'absolute inset-0 h-full w-full rounded-xl object-fill object-center'
                 }
-                return (
-                  <picture className={pictureClass}>
-                    <source type="image/webp" srcSet={webpSrcSet} sizes={sizes} />
-                    <img
-                      src={resolvedBackgroundUrl}
-                      alt="Background"
-                      className={imgClass}
-                      loading="eager"
-                      decoding="async"
-                      fetchPriority="high"
-                      draggable={false}
-                    />
-                  </picture>
-                );
-              })()
+                loading="eager"
+                decoding="async"
+                fetchPriority="high"
+                draggable={false}
+              />
             )
           ) : null}
 

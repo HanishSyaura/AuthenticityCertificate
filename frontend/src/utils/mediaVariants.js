@@ -1,7 +1,7 @@
 export function buildUploadsWebpSrcSet(url, widths = [320, 640, 1024]) {
   const raw = String(url || '').trim();
   if (!raw) return null;
-  const markers = ['/public/uploads/', '/uploads/'];
+  const markers = ['/api/public/uploads/', '/api/v1/public/uploads/', '/public/uploads/', '/uploads/'];
   let uploadsIdx = -1;
   for (const m of markers) {
     const idx = raw.indexOf(m);

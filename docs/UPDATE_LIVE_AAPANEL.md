@@ -229,11 +229,10 @@ CREATE TABLE MediaAsset (
 );
 ```
 
-cara update semua:
+cara update semua
 
 ```Shell
 set -e
-
 cd /www/wwwroot/nfc.cert.demo.clbgroups.com/app
 
 echo "== Clean local changes =="
@@ -249,8 +248,7 @@ git log -1 --oneline
 echo "== Backend deps + prisma =="
 npm ci || npm install
 npx prisma generate
-echo "== Sync DB schema (Prisma) =="
-npx prisma db push
+npx prisma migrate deploy
 
 echo "== Frontend build =="
 cd frontend
@@ -262,9 +260,7 @@ cd ..
 echo "== Restart (API) =="
 pm2 restart nfccertdemo-api || true
 
-echo "== Health check =="
-curl -s http://127.0.0.1:5015/health
-echo
+curl -sS http://127.0.0.1:5015/health
 ```
 
 Update Video file

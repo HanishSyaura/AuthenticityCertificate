@@ -7,6 +7,7 @@ import { useT } from '../../i18n/useT';
 import DataTable from '../../components/ui/DataTable';
 import TablePager from '../../components/ui/TablePager';
 import RowActionsMenu from '../../components/ui/RowActionsMenu';
+import { normalizePublicMediaPath } from '../../utils/apiBase';
 import { MAX_UPLOAD_MB } from '../../utils/uploadLimits';
 
 function formatDate(input) {
@@ -314,7 +315,7 @@ export default function AdminCertificateList() {
                 <label className="block text-xs font-medium text-zinc-700">{t('backgroundUrl')}</label>
                 <input
                   value={newBackground}
-                  onChange={(e) => setNewBackground(e.target.value)}
+                  onChange={(e) => setNewBackground(normalizePublicMediaPath(e.target.value))}
                   className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
                 />
                 <input
@@ -329,7 +330,7 @@ export default function AdminCertificateList() {
                     setNewBgUploading(true);
                     try {
                       const created = await uploadMedia({ file });
-                      if (created?.url) setNewBackground(created.url);
+                      if (created?.url) setNewBackground(normalizePublicMediaPath(created.url));
                       setNewBgFileKey((k) => k + 1);
                     } catch (err) {
                       const msg = err?.response?.data?.message || err?.message || t('uploadFailed');
