@@ -37,6 +37,16 @@ function translateCertificateStatus(t, statusRaw) {
   return statusRaw || '-';
 }
 
+function VerifyLanguageSwitcher() {
+  return (
+    <div className="fixed bottom-3 right-3 z-40 sm:bottom-4 sm:right-4">
+      <div className="origin-bottom-right scale-90 opacity-95">
+        <LanguageSwitcher size="xs" />
+      </div>
+    </div>
+  );
+}
+
 const VerifyPage = () => {
   const { id } = useParams();
   const location = useLocation();
@@ -127,9 +137,7 @@ const VerifyPage = () => {
   if (showLoader) {
     return (
       <div className="min-h-[100dvh]">
-        <div className="fixed right-3 top-3 z-[60]">
-          <LanguageSwitcher size="md" />
-        </div>
+        <VerifyLanguageSwitcher />
         <VerifyLoadingScreen meta={loadingMeta} mode={loadingMode} />
       </div>
     );
@@ -154,9 +162,7 @@ const VerifyPage = () => {
             backgroundSize: undefined
           }}
         >
-          <div className="fixed right-3 top-3 z-50">
-            <LanguageSwitcher size="md" />
-          </div>
+          <VerifyLanguageSwitcher />
           <div className="relative z-10 w-full">
             <PublicRenderer layout={certificate.layout} data={certificate} responsive responsiveMode="viewport" baseWidth={390} />
           </div>
@@ -196,6 +202,7 @@ const VerifyPage = () => {
     return (
       <div className="min-h-[100dvh]">
         <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 lg:px-8">
+          <VerifyLanguageSwitcher />
           <div
             className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${
               statusOk
@@ -210,7 +217,6 @@ const VerifyPage = () => {
               <div className="text-sm font-semibold">{t('verification')}</div>
               <div className="rounded-full bg-white/70 px-2 py-1 text-xs font-semibold">{translateCertificateStatus(t, statusUpper)}</div>
             </div>
-            <LanguageSwitcher size="md" />
           </div>
 
           {hasTemplate ? (
@@ -305,9 +311,7 @@ const VerifyPage = () => {
   return (
     <div className="flex min-h-[100dvh] flex-col items-center justify-center px-4 py-8">
       <div className="mx-auto w-full max-w-md">
-        <div className="mb-3 flex justify-end">
-          <LanguageSwitcher size="md" />
-        </div>
+        <VerifyLanguageSwitcher />
         <div className="ac-card p-6 text-center">
           <IconShieldCheck className="mx-auto mb-4 h-12 w-12 text-zinc-900" />
           <h1 className="text-lg font-semibold text-zinc-900">{t('productVerification')}</h1>
