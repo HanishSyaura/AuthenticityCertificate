@@ -128,7 +128,7 @@ function PreviewStage({
             }}
             className="ac-scrollbar-outside"
           >
-            <PublicRenderer layout={effectivePreviewLayout} data={previewData || sampleCert()} />
+            <PublicRenderer layout={effectivePreviewLayout} data={previewData || sampleCert()} disableResponsiveMediaOptimizations />
           </div>
           {previewLoading ? (
             <div className="absolute inset-0 flex items-center justify-center bg-white/60 text-xs font-semibold text-zinc-700">{t('loading')}</div>

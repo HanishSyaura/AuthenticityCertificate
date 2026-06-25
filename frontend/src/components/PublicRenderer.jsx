@@ -479,7 +479,16 @@ const CmsVideoBlock = ({ block, style, t }) => {
   );
 };
 
-const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed = false, responsive = false, responsiveMode = 'container', baseWidth = 390 }) => {
+const PublicRenderer = ({
+  layout,
+  data,
+  className = '',
+  disableCertificateEmbed = false,
+  disableResponsiveMediaOptimizations = false,
+  responsive = false,
+  responsiveMode = 'container',
+  baseWidth = 390
+}) => {
   const { t, locale } = useT();
   const layoutSafe = Array.isArray(layout) ? layout : null;
 
@@ -647,7 +656,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
           const isStretch = mode === 'stretch';
           const isEager = eagerImageIds.has(String(block.id || ''));
           const resolvedUrl = block.content?.url ? resolvePublicMediaUrl(String(block.content.url)) : '';
-          const webpSrcSet = resolvedUrl ? buildUploadsWebpSrcSet(resolvedUrl) : null;
+          const webpSrcSet = !disableResponsiveMediaOptimizations && resolvedUrl ? buildUploadsWebpSrcSet(resolvedUrl) : null;
           const renderedW = Math.max(1, Math.round((Number(block.__rect?.w || 0) || 0) * (Number(scale) || 1)));
           const sizes = `${renderedW}px`;
           const linkUrl = sanitizeLinkUrl(block.content?.linkUrl);
@@ -808,7 +817,7 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
             const bgColor = String(template?.backgroundColor || '#ffffff');
             const bgUrl = template?.background ? resolvePublicMediaUrl(String(template.background)) : '';
             const bgMode = String(template?.backgroundMode || 'background');
-            const bgSrcSet = bgUrl ? buildUploadsWebpSrcSet(bgUrl) : null;
+            const bgSrcSet = !disableResponsiveMediaOptimizations && bgUrl ? buildUploadsWebpSrcSet(bgUrl) : null;
             const bgSizes = `${Math.max(1, Math.round(baseW * scale))}px`;
 
             const items = templateLayout

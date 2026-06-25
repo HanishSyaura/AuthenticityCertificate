@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useT } from '../../../i18n/useT';
 import useUploadsStore from '../../../store/useUploadsStore';
 import { isFileTooLarge, MAX_UPLOAD_MB } from '../../../utils/uploadLimits';
-import { resolvePublicMediaUrl } from '../../../utils/apiBase';
+import { normalizePublicMediaPath, resolvePublicMediaUrl } from '../../../utils/apiBase';
 import RichTextEditor from '../RichTextEditor';
 import ImageCropModal from './ImageCropModal';
 
@@ -167,10 +167,10 @@ export default function CmsInspectorPanel({
         });
         if (created?.url) {
           const blockType = layout.find((b) => String(b?.id) === String(blockId))?.type || '';
-          const patch = { url: created.url };
+          const patch = { url: normalizePublicMediaPath(created.url) };
           if (blockType === 'video') {
             const poster = String(created?.posterUrl || '').trim() || guessPosterUrl(created.url);
-            if (poster) patch.posterUrl = poster;
+            if (poster) patch.posterUrl = normalizePublicMediaPath(poster);
           }
           updateBlockContentById(blockId, patch);
         }
@@ -581,7 +581,7 @@ export default function CmsInspectorPanel({
               <label className="block text-xs font-medium text-zinc-700">{t('url')}</label>
               <input
                 value={selectedBlock.content?.url || ''}
-                onChange={(e) => updateSelectedContent({ url: e.target.value })}
+                onChange={(e) => updateSelectedContent({ url: normalizePublicMediaPath(e.target.value) })}
                 className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 placeholder="https://..."
               />
