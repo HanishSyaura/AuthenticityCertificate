@@ -2,6 +2,7 @@ const { z } = require('zod');
 const epcService = require('./epc.service');
 const { matchPermission } = require('../../middleware/access.middleware');
 const prisma = require('../../config/prisma');
+const { resolvePublicVerifyUrlPrefix } = require('../../utils/publicVerifyUrl');
 
 const EPC_BATCH_IMPORT_AUDIT_ACTION = 'SUBMIT_EPC_BATCH_IMPORT';
 
@@ -431,7 +432,7 @@ async function exportBatch(req, res) {
 async function exportBatchVerifyUrls(req, res) {
   try {
     const batchId = Number(req.params.id);
-    const verifyUrlPrefix = (process.env.PUBLIC_VERIFY_URL_PREFIX || '').trim() || 'https://wmscertauth.clbgroups.com/verify?epc=';
+    const verifyUrlPrefix = resolvePublicVerifyUrlPrefix(req);
     const { buffer, filename } = await epcService.exportBatchVerifyUrlXlsx({
       organizationId: req.organization.id,
       batchId,
