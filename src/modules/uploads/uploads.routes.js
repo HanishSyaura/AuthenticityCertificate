@@ -21,6 +21,13 @@ function getUploadsRoot() {
   return path.resolve(process.cwd(), 'uploads');
 }
 
+async function appendUploadDebug(payload) {
+  const dir = path.resolve(process.cwd(), '.dbg');
+  await fs.mkdir(dir, { recursive: true });
+  const abs = path.join(dir, 'trae-debug-log-upload-timeout-cms.ndjson');
+  await fs.appendFile(abs, `${JSON.stringify({ ts: Date.now(), ...payload })}\n`);
+}
+
 function makeFileName(originalName) {
   const ext = path.extname(String(originalName || '')).slice(0, 10);
   const rand = crypto.randomBytes(16).toString('hex');
@@ -97,7 +104,20 @@ async function listMedia(req, res) {
 
 function uploadMedia(req, res) {
   upload(req, res, async (err) => {
+    const startedAt = Date.now();
     if (err) {
+      try {
+        // #region debug-point A:upload-multer-error
+        await appendUploadDebug({
+          hypothesisId: 'A',
+          stage: 'multer_error',
+          orgId: req?.organization?.id || null,
+          message: err?.message || 'upload_error',
+          code: err?.code || null,
+          elapsedMs: Date.now() - startedAt
+        });
+        // #endregion debug-point A:upload-multer-error
+      } catch {}
       if (err?.code === 'LIMIT_FILE_SIZE') {
         return res.error(`File too large. Maximum file size is ${MAX_UPLOAD_MB}MB.`, 413);
       }
@@ -109,6 +129,19 @@ function uploadMedia(req, res) {
       const orgId = Number(req.organization.id);
       const destDir = path.join(getUploadsRoot(), 'media', String(orgId));
       const baseName = path.parse(String(file.filename || '')).name;
+      try {
+        // #region debug-point B:upload-start
+        await appendUploadDebug({
+          hypothesisId: 'B',
+          stage: 'upload_received',
+          orgId,
+          fileName: file.filename,
+          mimeType: file.mimetype,
+          sizeBytes: Number(file.size) || 0,
+          elapsedMs: Date.now() - startedAt
+        });
+        // #endregion debug-point B:upload-start
+      } catch {}
       if (isProcessableImage(file) && file.path) {
         try {
           await generateWebpVariants({ filePath: file.path, destDir, baseName });
@@ -118,12 +151,37 @@ function uploadMedia(req, res) {
       let finalMimeType = file.mimetype;
       let finalSizeBytes = Number(file.size);
       if (file.path) {
+        try {
+          // #region debug-point C:transcode-start
+          await appendUploadDebug({
+            hypothesisId: 'C',
+            stage: 'transcode_start',
+            orgId,
+            fileName: file.filename,
+            elapsedMs: Date.now() - startedAt
+          });
+          // #endregion debug-point C:transcode-start
+        } catch {}
         const processed = await processUploadedVideo({
           fileAbs: file.path,
           fileName: file.filename,
           mimeType: file.mimetype,
           destDir
         });
+        try {
+          // #region debug-point D:transcode-done
+          await appendUploadDebug({
+            hypothesisId: 'D',
+            stage: 'transcode_done',
+            orgId,
+            inputFileName: file.filename,
+            outputFileName: processed?.fileName || file.filename,
+            skipped: Boolean(processed?.skipped),
+            sizeBytes: Number(processed?.sizeBytes || finalSizeBytes || 0),
+            elapsedMs: Date.now() - startedAt
+          });
+          // #endregion debug-point D:transcode-done
+        } catch {}
         if (processed?.fileName) finalFileName = processed.fileName;
         if (processed?.mimeType) finalMimeType = processed.mimeType;
         if (processed?.sizeBytes != null) finalSizeBytes = Number(processed.sizeBytes);
@@ -142,6 +200,19 @@ function uploadMedia(req, res) {
         }),
         1500
       );
+      try {
+        // #region debug-point E:upload-success
+        await appendUploadDebug({
+          hypothesisId: 'E',
+          stage: 'upload_success',
+          orgId,
+          fileName: finalFileName,
+          mediaAssetId: created?.id || null,
+          url,
+          elapsedMs: Date.now() - startedAt
+        });
+        // #endregion debug-point E:upload-success
+      } catch {}
       res.success(created, 'Uploaded');
     } catch (e) {
       const filePath = req?.file?.path;
@@ -150,6 +221,18 @@ function uploadMedia(req, res) {
           await fs.unlink(filePath);
         } catch {}
       }
+      try {
+        // #region debug-point F:upload-fail
+        await appendUploadDebug({
+          hypothesisId: 'F',
+          stage: 'upload_fail',
+          orgId: req?.organization?.id || null,
+          fileName: req?.file?.filename || null,
+          message: e?.message || 'upload_failed',
+          elapsedMs: Date.now() - startedAt
+        });
+        // #endregion debug-point F:upload-fail
+      } catch {}
       res.error(e.message, 400);
     }
   });

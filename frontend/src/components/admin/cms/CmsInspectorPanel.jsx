@@ -6,9 +6,12 @@ import RichTextEditor from '../RichTextEditor';
 import ImageCropModal from './ImageCropModal';
 
 export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, clearSelection, templates, layoutLocked = false, onCollapse }) {
-  const { t } = useT();
+  const { t, locale } = useT();
   const { uploadMedia } = useUploadsStore((s) => ({ uploadMedia: s.uploadMedia }));
   const [uploadingBlockId, setUploadingBlockId] = useState(null);
+  const [uploadPct, setUploadPct] = useState(null);
+  const [uploadStage, setUploadStage] = useState(null);
+  const [lastUploadDone, setLastUploadDone] = useState(null);
   const [uploadError, setUploadError] = useState(null);
   const [fileKey, setFileKey] = useState(0);
   const [cropOpen, setCropOpen] = useState(false);
@@ -88,10 +91,16 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
 
   const accept = selectedBlock?.type === 'video' ? 'video/*' : selectedBlock?.type === 'image' ? 'image/*' : undefined;
   const isUploadingSelectedBlock = selectedBlock?.id != null && String(uploadingBlockId || '') === String(selectedBlock.id);
+  const lastDoneForSelected =
+    selectedBlock?.id != null && lastUploadDone?.blockId != null && String(lastUploadDone.blockId) === String(selectedBlock.id)
+      ? lastUploadDone
+      : null;
 
   useEffect(() => {
     if (selectedBlock?.id) return;
     setUploadingBlockId(null);
+    setUploadPct(null);
+    setUploadStage(null);
   }, [selectedBlock?.id]);
 
   const doUpload = useCallback(
@@ -101,9 +110,25 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
       uploadRequestRef.current = request;
       setUploadError(null);
       setUploadingBlockId(blockId);
+      setUploadPct(0);
+      setUploadStage('uploading');
       try {
-        const created = await uploadMedia({ file });
+        const created = await uploadMedia({
+          file,
+          onProgress: (pct) => {
+            if (uploadRequestRef.current.seq !== request.seq) return;
+            if (uploadRequestRef.current.blockId !== request.blockId) return;
+            setUploadPct(pct);
+            if (pct >= 100) setUploadStage('processing');
+          },
+          onStage: (stage) => {
+            if (uploadRequestRef.current.seq !== request.seq) return;
+            if (uploadRequestRef.current.blockId !== request.blockId) return;
+            setUploadStage(stage);
+          }
+        });
         if (created?.url) updateBlockContentById(blockId, { url: created.url });
+        setLastUploadDone({ blockId, ts: Date.now() });
         setFileKey((k) => k + 1);
         return created;
       } catch (err) {
@@ -114,6 +139,8 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
         if (uploadRequestRef.current.seq === request.seq && uploadRequestRef.current.blockId === request.blockId) {
           uploadRequestRef.current = { seq: request.seq, blockId: null };
           setUploadingBlockId(null);
+          setUploadPct(null);
+          setUploadStage(null);
         }
       }
     },
@@ -465,6 +492,17 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
                   }}
                   className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 />
+                {isUploadingSelectedBlock ? (
+                  <div className="mt-1 text-[11px] font-semibold text-zinc-700">
+                    {uploadStage === 'processing' ? t('processing') : t('uploading')}
+                    {uploadStage !== 'processing' && typeof uploadPct === 'number' ? ` ${uploadPct}%` : ''}
+                  </div>
+                ) : null}
+                {lastDoneForSelected?.ts ? (
+                  <div className="mt-1 text-[11px] text-emerald-700">
+                    {t('doneAt', { value: new Date(lastDoneForSelected.ts).toLocaleString(locale) })}
+                  </div>
+                ) : null}
                 <div className="mt-1 text-[11px] text-zinc-500">{t('maxFileSize', { mb: MAX_UPLOAD_MB })}</div>
                 {uploadError ? <div className="mt-2 text-xs text-rose-700">{uploadError}</div> : null}
                 {selectedBlock.type === 'image' && String(selectedBlock.content?.url || '').trim() ? (
