@@ -100,9 +100,9 @@ async function transcodeToMobileMp4({ inAbs, outAbs }) {
     '-crf',
     '23',
     '-profile:v',
-    'high',
+    'baseline',
     '-level',
-    '4.1',
+    '3.1',
     '-g',
     '48',
     '-keyint_min',
@@ -113,6 +113,10 @@ async function transcodeToMobileMp4({ inAbs, outAbs }) {
     'aac',
     '-b:a',
     '128k',
+    '-ac',
+    '2',
+    '-ar',
+    '44100',
     '-movflags',
     '+faststart',
     '-f',
@@ -163,4 +167,3 @@ module.exports = {
   isVideoMime,
   processUploadedVideo
 };
-
