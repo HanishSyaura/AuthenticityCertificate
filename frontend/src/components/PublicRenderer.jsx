@@ -73,9 +73,15 @@ const ImageLightbox = ({ src, onClose }) => {
 };
 
 function LazyMedia({ kind, src }) {
+  const { t } = useT();
   const [enabled, setEnabled] = useState(false);
+  const [showVideoCover, setShowVideoCover] = useState(kind === 'video');
   const ref = useRef(null);
   const videoRef = useRef(null);
+
+  useEffect(() => {
+    setShowVideoCover(kind === 'video');
+  }, [kind, src]);
 
   useEffect(() => {
     if (enabled) return;
@@ -141,7 +147,10 @@ function LazyMedia({ kind, src }) {
     };
     const events = ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay', 'play', 'playing', 'waiting', 'stalled', 'suspend', 'error'];
     const handlers = events.map((name) => {
-      const handler = () => emit(name);
+      const handler = () => {
+        if (name === 'play' || name === 'playing') setShowVideoCover(false);
+        emit(name);
+      };
       video.addEventListener(name, handler);
       return { name, handler };
     });
@@ -194,7 +203,42 @@ function LazyMedia({ kind, src }) {
     );
   }
 
-  return <video ref={videoRef} src={src} controls playsInline preload="metadata" className="h-full w-full object-cover" />;
+  return (
+    <div className="relative h-full w-full overflow-hidden rounded-xl bg-zinc-950">
+      <video ref={videoRef} src={src} controls playsInline preload="metadata" className="h-full w-full object-cover" />
+      {showVideoCover ? (
+        <button
+          type="button"
+          aria-label={t('video')}
+          className="absolute inset-0 flex h-full w-full items-center justify-center bg-gradient-to-br from-zinc-800 via-zinc-900 to-black text-white"
+          onClick={() => {
+            const video = videoRef.current;
+            setShowVideoCover(false);
+            if (!video) return;
+            try {
+              const maybePromise = video.play?.();
+              if (maybePromise && typeof maybePromise.catch === 'function') {
+                maybePromise.catch(() => {
+                  setShowVideoCover(true);
+                });
+              }
+            } catch {
+              setShowVideoCover(true);
+            }
+          }}
+        >
+          <div className="flex flex-col items-center gap-3 px-4 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/16 ring-1 ring-white/20 backdrop-blur-sm">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M8.5 6.7v10.6c0 .6.7 1 1.2.7l9-5.3c.5-.3.5-1.1 0-1.4l-9-5.3c-.5-.3-1.2.1-1.2.7z" />
+              </svg>
+            </div>
+            <div className="text-xs font-semibold tracking-wide text-white/90">{t('video')}</div>
+          </div>
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 function getValue(path, data) {
