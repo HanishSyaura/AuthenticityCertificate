@@ -6,7 +6,28 @@ import { resolveCmsVideoSource } from '../utils/videoEmbed';
 
 function reportVideoDebug(event) {
   if (typeof window === 'undefined') return;
-  const url = String(window.__AC_DEBUG_VIDEO_URL || '').trim();
+  const stored = String(window.__AC_DEBUG_VIDEO_URL || '').trim();
+  const url = (() => {
+    if (stored) return stored;
+    let params;
+    try {
+      params = new URLSearchParams(window.location.search || '');
+    } catch {
+      params = null;
+    }
+    const raw = params ? String(params.get('ac_debug') || '').trim() : '';
+    const token = params ? String(params.get('ac_debug_token') || '').trim() : '';
+    if (raw === '1' || raw.toLowerCase() === 'true') {
+      const u = token ? `/api/__debug/video-event?token=${encodeURIComponent(token)}` : '/api/__debug/video-event';
+      window.__AC_DEBUG_VIDEO_URL = u;
+      return u;
+    }
+    if (raw && /^https?:\/\//i.test(raw)) {
+      window.__AC_DEBUG_VIDEO_URL = raw;
+      return raw;
+    }
+    return '';
+  })();
   if (!url) return;
   fetch(url, {
     method: 'POST',
@@ -93,7 +114,7 @@ function LazyMedia({ kind, src }) {
     const emit = (name) => {
       const err = video.error ? { code: video.error.code, message: video.error.message || null } : null;
       reportVideoDebug({
-        sessionId: 'mobile-video-black-screen',
+        sessionId: 'ios-video-playback',
         runId: 'pre-fix',
         hypothesisId: 'A',
         location: 'frontend/src/components/PublicRenderer.jsx:LazyMedia',
@@ -102,12 +123,17 @@ function LazyMedia({ kind, src }) {
         data: {
           kind,
           src,
+          currentSrc: video.currentSrc || '',
           readyState: video.readyState,
           networkState: video.networkState,
           paused: video.paused,
           currentTime: video.currentTime,
           videoWidth: video.videoWidth,
           videoHeight: video.videoHeight,
+          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+          canPlayMp4: typeof video.canPlayType === 'function' ? video.canPlayType('video/mp4') : '',
+          canPlayH264Aac:
+            typeof video.canPlayType === 'function' ? video.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"') : '',
           ancestorTransform,
           error: err
         }
@@ -132,7 +158,20 @@ function LazyMedia({ kind, src }) {
         ref={ref}
         type="button"
         className="group flex h-full w-full items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 text-xs font-semibold text-zinc-700 hover:bg-zinc-100"
-        onClick={() => setEnabled(true)}
+        onClick={() => {
+          // #region debug-point B:load-video-click
+          reportVideoDebug({
+            sessionId: 'ios-video-playback',
+            runId: 'pre-fix',
+            hypothesisId: 'B',
+            location: 'frontend/src/components/PublicRenderer.jsx:LazyMedia',
+            msg: '[DEBUG] video:load-click',
+            ts: Date.now(),
+            data: { kind, src, userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '' }
+          });
+          // #endregion
+          setEnabled(true);
+        }}
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="opacity-80 transition group-hover:opacity-100">
           <path d="M8.5 6.7v10.6c0 .6.7 1 1.2.7l9-5.3c.5-.3.5-1.1 0-1.4l-9-5.3c-.5-.3-1.2.1-1.2.7z" />

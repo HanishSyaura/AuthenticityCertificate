@@ -2,18 +2,20 @@ require('dotenv').config();
 
 const prisma = require('../src/config/prisma');
 
-const TARGET_PATHS = [
-  '/uploads/media/1/1784014930443-32e254b62787e9df713815d5c41882b4.mp4',
-  '/uploads/media/1/1778210593254-1edb7228e1d9f562494ac0d265e7e905.mp4',
-  '/uploads/media/1/1778220556763-50a4959688dd323114958ebd307580dd.mp4',
-  '/uploads/media/1/1778223460765-883d2291a21dbe4133257235a4e37c49.mp4',
-  '/uploads/media/1/1778222478774-66a2ee9af94b02186c7edd08393e9e06.mp4'
-];
-
 function normalizeVersion(raw) {
   const value = String(raw || '').trim();
   if (!value) return '20260715a';
   return value.replace(/[^A-Za-z0-9._-]/g, '');
+}
+
+const ORG_ID = Number(process.argv[2] || 1);
+const VERSION = normalizeVersion(process.argv[3] || '20260715a');
+
+function isTargetPath(pathname) {
+  const p = String(pathname || '');
+  const prefix = `/uploads/media/${String(ORG_ID)}/`;
+  if (!p.startsWith(prefix)) return false;
+  return p.toLowerCase().endsWith('.mp4');
 }
 
 function tryParseUrl(value) {
@@ -35,7 +37,7 @@ function maybeUpdateUrlString(value, version) {
   if (!parsed) return { changed: false, value };
 
   const pathname = parsed.url.pathname;
-  if (!TARGET_PATHS.includes(pathname)) return { changed: false, value };
+  if (!isTargetPath(pathname)) return { changed: false, value };
 
   parsed.url.searchParams.set('v', version);
   const next = parsed.absolute
@@ -100,9 +102,6 @@ async function updateMediaUrlTable({ label, rows, field, update }) {
 function hasModel(name) {
   return prisma && typeof prisma[name] === 'object' && prisma[name] !== null;
 }
-
-const ORG_ID = Number(process.argv[2] || 1);
-const VERSION = normalizeVersion(process.argv[3] || '20260715a');
 
 async function main() {
   if (!Number.isFinite(ORG_ID) || ORG_ID <= 0) {

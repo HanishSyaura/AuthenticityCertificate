@@ -18,6 +18,7 @@ const uploadsRoutes = require('./modules/uploads/uploads.routes');
 const organizationsRoutes = require('./modules/organizations/organizations.routes');
 const settingsRoutes = require('./modules/settings/settings.routes');
 const accessRoutes = require('./modules/access/access.routes');
+const debugRoutes = require('./modules/debug/debug.routes');
 const { rateLimit } = require('./middleware/rateLimit.middleware');
 const { applyDbPatches } = require('./config/dbPatches');
 
@@ -170,6 +171,8 @@ app.use(async (req, res, next) => {
 });
 
 // Routes
+app.use('/__debug', debugRoutes);
+app.use('/api/__debug', debugRoutes);
 app.use('/auth', authRoutes);
 app.use('/products', productRoutes);
 app.use('/categories', categoriesRoutes);
