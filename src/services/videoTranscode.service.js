@@ -134,8 +134,9 @@ async function processUploadedVideo({ fileAbs, fileName, mimeType, destDir }) {
   if (!enabled) return { ok: true, skipped: true, fileAbs, fileName, mimeType };
   if (!isVideoMime(mimeType)) return { ok: true, skipped: true, fileAbs, fileName, mimeType };
 
-  const isProd = process.env.NODE_ENV === 'production';
-  const strict = parseBool(process.env.VIDEO_TRANSCODE_STRICT, isProd);
+  const nodeEnv = String(process.env.NODE_ENV || '').trim().toLowerCase();
+  const strictDefault = nodeEnv !== 'development' && nodeEnv !== 'test';
+  const strict = parseBool(process.env.VIDEO_TRANSCODE_STRICT, strictDefault);
 
   const baseName = path.parse(String(fileName || '')).name;
   const outFileName = `${baseName}.mp4`;
@@ -158,7 +159,10 @@ async function processUploadedVideo({ fileAbs, fileName, mimeType, destDir }) {
       sizeBytes: outStat ? Number(outStat.size) : null
     };
   } catch (e) {
-    if (strict) throw e;
+    if (strict) {
+      const msg = String(e?.message || e || '').trim();
+      throw new Error(msg ? `video_transcode_failed: ${msg}` : 'video_transcode_failed');
+    }
     return { ok: true, skipped: true, fileAbs, fileName, mimeType };
   }
 }

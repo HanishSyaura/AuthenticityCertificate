@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../../../i18n/useT';
 import useUploadsStore from '../../../store/useUploadsStore';
 import { isFileTooLarge, MAX_UPLOAD_MB } from '../../../utils/uploadLimits';
@@ -8,7 +8,7 @@ import ImageCropModal from './ImageCropModal';
 export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, clearSelection, templates, layoutLocked = false, onCollapse }) {
   const { t } = useT();
   const { uploadMedia } = useUploadsStore((s) => ({ uploadMedia: s.uploadMedia }));
-  const [uploading, setUploading] = useState(false);
+  const [uploadingBlockId, setUploadingBlockId] = useState(null);
   const [uploadError, setUploadError] = useState(null);
   const [fileKey, setFileKey] = useState(0);
   const [cropOpen, setCropOpen] = useState(false);
@@ -16,6 +16,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
   const [cropBlockId, setCropBlockId] = useState(null);
   const [cropLoading, setCropLoading] = useState(false);
   const editorRef = useRef(null);
+  const uploadRequestRef = useRef({ seq: 0, blockId: null });
 
   const textPlaceholders = useMemo(() => {
     return [
@@ -86,11 +87,20 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
   };
 
   const accept = selectedBlock?.type === 'video' ? 'video/*' : selectedBlock?.type === 'image' ? 'image/*' : undefined;
+  const isUploadingSelectedBlock = selectedBlock?.id != null && String(uploadingBlockId || '') === String(selectedBlock.id);
+
+  useEffect(() => {
+    if (selectedBlock?.id) return;
+    setUploadingBlockId(null);
+  }, [selectedBlock?.id]);
 
   const doUpload = useCallback(
     async (file, blockId) => {
+      if (!blockId) return null;
+      const request = { seq: uploadRequestRef.current.seq + 1, blockId: String(blockId) };
+      uploadRequestRef.current = request;
       setUploadError(null);
-      setUploading(true);
+      setUploadingBlockId(blockId);
       try {
         const created = await uploadMedia({ file });
         if (created?.url) updateBlockContentById(blockId, { url: created.url });
@@ -101,7 +111,10 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
         setUploadError(msg);
         throw new Error(msg);
       } finally {
-        setUploading(false);
+        if (uploadRequestRef.current.seq === request.seq && uploadRequestRef.current.blockId === request.blockId) {
+          uploadRequestRef.current = { seq: request.seq, blockId: null };
+          setUploadingBlockId(null);
+        }
       }
     },
     [t, updateBlockContentById, uploadMedia]
@@ -431,10 +444,12 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
                   key={fileKey}
                   type="file"
                   accept={accept}
-                  disabled={uploading}
+                  disabled={isUploadingSelectedBlock || cropLoading}
                   onChange={async (e) => {
+                    if (isUploadingSelectedBlock || cropLoading) return;
                     const file = e.target.files?.[0];
                     if (!file) return;
+                    e.target.value = '';
                     setFileKey((k) => k + 1);
                     if (isFileTooLarge(file)) {
                       setUploadError(t('fileTooLargeMaxMb', { mb: MAX_UPLOAD_MB }));
@@ -455,7 +470,7 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
                 {selectedBlock.type === 'image' && String(selectedBlock.content?.url || '').trim() ? (
                   <button
                     type="button"
-                    disabled={uploading || cropLoading}
+                    disabled={isUploadingSelectedBlock || cropLoading}
                     onClick={async () => {
                       const rawUrl = String(selectedBlock.content?.url || '').trim();
                       if (!rawUrl) return;

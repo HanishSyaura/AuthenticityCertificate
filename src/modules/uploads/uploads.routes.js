@@ -144,6 +144,12 @@ function uploadMedia(req, res) {
       );
       res.success(created, 'Uploaded');
     } catch (e) {
+      const filePath = req?.file?.path;
+      if (filePath) {
+        try {
+          await fs.unlink(filePath);
+        } catch {}
+      }
       res.error(e.message, 400);
     }
   });
