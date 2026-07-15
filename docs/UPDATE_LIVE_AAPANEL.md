@@ -100,11 +100,10 @@ npm run build
 ```bash
 cd /www/wwwroot/wmscertauth.clbgroups.com
 git pull
-npm ci || npm install
+npm ci
 npx prisma generate
 pm2 restart wmscertauth-api
 curl -s http://127.0.0.1:5000/health
-echo
 ```
 
 ***
