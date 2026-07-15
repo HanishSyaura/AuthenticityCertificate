@@ -11,6 +11,7 @@ const { verifyToken } = require('../../middleware/auth.middleware');
 const { attachOrganization, requireOrganization } = require('../../middleware/org.middleware');
 const { attachAccessContext, requireAccess } = require('../../middleware/access.middleware');
 const { auditAction } = require('../../services/audit.service');
+const { processUploadedVideo } = require('../../services/videoTranscode.service');
 
 async function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), ms))]);
@@ -113,15 +114,29 @@ function uploadMedia(req, res) {
           await generateWebpVariants({ filePath: file.path, destDir, baseName });
         } catch {}
       }
-      const url = `/uploads/media/${orgId}/${file.filename}`;
+      let finalFileName = file.filename;
+      let finalMimeType = file.mimetype;
+      let finalSizeBytes = Number(file.size);
+      if (file.path) {
+        const processed = await processUploadedVideo({
+          fileAbs: file.path,
+          fileName: file.filename,
+          mimeType: file.mimetype,
+          destDir
+        });
+        if (processed?.fileName) finalFileName = processed.fileName;
+        if (processed?.mimeType) finalMimeType = processed.mimeType;
+        if (processed?.sizeBytes != null) finalSizeBytes = Number(processed.sizeBytes);
+      }
+      const url = `/uploads/media/${orgId}/${finalFileName}`;
       const created = await withTimeout(
         prisma.mediaAsset.create({
           data: {
             organizationId: orgId,
             originalName: file.originalname,
-            fileName: file.filename,
-            mimeType: file.mimetype,
-            sizeBytes: Number(file.size),
+            fileName: finalFileName,
+            mimeType: finalMimeType,
+            sizeBytes: finalSizeBytes,
             url
           }
         }),
