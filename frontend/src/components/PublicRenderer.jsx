@@ -4,6 +4,17 @@ import { stripHtmlToText } from '../utils/richText';
 import { buildUploadsWebpSrcSet } from '../utils/mediaVariants';
 import { resolveCmsVideoSource } from '../utils/videoEmbed';
 
+function reportVideoDebug(event) {
+  if (typeof window === 'undefined') return;
+  const url = String(window.__AC_DEBUG_VIDEO_URL || '').trim();
+  if (!url) return;
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(event)
+  }).catch(() => {});
+}
+
 const ImageLightbox = ({ src, onClose }) => {
   useEffect(() => {
     const prevOverflow = document?.body?.style?.overflow ?? '';
@@ -43,6 +54,7 @@ const ImageLightbox = ({ src, onClose }) => {
 function LazyMedia({ kind, src }) {
   const [enabled, setEnabled] = useState(false);
   const ref = useRef(null);
+  const videoRef = useRef(null);
 
   useEffect(() => {
     if (enabled) return;
@@ -93,7 +105,55 @@ function LazyMedia({ kind, src }) {
     );
   }
 
-  return <video src={src} controls playsInline preload="metadata" className="h-full w-full object-cover" />;
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const ancestorTransform = (() => {
+      let node = video.parentElement;
+      while (node) {
+        const transform = window.getComputedStyle(node).transform;
+        if (transform && transform !== 'none') return transform;
+        node = node.parentElement;
+      }
+      return 'none';
+    })();
+
+    // #region debug-point A:video-events
+    const emit = (name) => {
+      const err = video.error ? { code: video.error.code, message: video.error.message || null } : null;
+      reportVideoDebug({
+        sessionId: 'mobile-video-black-screen',
+        runId: 'pre-fix',
+        hypothesisId: 'A',
+        location: 'frontend/src/components/PublicRenderer.jsx:LazyMedia',
+        msg: `[DEBUG] video:${name}`,
+        ts: Date.now(),
+        data: {
+          kind,
+          src,
+          readyState: video.readyState,
+          networkState: video.networkState,
+          paused: video.paused,
+          currentTime: video.currentTime,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          ancestorTransform,
+          error: err
+        }
+      });
+    };
+    const events = ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay', 'play', 'playing', 'waiting', 'stalled', 'suspend', 'error'];
+    const handlers = events.map((name) => {
+      const handler = () => emit(name);
+      video.addEventListener(name, handler);
+      return { name, handler };
+    });
+    emit('mounted');
+    return () => handlers.forEach(({ name, handler }) => video.removeEventListener(name, handler));
+    // #endregion
+  }, [kind, src, enabled]);
+
+  return <video ref={videoRef} src={src} controls playsInline preload="metadata" className="h-full w-full object-cover" />;
 }
 
 function getValue(path, data) {
@@ -486,14 +546,23 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
     return Math.max(0.1, Math.min(4, w / baseW));
   }, [baseW, responsive, targetW]);
 
-  const renderBlock = (block) => {
-    const style = {
-      position: 'absolute',
-      left: `${block.__rect.x}px`,
-      top: `${block.__rect.y}px`,
-      width: `${block.__rect.w}px`,
-      height: `${block.__rect.h}px`,
-    };
+  const renderBlock = (block, options = {}) => {
+    const useScaledCoordinates = !!options.scaledCoordinates;
+    const style = useScaledCoordinates
+      ? {
+          position: 'absolute',
+          left: `${Number(block.__rect.x || 0) * scale}px`,
+          top: `${Number(block.__rect.y || 0) * scale}px`,
+          width: `${Number(block.__rect.w || 0) * scale}px`,
+          height: `${Number(block.__rect.h || 0) * scale}px`,
+        }
+      : {
+          position: 'absolute',
+          left: `${block.__rect.x}px`,
+          top: `${block.__rect.y}px`,
+          width: `${block.__rect.w}px`,
+          height: `${block.__rect.h}px`,
+        };
 
     switch (block.type) {
       case 'container':
@@ -919,19 +988,22 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
   };
 
   if (responsive && layoutSafe && containerHeight) {
+    const transformedBlocks = blocks.filter((block) => block.type !== 'video');
+    const overlayVideoBlocks = blocks.filter((block) => block.type === 'video');
     const content = (
       <div
         ref={containerRef}
         className={`w-full overflow-x-hidden ${className || ''}`}
         style={{ minHeight: `${containerHeight * scale}px` }}
       >
-        <div className="mx-auto" style={{ width: `${baseW * scale}px`, height: `${containerHeight * scale}px` }}>
+        <div className="relative mx-auto" style={{ width: `${baseW * scale}px`, height: `${containerHeight * scale}px` }}>
           <div
             className="relative"
             style={{ width: `${baseW}px`, height: `${containerHeight}px`, transform: `scale(${scale})`, transformOrigin: 'top left' }}
           >
-            {blocks.map(renderBlock)}
+            {transformedBlocks.map(renderBlock)}
           </div>
+          {overlayVideoBlocks.length ? <div className="absolute inset-0">{overlayVideoBlocks.map((block) => renderBlock(block, { scaledCoordinates: true }))}</div> : null}
         </div>
       </div>
     );
