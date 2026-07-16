@@ -72,21 +72,13 @@ const ImageLightbox = ({ src, onClose }) => {
   );
 };
 
-function derivePosterFromVideoUrl(videoSrc) {
-  const raw = String(videoSrc || '').trim();
-  if (!raw) return '';
-  const match = raw.match(/^([^?#]+)\.(mp4|webm|ogg|mov|m4v)(\?[^#]*)?(#.*)?$/i);
-  if (!match) return '';
-  return `${match[1]}.jpg${match[3] || ''}${match[4] || ''}`;
-}
-
 function LazyMedia({ kind, src, poster = '' }) {
   const { t } = useT();
   const [enabled, setEnabled] = useState(false);
   const [showVideoCover, setShowVideoCover] = useState(kind === 'video');
   const ref = useRef(null);
   const videoRef = useRef(null);
-  const posterSrc = kind === 'video' ? String(poster || derivePosterFromVideoUrl(src) || '').trim() : '';
+  const posterSrc = kind === 'video' ? String(poster || '').trim() : '';
 
   useEffect(() => {
     setShowVideoCover(kind === 'video');
