@@ -72,16 +72,25 @@ const ImageLightbox = ({ src, onClose }) => {
   );
 };
 
-function LazyMedia({ kind, src }) {
+function derivePosterFromVideoUrl(videoSrc) {
+  const raw = String(videoSrc || '').trim();
+  if (!raw) return '';
+  const match = raw.match(/^([^?#]+)\.(mp4|webm|ogg|mov|m4v)(\?[^#]*)?(#.*)?$/i);
+  if (!match) return '';
+  return `${match[1]}.jpg${match[3] || ''}${match[4] || ''}`;
+}
+
+function LazyMedia({ kind, src, poster = '' }) {
   const { t } = useT();
   const [enabled, setEnabled] = useState(false);
   const [showVideoCover, setShowVideoCover] = useState(kind === 'video');
   const ref = useRef(null);
   const videoRef = useRef(null);
+  const posterSrc = kind === 'video' ? String(poster || derivePosterFromVideoUrl(src) || '').trim() : '';
 
   useEffect(() => {
     setShowVideoCover(kind === 'video');
-  }, [kind, src]);
+  }, [kind, src, posterSrc]);
 
   useEffect(() => {
     if (enabled) return;
@@ -162,11 +171,15 @@ function LazyMedia({ kind, src }) {
   if (!src) return null;
 
   if (!enabled) {
+    const buttonClassName = posterSrc
+      ? 'group relative h-full w-full overflow-hidden rounded-xl bg-zinc-950 text-white'
+      : 'group flex h-full w-full items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 text-xs font-semibold text-zinc-700 hover:bg-zinc-100';
     return (
       <button
         ref={ref}
         type="button"
-        className="group flex h-full w-full items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 text-xs font-semibold text-zinc-700 hover:bg-zinc-100"
+        aria-label={t('video')}
+        className={buttonClassName}
         onClick={() => {
           // #region debug-point B:load-video-click
           reportVideoDebug({
@@ -182,10 +195,27 @@ function LazyMedia({ kind, src }) {
           setEnabled(true);
         }}
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="opacity-80 transition group-hover:opacity-100">
-          <path d="M8.5 6.7v10.6c0 .6.7 1 1.2.7l9-5.3c.5-.3.5-1.1 0-1.4l-9-5.3c-.5-.3-1.2.1-1.2.7z" />
-        </svg>
-        <span>Load video</span>
+        {posterSrc ? (
+          <>
+            <img src={posterSrc} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />
+            <div className="absolute inset-0 bg-gradient-to-br from-black/25 via-black/35 to-black/55" />
+            <div className="relative flex h-full w-full flex-col items-center justify-center gap-3 px-4 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/16 ring-1 ring-white/20 backdrop-blur-sm">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M8.5 6.7v10.6c0 .6.7 1 1.2.7l9-5.3c.5-.3.5-1.1 0-1.4l-9-5.3c-.5-.3-1.2.1-1.2.7z" />
+                </svg>
+              </div>
+              <div className="text-xs font-semibold tracking-wide text-white/90">{t('video')}</div>
+            </div>
+          </>
+        ) : (
+          <>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="opacity-80 transition group-hover:opacity-100">
+              <path d="M8.5 6.7v10.6c0 .6.7 1 1.2.7l9-5.3c.5-.3.5-1.1 0-1.4l-9-5.3c-.5-.3-1.2.1-1.2.7z" />
+            </svg>
+            <span>Load video</span>
+          </>
+        )}
       </button>
     );
   }
@@ -205,7 +235,7 @@ function LazyMedia({ kind, src }) {
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-xl bg-zinc-950">
-      <video ref={videoRef} src={src} controls playsInline preload="metadata" className="h-full w-full object-cover" />
+      <video ref={videoRef} src={src} poster={posterSrc || undefined} controls playsInline preload="metadata" className="h-full w-full object-cover" />
       {showVideoCover ? (
         <button
           type="button"
@@ -227,13 +257,15 @@ function LazyMedia({ kind, src }) {
             }
           }}
         >
+          {posterSrc ? <img src={posterSrc} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} /> : null}
+          {posterSrc ? <div className="absolute inset-0 bg-black/30" /> : null}
           <div className="flex flex-col items-center gap-3 px-4 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/16 ring-1 ring-white/20 backdrop-blur-sm">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M8.5 6.7v10.6c0 .6.7 1 1.2.7l9-5.3c.5-.3.5-1.1 0-1.4l-9-5.3c-.5-.3-1.2.1-1.2.7z" />
               </svg>
             </div>
-            <div className="text-xs font-semibold tracking-wide text-white/90">{t('video')}</div>
+            <div className="relative text-xs font-semibold tracking-wide text-white/90">{t('video')}</div>
           </div>
         </button>
       ) : null}
@@ -1055,10 +1087,11 @@ const PublicRenderer = ({ layout, data, className = '', disableCertificateEmbed 
         return (() => {
           const raw = String(block.content?.url || '').trim();
           const resolved = raw ? resolveCmsVideoSource(raw, typeof window !== 'undefined' ? window.location.origin : 'https://example.invalid') : null;
+          const poster = String(block.content?.posterUrl || '').trim();
           return (
             <div key={block.id} style={style}>
               {resolved?.kind === 'iframe' || resolved?.kind === 'video' ? (
-                <LazyMedia kind={resolved.kind} src={resolved.src} />
+                <LazyMedia kind={resolved.kind} src={resolved.src} poster={poster} />
               ) : (
                 <div className="flex h-full w-full items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 text-xs text-zinc-500">
                   {t('video')}

@@ -106,6 +106,10 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
   const doUpload = useCallback(
     async (file, blockId) => {
       if (!blockId) return null;
+      const isVideoFile = String(file?.type || '')
+        .trim()
+        .toLowerCase()
+        .startsWith('video/');
       const request = { seq: uploadRequestRef.current.seq + 1, blockId: String(blockId) };
       uploadRequestRef.current = request;
       setUploadError(null);
@@ -127,7 +131,10 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
             setUploadStage(stage);
           }
         });
-        if (created?.url) updateBlockContentById(blockId, { url: created.url });
+        const contentPatch = {};
+        if (created?.url) contentPatch.url = created.url;
+        if (isVideoFile) contentPatch.posterUrl = created?.posterUrl || '';
+        if (Object.keys(contentPatch).length) updateBlockContentById(blockId, contentPatch);
         setLastUploadDone({ blockId, ts: Date.now() });
         setFileKey((k) => k + 1);
         return created;
@@ -445,7 +452,9 @@ export default function CmsInspectorPanel({ selectedBlock, layout, setLayout, cl
               <label className="block text-xs font-medium text-zinc-700">{t('url')}</label>
               <input
                 value={selectedBlock.content?.url || ''}
-                onChange={(e) => updateSelectedContent({ url: e.target.value })}
+                onChange={(e) =>
+                  updateSelectedContent(selectedBlock.type === 'video' ? { url: e.target.value, posterUrl: '' } : { url: e.target.value })
+                }
                 className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 placeholder="https://..."
               />

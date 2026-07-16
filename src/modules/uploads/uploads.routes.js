@@ -150,6 +150,7 @@ function uploadMedia(req, res) {
       let finalFileName = file.filename;
       let finalMimeType = file.mimetype;
       let finalSizeBytes = Number(file.size);
+      let finalPosterFileName = null;
       if (file.path) {
         try {
           // #region debug-point C:transcode-start
@@ -185,8 +186,10 @@ function uploadMedia(req, res) {
         if (processed?.fileName) finalFileName = processed.fileName;
         if (processed?.mimeType) finalMimeType = processed.mimeType;
         if (processed?.sizeBytes != null) finalSizeBytes = Number(processed.sizeBytes);
+        if (processed?.posterFileName) finalPosterFileName = processed.posterFileName;
       }
       const url = `/uploads/media/${orgId}/${finalFileName}`;
+      const posterUrl = finalPosterFileName ? `/uploads/media/${orgId}/${finalPosterFileName}` : null;
       const created = await withTimeout(
         prisma.mediaAsset.create({
           data: {
@@ -213,7 +216,7 @@ function uploadMedia(req, res) {
         });
         // #endregion debug-point E:upload-success
       } catch {}
-      res.success(created, 'Uploaded');
+      res.success({ ...created, posterUrl }, 'Uploaded');
     } catch (e) {
       const filePath = req?.file?.path;
       if (filePath) {
@@ -259,6 +262,11 @@ async function deleteMedia(req, res) {
     for (const w of [320, 640, 1024]) {
       try {
         await fs.unlink(path.join(dir, `${baseName}-w${w}.webp`));
+      } catch {}
+    }
+    if (String(asset.mimeType || '').toLowerCase().startsWith('video/')) {
+      try {
+        await fs.unlink(path.join(dir, `${baseName}.jpg`));
       } catch {}
     }
 

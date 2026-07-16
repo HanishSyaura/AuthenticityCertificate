@@ -129,6 +129,17 @@ async function transcodeToMobileMp4({ inAbs, outAbs }) {
   return { ok: true, sizeBytes: outStat ? Number(outStat.size) : null };
 }
 
+async function generateVideoPoster({ videoAbs, posterAbs }) {
+  const tmpPosterAbs = `${posterAbs}.tmp-${process.pid}-${randHex(8)}.jpg`;
+  const cmd = ffmpegBin();
+
+  await fs.mkdir(path.dirname(posterAbs), { recursive: true });
+  await run(cmd, ['-y', '-ss', '00:00:01.000', '-i', videoAbs, '-frames:v', '1', '-q:v', '2', tmpPosterAbs]);
+  await replaceFile(tmpPosterAbs, posterAbs);
+  const posterStat = await fileStatSafe(posterAbs);
+  return { ok: true, sizeBytes: posterStat ? Number(posterStat.size) : null };
+}
+
 async function processUploadedVideo({ fileAbs, fileName, mimeType, destDir }) {
   const enabled = !parseBool(process.env.DISABLE_VIDEO_TRANSCODE, false);
   if (!enabled) return { ok: true, skipped: true, fileAbs, fileName, mimeType };
@@ -141,6 +152,8 @@ async function processUploadedVideo({ fileAbs, fileName, mimeType, destDir }) {
   const baseName = path.parse(String(fileName || '')).name;
   const outFileName = `${baseName}.mp4`;
   const outAbs = path.join(destDir, outFileName);
+  const posterFileName = `${baseName}.jpg`;
+  const posterAbs = path.join(destDir, posterFileName);
 
   try {
     await transcodeToMobileMp4({ inAbs: fileAbs, outAbs });
@@ -149,6 +162,10 @@ async function processUploadedVideo({ fileAbs, fileName, mimeType, destDir }) {
         await fs.unlink(fileAbs);
       } catch {}
     }
+    try {
+      await generateVideoPoster({ videoAbs: outAbs, posterAbs });
+    } catch {}
+    const posterStat = await fileStatSafe(posterAbs);
     const outStat = await fileStatSafe(outAbs);
     return {
       ok: true,
@@ -156,7 +173,8 @@ async function processUploadedVideo({ fileAbs, fileName, mimeType, destDir }) {
       fileAbs: outAbs,
       fileName: outFileName,
       mimeType: 'video/mp4',
-      sizeBytes: outStat ? Number(outStat.size) : null
+      sizeBytes: outStat ? Number(outStat.size) : null,
+      posterFileName: posterStat ? posterFileName : null
     };
   } catch (e) {
     if (strict) {

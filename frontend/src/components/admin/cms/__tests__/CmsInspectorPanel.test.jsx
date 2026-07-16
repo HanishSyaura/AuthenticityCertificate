@@ -28,8 +28,8 @@ describe('CmsInspectorPanel', () => {
 
   it('reenables the file input after a successful video upload', async () => {
     mockUploadMedia
-      .mockResolvedValueOnce({ url: '/uploads/media/1/first.mp4' })
-      .mockResolvedValueOnce({ url: '/uploads/media/1/second.mp4' });
+      .mockResolvedValueOnce({ url: '/uploads/media/1/first.mp4', posterUrl: '/uploads/media/1/first.jpg' })
+      .mockResolvedValueOnce({ url: '/uploads/media/1/second.mp4', posterUrl: '/uploads/media/1/second.jpg' });
 
     const layout = [
       {
@@ -66,5 +66,17 @@ describe('CmsInspectorPanel', () => {
     await waitFor(() => expect(mockUploadMedia).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(container.querySelector('input[type="file"]')).not.toBeDisabled());
     expect(setLayout).toHaveBeenCalledTimes(2);
+    expect(setLayout).toHaveBeenNthCalledWith(1, [
+      {
+        ...layout[0],
+        content: { url: '/uploads/media/1/first.mp4', posterUrl: '/uploads/media/1/first.jpg' }
+      }
+    ]);
+    expect(setLayout).toHaveBeenNthCalledWith(2, [
+      {
+        ...layout[0],
+        content: { url: '/uploads/media/1/second.mp4', posterUrl: '/uploads/media/1/second.jpg' }
+      }
+    ]);
   });
 });
