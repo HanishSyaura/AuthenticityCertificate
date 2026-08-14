@@ -21,7 +21,15 @@ async function pruneBatchImportHistoryIfNoEpcsTx(tx, organizationId) {
 }
 
 function getAllowedCorpPrefixes() {
-  return ['DA01'];
+  const raw = process.env.EPC_ALLOWED_CORP_PREFIXES;
+  if (typeof raw === 'string' && raw.trim()) {
+    const list = raw
+      .split(',')
+      .map((s) => String(s || '').trim().toUpperCase())
+      .filter(Boolean);
+    if (list.length) return list;
+  }
+  return ['DA01', 'AB01'];
 }
 
 function getRunningPadLen() {
@@ -231,7 +239,7 @@ function chunkArray(arr, size) {
 
 async function deleteAllBatches({ organizationId, corpPrefix }) {
   const orgId = Number(organizationId);
-  const prefix = corpPrefix == null ? null : String(corpPrefix || '').trim();
+  const prefix = corpPrefix == null ? null : String(corpPrefix || '').trim().toUpperCase();
   if (prefix) {
     const allowed = getAllowedCorpPrefixes();
     if (!allowed.includes(prefix)) throw new Error('Corp code tidak dibenarkan');
@@ -327,7 +335,8 @@ async function peekCertificateId({ organizationId } = {}) {
 
 async function generateEpcBatch({ organizationId, corpPrefix, batchQty, remark }) {
   const allowed = getAllowedCorpPrefixes();
-  if (!allowed.includes(corpPrefix)) throw new Error('Corp code tidak dibenarkan');
+  const prefix = String(corpPrefix || '').trim().toUpperCase();
+  if (!allowed.includes(prefix)) throw new Error('Corp code tidak dibenarkan');
 
   const orgId = Number(organizationId);
   const qty = Number(batchQty);
@@ -355,9 +364,9 @@ async function generateEpcBatch({ organizationId, corpPrefix, batchQty, remark }
       });
 
       await tx.corpMonthSequence.upsert({
-        where: { organizationId_corpPrefix_periodKey: { organizationId: orgId, corpPrefix, periodKey } },
+        where: { organizationId_corpPrefix_periodKey: { organizationId: orgId, corpPrefix: prefix, periodKey } },
         update: {},
-        create: { organizationId: orgId, corpPrefix, periodKey, lastNo: 0n }
+        create: { organizationId: orgId, corpPrefix: prefix, periodKey, lastNo: 0n }
       });
 
       const batchSeqRows = await tx.$queryRaw`
@@ -372,7 +381,7 @@ async function generateEpcBatch({ organizationId, corpPrefix, batchQty, remark }
 
       const rows = await tx.$queryRaw`
         SELECT lastNo FROM \`CorpMonthSequence\`
-        WHERE organizationId = ${orgId} AND corpPrefix = ${corpPrefix} AND periodKey = ${periodKey}
+        WHERE organizationId = ${orgId} AND corpPrefix = ${prefix} AND periodKey = ${periodKey}
         FOR UPDATE
       `;
 
@@ -380,14 +389,14 @@ async function generateEpcBatch({ organizationId, corpPrefix, batchQty, remark }
       const startNo = current + 1n;
       const endNo = current + BigInt(qty);
       await tx.corpMonthSequence.update({
-        where: { organizationId_corpPrefix_periodKey: { organizationId: orgId, corpPrefix, periodKey } },
+        where: { organizationId_corpPrefix_periodKey: { organizationId: orgId, corpPrefix: prefix, periodKey } },
         data: { lastNo: endNo }
       });
 
       const batch = await tx.epcBatch.create({
         data: {
           organizationId: orgId,
-          corpPrefix,
+          corpPrefix: prefix,
           periodKey,
           origin: 'generated',
           productId: null,
@@ -410,7 +419,7 @@ async function generateEpcBatch({ organizationId, corpPrefix, batchQty, remark }
       const items = [];
       for (let i = 0; i < qty; i += 1) {
         const runningNo = startNo + BigInt(i);
-        const epcCode = buildEpcCode({ corpPrefix, runningNo: runningNo.toString(), ddmmyy });
+        const epcCode = buildEpcCode({ corpPrefix: prefix, runningNo: runningNo.toString(), ddmmyy });
         items.push({
           organizationId: orgId,
           batchId: batch.id,
@@ -1028,7 +1037,7 @@ async function deleteItems({ organizationId, itemIds, cleanup }) {
 
 async function deleteAllGeneratedBatches({ organizationId, corpPrefix }) {
   const orgId = Number(organizationId);
-  const prefix = corpPrefix == null ? null : String(corpPrefix || '').trim();
+  const prefix = corpPrefix == null ? null : String(corpPrefix || '').trim().toUpperCase();
   if (prefix) {
     const allowed = getAllowedCorpPrefixes();
     if (!allowed.includes(prefix)) throw new Error('Corp code tidak dibenarkan');
@@ -1346,8 +1355,14 @@ async function listItems({ organizationId, q, batchId, pendingOnly, status, crea
               certificateTemplate: { select: { id: true, name: true } },
               sku: true,
               createdAt: true,
-              product: { select: { id: true, sku: true, name: true, code: true } }
+              product: { select: { id: true, sku: true, name: true, code: true, cmsDesignId: true, cmsCertificateDesignId: true } }
             }
+          },
+          identities: {
+            where: { unassignedAt: null },
+            orderBy: { assignedAt: 'desc' },
+            take: 5,
+            select: { id: true, epc: true, nfcUid: true, certificateId: true, assignedAt: true }
           }
         }
       }),
@@ -1402,8 +1417,14 @@ async function listItems({ organizationId, q, batchId, pendingOnly, status, crea
               certificateTemplate: { select: { id: true, name: true } },
               sku: true,
               createdAt: true,
-              product: { select: { id: true, sku: true, name: true, code: true } }
+              product: { select: { id: true, sku: true, name: true, code: true, cmsDesignId: true, cmsCertificateDesignId: true } }
             }
+          },
+          identities: {
+            where: { unassignedAt: null },
+            orderBy: { assignedAt: 'desc' },
+            take: 5,
+            select: { id: true, epc: true, nfcUid: true, certificateId: true, assignedAt: true }
           }
         },
         orderBy: { createdAt: 'desc' },
@@ -1455,8 +1476,14 @@ const EPC_ITEM_INCLUDE = {
       certificateTemplate: { select: { id: true, name: true } },
       sku: true,
       createdAt: true,
-      product: { select: { id: true, sku: true, name: true, code: true } }
+      product: { select: { id: true, sku: true, name: true, code: true, cmsDesignId: true, cmsCertificateDesignId: true } }
     }
+  },
+  identities: {
+    where: { unassignedAt: null },
+    orderBy: { assignedAt: 'desc' },
+    take: 5,
+    select: { id: true, epc: true, nfcUid: true, certificateId: true, assignedAt: true }
   }
 };
 
@@ -2034,10 +2061,6 @@ async function createImportBatchFromXlsx({
       if (!docTypes.has(k)) throw new Error('Invalid supporting certificate type.');
       if (!v) throw new Error('Supporting certificate URL is required.');
     }
-    for (const required of docTypes) {
-      const has = docEntries.some(([k]) => k === required);
-      if (!has) throw new Error('All 4 supporting certificates are required.');
-    }
   }
 
   const updates = [];
@@ -2305,10 +2328,6 @@ async function submitBatchImport({
     if (!docTypes.has(k)) throw new Error('Invalid supporting certificate type.');
     if (!v) throw new Error('Supporting certificate URL is required.');
   }
-  for (const required of docTypes) {
-    const has = docEntries.some(([k]) => k === required);
-    if (!has) throw new Error('All 4 supporting certificates are required.');
-  }
 
   const result = await prisma.$transaction(async (tx) => {
     const batch = await tx.epcBatch.findFirst({
@@ -2458,7 +2477,6 @@ async function updateBatchDocuments({ organizationId, batchId, documents }) {
     String(k || '').trim(),
     String(v || '').trim()
   ]);
-  if (docEntries.length === 0) throw new Error('Supporting certificates are required.');
   for (const [k, v] of docEntries) {
     if (!docTypes.has(k)) throw new Error('Invalid supporting certificate type.');
     if (!v) throw new Error('Supporting certificate URL is required.');
@@ -2558,7 +2576,7 @@ async function deleteBatch({ organizationId, batchId }) {
 
 async function recalculateCorpSequence({ organizationId, corpPrefix }) {
   const orgId = Number(organizationId);
-  const prefix = String(corpPrefix || '').trim();
+  const prefix = String(corpPrefix || '').trim().toUpperCase();
   if (!prefix) throw new Error('corpPrefix required');
   const allowed = getAllowedCorpPrefixes();
   if (!allowed.includes(prefix)) throw new Error('Corp code tidak dibenarkan');

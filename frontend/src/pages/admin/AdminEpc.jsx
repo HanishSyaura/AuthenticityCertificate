@@ -5,10 +5,13 @@ import useAdminAuthStore from '../../store/useAdminAuthStore';
 import useRecordsStore from '../../store/useRecordsStore';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import useUploadsStore from '../../store/useUploadsStore';
+import useCertificatesStore from '../../store/useCertificatesStore';
+import useCmsStore from '../../store/useCmsStore';
 import { useT } from '../../i18n/useT';
 import { tRaw } from '../../i18n/tRaw';
 import DataTable from '../../components/ui/DataTable';
 import TablePager from '../../components/ui/TablePager';
+import RowActionsMenu from '../../components/ui/RowActionsMenu';
 import { hasPermission } from '../../utils/permissions';
 import { resolvePublicMediaUrl } from '../../utils/apiBase';
 
@@ -117,6 +120,12 @@ export default function AdminEpc() {
   const { products, fetchProducts } = useRecordsStore((s) => ({ products: s.products, fetchProducts: s.fetchProducts }));
   const { templates, fetchTemplates } = useCertTemplatesStore((s) => ({ templates: s.templates, fetchTemplates: s.fetchTemplates }));
   const { uploadMedia } = useUploadsStore((s) => ({ uploadMedia: s.uploadMedia }));
+  const { updateCertificate } = useCertificatesStore((s) => ({ updateCertificate: s.updateCertificate }));
+  const { cmsDesigns, cmsDesignsLoading, cmsFetchDesigns } = useCmsStore((s) => ({
+    cmsDesigns: s.designs,
+    cmsDesignsLoading: s.loadingDesigns || s.loading,
+    cmsFetchDesigns: s.fetchDesigns
+  }));
 
   const [tab, setTab] = useState('batches');
 
@@ -206,6 +215,15 @@ export default function AdminEpc() {
     dvs_health_certificate: false,
     dvs_coo_certificate: false
   }));
+
+  const [lpOpen, setLpOpen] = useState(false);
+  const [lpEpcItemId, setLpEpcItemId] = useState(null);
+  const [lpEpcCode, setLpEpcCode] = useState('');
+  const [lpCertificateId, setLpCertificateId] = useState('');
+  const [lpCertCmsDesignId, setLpCertCmsDesignId] = useState('');
+  const [lpProductCmsDesignId, setLpProductCmsDesignId] = useState(null);
+  const [lpProductCmsCertDesignId, setLpProductCmsCertDesignId] = useState(null);
+  const [lpNoCertError, setLpNoCertError] = useState('');
 
   const getDocTypeLabel = useCallback(
     (docType) =>
@@ -381,6 +399,35 @@ export default function AdminEpc() {
   useEffect(() => {
     setSelectedItemIds(new Set());
   }, [items, listOffset, listQuery, listBatchId, listStatus, createdFrom, createdTo]);
+
+  useEffect(() => {
+    void cmsFetchDesigns();
+  }, [cmsFetchDesigns]);
+
+  function resolveEpcCertificateId(it) {
+    const idents = Array.isArray(it?.identities) ? it.identities : [];
+    if (idents.length > 0 && idents[0].certificateId) return String(idents[0].certificateId);
+    if (it?.batch?.certificateId) return String(it.batch.certificateId);
+    return '';
+  }
+
+  const openLandingFromItem = useCallback((it) => {
+    const item = it || null;
+    if (!item) return;
+    const certId = resolveEpcCertificateId(item);
+    setLpEpcItemId(Number(item.id) || null);
+    setLpEpcCode(String(item.epcCode || ''));
+    setLpCertificateId(certId);
+    setLpCertCmsDesignId('');
+    setLpProductCmsDesignId(item?.batch?.product?.cmsDesignId ?? null);
+    setLpProductCmsCertDesignId(item?.batch?.product?.cmsCertificateDesignId ?? null);
+    if (!certId) {
+      setLpNoCertError('EPC ini belum dikaitkan dengan Certificate Identity. Tidak boleh edit landing page.');
+    } else {
+      setLpNoCertError('');
+    }
+    setLpOpen(true);
+  }, []);
 
   const pageItemIds = useMemo(
     () =>
@@ -710,7 +757,34 @@ export default function AdminEpc() {
                   }
                 },
                 { id: 'createdAt', header: t('createdAt'), cell: (it) => <span className="whitespace-nowrap text-zinc-700">{formatDateTime(it.createdAt)}</span> },
-                { id: 'remark', header: t('remark'), cell: (it) => <span className="text-zinc-800">{it?.batch?.remark ? String(it.batch.remark) : '-'}</span> }
+                { id: 'remark', header: t('remark'), cell: (it) => <span className="text-zinc-800">{it?.batch?.remark ? String(it.batch.remark) : '-'}</span> },
+                {
+                  id: 'actions',
+                  header: t('actions'),
+                  align: 'right',
+                  cell: (it) => (
+                    <RowActionsMenu
+                      ariaLabel={t('actions')}
+                      items={[
+                        {
+                          key: 'view',
+                          label: t('view'),
+                          onSelect: () => {
+                            setDetailItem(it || null);
+                            setDetailOpen(true);
+                          }
+                        },
+                        {
+                          key: 'landing',
+                          label: 'Reassign Landing Page',
+                          onSelect: () => openLandingFromItem(it)
+                        }
+                      ]}
+                    />
+                  ),
+                  headerClassName: 'pr-3',
+                  className: 'pr-3'
+                }
               ]}
             />
 
@@ -787,6 +861,12 @@ export default function AdminEpc() {
                   <div className="text-[11px] font-semibold text-zinc-600">{t('certTemplate')}</div>
                   <div className="mt-1 text-xs text-zinc-900">{resolveBatchAuthCertificate(detailItem?.batch)}</div>
                 </div>
+                <div className="sm:col-span-2">
+                  <div className="text-[11px] font-semibold text-zinc-600">Linked Certificate</div>
+                  <div className="mt-1 text-xs text-zinc-900 font-mono break-all">
+                    {resolveEpcCertificateId(detailItem) || '(not linked yet)'}
+                  </div>
+                </div>
                 <div>
                   <div className="text-[11px] font-semibold text-zinc-600">{t('remark')}</div>
                   <div className="mt-1 text-xs text-zinc-900">{detailItem?.batch?.remark ? String(detailItem.batch.remark) : '-'}</div>
@@ -802,6 +882,132 @@ export default function AdminEpc() {
                   <div className="mt-1 text-xs text-zinc-900">{formatDateTime(detailItem.createdAt) || '-'}</div>
                 </div>
               </div>
+            </div>
+            <div className="flex flex-wrap justify-between gap-2 border-t border-zinc-200 bg-zinc-50 px-4 py-3">
+              <button
+                type="button"
+                className="ac-btn px-3 py-2 text-xs"
+                onClick={() => openLandingFromItem(detailItem)}
+                disabled={!resolveEpcCertificateId(detailItem)}
+                title={!resolveEpcCertificateId(detailItem) ? 'EPC belum dikaitkan dengan Certificate Identity' : ''}
+              >
+                Reassign Landing Page
+              </button>
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={closeDetail}>
+                {t('close')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {lpOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setLpOpen(false)}
+        >
+          <div
+            className="w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-zinc-900">Reassign Landing Page</div>
+                <div className="mt-1 truncate font-mono text-[11px] text-zinc-600">EPC: {lpEpcCode || '-'}</div>
+              </div>
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => setLpOpen(false)}>
+                {t('close')}
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3">
+              <div>
+                <div className="mb-1 text-[11px] font-semibold text-zinc-600">Linked Certificate ID</div>
+                <input
+                  value={lpCertificateId}
+                  readOnly
+                  className="ac-input bg-zinc-50 px-3 py-2 text-xs w-full font-mono"
+                />
+              </div>
+
+              {lpNoCertError ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800">
+                  {lpNoCertError}
+                </div>
+              ) : null}
+
+              <div>
+                <div className="mb-1 text-[11px] font-semibold text-zinc-600">
+                  EPC Landing Page Override (Tier 1 — Highest)
+                </div>
+                <select
+                  value={lpCertCmsDesignId}
+                  onChange={(e) => setLpCertCmsDesignId(e.target.value)}
+                  disabled={cmsDesignsLoading || !!lpNoCertError}
+                  className="ac-input px-3 py-2 text-xs w-full"
+                >
+                  <option value="">— Fallback to Product (no per-EPC override) —</option>
+                  {Array.isArray(cmsDesigns)
+                    ? cmsDesigns.map((d) => (
+                        <option key={d.id} value={String(d.id)}>
+                          [{d.id}] {d.name || '(unnamed)'}
+                        </option>
+                      ))
+                    : null}
+                </select>
+                <div className="mt-1 text-[10px] text-zinc-500">
+                  * Pilih design bundle untuk EPC ini sahaja. Akan override setting Product.
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-[11px] space-y-1.5">
+                <div className="font-semibold text-zinc-700">Current fallback chain (if above empty):</div>
+                <div>
+                  <span className="text-zinc-500">Tier 2 — Product.cmsCertificateDesignId:</span>{' '}
+                  <span className="font-mono text-zinc-800">
+                    {lpProductCmsCertDesignId != null ? `#${lpProductCmsCertDesignId}` : '(empty)'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-zinc-500">Tier 3 — Product.cmsDesignId:</span>{' '}
+                  <span className="font-mono text-zinc-800">
+                    {lpProductCmsDesignId != null ? `#${lpProductCmsDesignId}` : '(empty)'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-2 border-t border-zinc-200 bg-white px-4 py-3">
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => setLpOpen(false)}>
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                className="ac-btn px-3 py-2 text-xs"
+                disabled={!!lpNoCertError || !lpCertificateId || cmsDesignsLoading}
+                onClick={async () => {
+                  if (!lpCertificateId) return;
+                  const cmsDesignId = lpCertCmsDesignId.trim() === '' ? null : Number(lpCertCmsDesignId);
+                  await updateCertificate({
+                    certificateId: lpCertificateId,
+                    patch: { cmsDesignId }
+                  });
+                  setLpOpen(false);
+                  void fetchItems({
+                    q: listQuery,
+                    batchId: listBatchId,
+                    status: listStatus,
+                    createdFrom,
+                    createdTo,
+                    limit: listLimit,
+                    offset: listOffset
+                  });
+                }}
+              >
+                {t('save')}
+              </button>
             </div>
           </div>
         </div>
@@ -1585,8 +1791,6 @@ export default function AdminEpc() {
                     if (!String(importProductId || '').trim()) throw new Error(t('selectProduct'));
                     const missingCount = Number(importPreview?.missingEpcs) || 0;
                     if (missingCount > 0) throw new Error(t('missingEpcError'));
-                    const uploadedCount = DOC_TYPES.filter((k) => String(importDocUrls?.[k] || '').trim()).length;
-                    if (uploadedCount !== DOC_TYPES.length) throw new Error(t('allSupportingCertsRequired'));
                     const res = await submitBatchImport({
                       batchId: null,
                       base64: importBase64,
