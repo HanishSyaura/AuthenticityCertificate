@@ -7,7 +7,14 @@ const productSchema = z.object({
   product_code: z.string().min(1),
   category: z.string().min(1),
   status: z.string().min(1),
-  remark: z.string().optional()
+  remark: z.string().optional(),
+  // NEW GROUP-LEVEL FK (what links to CmsDesign bundle = multiple inner pages)
+  cmsDesignId: z.number().int().nullable().optional(),
+  cmsCertificateDesignId: z.number().int().nullable().optional(),
+  // LEGACY single-page FK (deprecated, backward compat only)
+  cmsPageId: z.number().int().nullable().optional(),
+  cmsCertificatePageId: z.number().int().nullable().optional(),
+  certificateTemplateId: z.number().int().nullable().optional()
 });
 
 function formatZodMessage(error) {
@@ -39,6 +46,10 @@ const updateProductSchema = z.object({
   category: z.string().min(1).optional(),
   status: z.string().min(1).optional(),
   remark: z.string().nullable().optional(),
+  // NEW GROUP-LEVEL FK
+  cmsDesignId: z.number().int().nullable().optional(),
+  cmsCertificateDesignId: z.number().int().nullable().optional(),
+  // LEGACY single-page FK
   cmsPageId: z.number().int().nullable().optional(),
   cmsCertificatePageId: z.number().int().nullable().optional(),
   certificateTemplateId: z.number().int().nullable().optional()

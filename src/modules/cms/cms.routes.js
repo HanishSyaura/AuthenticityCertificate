@@ -8,6 +8,37 @@ const { attachOrganization, requireOrganization } = require('../../middleware/or
 
 router.use(attachOrganization);
 
+// ===== CmsDesign (top-level Landing Design bundles) =====
+router.get('/designs', verifyToken, attachAccessContext, requirePermission('cms.read'), requireOrganization, cmsController.listDesigns);
+router.post(
+  '/design',
+  verifyToken,
+  attachAccessContext,
+  requirePermission('cms.write'),
+  requireOrganization,
+  auditAction('CREATE_CMS_DESIGN', { targetType: 'cms_design' }),
+  cmsController.createDesign
+);
+router.patch(
+  '/design/:id',
+  verifyToken,
+  attachAccessContext,
+  requirePermission('cms.write'),
+  requireOrganization,
+  auditAction('UPDATE_CMS_DESIGN', { targetType: 'cms_design', getTargetId: (req) => String(req.params?.id || '') }),
+  cmsController.patchDesign
+);
+router.delete(
+  '/design/:id',
+  verifyToken,
+  attachAccessContext,
+  requirePermission('cms.write'),
+  requireOrganization,
+  auditAction('DELETE_CMS_DESIGN', { targetType: 'cms_design', getTargetId: (req) => String(req.params?.id || '') }),
+  cmsController.removeDesign
+);
+
+// ===== CmsPage (inner pages/seksyen dalam satu design bundle) =====
 router.post(
   '/page',
   verifyToken,
@@ -17,6 +48,7 @@ router.post(
   auditAction('CREATE_CMS_PAGE', { targetType: 'cms_page' }),
   cmsController.createPage
 );
+// ?kind=landing&designId=<NUMBER> | designId=null (legacy default) | designId query absent = all designs
 router.get('/pages', verifyToken, attachAccessContext, requirePermission('cms.read'), requireOrganization, cmsController.listPages);
 router.patch(
   '/pages/order',

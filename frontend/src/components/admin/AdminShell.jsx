@@ -132,7 +132,10 @@ export default function AdminShell() {
               <div className="h-7 w-7 rounded bg-orange-500" />
             )}
             {sidebarCollapsed ? null : (
-              <div className="text-sm font-semibold tracking-tight text-white">Certificate Authenticity</div>
+              <div className="flex flex-col leading-tight">
+                <span className="text-sm font-semibold tracking-tight text-white">Zora Pro PAC</span>
+                <span className="text-[11px] font-medium tracking-wide text-slate-400">Product Authenticity Certification</span>
+              </div>
             )}
           </div>
 

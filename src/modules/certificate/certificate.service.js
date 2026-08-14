@@ -272,13 +272,24 @@ async function getCertificateDetails(certificateId) {
   const cached = getCache(certificateId);
   if (cached) return cached;
 
-  return prisma.certificate.findUnique({
+  // Step 1: Fetch certificate + product metadata (no CMS layouts yet, to keep this fast)
+  const cert = await prisma.certificate.findUnique({
     where: { certificateId },
     include: {
+      // LEGACY single-page includes, kept for backward compat
+      cmsPage: {
+        include: {
+          layout: true,
+          publishedVersion: true,
+          draftVersion: true
+        }
+      },
       batch: {
         include: {
           product: {
             include: {
+              certificateTemplate: true,
+              // LEGACY single-page includes
               cmsPage: {
                 include: {
                   layout: true,
@@ -292,14 +303,97 @@ async function getCertificateDetails(certificateId) {
                   publishedVersion: true,
                   draftVersion: true
                 }
-              },
-              certificateTemplate: true
+              }
             }
           }
         }
       }
     }
   });
+
+  if (!cert) {
+    return null;
+  }
+
+  // =========================================================================
+  // Step 2: 3-TIER FALLBACK to resolve the ACTIVE CmsDesign bundle id (NEW)
+  //   Tier 1  : Certificate.cmsDesignId           (per-cert override)
+  //   Tier 2  : Product.cmsCertificateDesignId    (product cert-only design)
+  //   Tier 3  : Product.cmsDesignId               (product main landing design)
+  // Fallback: Single legacy CmsPage → bundle = null (we return 1-element pages)
+  // =========================================================================
+  const product = cert.batch?.product ?? null;
+  let effectiveDesignId = null;
+  if (cert.cmsDesignId != null) {
+    effectiveDesignId = Number(cert.cmsDesignId);
+  } else if (product?.cmsCertificateDesignId != null) {
+    effectiveDesignId = Number(product.cmsCertificateDesignId);
+  } else if (product?.cmsDesignId != null) {
+    effectiveDesignId = Number(product.cmsDesignId);
+  }
+
+  // Try resolving a LEGACY single CmsPage pageId (used as last-resort 1-page bundle)
+  let legacySinglePage = null;
+  if (effectiveDesignId == null) {
+    if (cert.cmsPage) legacySinglePage = cert.cmsPage;
+    else if (product?.cmsCertificatePage) legacySinglePage = product.cmsCertificatePage;
+    else if (product?.cmsPage) legacySinglePage = product.cmsPage;
+  }
+
+  const orgId = Number(cert.organizationId);
+
+  // Step 3: Fetch ALL inner CmsPages inside the resolved CmsDesign bundle (or legacy single)
+  //         Each page comes with its publishedVersion.layoutJson so composeLayouts can stack them
+  let cmsPages = [];
+  try {
+    if (effectiveDesignId != null) {
+      cmsPages = await prisma.cmsPage.findMany({
+        where: { organizationId: orgId, designId: Number(effectiveDesignId), deletedAt: null },
+        orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        include: {
+          layout: true,
+          publishedVersion: true,
+          draftVersion: true
+        }
+      });
+    } else if (legacySinglePage && legacySinglePage.id) {
+      // Backward compat: If user links legacy single-page FK, wrap as 1-element bundle
+      cmsPages = [legacySinglePage];
+    } else {
+      // Fallback: "default" group (designId IS NULL) — all existing ungrouped pages
+      cmsPages = await prisma.cmsPage.findMany({
+        where: { organizationId: orgId, designId: null, deletedAt: null },
+        orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        include: {
+          layout: true,
+          publishedVersion: true,
+          draftVersion: true
+        }
+      });
+    }
+  } catch {
+    cmsPages = legacySinglePage && legacySinglePage.id ? [legacySinglePage] : [];
+  }
+
+  // Attach NEW derived fields to the returned cert object.
+  // composeLayouts({ pages: cmsPages }) in the public view can now stack every inner section.
+  const enriched = {
+    ...cert,
+    cmsEffectiveDesignId: effectiveDesignId,
+    cmsEffectiveSource:
+      cert.cmsDesignId != null
+        ? 'cert.cmsDesignId'
+        : product?.cmsCertificateDesignId != null
+          ? 'product.cmsCertificateDesignId'
+          : product?.cmsDesignId != null
+            ? 'product.cmsDesignId'
+            : legacySinglePage
+              ? 'legacy.cmsPageId'
+              : 'default.designNull',
+    cmsPages: Array.isArray(cmsPages) ? cmsPages : []
+  };
+
+  return enriched;
 }
 
 async function getCertificateDetailsCached(certificateId, { ttlMs = 30000 } = {}) {

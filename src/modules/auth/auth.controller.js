@@ -13,8 +13,8 @@ async function login(req, res, next) {
     res.success(result, 'Login successful');
   } catch (error) {
     console.error(`[login] Error: ${error?.message || error}`);
-    if (error instanceof z.ZodError) {
-      return res.error(error.errors[0].message, 400);
+    if (error instanceof z.ZodError || error?.name === 'ZodError') {
+      return res.error(error.issues?.[0]?.message || error.errors?.[0]?.message || 'Invalid input', 400);
     }
     const msg = String(error?.message || '');
     const errCode = String(error?.code || '');
@@ -71,8 +71,8 @@ async function updateMe(req, res) {
     const result = await authService.updateMe(req.user, validated);
     res.success(result, 'OK');
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.error(error.errors[0].message, 400);
+    if (error instanceof z.ZodError || error?.name === 'ZodError') {
+      return res.error(error.issues?.[0]?.message || error.errors?.[0]?.message || 'Invalid input', 400);
     }
     if (error?.message === 'Forbidden') {
       return res.error('Insufficient permissions', 403);

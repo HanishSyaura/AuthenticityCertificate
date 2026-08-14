@@ -75,6 +75,23 @@ export default defineConfig({
   plugins: [react(), pdfjsAssetsPlugin()],
   server: {
     port: 3000,
+    proxy: {
+      '/auth':       { target: 'http://127.0.0.1:5000', changeOrigin: true },
+      '/public':     { target: 'http://127.0.0.1:5000', changeOrigin: true },
+      '/api':        { target: 'http://127.0.0.1:5000', changeOrigin: true },
+      '/products':   { target: 'http://127.0.0.1:5000', changeOrigin: true },
+      '/categories': { target: 'http://127.0.0.1:5000', changeOrigin: true },
+      '/epc':        { target: 'http://127.0.0.1:5000', changeOrigin: true },
+      '/certificates': { target: 'http://127.0.0.1:5000', changeOrigin: true },
+      '/cms':        { target: 'http://127.0.0.1:5000', changeOrigin: true },
+      '/users':      { target: 'http://127.0.0.1:5000', changeOrigin: true },
+      '/templates':  { target: 'http://127.0.0.1:5000', changeOrigin: true },
+      '/uploads':    { target: 'http://127.0.0.1:5000', changeOrigin: true },
+      '/organizations': { target: 'http://127.0.0.1:5000', changeOrigin: true },
+      '/settings':   { target: 'http://127.0.0.1:5000', changeOrigin: true },
+      '/access':     { target: 'http://127.0.0.1:5000', changeOrigin: true },
+      '/health':     { target: 'http://127.0.0.1:5000', changeOrigin: true }
+    }
   }
   ,
   test: {

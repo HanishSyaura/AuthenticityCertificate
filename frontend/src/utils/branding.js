@@ -1,6 +1,6 @@
 import { resolvePublicMediaUrl } from './apiBase';
 
-export const DEFAULT_APP_TITLE = 'Certificate Authenticity';
+export const DEFAULT_APP_TITLE = 'Zora Pro PAC';
 
 export function applyDocumentTitle(nextTitle) {
   if (typeof document === 'undefined') return;

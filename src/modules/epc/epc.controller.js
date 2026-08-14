@@ -28,6 +28,7 @@ function resolveMessage(error) {
 }
 
 const generateSchema = z.object({
+  corpPrefix: z.string().min(1).optional(),
   batchQty: z.number().int().positive().max(5000),
   remark: z.string().optional()
 });
@@ -149,7 +150,7 @@ async function peekCertificateId(req, res) {
 async function generateBatch(req, res) {
   try {
     const validated = generateSchema.parse(req.body || {});
-    const corpPrefix = epcService.getAllowedCorpPrefixes()[0] || 'DA01';
+    const corpPrefix = String(validated.corpPrefix || epcService.getAllowedCorpPrefixes()[0] || 'DA01').trim();
     const result = await epcService.generateEpcBatch({
       organizationId: req.organization.id,
       corpPrefix,

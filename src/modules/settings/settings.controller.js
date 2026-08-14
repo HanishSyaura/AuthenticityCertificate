@@ -344,8 +344,8 @@ async function updateSettings(req, res) {
       'OK'
     );
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.error(error.errors[0].message, 400);
+    if (error instanceof z.ZodError || error?.name === 'ZodError') {
+      return res.error(error.issues?.[0]?.message || error.errors?.[0]?.message || 'Invalid input', 400);
     }
     if (error?.message === 'db_timeout') {
       return res.error('Database temporarily unavailable', 503);
@@ -389,8 +389,8 @@ async function sendSmtpTestEmail(req, res) {
     }
     return res.success({ ok: Boolean(result?.ok), skipped: Boolean(result?.skipped), reason: result?.reason || null }, 'OK');
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.error(error.errors[0].message, 400);
+    if (error instanceof z.ZodError || error?.name === 'ZodError') {
+      return res.error(error.issues?.[0]?.message || error.errors?.[0]?.message || 'Invalid input', 400);
     }
     const msg = String(error?.message || '');
     if (msg === 'nodemailer_missing') return res.error('Email service not available', 503);

@@ -43,7 +43,7 @@ export function getApiBaseUrl() {
     }
     return upgraded;
   }
-  if (import.meta.env.DEV) return 'http://localhost:5000';
+  if (import.meta.env.DEV) return '';
   return '/api';
 }
 

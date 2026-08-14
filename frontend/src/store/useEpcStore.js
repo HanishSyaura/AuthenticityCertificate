@@ -121,11 +121,12 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
-  generateBatch: async ({ batchQty, remark } = {}) => {
+  generateBatch: async ({ corpPrefix, batchQty, remark } = {}) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
       const body = {
+        ...(corpPrefix && String(corpPrefix).trim() ? { corpPrefix: String(corpPrefix).trim() } : {}),
         batchQty: Number(batchQty),
         remark: remark || undefined
       };

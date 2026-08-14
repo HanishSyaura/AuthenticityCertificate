@@ -81,11 +81,19 @@ const useRecordsStore = create((set, get) => ({
     }
   },
 
-  createProduct: async ({ sku, name, product_code, category, status, remark }) => {
+  createProduct: async ({ sku, name, product_code, category, status, remark, cmsDesignId, cmsCertificateDesignId, cmsPageId, cmsCertificatePageId, certificateTemplateId }) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
-      const res = await api.post('/products/', { sku, name, product_code, category, status, remark });
+      const body = { sku, name, product_code, category, status, remark };
+      // NEW: bundle-level FKs (multiple inner pages inside one bundle)
+      if (cmsDesignId !== undefined) body.cmsDesignId = cmsDesignId;
+      if (cmsCertificateDesignId !== undefined) body.cmsCertificateDesignId = cmsCertificateDesignId;
+      // LEGACY: single-page FKs (deprecated backward compat)
+      if (cmsPageId !== undefined) body.cmsPageId = cmsPageId;
+      if (cmsCertificatePageId !== undefined) body.cmsCertificatePageId = cmsCertificatePageId;
+      if (certificateTemplateId !== undefined) body.certificateTemplateId = certificateTemplateId;
+      const res = await api.post('/products/', body);
       const created = res?.data?.data;
       const products = [created, ...get().products].filter(Boolean);
       set({ products, loading: false, lastSyncAt: Date.now() });

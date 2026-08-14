@@ -47,6 +47,11 @@ function normalizeRawProduct(row) {
     remark: p.remark ?? null,
     origin: p.origin ?? null,
     description: p.description ?? null,
+    // ===== NEW GROUP-LEVEL FK (main): landing page BUNDLE design (multiple inner pages) =====
+    cmsDesignId: p.cmsDesignId ?? null,
+    // Optional: alternate certificate-only bundle (if different layout from product landing)
+    cmsCertificateDesignId: p.cmsCertificateDesignId ?? null,
+    // ===== LEGACY single-page FKs (deprecated, backward compat only) =====
     cmsPageId: p.cmsPageId ?? null,
     cmsCertificatePageId: p.cmsCertificatePageId ?? null,
     certificateTemplateId: p.certificateTemplateId ?? null,
@@ -73,6 +78,8 @@ async function rawListProducts({ organizationId, status }) {
     'remark',
     'origin',
     'description',
+    'cmsDesignId',
+    'cmsCertificateDesignId',
     'cmsPageId',
     'cmsCertificatePageId',
     'certificateTemplateId',
@@ -113,6 +120,8 @@ const productSelectWithoutSku = {
   remark: true,
   origin: true,
   description: true,
+  cmsDesignId: true,
+  cmsCertificateDesignId: true,
   cmsPageId: true,
   cmsCertificatePageId: true,
   certificateTemplateId: true,
@@ -135,9 +144,13 @@ async function createProduct(data) {
         remark: data.remark || null,
         origin: null,
         description: null,
-        cmsPageId: null,
-        cmsCertificatePageId: null,
-        certificateTemplateId: null
+        // NEW group-level FK: landing page design BUNDLE (multiple inner pages)
+        cmsDesignId: data.cmsDesignId != null ? Number(data.cmsDesignId) : null,
+        cmsCertificateDesignId: data.cmsCertificateDesignId != null ? Number(data.cmsCertificateDesignId) : null,
+        // LEGACY single-page FKs (backward compat)
+        cmsPageId: data.cmsPageId != null ? Number(data.cmsPageId) : null,
+        cmsCertificatePageId: data.cmsCertificatePageId != null ? Number(data.cmsCertificatePageId) : null,
+        certificateTemplateId: data.certificateTemplateId != null ? Number(data.certificateTemplateId) : null
       }
     }),
     10000
@@ -196,8 +209,15 @@ async function updateProduct({ organizationId, productId, patch }) {
   if (patch.category !== undefined) data.category = patch.category;
   if (patch.status !== undefined) data.status = patch.status;
   if (patch.remark !== undefined) data.remark = patch.remark;
+
+  // NEW group-level FK (primary)
+  if (patch.cmsDesignId !== undefined) data.cmsDesignId = patch.cmsDesignId == null ? null : Number(patch.cmsDesignId);
+  if (patch.cmsCertificateDesignId !== undefined) data.cmsCertificateDesignId = patch.cmsCertificateDesignId == null ? null : Number(patch.cmsCertificateDesignId);
+
+  // LEGACY single-page FK (backward compat)
   if (patch.cmsPageId !== undefined) data.cmsPageId = patch.cmsPageId == null ? null : Number(patch.cmsPageId);
   if (patch.cmsCertificatePageId !== undefined) data.cmsCertificatePageId = patch.cmsCertificatePageId == null ? null : Number(patch.cmsCertificatePageId);
+
   if (patch.certificateTemplateId !== undefined) data.certificateTemplateId = patch.certificateTemplateId == null ? null : Number(patch.certificateTemplateId);
 
   const res = await withTimeout(

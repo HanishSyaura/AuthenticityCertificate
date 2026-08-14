@@ -125,6 +125,7 @@ export default function AdminEpc() {
   const [batchQty, setBatchQty] = useState(1);
   const [remark, setRemark] = useState('');
   const [generateOpen, setGenerateOpen] = useState(false);
+  const [generateCorpPrefix, setGenerateCorpPrefix] = useState('');
   const [listQuery, setListQuery] = useState('');
   const [listBatchId, setListBatchId] = useState('');
   const [listStatus, setListStatus] = useState('');
@@ -325,6 +326,12 @@ export default function AdminEpc() {
     if (!canBatchCreate && !canBatchView && !canBatchImport && !canProduction) return;
     void fetchCorpCodes();
   }, [canBatchCreate, canBatchImport, canBatchView, canProduction, fetchBatches, fetchCorpCodes]);
+
+  useEffect(() => {
+    if (Array.isArray(corpCodes) && corpCodes.length > 0 && !generateCorpPrefix) {
+      setGenerateCorpPrefix(corpCodes[0]);
+    }
+  }, [corpCodes, generateCorpPrefix]);
 
   useEffect(() => {
     if (!(detailOpen || viewBatchOpen)) return;
@@ -1617,9 +1624,10 @@ export default function AdminEpc() {
               <div>
                 <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('corpCode')}</div>
                 <input
-                  value={String((Array.isArray(corpCodes) && corpCodes[0]) || 'DA01')}
-                  readOnly
+                  value={String(generateCorpPrefix || (Array.isArray(corpCodes) && corpCodes[0]) || 'DA01')}
+                  onChange={(e) => setGenerateCorpPrefix(e.target.value)}
                   className="ac-input px-3 py-2 text-xs"
+                  placeholder="e.g. DA01"
                 />
               </div>
               <div>
@@ -1651,11 +1659,13 @@ export default function AdminEpc() {
                 className="ac-btn ac-btn-primary px-3 py-2 text-xs"
                 disabled={loading || !batchQty}
                 onClick={async () => {
-                  const created = await generateBatch({ batchQty, remark: String(remark || '').trim() || undefined });
+                  const corpPrefix = String(generateCorpPrefix || (Array.isArray(corpCodes) && corpCodes[0]) || 'DA01').trim();
+                  const created = await generateBatch({ corpPrefix, batchQty, remark: String(remark || '').trim() || undefined });
                   if (created?.batch?.id != null) await exportBatchImportTemplateXlsx();
                   setGenerateOpen(false);
                   setBatchQty(1);
                   setRemark('');
+                  setGenerateCorpPrefix(Array.isArray(corpCodes) && corpCodes[0] ? corpCodes[0] : 'DA01');
                   setListOffset(0);
                   await fetchItems({
                     q: listQuery,

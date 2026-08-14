@@ -90,7 +90,124 @@ function pickTextOnlyTranslationLayout(layout) {
   return out;
 }
 
+function sanitizeDesignsList(list) {
+  const arr = Array.isArray(list) ? list : [];
+  return arr
+    .filter((d) => d && typeof d === 'object')
+    .filter((d) => d.id != null && String(d.id).trim())
+    .map((d) => ({
+      ...d,
+      id: d.id,
+      name: String(d.name || '').trim() || `Design ${String(d.id)}`,
+      slug: String(d.slug || '').trim(),
+      kind: String(d.kind || 'landing').trim() || 'landing',
+      description: d.description == null ? null : String(d.description).trim() || null,
+      published: !!d.publishedVersionId,
+    }))
+    .filter((d) => d.slug)
+    .sort((a, b) => Number(a.id) - Number(b.id));
+}
+
 const useCmsStore = create((set, get) => ({
+  // =============================================================
+  // STATE: CmsDesign (top-level landing page bundles / designs)
+  // selectedDesignId = null means: use "Default (legacy)" group (pages with designId IS NULL)
+  // =============================================================
+  designs: [],
+  selectedDesignId: null,
+  loadingDesigns: false,
+
+  setSelectedDesignId: (id) => {
+    const target = id === null || id === '' || id === 'null' ? null : Number(id);
+    set({ selectedDesignId: target, layoutsByPageKey: {}, selectedPageId: null });
+  },
+
+  fetchDesigns: async ({ kind } = {}) => {
+    const { token } = useAdminAuthStore.getState();
+    set({ loadingDesigns: true, error: null });
+    if (!token) {
+      set({ designs: [], loadingDesigns: false, error: tRaw('notAuthenticated') });
+      return [];
+    }
+    try {
+      const api = createAdminApi({ token });
+      const params = {};
+      if (typeof kind === 'string' && kind) params.kind = kind;
+      const hasParams = Object.keys(params).length > 0;
+      const res = await api.get('/cms/designs', hasParams ? { params } : undefined);
+      const designs = sanitizeDesignsList(res?.data?.data || []);
+      set({ designs, loadingDesigns: false });
+      return designs;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      set({ designs: [], loadingDesigns: false, error: msg });
+      return [];
+    }
+  },
+
+  createDesign: async ({ name, slug, kind, description }) => {
+    const { token } = useAdminAuthStore.getState();
+    if (!token) throw new Error(tRaw('notAuthenticated'));
+    const safeSlug = safeSlugify(slug || name);
+    const k = typeof kind === 'string' && kind ? kind : 'landing';
+    try {
+      const api = createAdminApi({ token });
+      const res = await api.post('/cms/design', { name, slug: safeSlug, kind: k, description });
+      const created = res?.data?.data;
+      const designs = sanitizeDesignsList([...(get().designs || []), created].filter(Boolean));
+      set({ designs, selectedDesignId: created?.id ?? null });
+      return created;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      throw new Error(msg);
+    }
+  },
+
+  patchDesign: async ({ id, name, slug, kind, description }) => {
+    const { token } = useAdminAuthStore.getState();
+    if (!token) throw new Error(tRaw('notAuthenticated'));
+    const body = {};
+    if (name !== undefined) body.name = name;
+    if (slug !== undefined) body.slug = safeSlugify(slug);
+    if (kind !== undefined) body.kind = kind;
+    if (description !== undefined) body.description = description;
+    try {
+      const api = createAdminApi({ token });
+      const res = await api.patch(`/cms/design/${encodeURIComponent(id)}`, body);
+      const updated = res?.data?.data;
+      const designs = sanitizeDesignsList(
+        (get().designs || []).map((d) => String(d.id) === String(id) && updated ? { ...d, ...updated } : d)
+      );
+      set({ designs });
+      return updated;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      throw new Error(msg);
+    }
+  },
+
+  deleteDesign: async ({ id }) => {
+    const { token } = useAdminAuthStore.getState();
+    if (!token) throw new Error(tRaw('notAuthenticated'));
+    try {
+      const api = createAdminApi({ token });
+      await api.delete(`/cms/design/${encodeURIComponent(id)}`);
+      const designs = sanitizeDesignsList((get().designs || []).filter((d) => String(d.id) !== String(id)));
+      const wasSelected = String(get().selectedDesignId) === String(id);
+      set({
+        designs,
+        ...(wasSelected ? { selectedDesignId: null, pages: [], layoutsByPageKey: {}, selectedPageId: null } : {}),
+      });
+      return true;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      throw new Error(msg);
+    }
+  },
+
+  // =============================================================
+  // STATE: CmsPage (inner pages / sections WITHIN currently-selected design)
+  // =============================================================
   pages: [],
   layoutsByPageKey: {},
   selectedPageId: null,
@@ -99,10 +216,15 @@ const useCmsStore = create((set, get) => ({
 
   selectPage: (pageId) => set({ selectedPageId: pageId }),
 
-  fetchPages: async () => {
+  fetchPages: async (opts) => {
     const { token } = useAdminAuthStore.getState();
     set({ loading: true, error: null });
-    const kind = 'landing';
+    const kind = opts?.kind != null ? opts.kind : 'landing';
+    // Respect explicit opts.designId if provided; otherwise use the currently selected design
+    const designId =
+      opts && Object.prototype.hasOwnProperty.call(opts, 'designId')
+        ? opts.designId
+        : get().selectedDesignId; // null = default group, number = specific group, undefined = backend returns all
 
     if (!token) {
       set({ pages: [], loading: false, error: tRaw('notAuthenticated') });
@@ -111,7 +233,12 @@ const useCmsStore = create((set, get) => ({
 
     try {
       const api = createAdminApi({ token });
-      const res = await api.get('/cms/pages', { params: { kind } });
+      const params = {};
+      if (kind) params.kind = kind;
+      if (designId === null) params.designId = 'null'; // IS NULL (legacy default group)
+      else if (designId !== undefined) params.designId = Number(designId);
+      const hasParams = Object.keys(params).length > 0;
+      const res = await api.get('/cms/pages', hasParams ? { params } : undefined);
       const pages = sortPages(sanitizePagesList(res?.data?.data || []));
       set({ pages, loading: false });
     } catch (e) {
@@ -125,12 +252,16 @@ const useCmsStore = create((set, get) => ({
     const safeSlug = safeSlugify(slug || name);
     const pages = get().pages;
     const kind = 'landing';
+    const designId = get().selectedDesignId; // null => attach to default group; number => attach to that group
 
     if (!token) throw new Error(tRaw('notAuthenticated'));
 
     try {
       const api = createAdminApi({ token });
-      const res = await api.post('/cms/page', { name, slug: safeSlug, kind });
+      const payload = { name, slug: safeSlug, kind };
+      if (designId === null) payload.designId = null;
+      else if (designId != null) payload.designId = Number(designId);
+      const res = await api.post('/cms/page', payload);
       const created = res?.data?.data;
       const updated = sortPages(sanitizePagesList([...(pages || []), created].filter(Boolean)));
       set({ pages: updated });

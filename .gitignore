@@ -4,3 +4,9 @@ node_modules
 .env
 
 /src/generated/prisma
+frontend/playwright-report/
+frontend/pw-browsers/
+frontend/test-results/
+frontend/playwright-test-output.log
+frontend/.env.development
+frontend/*.log

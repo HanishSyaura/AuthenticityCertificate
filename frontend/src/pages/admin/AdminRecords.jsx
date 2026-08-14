@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useRecordsStore from '../../store/useRecordsStore';
+import useCmsStore from '../../store/useCmsStore';
 import { useT } from '../../i18n/useT';
 import { stripHtmlToText } from '../../utils/richText';
 import DataTable from '../../components/ui/DataTable';
@@ -51,6 +52,12 @@ export default function AdminRecords() {
     bulkDeleteProducts: s.bulkDeleteProducts
   }));
 
+  const { cmsDesigns, cmsDesignsLoading, cmsFetchDesigns } = useCmsStore((s) => ({
+    cmsDesigns: s.designs,
+    cmsDesignsLoading: s.loadingDesigns || s.loading,
+    cmsFetchDesigns: s.fetchDesigns
+  }));
+
   const [activeTab, setActiveTab] = useState('products');
   const [query, setQuery] = useState('');
   const [productStatusFilter, setProductStatusFilter] = useState('all');
@@ -73,6 +80,9 @@ export default function AdminRecords() {
   const [category, setCategory] = useState('');
   const [status, setStatus] = useState('active');
   const [remark, setRemark] = useState('');
+  // NEW: design bundle FKs (each bundle = multiple inner pages/sections)
+  const [selectedCmsDesignId, setSelectedCmsDesignId] = useState('');
+  const [selectedCmsCertificateDesignId, setSelectedCmsCertificateDesignId] = useState('');
 
   const [categoryName, setCategoryName] = useState('');
   const [categoryCode, setCategoryCode] = useState('');
@@ -118,7 +128,8 @@ export default function AdminRecords() {
   useEffect(() => {
     void fetchProducts();
     void fetchCategories();
-  }, [fetchProducts, fetchCategories]);
+    void cmsFetchDesigns({ kind: 'landing' });
+  }, [fetchProducts, fetchCategories, cmsFetchDesigns]);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -599,6 +610,21 @@ export default function AdminRecords() {
                           setCategory(p.category || '');
                           setStatus(String(p.status || '').toLowerCase() === 'inactive' ? 'inactive' : 'active');
                           setRemark(stripHtmlToText(p.remark || ''));
+                          // Prefer new group-level FK, fall back to legacy single-page FK column
+                          const desId =
+                            p?.cmsDesignId != null
+                              ? p.cmsDesignId
+                              : p?.cmsPageId != null
+                                ? p.cmsPageId
+                                : null;
+                          const certDesId =
+                            p?.cmsCertificateDesignId != null
+                              ? p.cmsCertificateDesignId
+                              : p?.cmsCertificatePageId != null
+                                ? p.cmsCertificatePageId
+                                : null;
+                          setSelectedCmsDesignId(desId != null ? String(desId) : '');
+                          setSelectedCmsCertificateDesignId(certDesId != null ? String(certDesId) : '');
                           setShowEdit(true);
                         }
                       },
@@ -794,6 +820,77 @@ export default function AdminRecords() {
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
                 <textarea value={remark} onChange={(e) => setRemark(e.target.value)} className="ac-input h-24 resize-none" data-tour="records-product-remark" />
               </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('landingPageDesign')}</div>
+                {cmsDesignsLoading ? (
+                  <div className="ac-input text-xs text-zinc-400">Loading…</div>
+                ) : (cmsDesigns?.length || 0) === 0 ? (
+                  <div className="ac-input text-xs text-zinc-400">{t('noLandingPages')}</div>
+                ) : (
+                  <select
+                    value={selectedCmsDesignId}
+                    onChange={(e) => setSelectedCmsDesignId(e.target.value)}
+                    className="ac-input"
+                    data-tour="records-product-cms-page"
+                  >
+                    <option value="">{t('useDefaultLandingPage')}</option>
+                    {cmsDesigns
+                      .slice()
+                      .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')))
+                      .map((des) => {
+                        const did = String(des?.id ?? '');
+                        if (!did) return null;
+                        const label = String(des?.name || '').trim() || `Design #${did}`;
+                        const slug = String(des?.slug || '').trim();
+                        const kindLabel = String(des?.kind || '').trim();
+                        return (
+                          <option key={did} value={did}>
+                            {kindLabel && kindLabel !== 'landing' ? `[${kindLabel}] ` : ''}
+                            {label}
+                            {slug ? ` (${slug})` : ''}
+                            {des.published ? ' · published' : ' · draft'}
+                          </option>
+                        );
+                      })}
+                  </select>
+                )}
+                <div className="mt-1 text-[11px] text-zinc-500">{t('selectLandingPage')}</div>
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('certificatePageDesign')}</div>
+                {cmsDesignsLoading ? (
+                  <div className="ac-input text-xs text-zinc-400">Loading…</div>
+                ) : (cmsDesigns?.length || 0) === 0 ? (
+                  <div className="ac-input text-xs text-zinc-400">{t('noLandingPages')}</div>
+                ) : (
+                  <select
+                    value={selectedCmsCertificateDesignId}
+                    onChange={(e) => setSelectedCmsCertificateDesignId(e.target.value)}
+                    className="ac-input"
+                  >
+                    <option value="">{t('useProductLandingDesign')}</option>
+                    {cmsDesigns
+                      .slice()
+                      .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')))
+                      .map((des) => {
+                        const did = String(des?.id ?? '');
+                        if (!did) return null;
+                        const label = String(des?.name || '').trim() || `Design #${did}`;
+                        const slug = String(des?.slug || '').trim();
+                        const kindLabel = String(des?.kind || '').trim();
+                        return (
+                          <option key={did} value={did}>
+                            {kindLabel && kindLabel !== 'landing' ? `[${kindLabel}] ` : ''}
+                            {label}
+                            {slug ? ` (${slug})` : ''}
+                            {des.published ? ' · published' : ' · draft'}
+                          </option>
+                        );
+                      })}
+                  </select>
+                )}
+                <div className="mt-1 text-[11px] text-zinc-500">{t('certDesignOverrideHint')}</div>
+              </div>
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -807,6 +904,8 @@ export default function AdminRecords() {
                   setCategory('');
                   setStatus('active');
                   setRemark('');
+                  setSelectedCmsDesignId('');
+                  setSelectedCmsCertificateDesignId('');
                 }}
                 data-tour="records-product-cancel"
               >
@@ -822,6 +921,10 @@ export default function AdminRecords() {
                   const trimmedCategory = String(category || '').trim();
                   const trimmedStatus = String(status || '').trim() || 'active';
                   if (!trimmedSku || !trimmedName || !trimmedProductCode || !trimmedCategory) return;
+                  const designIdRaw = String(selectedCmsDesignId || '').trim();
+                  const certDesignIdRaw = String(selectedCmsCertificateDesignId || '').trim();
+                  const cmsDesignId = designIdRaw ? Number(designIdRaw) : null;
+                  const cmsCertificateDesignId = certDesignIdRaw ? Number(certDesignIdRaw) : null;
                   try {
                     await createProduct({
                       sku: trimmedSku,
@@ -829,7 +932,9 @@ export default function AdminRecords() {
                       product_code: trimmedProductCode,
                       category: trimmedCategory,
                       status: trimmedStatus,
-                      remark: String(remark || '').trim() || undefined
+                      remark: String(remark || '').trim() || undefined,
+                      cmsDesignId: cmsDesignId ?? undefined,
+                      cmsCertificateDesignId: cmsCertificateDesignId ?? undefined
                     });
                     setShowCreate(false);
                     setSku('');
@@ -838,6 +943,8 @@ export default function AdminRecords() {
                     setCategory('');
                     setStatus('active');
                     setRemark('');
+                    setSelectedCmsDesignId('');
+                    setSelectedCmsCertificateDesignId('');
                   } catch {
                     return;
                   }
@@ -916,6 +1023,76 @@ export default function AdminRecords() {
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
                 <textarea value={remark} onChange={(e) => setRemark(e.target.value)} className="ac-input h-24 resize-none" />
               </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('landingPageDesign')}</div>
+                {cmsDesignsLoading ? (
+                  <div className="ac-input text-xs text-zinc-400">Loading…</div>
+                ) : (cmsDesigns?.length || 0) === 0 ? (
+                  <div className="ac-input text-xs text-zinc-400">{t('noLandingPages')}</div>
+                ) : (
+                  <select
+                    value={selectedCmsDesignId}
+                    onChange={(e) => setSelectedCmsDesignId(e.target.value)}
+                    className="ac-input"
+                  >
+                    <option value="">{t('useDefaultLandingPage')}</option>
+                    {cmsDesigns
+                      .slice()
+                      .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')))
+                      .map((des) => {
+                        const did = String(des?.id ?? '');
+                        if (!did) return null;
+                        const label = String(des?.name || '').trim() || `Design #${did}`;
+                        const slug = String(des?.slug || '').trim();
+                        const kindLabel = String(des?.kind || '').trim();
+                        return (
+                          <option key={did} value={did}>
+                            {kindLabel && kindLabel !== 'landing' ? `[${kindLabel}] ` : ''}
+                            {label}
+                            {slug ? ` (${slug})` : ''}
+                            {des.published ? ' · published' : ' · draft'}
+                          </option>
+                        );
+                      })}
+                  </select>
+                )}
+                <div className="mt-1 text-[11px] text-zinc-500">{t('selectLandingPage')}</div>
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('certificatePageDesign')}</div>
+                {cmsDesignsLoading ? (
+                  <div className="ac-input text-xs text-zinc-400">Loading…</div>
+                ) : (cmsDesigns?.length || 0) === 0 ? (
+                  <div className="ac-input text-xs text-zinc-400">{t('noLandingPages')}</div>
+                ) : (
+                  <select
+                    value={selectedCmsCertificateDesignId}
+                    onChange={(e) => setSelectedCmsCertificateDesignId(e.target.value)}
+                    className="ac-input"
+                  >
+                    <option value="">{t('useProductLandingDesign')}</option>
+                    {cmsDesigns
+                      .slice()
+                      .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')))
+                      .map((des) => {
+                        const did = String(des?.id ?? '');
+                        if (!did) return null;
+                        const label = String(des?.name || '').trim() || `Design #${did}`;
+                        const slug = String(des?.slug || '').trim();
+                        const kindLabel = String(des?.kind || '').trim();
+                        return (
+                          <option key={did} value={did}>
+                            {kindLabel && kindLabel !== 'landing' ? `[${kindLabel}] ` : ''}
+                            {label}
+                            {slug ? ` (${slug})` : ''}
+                            {des.published ? ' · published' : ' · draft'}
+                          </option>
+                        );
+                      })}
+                  </select>
+                )}
+                <div className="mt-1 text-[11px] text-zinc-500">{t('certDesignOverrideHint')}</div>
+              </div>
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -924,6 +1101,8 @@ export default function AdminRecords() {
                 onClick={() => {
                   setShowEdit(false);
                   setEditing(null);
+                  setSelectedCmsDesignId('');
+                  setSelectedCmsCertificateDesignId('');
                 }}
               >
                 {t('cancel')}
@@ -934,6 +1113,10 @@ export default function AdminRecords() {
                 disabled={!editing?.id}
                 onClick={async () => {
                   if (!editing?.id) return;
+                  const designIdRaw = String(selectedCmsDesignId || '').trim();
+                  const certDesignIdRaw = String(selectedCmsCertificateDesignId || '').trim();
+                  const cmsDesignId = designIdRaw ? Number(designIdRaw) : null;
+                  const cmsCertificateDesignId = certDesignIdRaw ? Number(certDesignIdRaw) : null;
                   await updateProduct({
                     id: editing.id,
                     patch: {
@@ -942,11 +1125,15 @@ export default function AdminRecords() {
                       product_code: String(productCode || '').trim(),
                       category: String(category || '').trim(),
                       status: String(status || '').trim() || 'active',
-                      remark: String(remark || '').trim() || null
+                      remark: String(remark || '').trim() || null,
+                      cmsDesignId,
+                      cmsCertificateDesignId
                     }
                   });
                   setShowEdit(false);
                   setEditing(null);
+                  setSelectedCmsDesignId('');
+                  setSelectedCmsCertificateDesignId('');
                 }}
               >
                 {t('save')}

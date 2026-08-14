@@ -50,14 +50,80 @@ const metaSchema = z.object({
 
 const reorderSchema = z.object({
   orderedIds: z.array(z.number().int()).min(1),
-  kind: z.string().optional()
+  kind: z.string().optional(),
+  designId: z.union([z.number().int(), z.null(), z.string().max(0)]).optional()
 });
+
+// ===== CmsDesign (top-level landing page bundles) =====
+const designSchema = z.object({
+  name: z.string().min(1),
+  slug: z.string().min(1),
+  kind: z.string().optional(),
+  description: z.string().optional().nullable()
+});
+
+const designPatchSchema = z.object({
+  name: z.string().min(1).optional(),
+  slug: z.string().min(1).optional(),
+  kind: z.string().optional(),
+  description: z.string().optional().nullable()
+});
+
+async function listDesigns(req, res) {
+  try {
+    const kind = typeof req.query?.kind === 'string' ? req.query.kind : undefined;
+    const designs = await cmsService.listDesigns({ organizationId: req.organization.id, kind });
+    res.success(designs);
+  } catch (e) {
+    res.error(resolveMessage(e), resolveStatus(e, 500));
+  }
+}
+
+async function createDesign(req, res) {
+  try {
+    const v = designSchema.parse(req.body);
+    const design = await cmsService.createDesign({ organizationId: req.organization.id, ...v });
+    res.success(design, 'Landing design created successfully');
+  } catch (e) {
+    res.error(resolveMessage(e), resolveStatus(e, 400));
+  }
+}
+
+async function patchDesign(req, res) {
+  try {
+    const id = Number(req.params.id);
+    const v = designPatchSchema.parse(req.body);
+    await cmsService.updateDesign({ organizationId: req.organization.id, id, ...v });
+    const fresh = await cmsService.getDesignById({ organizationId: req.organization.id, id });
+    res.success(fresh, 'Landing design updated successfully');
+  } catch (e) {
+    res.error(resolveMessage(e), resolveStatus(e, 400));
+  }
+}
+
+async function removeDesign(req, res) {
+  try {
+    const id = Number(req.params.id);
+    const r = await cmsService.deleteDesign({ organizationId: req.organization.id, id });
+    res.success(r, 'Landing design deleted successfully (inner pages moved to Default group)');
+  } catch (e) {
+    res.error(resolveMessage(e), resolveStatus(e, 400));
+  }
+}
 
 async function createPage(req, res) {
   try {
     const validatedData = pageSchema.parse(req.body);
+    // Accept optional designId from body / query: numeric = specific bundle, explicit null = legacy default, missing = default group
+    let designId = undefined;
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'designId') || Object.prototype.hasOwnProperty.call(req.query || {}, 'designId')) {
+      const raw = (req.body || {}).designId ?? (req.query || {}).designId;
+      if (raw === null || raw === '' || raw === 'null') designId = null;
+      else designId = Number(raw);
+    }
     const page = await cmsService.createPage({
       organizationId: req.organization.id,
+      designId,
       ...validatedData
     });
     res.success(page, 'CMS Page created successfully');
@@ -138,7 +204,13 @@ async function fillEmptyTranslation(req, res) {
 async function listPages(req, res) {
   try {
     const kind = typeof req.query?.kind === 'string' ? req.query.kind : undefined;
-    const pages = await cmsService.getAllPages({ organizationId: req.organization.id, kind });
+    let designId = undefined;
+    if (Object.prototype.hasOwnProperty.call(req.query || {}, 'designId')) {
+      const raw = req.query.designId;
+      if (raw === null || raw === '' || raw === 'null') designId = null;
+      else designId = Number(raw);
+    }
+    const pages = await cmsService.getAllPages({ organizationId: req.organization.id, kind, designId });
     res.success(pages);
   } catch (error) {
     res.error(resolveMessage(error), resolveStatus(error, 500));
@@ -178,5 +250,9 @@ module.exports = {
   fillEmptyTranslation,
   listPages,
   removePage,
-  reorderPages
+  reorderPages,
+  listDesigns,
+  createDesign,
+  patchDesign,
+  removeDesign,
 };

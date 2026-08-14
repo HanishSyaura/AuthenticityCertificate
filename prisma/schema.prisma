@@ -15,6 +15,38 @@ model Admin {
   createdAt DateTime @default(now())
 }
 
+// Global org-wide branding / settings (maps to legacy OrganizationSettings table)
+model OrganizationSetting {
+  id               Int      @id @default(autoincrement())
+  organizationId   Int      @unique
+  organization     Organization @relation(fields: [organizationId], references: [id])
+
+  defaultLocale    String?  @db.VarChar(20)
+  defaultTimezone  String?  @db.VarChar(64)
+  maintenanceMode  Boolean  @default(false)
+
+  // Branding
+  appTitle         String?  @db.VarChar(191)
+  faviconUrl       String?  @db.VarChar(512)
+  logoUrl          String?  @db.VarChar(512)
+
+  // SMTP
+  smtpHost         String?  @db.VarChar(191)
+  smtpPort         Int?
+  smtpSecure       Boolean?
+  smtpUser         String?  @db.VarChar(191)
+  smtpPassEnc      String?  @db.Text
+  smtpFromName     String?  @db.VarChar(191)
+  smtpFromEmail    String?  @db.VarChar(191)
+  smtpReplyTo      String?  @db.VarChar(191)
+  adminAppUrl      String?  @db.VarChar(512)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("OrganizationSettings")
+}
+
 model Organization {
   id        Int       @id @default(autoincrement())
   name      String
@@ -42,6 +74,10 @@ model Organization {
   tagIdentities   TagIdentity[]
   apiKeys         ApiKey[]
   webhooks        WebhookEndpoint[]
+  settings        OrganizationSetting?
+
+  // CMS
+  cmsDesigns      CmsDesign[]
   pages           CmsPage[]
   layouts         CmsLayout[]
   cmsVersions     CmsVersion[]
@@ -128,38 +164,51 @@ model AuditLog {
 }
 
 model Product {
-  id                    Int                  @id @default(autoincrement())
-  organizationId        Int
-  organization          Organization         @relation(fields: [organizationId], references: [id])
-  sku                   String
-  name                  String
-  code                  String
-  category              String
-  status                String
-  remark                String?
-  origin                String?
-  description           String?
-  cmsPageId             Int? // Linked CMS landing page
-  cmsPage               CmsPage?             @relation("LandingPage", fields: [cmsPageId], references: [id])
-  cmsCertificatePageId  Int? // Linked CMS certificate page
-  cmsCertificatePage    CmsPage?             @relation("CertificatePage", fields: [cmsCertificatePageId], references: [id])
-  certificateTemplateId Int?
-  certificateTemplate   CertificateTemplate? @relation(fields: [certificateTemplateId], references: [id])
-  batches               Batch[]
+  id                      Int                  @id @default(autoincrement())
+  organizationId          Int
+  organization            Organization         @relation(fields: [organizationId], references: [id])
+  sku                     String
+  name                    String
+  code                    String
+  category                String
+  status                  String
+  remark                  String?
+  origin                  String?
+  description             String?
 
-  epcBatches EpcBatch[]
-  epcScanGroups EpcScanGroup[]
-  supportingCertificates ProductSupportingCertificate[]
+  // ===== LEGACY / DEPRECATED COLUMNS (single-page FKs — keep for old data / backward compat only) =====
+  cmsPageId               Int?
+  cmsPage                 CmsPage?             @relation("LandingPage", fields: [cmsPageId], references: [id])
+  cmsCertificatePageId    Int?
+  cmsCertificatePage      CmsPage?             @relation("CertificatePage", fields: [cmsCertificatePageId], references: [id])
 
-  versionNo Int       @default(1)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  // ===== NEW: GROUP-LEVEL FK (links to CmsDesign.id = BUNDLE of multiple inner pages) =====
+  // Landing page bundle for public product page
+  cmsDesignId             Int?
+  cmsDesign               CmsDesign?          @relation("LandingDesign", fields: [cmsDesignId], references: [id])
+  // Optional: separate bundle for certificate-only view (if different from product landing)
+  cmsCertificateDesignId  Int?
+  cmsCertificateDesign    CmsDesign?          @relation("CertificateDesign", fields: [cmsCertificateDesignId], references: [id])
+
+  certificateTemplateId   Int?
+  certificateTemplate     CertificateTemplate? @relation(fields: [certificateTemplateId], references: [id])
+  batches                 Batch[]
+
+  epcBatches              EpcBatch[]
+  epcScanGroups           EpcScanGroup[]
+  supportingCertificates  ProductSupportingCertificate[]
+
+  versionNo   Int       @default(1)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
 
   @@unique([organizationId, code])
   @@unique([organizationId, sku])
   @@index([organizationId, category])
   @@index([organizationId, status])
+  @@index([organizationId, cmsDesignId])
+  @@index([organizationId, cmsCertificateDesignId])
 }
 
 model ProductSupportingCertificate {
@@ -408,13 +457,23 @@ model Certificate {
   status         String       @default("PENDING") // PENDING, VALID, SUSPICIOUS, REVOKED, EXPIRED
   batchId        Int?
   batch          Batch?       @relation(fields: [batchId], references: [id])
+
+  // ===== DEPRECATED OLD FK (per-cert single-page override — keep for migration only) =====
+  cmsPageId      Int?
+  cmsPage        CmsPage?     @relation("CertificateLandingPage", fields: [cmsPageId], references: [id])
+
+  // ===== NEW: GROUP-LEVEL PER-CERT OVERRIDE (points to CmsDesign.id = BUNDLE of multiple inner pages) =====
+  // HIGHEST PRIORITY: cert-specific landing design (overrides product design bundle)
+  cmsDesignId    Int?
+  cmsDesign      CmsDesign?  @relation("CertificateDesign2", fields: [cmsDesignId], references: [id])
+
   epcBatches     EpcBatch[]   @relation("EpcBatchCertificate")
   scanLogs       ScanLog[]
   fraudFlags     FraudFlag[]
   createdAt      DateTime     @default(now())
 
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
 
   issuedAt       DateTime? // set when activated/bound
   expiresAt      DateTime?
@@ -422,9 +481,10 @@ model Certificate {
   reissuedFromId String?
   reissuedToId   String?
 
-  identities TagIdentity[]
+  identities     TagIdentity[]
 
   @@index([certificateId])
+  @@index([organizationId, cmsDesignId])
 }
 
 model ScanLog {
@@ -494,37 +554,84 @@ model TagIdentity {
   @@index([certificateId])
 }
 
+// =====================================================================
+// CmsDesign — TOP-LEVEL Landing Page Design BUNDLE.
+// Each "landing page design" = ONE CmsDesign row = multiple inner CmsPage rows
+// (sections/pages) linked via CmsPage.designId.
+// This is what Product.cmsDesignId / Certificate.cmsDesignId point to.
+// =====================================================================
+model CmsDesign {
+  id                  Int          @id @default(autoincrement())
+  organizationId      Int
+  organization        Organization @relation(fields: [organizationId], references: [id])
+
+  // Identity
+  name                String                            // Display name: "Sarang Madu Lama Landing"
+  slug                String                            // URL slug: "sarang-madu-lama"
+  kind                String       @default("landing")  // "landing" for public product page; "certificate" for verify/cert page
+  description         String?                           // Optional admin memo
+
+  // ===== INNER CHILDREN (1:many bundle → inner pages) =====
+  pages               CmsPage[]
+
+  // ===== NEW: Reverse relations for Product/Certificate FKs =====
+  landingProducts     Product[]      @relation("LandingDesign")
+  certificateProducts Product[]      @relation("CertificateDesign")
+  certificates        Certificate[]  @relation("CertificateDesign2")
+
+  // Publish state (copy pattern from CmsPage)
+  draftVersionId      Int?
+  publishedVersionId  Int?
+  versionNo           Int          @default(1)
+
+  // Audit
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  deletedAt           DateTime?
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, kind])
+}
+
 model CmsPage {
   id                  Int          @id @default(autoincrement())
   organizationId      Int
   organization        Organization @relation(fields: [organizationId], references: [id])
+
+  // ========== NEW: belongs to a CmsDesign (bundle/group) — NULL = legacy default group ==========
+  designId            Int?
+
   name                String
   slug                String
-  kind                String       @default("landing")
+  kind                String       @default("landing")   // "landing" default (use parent design.kind for top-level)
   sortOrder           Int          @default(0)
   layout              CmsLayout?
+
+  // ===== DEPRECATED REVERSE RELATIONS (used to point at Product directly — now Product links to CmsDesign instead) =====
   landingProducts     Product[]    @relation("LandingPage")
   certificateProducts Product[]    @relation("CertificatePage")
+  certificates        Certificate[] @relation("CertificateLandingPage")
 
-  metaTitle       String?
-  metaDescription String?
-  ogImage         String?
+  metaTitle           String?
+  metaDescription     String?
+  ogImage             String?
 
-  draftVersionId     Int?
-  draftVersion       CmsVersion? @relation("DraftVersion", fields: [draftVersionId], references: [id])
-  publishedVersionId Int?
-  publishedVersion   CmsVersion? @relation("PublishedVersion", fields: [publishedVersionId], references: [id])
+  draftVersionId      Int?
+  draftVersion        CmsVersion?  @relation("DraftVersion", fields: [draftVersionId], references: [id])
+  publishedVersionId  Int?
+  publishedVersion    CmsVersion?  @relation("PublishedVersion", fields: [publishedVersionId], references: [id])
 
-  versions     CmsVersion[]
-  translations CmsTranslation[]
+  versions            CmsVersion[]
+  translations        CmsTranslation[]
 
-  versionNo Int       @default(1)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  versionNo           Int          @default(1)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  deletedAt           DateTime?
 
   @@unique([organizationId, slug])
   @@index([organizationId, kind])
+  @@index([organizationId, designId])
 }
 
 model CmsVersion {

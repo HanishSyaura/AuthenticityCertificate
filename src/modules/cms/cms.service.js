@@ -102,9 +102,10 @@ function fillEmptyCmsTextFromBase(baseLayout, existingTranslationLayout) {
 async function createPage(data) {
   const orgId = Number(data.organizationId);
   const kind = data.kind || 'landing';
+  const designId = data.designId != null ? Number(data.designId) : null;
   const latest = await withTimeout(
     prisma.cmsPage.findFirst({
-      where: { organizationId: orgId, kind },
+      where: { organizationId: orgId, kind, ...(designId != null ? { designId } : { designId: null }) },
       select: { sortOrder: true, id: true },
       orderBy: [{ sortOrder: 'desc' }, { id: 'desc' }]
     }),
@@ -119,6 +120,7 @@ async function createPage(data) {
         slug: data.slug,
         kind,
         sortOrder: nextSortOrder,
+        designId,
         metaTitle: data.metaTitle || null,
         metaDescription: data.metaDescription || null,
         ogImage: data.ogImage || null
@@ -273,11 +275,16 @@ async function updateMeta({ organizationId, pageId, metaTitle, metaDescription, 
   );
 }
 
-async function getAllPages({ organizationId, kind }) {
+async function getAllPages({ organizationId, kind, designId }) {
   const k = typeof kind === 'string' && kind ? kind : null;
+  const d = designId === undefined ? undefined : (designId === null || designId === '' ? null : Number(designId));
+  const where = { organizationId: Number(organizationId) };
+  if (k) where.kind = k;
+  // designId filter: number=specific group; null=legacy default group (designId IS NULL); undefined=any
+  if (d !== undefined) where.designId = d;
   return await withTimeout(
     prisma.cmsPage.findMany({
-      where: { organizationId: Number(organizationId), ...(k ? { kind: k } : {}) },
+      where,
       orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }]
     }),
     DEFAULT_TIMEOUT_MS
@@ -335,5 +342,118 @@ module.exports = {
   updateMeta,
   getAllPages,
   reorderPages,
-  deletePage
+  deletePage,
+
+  // CmsDesign (top-level landing page bundles)
+  createDesign,
+  listDesigns,
+  updateDesign,
+  deleteDesign,
+  getDesignById
 };
+
+// ============================================================================
+// CmsDesign — Top-level landing page design bundles (groups of inner CmsPage)
+// ============================================================================
+
+async function createDesign({ organizationId, name, slug, kind, description }) {
+  const orgId = Number(organizationId);
+  const k = kind || 'landing';
+  return await withTimeout(
+    prisma.cmsDesign.create({
+      data: {
+        organizationId: orgId,
+        name: String(name || '').trim(),
+        slug: String(slug || '').trim(),
+        kind: k,
+        description: description ? String(description).trim() : null,
+      },
+    }),
+    DEFAULT_TIMEOUT_MS
+  );
+}
+
+async function listDesigns({ organizationId, kind }) {
+  const orgId = Number(organizationId);
+  const where = { organizationId: orgId, deletedAt: null };
+  if (typeof kind === 'string' && kind) where.kind = kind;
+  return await withTimeout(
+    prisma.cmsDesign.findMany({
+      where,
+      orderBy: [{ id: 'asc' }],
+    }),
+    DEFAULT_TIMEOUT_MS
+  );
+}
+
+async function getDesignById({ organizationId, id }) {
+  const orgId = Number(organizationId);
+  const designId = Number(id);
+  return await withTimeout(
+    prisma.cmsDesign.findFirst({
+      where: { id: designId, organizationId: orgId, deletedAt: null },
+    }),
+    DEFAULT_TIMEOUT_MS
+  );
+}
+
+async function updateDesign({ organizationId, id, name, slug, kind, description }) {
+  const orgId = Number(organizationId);
+  const designId = Number(id);
+  const data = {};
+  if (name !== undefined) data.name = String(name).trim();
+  if (slug !== undefined) data.slug = String(slug).trim();
+  if (kind !== undefined) data.kind = String(kind);
+  if (description !== undefined) data.description = description ? String(description).trim() : null;
+  return await withTimeout(
+    prisma.cmsDesign.updateMany({
+      where: { id: designId, organizationId: orgId, deletedAt: null },
+      data,
+    }),
+    DEFAULT_TIMEOUT_MS
+  );
+}
+
+async function deleteDesign({ organizationId, id }) {
+  const orgId = Number(organizationId);
+  const designId = Number(id);
+
+  await prisma.$transaction(async (tx) => {
+    const existing = await withTimeout(
+      tx.cmsDesign.findFirst({ where: { id: designId, organizationId: orgId, deletedAt: null }, select: { id: true } }),
+      DEFAULT_TIMEOUT_MS
+    );
+    if (!existing) throw new Error('Design not found');
+
+    // 1) Detach all CmsPage rows that currently belong to this design → set designId = null (move back to legacy default group)
+    //    or delete them entirely? Move to default group is safer (avoid accidental data loss of pages user built)
+    await tx.cmsPage.updateMany({
+      where: { organizationId: orgId, designId },
+      data: { designId: null },
+    });
+
+    // 2) Clear Product.cmsDesignId / Product.cmsCertificateDesignId FKs pointing to this design
+    await tx.product.updateMany({
+      where: { organizationId: orgId, cmsDesignId: designId },
+      data: { cmsDesignId: null },
+    });
+    await tx.product.updateMany({
+      where: { organizationId: orgId, cmsCertificateDesignId: designId },
+      data: { cmsCertificateDesignId: null },
+    });
+
+    // 3) Clear Certificate.cmsDesignId per-cert override FK
+    await tx.certificate.updateMany({
+      where: { organizationId: orgId, cmsDesignId: designId },
+      data: { cmsDesignId: null },
+    });
+
+    // 4) Soft-delete the design row
+    await tx.cmsDesign.updateMany({
+      where: { id: designId, organizationId: orgId },
+      data: { deletedAt: new Date() },
+    });
+  });
+
+  return { id: designId };
+}

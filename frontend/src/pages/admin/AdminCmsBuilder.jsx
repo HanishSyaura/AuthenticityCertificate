@@ -64,6 +64,13 @@ function composeLayouts({ pages, layoutsByPageKey, language }) {
 export default function AdminCmsBuilder() {
   const { t } = useT();
   const {
+    designs,
+    selectedDesignId,
+    setSelectedDesignId,
+    fetchDesigns,
+    createDesign,
+    patchDesign,
+    deleteDesign,
     pages,
     layoutsByPageKey,
     selectedPageId,
@@ -80,6 +87,13 @@ export default function AdminCmsBuilder() {
     deletePage,
     error
   } = useCmsStore((s) => ({
+    designs: s.designs,
+    selectedDesignId: s.selectedDesignId,
+    setSelectedDesignId: s.setSelectedDesignId,
+    fetchDesigns: s.fetchDesigns,
+    createDesign: s.createDesign,
+    patchDesign: s.patchDesign,
+    deleteDesign: s.deleteDesign,
     pages: s.pages,
     layoutsByPageKey: s.layoutsByPageKey,
     selectedPageId: s.selectedPageId,
@@ -106,6 +120,18 @@ export default function AdminCmsBuilder() {
   const [viewMode, setViewMode] = useState('split');
   const canvasWidth = 390;
   const canvasHeight = 844;
+
+  // Design panel UI state
+  const [designsOpen, setDesignsOpen] = useState(true);
+  const [designNewName, setDesignNewName] = useState('');
+  const [designNewSlug, setDesignNewSlug] = useState('');
+  const [designNewDesc, setDesignNewDesc] = useState('');
+  const [designShowCreate, setDesignShowCreate] = useState(false);
+  const [designEditingId, setDesignEditingId] = useState(null);
+  const [designEditName, setDesignEditName] = useState('');
+  const [designEditSlug, setDesignEditSlug] = useState('');
+  const [designEditDesc, setDesignEditDesc] = useState('');
+
   const [pagesOpen, setPagesOpen] = useState(() => {
     try {
       return localStorage.getItem('ac_cms_pages_open_v1') !== '0';
@@ -155,8 +181,12 @@ export default function AdminCmsBuilder() {
   );
 
   useEffect(() => {
-    fetchPages();
-  }, [fetchPages]);
+    void fetchDesigns({ kind: 'landing' });
+  }, [fetchDesigns]);
+
+  useEffect(() => {
+    fetchPages({ kind: 'landing' });
+  }, [fetchPages, selectedDesignId]);
 
   useEffect(() => {
     void fetchTemplates();
@@ -409,28 +439,271 @@ export default function AdminCmsBuilder() {
           </button>
         ) : null}
         {pagesOpen ? (
-          <div data-tour="cms-pages-panel">
-            <CmsPagePanel
-              pages={pages}
-              selectedPageId={selectedPageId}
-              onSelectPage={(id) => {
-                selectPage(id);
-                setSelectedBlockId(null);
-              }}
-              onCollapse={() => setPagesOpen(false)}
-              onReorderPages={async (orderedIds) => {
-                await reorderPages({ orderedIds });
-              }}
-              onCreatePage={async ({ name, slug }) => {
-                const created = await createPage({ name, slug });
-                selectPage(created.id);
-                setSelectedBlockId(null);
-              }}
-              onDeletePage={async (id) => {
-                await deletePage({ pageId: id });
-                setSelectedBlockId(null);
-              }}
-            />
+          <div data-tour="cms-panels-left" className="flex flex-col gap-3">
+            {/* =======================================================
+                CmsDesignPanel — Top-level landing design bundle selector
+                ======================================================= */}
+            <div className="ac-card p-3">
+              <div className="mb-2 flex items-center justify-between">
+                  <div className="text-xs font-semibold text-zinc-900">
+                    {t('landingDesigns')}
+                    <span className="ml-2 text-[10px] font-normal text-zinc-500">
+                      {selectedDesignId == null
+                        ? `(${t('defaultGroup')} — ${pages?.length || 0} ${t('pages')})`
+                        : `(${pages?.length || 0} ${t('pages')})`}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDesignsOpen((v) => !v)}
+                    className="text-xs text-zinc-500 hover:text-zinc-800"
+                    aria-label="Toggle designs"
+                  >
+                    {designsOpen ? '▾' : '▸'}
+                  </button>
+                </div>
+
+                {designsOpen ? (
+                  <>
+                    {/* Default (legacy) group option — pages with designId = NULL */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDesignId(null)}
+                      className={`mb-1 flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${
+                        selectedDesignId == null
+                          ? 'bg-brand-50 ring-1 ring-inset ring-brand-200 text-brand-900 font-semibold'
+                          : 'hover:bg-zinc-50 text-zinc-800'
+                      }`}
+                    >
+                      <span className="flex min-w-0 truncate">✨ {t('defaultDesign')}</span>
+                      <span className="shrink-0 rounded bg-white px-1.5 text-[10px] text-zinc-500">{t('legacy')}</span>
+                    </button>
+
+                    {/* Created CmsDesign bundles */}
+                    {(designs || []).map((d) => {
+                      const active = String(d.id) === String(selectedDesignId);
+                      const editing = String(designEditingId) === String(d.id);
+                      if (editing) {
+                        return (
+                          <div key={`edit-${d.id}`} className="mb-1 space-y-1 rounded-md border border-zinc-200 bg-white p-2">
+                            <input
+                              className="ac-input !py-1 text-[11px]"
+                              placeholder={t('name')}
+                              value={designEditName}
+                              onChange={(e) => setDesignEditName(e.target.value)}
+                            />
+                            <input
+                              className="ac-input !py-1 text-[11px]"
+                              placeholder="slug"
+                              value={designEditSlug}
+                              onChange={(e) => setDesignEditSlug(e.target.value)}
+                            />
+                            <textarea
+                              className="ac-input !py-1 text-[11px] h-12"
+                              placeholder={t('description')}
+                              value={designEditDesc}
+                              onChange={(e) => setDesignEditDesc(e.target.value)}
+                            />
+                            <div className="flex justify-end gap-1 pt-1">
+                              <button
+                                type="button"
+                                className="ac-btn ac-btn-soft !px-2 !py-1 text-[10px]"
+                                onClick={() => {
+                                  setDesignEditingId(null);
+                                  setDesignEditName('');
+                                  setDesignEditSlug('');
+                                  setDesignEditDesc('');
+                                }}
+                              >
+                                {t('cancel')}
+                              </button>
+                              <button
+                                type="button"
+                                className="ac-btn !px-2 !py-1 text-[10px]"
+                                onClick={async () => {
+                                  try {
+                                    await patchDesign({
+                                      id: d.id,
+                                      name: designEditName || undefined,
+                                      slug: designEditSlug || undefined,
+                                      description: designEditDesc === '' ? null : designEditDesc
+                                    });
+                                    setDesignEditingId(null);
+                                    setDesignEditName('');
+                                    setDesignEditSlug('');
+                                    setDesignEditDesc('');
+                                  } catch {
+                                    /* handled globally */
+                                  }
+                                }}
+                              >
+                                {t('save')}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div
+                          key={d.id}
+                          className={`mb-1 group rounded-md transition ${
+                            active ? 'bg-brand-50 ring-1 ring-inset ring-brand-200' : 'hover:bg-zinc-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedDesignId(d.id)}
+                              className={`flex-1 min-w-0 px-2 py-1.5 text-left text-xs ${
+                                active ? 'font-semibold text-brand-900' : 'text-zinc-800'
+                              }`}
+                            >
+                              <div className="truncate">{d.name}</div>
+                              <div className="truncate text-[10px] text-zinc-500">
+                                {d.slug}
+                                {d.published ? ' · published' : ' · draft'}
+                              </div>
+                            </button>
+                            <button
+                              type="button"
+                              className="px-1 text-[10px] text-zinc-500 opacity-0 group-hover:opacity-100 hover:text-zinc-900"
+                              title={t('edit')}
+                              onClick={() => {
+                                setDesignEditingId(d.id);
+                                setDesignEditName(d.name || '');
+                                setDesignEditSlug(d.slug || '');
+                                setDesignEditDesc(d.description || '');
+                              }}
+                            >
+                              ✎
+                            </button>
+                            <button
+                              type="button"
+                              className="mr-1 px-1 text-[10px] text-rose-500 opacity-0 group-hover:opacity-100 hover:text-rose-700"
+                              title={t('delete')}
+                              onClick={async () => {
+                                const confirmMsg =
+                                  typeof window !== 'undefined'
+                                    ? window.confirm(
+                                        `${String(t('confirmDelete') || 'Delete this design bundle?')}\n${String(
+                                          t('pagesWillMoveToDefault') || 'Inner pages will be moved to Default group.'
+                                        )}`
+                                      )
+                                    : true;
+                                if (!confirmMsg) return;
+                                try {
+                                  await deleteDesign({ id: d.id });
+                                } catch {
+                                  /* ignore */
+                                }
+                              }}
+                            >
+                              🗑
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Create new design */}
+                    {designShowCreate ? (
+                      <div className="mt-2 space-y-1 rounded-md border border-zinc-200 bg-white p-2">
+                        <input
+                          className="ac-input !py-1 text-[11px]"
+                          placeholder={`${t('name')} — e.g. Sarang Madu Landing`}
+                          value={designNewName}
+                          onChange={(e) => setDesignNewName(e.target.value)}
+                        />
+                        <input
+                          className="ac-input !py-1 text-[11px]"
+                          placeholder="slug — e.g. sarang-madu"
+                          value={designNewSlug}
+                          onChange={(e) => setDesignNewSlug(e.target.value)}
+                        />
+                        <textarea
+                          className="ac-input !py-1 text-[11px] h-12"
+                          placeholder={`${t('description')} (${t('optional')})`}
+                          value={designNewDesc}
+                          onChange={(e) => setDesignNewDesc(e.target.value)}
+                        />
+                        <div className="flex justify-end gap-1 pt-1">
+                          <button
+                            type="button"
+                            className="ac-btn ac-btn-soft !px-2 !py-1 text-[10px]"
+                            onClick={() => {
+                              setDesignShowCreate(false);
+                              setDesignNewName('');
+                              setDesignNewSlug('');
+                              setDesignNewDesc('');
+                            }}
+                          >
+                            {t('cancel')}
+                          </button>
+                          <button
+                            type="button"
+                            className="ac-btn !px-2 !py-1 text-[10px]"
+                            onClick={async () => {
+                              const name = String(designNewName || '').trim();
+                              if (!name) return;
+                              try {
+                                await createDesign({
+                                  name,
+                                  slug: designNewSlug || undefined,
+                                  kind: 'landing',
+                                  description: designNewDesc ? String(designNewDesc).trim() : undefined
+                                });
+                                setDesignShowCreate(false);
+                                setDesignNewName('');
+                                setDesignNewSlug('');
+                                setDesignNewDesc('');
+                              } catch {
+                                /* ignore */
+                              }
+                            }}
+                          >
+                            {t('create')}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="mt-2 w-full rounded-md border border-dashed border-zinc-300 px-2 py-1.5 text-[11px] text-zinc-500 hover:border-zinc-500 hover:text-zinc-800"
+                        onClick={() => setDesignShowCreate(true)}
+                      >
+                        + {t('addDesign')}
+                      </button>
+                    )}
+                  </>
+                ) : null}
+              </div>
+
+            {/* =====================================================
+                CmsPagePanel — inner pages/sections WITHIN currently selected design bundle
+                ===================================================== */}
+            <div data-tour="cms-pages-panel">
+              <CmsPagePanel
+                pages={pages}
+                selectedPageId={selectedPageId}
+                onSelectPage={(id) => {
+                  selectPage(id);
+                  setSelectedBlockId(null);
+                }}
+                onCollapse={() => setPagesOpen(false)}
+                onReorderPages={async (orderedIds) => {
+                  await reorderPages({ orderedIds });
+                }}
+                onCreatePage={async ({ name, slug }) => {
+                  const created = await createPage({ name, slug });
+                  selectPage(created.id);
+                  setSelectedBlockId(null);
+                }}
+                onDeletePage={async (id) => {
+                  await deletePage({ pageId: id });
+                  setSelectedBlockId(null);
+                }}
+              />
+            </div>
           </div>
         ) : null}
 

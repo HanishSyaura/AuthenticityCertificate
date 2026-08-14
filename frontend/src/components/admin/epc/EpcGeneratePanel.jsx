@@ -36,13 +36,12 @@ export default function EpcGeneratePanel({
       <div className="space-y-3">
         <div>
           <div className="mb-1 text-xs font-semibold text-zinc-600">{t('corpCode')}</div>
-          <select value={corpPrefix} onChange={(e) => setCorpPrefix(e.target.value)} className="ac-input">
-            {corpCodes.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+          <input
+            value={corpPrefix}
+            onChange={(e) => setCorpPrefix(e.target.value)}
+            className="ac-input"
+            placeholder="e.g. DA01"
+          />
         </div>
 
         <div>
