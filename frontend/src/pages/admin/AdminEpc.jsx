@@ -174,12 +174,12 @@ export default function AdminEpc() {
     caiqNumber: true
   });
 
-  const DOC_TYPES = useMemo(
+  const DEFAULT_SUPPORTING_TYPES = useMemo(
     () => [
-      'moh_health_certificate',
-      'export_permit',
-      'dvs_health_certificate',
-      'dvs_coo_certificate'
+      { key: 'moh_health_certificate', label: 'mohHealthCertificate' },
+      { key: 'export_permit', label: 'exportPermit' },
+      { key: 'dvs_health_certificate', label: 'dvsHealthCertificate' },
+      { key: 'dvs_coo_certificate', label: 'dvsCooCertificate' }
     ],
     []
   );
@@ -191,12 +191,14 @@ export default function AdminEpc() {
   const [importProductId, setImportProductId] = useState('');
   const [importSku, setImportSku] = useState('');
   const [importAuthTemplateId, setImportAuthTemplateId] = useState('');
-  const [importDocUrls, setImportDocUrls] = useState(() => ({
-    moh_health_certificate: '',
-    export_permit: '',
-    dvs_health_certificate: '',
-    dvs_coo_certificate: ''
-  }));
+  const [importDocRows, setImportDocRows] = useState(() =>
+    [
+      { key: 'moh_health_certificate', url: '' },
+      { key: 'export_permit', url: '' },
+      { key: 'dvs_health_certificate', url: '' },
+      { key: 'dvs_coo_certificate', url: '' }
+    ]
+  );
   const [importDocUploading, setImportDocUploading] = useState(() => ({
     moh_health_certificate: false,
     export_permit: false,
@@ -238,17 +240,12 @@ export default function AdminEpc() {
   const [bulkLandingSaving, setBulkLandingSaving] = useState(false);
 
   const getDocTypeLabel = useCallback(
-    (docType) =>
-      docType === 'moh_health_certificate'
-        ? t('mohHealthCertificate')
-        : docType === 'export_permit'
-          ? t('exportPermit')
-          : docType === 'dvs_health_certificate'
-            ? t('dvsHealthCertificate')
-            : docType === 'dvs_coo_certificate'
-              ? t('dvsCooCertificate')
-              : String(docType || '-'),
-    [t]
+    (docType) => {
+      const found = DEFAULT_SUPPORTING_TYPES.find((d) => d.key === docType);
+      if (found) return t(found.label);
+      return String(docType || '-');
+    },
+    [DEFAULT_SUPPORTING_TYPES, t]
   );
 
   const closeExportCols = useCallback(() => {
@@ -281,12 +278,12 @@ export default function AdminEpc() {
     setImportProductId('');
     setImportSku('');
     setImportAuthTemplateId('');
-    setImportDocUrls({
-      moh_health_certificate: '',
-      export_permit: '',
-      dvs_health_certificate: '',
-      dvs_coo_certificate: ''
-    });
+    setImportDocRows([
+      { key: 'moh_health_certificate', url: '' },
+      { key: 'export_permit', url: '' },
+      { key: 'dvs_health_certificate', url: '' },
+      { key: 'dvs_coo_certificate', url: '' }
+    ]);
     setImportDocUploading({
       moh_health_certificate: false,
       export_permit: false,
@@ -1741,56 +1738,158 @@ export default function AdminEpc() {
               </div>
 
               <div>
-                <div className="mb-2 text-[11px] font-semibold text-zinc-600">{t('supportingCertificates')}</div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {DOC_TYPES.map((docType) => {
-                    const matching = (Array.isArray(viewBatch?.documents) ? viewBatch.documents : []).find((d) => String(d?.docType || '').trim() === docType);
-                    const url = String(matching?.mediaUrl || '').trim();
-                    const viewUrl = url ? resolvePublicMediaUrl(url) : '';
-                    return (
-                      <div key={docType} className="rounded-xl border border-zinc-200 bg-white p-3">
-                        <div className="text-xs font-semibold text-zinc-900">{getDocTypeLabel(docType)}</div>
-                        <div className="mt-2">
-                          {viewUrl ? (
-                            <a href={viewUrl} target="_blank" rel="noreferrer" className="text-[11px] font-semibold underline">
-                              {t('view')}
-                            </a>
-                          ) : (
-                            <div className="text-[11px] text-zinc-500">{t('notUploaded')}</div>
-                          )}
-                        </div>
-                        {canEditBatchDocs ? (
-                          <div className="mt-3">
-                            <label className="ac-btn ac-btn-soft inline-flex px-3 py-2 text-xs">
-                              {viewBatchDocUploading?.[docType] ? t('uploading') : t('upload')}
-                              <input
-                                type="file"
-                                className="hidden"
-                                onChange={async (e) => {
-                                  const file = e.target.files?.[0];
-                                  if (!file) return;
-                                  try {
-                                    setViewBatchLocalError('');
-                                    setViewBatchDocUploading((prev) => ({ ...prev, [docType]: true }));
-                                    const uploaded = await uploadMedia({ file });
-                                    const mediaUrl = String(uploaded?.url || '').trim();
-                                    if (!mediaUrl) throw new Error(tRaw('operationFailed'));
-                                    const updated = await updateBatchDocuments({ batchId: viewBatch.id, documents: { [docType]: mediaUrl } });
-                                    if (updated) setViewBatch(updated);
-                                  } catch (err) {
-                                    setViewBatchLocalError(err?.message || tRaw('operationFailed'));
-                                  } finally {
-                                    setViewBatchDocUploading((prev) => ({ ...prev, [docType]: false }));
-                                    e.target.value = '';
-                                  }
-                                }}
-                              />
-                            </label>
+                <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('supportingCertificates')}</div>
+                  {canEditBatchDocs ? (
+                    <button
+                      type="button"
+                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                      onClick={async () => {
+                        try {
+                          setViewBatchLocalError('');
+                          const dummyKey = `custom_${Date.now()}`;
+                          const fileInput = document.createElement('input');
+                          fileInput.type = 'file';
+                          let resolved = false;
+                          fileInput.onchange = async () => {
+                            if (resolved) return;
+                            resolved = true;
+                            const file = fileInput.files?.[0];
+                            if (!file) return;
+                            try {
+                              setViewBatchDocUploading((prev) => ({ ...prev, [dummyKey]: true }));
+                              const uploaded = await uploadMedia({ file });
+                              const mediaUrl = String(uploaded?.url || '').trim();
+                              if (!mediaUrl) throw new Error(tRaw('operationFailed'));
+                              const updated = await updateBatchDocuments({ batchId: viewBatch.id, documents: { [dummyKey]: mediaUrl } });
+                              if (updated) setViewBatch(updated);
+                            } catch (err) {
+                              setViewBatchLocalError(err?.message || tRaw('operationFailed'));
+                            } finally {
+                              setViewBatchDocUploading((prev) => ({ ...prev, [dummyKey]: false }));
+                            }
+                          };
+                          fileInput.click();
+                          setTimeout(() => {
+                            if (!resolved && !fileInput.files?.length) resolved = true;
+                          }, 60000);
+                        } catch (err) {
+                          setViewBatchLocalError(err?.message || tRaw('operationFailed'));
+                        }
+                      }}
+                    >
+                      + {t('add')} Custom Upload
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="space-y-2">
+                  {(() => {
+                    const existing = (Array.isArray(viewBatch?.documents) ? viewBatch.documents : []).map((d) => ({
+                      key: String(d?.docType || '').trim(),
+                      mediaUrl: String(d?.mediaUrl || '').trim(),
+                      uploadedAt: d?.uploadedAt || null
+                    }));
+
+                    const defaultKeys = DEFAULT_SUPPORTING_TYPES.map((d) => d.key);
+                    const existingKeys = new Set(existing.filter((x) => x.key).map((x) => x.key));
+                    const missingDefaults = defaultKeys.filter((k) => !existingKeys.has(k));
+                    const rows = [
+                      ...existing,
+                      ...(canEditBatchDocs
+                        ? missingDefaults.map((k) => ({ key: k, mediaUrl: '', uploadedAt: null }))
+                        : [])
+                    ];
+
+                    if (rows.length === 0) {
+                      return <div className="text-[11px] text-zinc-500">{t('notUploaded')}</div>;
+                    }
+
+                    return rows.map((row, idx) => {
+                      const docKey = row.key || `view-doc-${idx}`;
+                      const url = String(row?.mediaUrl || '').trim();
+                      const viewUrl = url ? resolvePublicMediaUrl(url) : '';
+                      const uploading = Boolean(viewBatchDocUploading?.[docKey]);
+                      const isDefault = defaultKeys.includes(docKey);
+                      return (
+                        <div key={`${docKey}-${idx}`} className="flex flex-col gap-2 rounded-xl border border-zinc-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 sm:flex-1 min-w-0">
+                            <div className="min-w-0">
+                              <div className="text-[10px] font-semibold text-zinc-500">
+                                {isDefault ? 'Doc type' : 'Custom key'}:
+                              </div>
+                              <div className="text-xs font-semibold text-zinc-900 truncate">
+                                {getDocTypeLabel(docKey)}
+                              </div>
+                              {row?.uploadedAt ? (
+                                <div className="mt-1 text-[10px] text-zinc-500">
+                                  Uploaded: {formatDateTime(row.uploadedAt)}
+                                </div>
+                              ) : null}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
+                              {viewUrl ? (
+                                <a href={viewUrl} target="_blank" rel="noreferrer" className="text-[11px] font-semibold underline truncate block">
+                                  {viewUrl}
+                                </a>
+                              ) : (
+                                <div className="text-[11px] text-zinc-500">{t('notUploaded')}</div>
+                              )}
+                              {canEditBatchDocs ? (
+                                <label className="ac-btn ac-btn-soft shrink-0 px-3 py-2 text-xs">
+                                  {uploading ? t('uploading') : t('upload')}
+                                  <input
+                                    type="file"
+                                    className="hidden"
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+                                      try {
+                                        setViewBatchLocalError('');
+                                        setViewBatchDocUploading((prev) => ({ ...prev, [docKey]: true }));
+                                        const uploaded = await uploadMedia({ file });
+                                        const mediaUrl = String(uploaded?.url || '').trim();
+                                        if (!mediaUrl) throw new Error(tRaw('operationFailed'));
+                                        const updated = await updateBatchDocuments({ batchId: viewBatch.id, documents: { [docKey]: mediaUrl } });
+                                        if (updated) setViewBatch(updated);
+                                      } catch (err) {
+                                        setViewBatchLocalError(err?.message || tRaw('operationFailed'));
+                                      } finally {
+                                        setViewBatchDocUploading((prev) => ({ ...prev, [docKey]: false }));
+                                        e.target.value = '';
+                                      }
+                                    }}
+                                  />
+                                </label>
+                              ) : null}
+                            </div>
                           </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
+                          {canEditBatchDocs && url && !isDefault ? (
+                            <button
+                              type="button"
+                              className="ac-btn ac-btn-soft shrink-0 px-2 py-2 text-xs text-red-700"
+                              title="Remove custom certificate"
+                              onClick={async () => {
+                                if (!window.confirm(`Remove "${docKey}"?`)) return;
+                                try {
+                                  setViewBatchLocalError('');
+                                  setViewBatchDocUploading((prev) => ({ ...prev, [docKey]: true }));
+                                  const updated = await updateBatchDocuments({ batchId: viewBatch.id, documents: { [docKey]: '' } });
+                                  if (updated) setViewBatch(updated);
+                                } catch (err) {
+                                  setViewBatchLocalError(err?.message || tRaw('operationFailed'));
+                                } finally {
+                                  setViewBatchDocUploading((prev) => ({ ...prev, [docKey]: false }));
+                                }
+                              }}
+                            >
+                              ×
+                            </button>
+                          ) : null}
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
 
@@ -2006,53 +2105,116 @@ export default function AdminEpc() {
               </div>
 
               <div>
-                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('supportingCertificates')}</div>
-                <div className="mb-2 text-[11px] text-zinc-500">
-                  {t('supportingCertsUploaded', {
-                    value: DOC_TYPES.filter((k) => String(importDocUrls?.[k] || '').trim()).length
-                  })}
+                <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+                  <div>
+                    <div className="text-[11px] font-semibold text-zinc-600">{t('supportingCertificates')}</div>
+                    <div className="text-[11px] text-zinc-500">
+                      {t('supportingCertsUploaded', {
+                        value: importDocRows.filter((row) => String(row?.url || '').trim()).length
+                      })}
+                      <span className="ml-2">(Optional — boleh tambah custom doc type apa-apa)</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                    onClick={() =>
+                      setImportDocRows((prev) => {
+                        const next = Array.isArray(prev) ? [...prev] : [];
+                        next.push({ key: '', url: '' });
+                        return next;
+                      })
+                    }
+                  >
+                    + {t('add')} Custom
+                  </button>
                 </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {DOC_TYPES.map((docType) => {
-                    const url = String(importDocUrls?.[docType] || '').trim();
-                    const viewUrl = url ? resolvePublicMediaUrl(url) : '';
-                    const uploading = Boolean(importDocUploading?.[docType]);
+
+                <div className="space-y-2">
+                  {importDocRows.map((row, idx) => {
+                    const rowKey = `imp-doc-${idx}`;
+                    const keyVal = String(row?.key || '').trim();
+                    const urlVal = String(row?.url || '').trim();
+                    const uploadingKey = keyVal || `_idx_${idx}`;
+                    const uploading = Boolean(importDocUploading?.[uploadingKey]);
+                    const viewUrl = urlVal ? resolvePublicMediaUrl(urlVal) : '';
+                    const isDefault = DEFAULT_SUPPORTING_TYPES.some((d) => d.key === keyVal);
                     return (
-                      <div key={docType} className="rounded-xl border border-zinc-200 bg-white p-3">
-                        <div className="text-xs font-semibold text-zinc-900">{getDocTypeLabel(docType)}</div>
-                        <div className="mt-2 flex flex-wrap items-center gap-3">
-                          {viewUrl ? (
-                            <a href={viewUrl} target="_blank" rel="noreferrer" className="text-[11px] font-semibold underline">
-                              {t('view')}
-                            </a>
-                          ) : (
-                            <div className="text-[11px] text-zinc-500">{t('notUploaded')}</div>
-                          )}
-                          <label className="ac-btn ac-btn-soft px-3 py-2 text-xs">
-                            {uploading ? t('uploading') : t('upload')}
+                      <div key={rowKey} className="flex flex-col gap-2 rounded-xl border border-zinc-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 sm:flex-1 min-w-0">
+                          <div className="w-full sm:max-w-[200px] min-w-0">
+                            <label className="text-[10px] font-semibold text-zinc-500">Doc key {isDefault ? null : '(*)'}:</label>
                             <input
-                              type="file"
-                              className="hidden"
-                              onChange={async (e) => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                try {
-                                  setImportLocalError('');
-                                  setImportDocUploading((prev) => ({ ...prev, [docType]: true }));
-                                  const uploaded = await uploadMedia({ file });
-                                  const mediaUrl = String(uploaded?.url || '').trim();
-                                  if (!mediaUrl) throw new Error(tRaw('operationFailed'));
-                                  setImportDocUrls((prev) => ({ ...prev, [docType]: mediaUrl }));
-                                } catch (err) {
-                                  setImportLocalError(err?.message || tRaw('operationFailed'));
-                                } finally {
-                                  setImportDocUploading((prev) => ({ ...prev, [docType]: false }));
-                                  e.target.value = '';
-                                }
+                              type="text"
+                              className="ac-input mt-1 w-full px-2 py-2 text-xs"
+                              value={row.key}
+                              placeholder={`e.g. halal_cert, my_sijil...`}
+                              onChange={(e) => {
+                                setImportLocalError('');
+                                const v = e.target.value;
+                                setImportDocRows((prev) => {
+                                  const next = [...prev];
+                                  next[idx] = { ...(next[idx] || {}), key: v };
+                                  return next;
+                                });
                               }}
                             />
-                          </label>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
+                            <div className="text-[11px] text-zinc-700 min-w-0">
+                              {viewUrl ? (
+                                <a href={viewUrl} target="_blank" rel="noreferrer" className="font-semibold underline truncate block">
+                                  {viewUrl}
+                                </a>
+                              ) : (
+                                <span className="text-zinc-500">{t('notUploaded')}</span>
+                              )}
+                            </div>
+                            <label className="ac-btn ac-btn-soft shrink-0 px-3 py-2 text-xs">
+                              {uploading ? t('uploading') : t('upload')}
+                              <input
+                                type="file"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  try {
+                                    setImportLocalError('');
+                                    setImportDocUploading((prev) => ({ ...prev, [uploadingKey]: true }));
+                                    const uploaded = await uploadMedia({ file });
+                                    const mediaUrl = String(uploaded?.url || '').trim();
+                                    if (!mediaUrl) throw new Error(tRaw('operationFailed'));
+                                    setImportDocRows((prev) => {
+                                      const next = [...prev];
+                                      next[idx] = { ...(next[idx] || {}), url: mediaUrl };
+                                      return next;
+                                    });
+                                  } catch (err) {
+                                    setImportLocalError(err?.message || tRaw('operationFailed'));
+                                  } finally {
+                                    setImportDocUploading((prev) => ({ ...prev, [uploadingKey]: false }));
+                                    e.target.value = '';
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
                         </div>
+                        <button
+                          type="button"
+                          className="ac-btn ac-btn-soft shrink-0 px-2 py-2 text-xs text-red-700"
+                          title="Remove this entry"
+                          onClick={() => {
+                            setImportLocalError('');
+                            setImportDocRows((prev) => {
+                              const next = [...prev];
+                              next.splice(idx, 1);
+                              return next;
+                            });
+                          }}
+                        >
+                          ×
+                        </button>
                       </div>
                     );
                   })}
@@ -2076,12 +2238,22 @@ export default function AdminEpc() {
                     if (!String(importProductId || '').trim()) throw new Error(t('selectProduct'));
                     const missingCount = Number(importPreview?.missingEpcs) || 0;
                     if (missingCount > 0) throw new Error(t('missingEpcError'));
+
+                    const documents = {};
+                    for (const row of importDocRows) {
+                      const k = String(row?.key || '').trim();
+                      const v = String(row?.url || '').trim();
+                      if (!k) continue;
+                      if (!v) continue;
+                      documents[k] = v;
+                    }
+
                     const res = await submitBatchImport({
                       batchId: null,
                       base64: importBase64,
                       productId: String(importProductId || '').trim(),
                       certificateTemplateId: String(importAuthTemplateId || '').trim() || undefined,
-                      documents: importDocUrls
+                      documents
                     });
                     setImportLastResult(res || null);
                     if (Array.isArray(res?.batchIds) && res.batchIds.length === 1) {

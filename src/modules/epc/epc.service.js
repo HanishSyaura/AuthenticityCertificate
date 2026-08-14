@@ -1848,6 +1848,31 @@ function getBatchImportDocTypes() {
   return new Set(['moh_health_certificate', 'export_permit', 'dvs_health_certificate', 'dvs_coo_certificate']);
 }
 
+function isValidDocKey(k) {
+  const s = String(k || '').trim();
+  if (!s) return false;
+  if (s.length > 64) return false;
+  if (!/^[a-zA-Z0-9_][a-zA-Z0-9_ \-]*$/.test(s)) return false;
+  return true;
+}
+
+function validateDocEntries(entries, opts = {}) {
+  const { skipEmpty = true } = opts;
+  const result = [];
+  for (const [rawK, rawV] of entries) {
+    const k = String(rawK || '').trim();
+    const v = String(rawV || '').trim();
+    if (!k) continue;
+    if (!isValidDocKey(k)) throw new Error(`Invalid supporting certificate key name: "${k}"`);
+    if (!v) {
+      if (skipEmpty) continue;
+      throw new Error(`Supporting certificate "${k}" URL value is required when key is provided.`);
+    }
+    result.push([k, v]);
+  }
+  return result;
+}
+
 function normalizeIdentityEpc(raw) {
   return String(raw || '')
     .trim()
@@ -2070,17 +2095,10 @@ async function createImportBatchFromXlsx({
   const { rows } = parseXlsxBase64(base64);
   if (!Array.isArray(rows) || rows.length === 0) throw new Error('Excel is empty');
 
-  const docTypes = getBatchImportDocTypes();
-  const docEntries = Object.entries(documents && typeof documents === 'object' ? documents : {}).map(([k, v]) => [
+  const docEntries = validateDocEntries(Object.entries(documents && typeof documents === 'object' ? documents : {}).map(([k, v]) => [
     String(k || '').trim(),
     String(v || '').trim()
-  ]);
-  if (docEntries.length > 0) {
-    for (const [k, v] of docEntries) {
-      if (!docTypes.has(k)) throw new Error('Invalid supporting certificate type.');
-      if (!v) throw new Error('Supporting certificate URL is required.');
-    }
-  }
+  ]), { skipEmpty: true });
 
   const updates = [];
   for (const r of rows) {
@@ -2341,12 +2359,7 @@ async function submitBatchImport({
   const skuCode = String(sku || '').trim();
   if (!skuCode) throw new Error('SKU code is required.');
 
-  const docTypes = getBatchImportDocTypes();
-  const docEntries = Object.entries(documents && typeof documents === 'object' ? documents : {}).map(([k, v]) => [String(k || '').trim(), String(v || '').trim()]);
-  for (const [k, v] of docEntries) {
-    if (!docTypes.has(k)) throw new Error('Invalid supporting certificate type.');
-    if (!v) throw new Error('Supporting certificate URL is required.');
-  }
+  const docEntries = validateDocEntries(Object.entries(documents && typeof documents === 'object' ? documents : {}).map(([k, v]) => [String(k || '').trim(), String(v || '').trim()]), { skipEmpty: true });
 
   const result = await prisma.$transaction(async (tx) => {
     const batch = await tx.epcBatch.findFirst({
@@ -2491,26 +2504,34 @@ async function updateBatchDocuments({ organizationId, batchId, documents }) {
   const id = Number(batchId);
   if (!Number.isFinite(id)) throw new Error('Invalid batch id');
 
-  const docTypes = getBatchImportDocTypes();
-  const docEntries = Object.entries(documents && typeof documents === 'object' ? documents : {}).map(([k, v]) => [
+  const rawEntries = Object.entries(documents && typeof documents === 'object' ? documents : {}).map(([k, v]) => [
     String(k || '').trim(),
     String(v || '').trim()
   ]);
-  for (const [k, v] of docEntries) {
-    if (!docTypes.has(k)) throw new Error('Invalid supporting certificate type.');
-    if (!v) throw new Error('Supporting certificate URL is required.');
+  const upsertEntries = [];
+  const deleteKeys = [];
+  for (const [k, v] of rawEntries) {
+    if (!isValidDocKey(k)) throw new Error(`Invalid supporting certificate key name: "${k}"`);
+    if (v) upsertEntries.push([k, v]);
+    else deleteKeys.push(k);
+  }
+  if (upsertEntries.length === 0 && deleteKeys.length === 0) {
+    throw new Error('At least one supporting certificate entry is required.');
   }
 
   const result = await prisma.$transaction(async (tx) => {
     const batch = await tx.epcBatch.findFirst({ where: { id, organizationId: orgId }, select: { id: true } });
     if (!batch) throw new Error('Batch not found');
 
-    for (const [docType, mediaUrl] of docEntries) {
+    for (const [docType, mediaUrl] of upsertEntries) {
       await tx.epcBatchDocument.upsert({
         where: { batchId_docType: { batchId: id, docType } },
         update: { mediaUrl, uploadedAt: new Date() },
         create: { organizationId: orgId, batchId: id, docType, mediaUrl }
       });
+    }
+    if (deleteKeys.length > 0) {
+      await tx.epcBatchDocument.deleteMany({ where: { batchId: id, organizationId: orgId, docType: { in: deleteKeys } } });
     }
 
     return await tx.epcBatch.findFirst({
