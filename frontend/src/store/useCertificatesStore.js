@@ -108,6 +108,27 @@ const useCertificatesStore = create((set, get) => ({
       set({ loading: false, error: msg });
       throw e;
     }
+  },
+
+  bulkAssignLandingDesign: async ({ certificateIds, filters, cmsDesignId } = {}) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const body = { cmsDesignId };
+      if (Array.isArray(certificateIds) && certificateIds.length) {
+        body.certificateIds = certificateIds.map((v) => String(v || '').trim()).filter(Boolean);
+      }
+      if (filters && typeof filters === 'object' && Object.keys(filters).length) {
+        body.filters = filters;
+      }
+      const res = await api.post('/certificates/bulk/assign-landing-design', body);
+      set({ loading: false, lastSyncAt: Date.now() });
+      return res?.data?.data;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || tRaw('updateFailed');
+      set({ loading: false, error: msg });
+      throw e;
+    }
   }
 }));
 

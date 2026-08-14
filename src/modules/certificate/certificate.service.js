@@ -2,6 +2,10 @@ const prisma = require('../../config/prisma');
 const { generateCertificateId } = require('../../utils/id-generator');
 const identityService = require('../../services/identity.service');
 const settingsService = require('../settings/settings.service');
+const {
+  resolveEffectiveCmsDesignIdFromEntities,
+  resolveLegacySingleCmsPage
+} = require('../../utils/cmsDesignResolver');
 
 async function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), ms))]);
@@ -323,22 +327,17 @@ async function getCertificateDetails(certificateId) {
   // Fallback: Single legacy CmsPage → bundle = null (we return 1-element pages)
   // =========================================================================
   const product = cert.batch?.product ?? null;
-  let effectiveDesignId = null;
-  if (cert.cmsDesignId != null) {
-    effectiveDesignId = Number(cert.cmsDesignId);
-  } else if (product?.cmsCertificateDesignId != null) {
-    effectiveDesignId = Number(product.cmsCertificateDesignId);
-  } else if (product?.cmsDesignId != null) {
-    effectiveDesignId = Number(product.cmsDesignId);
-  }
+  const effectiveDesignId = resolveEffectiveCmsDesignIdFromEntities({ cert, product });
 
   // Try resolving a LEGACY single CmsPage pageId (used as last-resort 1-page bundle)
-  let legacySinglePage = null;
-  if (effectiveDesignId == null) {
-    if (cert.cmsPage) legacySinglePage = cert.cmsPage;
-    else if (product?.cmsCertificatePage) legacySinglePage = product.cmsCertificatePage;
-    else if (product?.cmsPage) legacySinglePage = product.cmsPage;
-  }
+  const legacySinglePage =
+    effectiveDesignId == null
+      ? resolveLegacySingleCmsPage({
+          certCmsPage: cert.cmsPage,
+          productCmsCertificatePage: product?.cmsCertificatePage,
+          productCmsPage: product?.cmsPage
+        })
+      : null;
 
   const orgId = Number(cert.organizationId);
 
@@ -520,6 +519,80 @@ async function patchCertificate({ organizationId, certificateId, patch }) {
   });
 }
 
+async function bulkPatchCertificates({ organizationId, certificateIds, certificateIdFilters, patch } = {}) {
+  const orgId = Number(organizationId);
+  const patchData = patch || {};
+  if (!Number.isFinite(orgId) || orgId <= 0) throw new Error('Invalid organizationId');
+
+  const ids = Array.isArray(certificateIds)
+    ? certificateIds
+        .map((v) => String(v || '').trim())
+        .filter((s) => s.length > 0)
+    : [];
+  const idFilters = certificateIdFilters && typeof certificateIdFilters === 'object' ? certificateIdFilters : {};
+  const hasExplicitIds = ids.length > 0;
+  const hasFilters = Object.keys(idFilters).length > 0;
+  if (!hasExplicitIds && !hasFilters) {
+    const err = new Error('Sama ada certificateIds atau filters diperlukan');
+    err.status = 400;
+    throw err;
+  }
+  if (ids.length > 2000) {
+    const err = new Error('Terlalu banyak certificateIds (maksimum 2000)');
+    err.status = 400;
+    throw err;
+  }
+
+  const data = {};
+  if (Object.prototype.hasOwnProperty.call(patchData, 'cmsDesignId')) {
+    const designId = patchData.cmsDesignId == null ? null : Number(patchData.cmsDesignId);
+    if (designId != null) {
+      if (!Number.isFinite(designId) || designId <= 0) throw new Error('Invalid cmsDesignId');
+      const design = await withTimeout(
+        prisma.cmsDesign.findUnique({ where: { id: designId, organizationId: orgId, deletedAt: null }, select: { id: true } }),
+        1500
+      );
+      if (!design) throw new Error('Landing Page Design tidak wujud');
+    }
+    data.cmsDesignId = designId;
+  }
+  if (Object.keys(data).length === 0) {
+    const err = new Error('Tiada field untuk dikemas kini');
+    err.status = 400;
+    throw err;
+  }
+
+  const where = { organizationId: orgId };
+  if (hasExplicitIds) where.certificateId = { in: ids };
+  if (idFilters.batchId != null) {
+    const bid = Number(idFilters.batchId);
+    if (!Number.isFinite(bid) || bid <= 0) throw new Error('Invalid batchId filter');
+    where.batchId = bid;
+  }
+  if (idFilters.productId != null) {
+    const pid = Number(idFilters.productId);
+    if (!Number.isFinite(pid) || pid <= 0) throw new Error('Invalid productId filter');
+    where.batch = { productId: pid };
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const u = await withTimeout(tx.certificate.updateMany({ where, data }), 5000);
+    const matched = await withTimeout(
+      tx.certificate.findMany({
+        where,
+        select: { certificateId: true, cmsDesignId: true },
+        take: 100
+      }),
+      1500
+    );
+    return {
+      updatedCount: Number(u.count) || 0,
+      sampleUpdated: matched
+    };
+  });
+  return result;
+}
+
 module.exports = {
   generateCertificates,
   revokeCertificate,
@@ -531,5 +604,6 @@ module.exports = {
   getCertificateDetailsCached,
   getCertificateDetailsForAdmin,
   listCertificates,
-  patchCertificate
+  patchCertificate,
+  bulkPatchCertificates
 };

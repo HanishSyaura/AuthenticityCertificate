@@ -13,6 +13,10 @@ const dbGate = require('../../services/dbGate.service');
 const webhookService = require('../../services/webhook.service');
 const { pickWritableUploadRoot } = require('../../utils/uploadsRoot');
 const { renderPdfPreviewOne } = require('../../services/pdfPreview.service');
+const {
+  resolveEffectiveCmsDesignId,
+  resolveLegacySingleCmsPage
+} = require('../../utils/cmsDesignResolver');
 
 function normalizeLang(lang) {
   const l = String(lang || 'en').toLowerCase();
@@ -518,26 +522,21 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     //   Tier 2 : Product.cmsCertificateDesignId     (cert-only product bundle)
     //   Tier 3 : Product.cmsDesignId                (main landing product bundle)
     //
-    // Legacy single-page fallbacks (used to determine sort-priority page OR
-    // as 1-element bundle if no design-id resolved):
-    //   cert.cmsPageId → product.cmsCertificatePageId → product.cmsPageId
+    // Legacy single-page fallbacks (used as 1-element bundle if no design-id resolved):
+    //   cert.cmsPage → product.cmsCertificatePage → product.cmsPage
     // =========================================================================
-    const effectiveDesignId =
-      cert?.cmsDesignId != null
-        ? Number(cert.cmsDesignId)
-        : resolvedProduct?.cmsCertificateDesignId != null
-          ? Number(resolvedProduct.cmsCertificateDesignId)
-          : resolvedProduct?.cmsDesignId != null
-            ? Number(resolvedProduct.cmsDesignId)
-            : null;
+    const effectiveDesignId = resolveEffectiveCmsDesignId({
+      certCmsDesignId: cert?.cmsDesignId,
+      productCmsCertificateDesignId: resolvedProduct?.cmsCertificateDesignId,
+      productCmsDesignId: resolvedProduct?.cmsDesignId
+    });
 
-    const legacyCertPageId = cert?.cmsPage?.id != null ? Number(cert.cmsPage.id) : null;
-    const legacyProductCertPageId = resolvedProduct?.cmsCertificatePage?.id != null ? Number(resolvedProduct.cmsCertificatePage.id) : null;
-    const legacyProductLandingPageId = resolvedProduct?.cmsPage?.id != null ? Number(resolvedProduct.cmsPage.id) : null;
-    const legacySinglePageId = legacyCertPageId ?? legacyProductCertPageId ?? legacyProductLandingPageId ?? null;
-    void legacyCertPageId;
-    void legacyProductCertPageId;
-    void legacyProductLandingPageId;
+    const legacySinglePage = resolveLegacySingleCmsPage({
+      certCmsPage: cert?.cmsPage,
+      productCmsCertificatePage: resolvedProduct?.cmsCertificatePage,
+      productCmsPage: resolvedProduct?.cmsPage
+    });
+    const legacySinglePageId = legacySinglePage && legacySinglePage.id ? Number(legacySinglePage.id) : null;
 
     const certificateLayout = null;
     const certificatePageId = null;

@@ -55,6 +55,7 @@ const importExistingSchema = z.object({
 });
 
 const updateBatchSchema = z.object({
+  productId: z.number().int().nullable().optional(),
   certificateTemplateId: z.number().int().nullable().optional(),
   remark: z.union([z.string(), z.null()]).optional(),
   templateData: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),

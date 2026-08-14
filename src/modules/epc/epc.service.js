@@ -2642,6 +2642,21 @@ async function updateBatch({ organizationId, batchId, patch, actor }) {
   const id = Number(batchId);
   if (!Number.isFinite(id)) throw new Error('Invalid batch id');
   const data = {};
+  if (patch.productId !== undefined) {
+    const rawPid = patch.productId;
+    if (rawPid == null) {
+      data.productId = null;
+    } else {
+      const pid = Number(rawPid);
+      if (!Number.isFinite(pid) || pid <= 0) throw new Error('Invalid productId');
+      const prod = await withTimeout(
+        prisma.product.findFirst({ where: { id: pid, organizationId: orgId, deletedAt: null }, select: { id: true } }),
+        1500
+      );
+      if (!prod) throw new Error('Product tidak wujud');
+      data.productId = pid;
+    }
+  }
   if (patch.certificateTemplateId !== undefined) {
     const tplId = patch.certificateTemplateId == null ? null : Number(patch.certificateTemplateId);
     if (tplId != null) {
@@ -2714,8 +2729,9 @@ async function updateBatch({ organizationId, batchId, patch, actor }) {
       tx.epcBatch.findFirst({
         where: { id, organizationId: orgId },
         include: {
-          product: { select: { id: true, sku: true, name: true, code: true } },
-          certificateTemplate: { select: { id: true, certificateId: true, name: true } }
+          product: { select: { id: true, sku: true, name: true, code: true, cmsDesignId: true, cmsCertificateDesignId: true } },
+          certificateTemplate: { select: { id: true, certificateId: true, name: true } },
+          certificate: { select: { id: true, certificateId: true, cmsDesignId: true } }
         }
       }),
       1500

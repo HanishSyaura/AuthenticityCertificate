@@ -31,7 +31,8 @@ export default function AdminCertificates() {
     assignIdentity,
     revokeCertificate,
     reissueCertificate,
-    updateCertificate
+    updateCertificate,
+    bulkAssignLandingDesign
   } = useCertificatesStore((s) => ({
     items: s.items,
     total: s.total,
@@ -44,7 +45,8 @@ export default function AdminCertificates() {
     assignIdentity: s.assignIdentity,
     revokeCertificate: s.revokeCertificate,
     reissueCertificate: s.reissueCertificate,
-    updateCertificate: s.updateCertificate
+    updateCertificate: s.updateCertificate,
+    bulkAssignLandingDesign: s.bulkAssignLandingDesign
   }));
 
   const { cmsDesigns, cmsDesignsLoading, cmsFetchDesigns } = useCmsStore((s) => ({
@@ -68,6 +70,13 @@ export default function AdminCertificates() {
   const [lpCertCmsDesignId, setLpCertCmsDesignId] = useState('');
   const [lpProductCmsDesignId, setLpProductCmsDesignId] = useState(null);
   const [lpProductCmsCertDesignId, setLpProductCmsCertDesignId] = useState(null);
+
+  const [selectedCertIds, setSelectedCertIds] = useState(() => new Set());
+  const [bulkLandingOpen, setBulkLandingOpen] = useState(false);
+  const [bulkLandingDesignId, setBulkLandingDesignId] = useState('');
+  const [bulkLandingSaving, setBulkLandingSaving] = useState(false);
+
+  const allCertsSelected = Array.isArray(items) && items.length > 0 && items.every((c) => selectedCertIds.has(c.certificateId));
 
   useEffect(() => {
     void fetchCertificates({});
@@ -119,6 +128,17 @@ export default function AdminCertificates() {
           <button type="button" className="ac-btn px-3 py-2 text-xs" onClick={() => void fetchCertificates({ q, status, type, offset: 0 })}>
             {t('apply')}
           </button>
+          <button
+            type="button"
+            className="ac-btn ac-btn-soft px-3 py-2 text-xs text-brand-700"
+            disabled={loading || selectedCertIds.size === 0 || cmsDesignsLoading}
+            onClick={() => {
+              setBulkLandingDesignId('');
+              setBulkLandingOpen(true);
+            }}
+          >
+            {t('bulkAssignLandingDesign') || 'Bulk Assign Landing'}
+          </button>
         </div>
       </div>
 
@@ -147,6 +167,46 @@ export default function AdminCertificates() {
           />
         }
         columns={[
+          {
+            id: '_select',
+            header: (
+              <input
+                type="checkbox"
+                checked={Boolean(allCertsSelected)}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  if (checked) {
+                    const next = new Set(selectedCertIds);
+                    for (const c of Array.isArray(items) ? items : []) {
+                      next.add(c.certificateId);
+                    }
+                    setSelectedCertIds(next);
+                  } else {
+                    const next = new Set(selectedCertIds);
+                    for (const c of Array.isArray(items) ? items : []) {
+                      next.delete(c.certificateId);
+                    }
+                    setSelectedCertIds(next);
+                  }
+                }}
+              />
+            ),
+            cell: (c) => (
+              <input
+                type="checkbox"
+                checked={Boolean(selectedCertIds.has(c.certificateId))}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  const next = new Set(selectedCertIds);
+                  if (checked) next.add(c.certificateId);
+                  else next.delete(c.certificateId);
+                  setSelectedCertIds(next);
+                }}
+              />
+            ),
+            headerClassName: 'w-8 px-3',
+            className: 'w-8 px-3'
+          },
           {
             id: 'certificateId',
             header: t('certificateId'),
@@ -357,6 +417,82 @@ export default function AdminCertificates() {
                 }}
               >
                 {t('save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {bulkLandingOpen ? (
+        <div className="ac-modal-backdrop">
+          <div className="ac-modal">
+            <div className="mb-1 text-sm font-semibold text-zinc-900">
+              {t('bulkAssignLandingDesign') || 'Bulk Assign Landing Page Design'}
+            </div>
+            <div className="mb-3 text-[11px] text-zinc-500">
+              {`${selectedCertIds.size} certificate(s) dipilih`}
+            </div>
+            <div className="space-y-3">
+              <div>
+                <div className="mb-1 text-[11px] font-semibold text-zinc-600">
+                  {t('landingPageDesign')}
+                </div>
+                <select
+                  value={bulkLandingDesignId}
+                  onChange={(e) => setBulkLandingDesignId(e.target.value)}
+                  disabled={bulkLandingSaving || cmsDesignsLoading}
+                  className="ac-input px-3 py-2 text-xs w-full"
+                >
+                  <option value="">— {t('followProduct')} (clear Tier 1 override) —</option>
+                  {Array.isArray(cmsDesigns)
+                    ? cmsDesigns.map((d) => (
+                        <option key={d.id} value={String(d.id)}>
+                          [{d.id}] {d.name || '(unnamed)'}
+                        </option>
+                      ))
+                    : null}
+                </select>
+                <div className="mt-2 text-[10px] text-zinc-500">
+                  Apply Tier 1 override to all selected certificates. Jika "Follow Product" dipilih, Tier 1 override akan dikeluarkan dan akan fallback ke Tier 2/Tier 3.
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                disabled={bulkLandingSaving}
+                onClick={() => setBulkLandingOpen(false)}
+              >
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                className="ac-btn ac-btn-primary px-3 py-2 text-xs"
+                disabled={bulkLandingSaving || cmsDesignsLoading}
+                onClick={async () => {
+                  try {
+                    setBulkLandingSaving(true);
+                    const certificateIds = Array.from(selectedCertIds).map((v) => String(v || '').trim()).filter(Boolean);
+                    if (certificateIds.length === 0) throw new Error('Sila pilih sekurang-kurangnya 1 certificate.');
+                    const designRaw = String(bulkLandingDesignId || '').trim();
+                    const cmsDesignId = designRaw ? Number(designRaw) : null;
+                    const res = await bulkAssignLandingDesign({ certificateIds, cmsDesignId });
+                    const count = Number(res?.updatedCount) || 0;
+                    window.alert(`Berjaya update ${count} certificate(s).`);
+                    setBulkLandingOpen(false);
+                    setSelectedCertIds(new Set());
+                    void fetchCertificates({ q, status, type, offset: 0 });
+                  } catch (err) {
+                    const msg = err?.message || err?.response?.data?.message || 'Operation failed';
+                    window.alert(msg);
+                  } finally {
+                    setBulkLandingSaving(false);
+                  }
+                }}
+              >
+                {bulkLandingSaving ? t('saving') : t('save')}
               </button>
             </div>
           </div>

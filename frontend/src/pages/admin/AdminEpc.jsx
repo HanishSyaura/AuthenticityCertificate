@@ -90,7 +90,8 @@ export default function AdminEpc() {
     exportItemsXlsx,
     deleteItems,
     deleteAllGeneratedBatches,
-    updateBatchDocuments
+    updateBatchDocuments,
+    updateBatch
   } = useEpcStore((s) => ({
     corpCodes: s.corpCodes,
     batches: s.batches,
@@ -114,13 +115,17 @@ export default function AdminEpc() {
     exportItemsXlsx: s.exportItemsXlsx,
     deleteItems: s.deleteItems,
     deleteAllGeneratedBatches: s.deleteAllGeneratedBatches,
-    updateBatchDocuments: s.updateBatchDocuments
+    updateBatchDocuments: s.updateBatchDocuments,
+    updateBatch: s.updateBatch
   }));
 
   const { products, fetchProducts } = useRecordsStore((s) => ({ products: s.products, fetchProducts: s.fetchProducts }));
   const { templates, fetchTemplates } = useCertTemplatesStore((s) => ({ templates: s.templates, fetchTemplates: s.fetchTemplates }));
   const { uploadMedia } = useUploadsStore((s) => ({ uploadMedia: s.uploadMedia }));
-  const { updateCertificate } = useCertificatesStore((s) => ({ updateCertificate: s.updateCertificate }));
+  const { updateCertificate, bulkAssignLandingDesign } = useCertificatesStore((s) => ({
+    updateCertificate: s.updateCertificate,
+    bulkAssignLandingDesign: s.bulkAssignLandingDesign
+  }));
   const { cmsDesigns, cmsDesignsLoading, cmsFetchDesigns } = useCmsStore((s) => ({
     cmsDesigns: s.designs,
     cmsDesignsLoading: s.loadingDesigns || s.loading,
@@ -215,6 +220,9 @@ export default function AdminEpc() {
     dvs_health_certificate: false,
     dvs_coo_certificate: false
   }));
+  const [viewBatchProductId, setViewBatchProductId] = useState('');
+  const [viewBatchCmsDesignId, setViewBatchCmsDesignId] = useState('');
+  const [viewBatchSaving, setViewBatchSaving] = useState(false);
 
   const [lpOpen, setLpOpen] = useState(false);
   const [lpEpcItemId, setLpEpcItemId] = useState(null);
@@ -224,6 +232,10 @@ export default function AdminEpc() {
   const [lpProductCmsDesignId, setLpProductCmsDesignId] = useState(null);
   const [lpProductCmsCertDesignId, setLpProductCmsCertDesignId] = useState(null);
   const [lpNoCertError, setLpNoCertError] = useState('');
+
+  const [bulkLandingOpen, setBulkLandingOpen] = useState(false);
+  const [bulkLandingDesignId, setBulkLandingDesignId] = useState('');
+  const [bulkLandingSaving, setBulkLandingSaving] = useState(false);
 
   const getDocTypeLabel = useCallback(
     (docType) =>
@@ -288,6 +300,9 @@ export default function AdminEpc() {
     setViewBatchOpen(false);
     setViewBatch(null);
     setViewBatchLocalError('');
+    setViewBatchProductId('');
+    setViewBatchCmsDesignId('');
+    setViewBatchSaving(false);
     setViewBatchDocUploading({
       moh_health_certificate: false,
       export_permit: false,
@@ -296,11 +311,22 @@ export default function AdminEpc() {
     });
   }, []);
 
-  const openViewBatch = useCallback((b) => {
+  const openViewBatch = useCallback(async (b) => {
     if (!b) return;
     setViewBatch(b);
     setViewBatchOpen(true);
-  }, []);
+    setViewBatchLocalError('');
+    setViewBatchSaving(false);
+    setViewBatchProductId(b?.productId != null ? String(b.productId) : b?.product?.id != null ? String(b.product.id) : '');
+    const linkedCertDesignId = b?.certificate?.cmsDesignId != null ? String(b.certificate.cmsDesignId) : '';
+    setViewBatchCmsDesignId(linkedCertDesignId);
+    try {
+      if (!Array.isArray(products) || products.length === 0) await fetchProducts({ status: 'all' });
+      if (!Array.isArray(cmsDesigns) || cmsDesigns.length === 0) await cmsFetchDesigns();
+    } catch {
+      /* ignore */
+    }
+  }, [cmsDesigns, cmsFetchDesigns, fetchProducts, products]);
 
   const openImport = useCallback(
     async (b) => {
@@ -506,6 +532,26 @@ export default function AdminEpc() {
                   onClick={() => setExportItemColsOpen(true)}
                 >
                   {t('exportXlsx')}
+                </button>
+              ) : null}
+              {canEditBatchDocs ? (
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-soft px-3 py-2 text-xs text-brand-700"
+                  disabled={loading || selectedItemIds.size === 0 || cmsDesignsLoading}
+                  onClick={async () => {
+                    if (!Array.isArray(cmsDesigns) || cmsDesigns.length === 0) {
+                      try {
+                        await cmsFetchDesigns();
+                      } catch {
+                        /* ignore */
+                      }
+                    }
+                    setBulkLandingDesignId('');
+                    setBulkLandingOpen(true);
+                  }}
+                >
+                  {t('assignLandingDesign') || 'Assign Landing Page'}
                 </button>
               ) : null}
               {canDelete ? (
@@ -1452,6 +1498,117 @@ export default function AdminEpc() {
         </div>
       ) : null}
 
+      {bulkLandingOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => {
+            if (!bulkLandingSaving) setBulkLandingOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-md overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-zinc-900">{t('bulkAssignLandingDesign') || 'Bulk Assign Landing Page Design'}</div>
+                <div className="mt-1 truncate text-xs text-zinc-500">
+                  {`${selectedItemIds.size} EPC item(s) dipilih`}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                disabled={bulkLandingSaving}
+                onClick={() => setBulkLandingOpen(false)}
+              >
+                {t('close')}
+              </button>
+            </div>
+            <div className="space-y-4 p-4">
+              <div>
+                <label className="text-[11px] font-semibold text-zinc-600">
+                  {t('landingPageDesign')}
+                </label>
+                <select
+                  className="ac-input mt-1 w-full text-xs"
+                  value={bulkLandingDesignId}
+                  onChange={(e) => setBulkLandingDesignId(e.target.value)}
+                  disabled={bulkLandingSaving || cmsDesignsLoading}
+                >
+                  <option value="">— {t('followProduct')} (clear Tier 1 override) —</option>
+                  {(Array.isArray(cmsDesigns) ? cmsDesigns : []).map((d) => (
+                    <option key={String(d.id)} value={String(d.id)}>
+                      {String(d.name || `Design ${d.id}`)}
+                    </option>
+                  ))}
+                </select>
+                <div className="mt-2 text-[10px] text-zinc-500">
+                  Sila pilih design Landing Page yang hendak di-apply ke semua Certificate bagi EPC items yang dipilih.
+                  Jika pilih "Follow Product", Tier 1 override akan dikeluarkan dan akan guna Tier 2/Tier 3 fallback.
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  className="ac-btn ac-btn-primary px-4 py-2 text-xs"
+                  disabled={bulkLandingSaving || cmsDesignsLoading}
+                  onClick={async () => {
+                    try {
+                      setBulkLandingSaving(true);
+                      const epcItemIds = Array.from(selectedItemIds).map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0);
+                      const selectedItems = (Array.isArray(items) ? items : []).filter((i) => epcItemIds.includes(Number(i?.id)));
+                      const certIdsSet = new Set();
+                      let noCertCount = 0;
+                      for (const it of selectedItems) {
+                        const idCert = it?.identities && it.identities[0]?.certificateId;
+                        const batchCert = it?.batch?.certificateId;
+                        const cid = idCert || batchCert;
+                        if (cid) certIdsSet.add(String(cid));
+                        else noCertCount += 1;
+                      }
+                      const certificateIds = Array.from(certIdsSet);
+                      if (certificateIds.length === 0) {
+                        throw new Error('Tiada certificate yang boleh dipadamkan daripada EPC items dipilih.');
+                      }
+                      const designRaw = String(bulkLandingDesignId || '').trim();
+                      const cmsDesignId = designRaw ? Number(designRaw) : null;
+                      const res = await bulkAssignLandingDesign({ certificateIds, cmsDesignId });
+                      const count = Number(res?.updatedCount) || 0;
+                      window.alert(
+                        `Berjaya update ${count} certificate${noCertCount ? ` (${noCertCount} EPC items tiada certificate linked, dilepaskan)` : ''}.`
+                      );
+                      setBulkLandingOpen(false);
+                      setSelectedItemIds(new Set());
+                      setListOffset(0);
+                      await fetchItems({
+                        q: listQuery,
+                        status: listStatus || undefined,
+                        createdFrom: createdFrom || undefined,
+                        createdTo: createdTo || undefined,
+                        batchId: String(listBatchId || '').trim() || undefined,
+                        limit: listLimit,
+                        offset: 0
+                      });
+                    } catch (err) {
+                      const msg = err?.message || tRaw('operationFailed');
+                      window.alert(msg);
+                    } finally {
+                      setBulkLandingSaving(false);
+                    }
+                  }}
+                >
+                  {bulkLandingSaving ? t('saving') : t('saveChanges')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {viewBatchOpen && viewBatch ? (
         <div
           className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
@@ -1492,12 +1649,90 @@ export default function AdminEpc() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-[11px] font-semibold text-zinc-600">{t('product')}</div>
-                  <div className="mt-1 text-xs text-zinc-900">{String(viewBatch?.product?.name || '-')}</div>
+                  <label className="text-[11px] font-semibold text-zinc-600">{t('product')}</label>
+                  {canEditBatchDocs ? (
+                    <select
+                      className="ac-input mt-1 text-xs"
+                      value={viewBatchProductId}
+                      onChange={(e) => {
+                        setViewBatchLocalError('');
+                        setViewBatchProductId(e.target.value);
+                      }}
+                    >
+                      <option value="">— {t('notSet')} —</option>
+                      {(Array.isArray(products) ? products : []).map((p) => (
+                        <option key={String(p.id)} value={String(p.id)}>
+                          {String(p.sku || p.code || '')} — {String(p.name || '')}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="mt-1 text-xs text-zinc-900">{String(viewBatch?.product?.name || '-')}</div>
+                  )}
                 </div>
                 <div>
                   <div className="text-[11px] font-semibold text-zinc-600">{t('sku')}</div>
                   <div className="mt-1 text-xs text-zinc-900">{String(viewBatch?.sku || viewBatch?.product?.sku || '-')}</div>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-[11px] font-semibold text-zinc-600">
+                    {t('landingPageDesign')}
+                    {' '}
+                    {canEditBatchDocs ? null : (
+                      <span className="ml-1 text-[10px] font-normal text-zinc-500">
+                        (Tier 1: Cert override, Tier 2: Product cert, Tier 3: Product main)
+                      </span>
+                    )}
+                  </label>
+                  {(() => {
+                    const effectiveFrom =
+                      viewBatchCmsDesignId != null && String(viewBatchCmsDesignId).trim()
+                        ? 'Certificate (Tier 1)'
+                        : viewBatch?.product?.cmsCertificateDesignId
+                          ? 'Product cert (Tier 2)'
+                          : viewBatch?.product?.cmsDesignId
+                            ? 'Product main (Tier 3)'
+                            : 'Default (no design)';
+                    return (
+                      <>
+                        {canEditBatchDocs ? (
+                          <div className="mt-1">
+                            <select
+                              className="ac-input text-xs"
+                              value={viewBatchCmsDesignId}
+                              onChange={(e) => {
+                                setViewBatchLocalError('');
+                                setViewBatchCmsDesignId(e.target.value);
+                              }}
+                              disabled={cmsDesignsLoading}
+                            >
+                              <option value="">— {t('followProduct')} (Tier 2 / 3 fallback) —</option>
+                              {(Array.isArray(cmsDesigns) ? cmsDesigns : []).map((d) => (
+                                <option key={String(d.id)} value={String(d.id)}>
+                                  {String(d.name || `Design ${d.id}`)}
+                                </option>
+                              ))}
+                            </select>
+                            <div className="mt-2 text-[10px] text-zinc-500">Effective source: {effectiveFrom}</div>
+                          </div>
+                        ) : (
+                          <div className="mt-1 text-xs text-zinc-900">
+                            {(() => {
+                              const did =
+                                viewBatchCmsDesignId != null && String(viewBatchCmsDesignId).trim()
+                                  ? String(viewBatchCmsDesignId)
+                                  : null;
+                              const d = did
+                                ? (Array.isArray(cmsDesigns) ? cmsDesigns : []).find((x) => String(x.id) === did)
+                                : null;
+                              const name = d ? String(d.name) : `Design #${did}`;
+                              return did ? name : `${String(viewBatch?.product?.name || t('notSet'))} — Effective: ${effectiveFrom}`;
+                            })()}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
                 <div className="sm:col-span-2">
                   <div className="text-[11px] font-semibold text-zinc-600">{t('authCertificate')}</div>
@@ -1558,6 +1793,56 @@ export default function AdminEpc() {
                   })}
                 </div>
               </div>
+
+              {canEditBatchDocs ? (
+                <div className="flex items-center justify-end gap-2 border-t border-zinc-200 pt-3">
+                  <button
+                    type="button"
+                    className="ac-btn ac-btn-primary px-4 py-2 text-xs"
+                    disabled={viewBatchSaving || loading}
+                    onClick={async () => {
+                      try {
+                        setViewBatchLocalError('');
+                        setViewBatchSaving(true);
+                        const pidRaw = String(viewBatchProductId || '').trim();
+                        const batchPatch = {};
+                        if (pidRaw) batchPatch.productId = Number(pidRaw);
+                        else if (viewBatch.productId != null) batchPatch.productId = null;
+
+                        let updatedBatch = viewBatch;
+                        if (Object.keys(batchPatch).length > 0) {
+                          updatedBatch =
+                            (await updateBatch({ batchId: viewBatch.id, patch: batchPatch })) || updatedBatch;
+                          setViewBatch(updatedBatch);
+                        }
+
+                        const certId = String(updatedBatch?.certificate?.certificateId || '').trim();
+                        const designRaw = String(viewBatchCmsDesignId || '').trim();
+                        const designId = designRaw ? Number(designRaw) : null;
+                        if (certId) {
+                          const currentCertDesignId = String(updatedBatch?.certificate?.cmsDesignId ?? '').trim();
+                          const desired = designRaw || '';
+                          if (currentCertDesignId !== desired) {
+                            await updateCertificate({
+                              certificateId: certId,
+                              patch: { cmsDesignId: designId }
+                            });
+                            const refreshed = { ...updatedBatch, certificate: { ...(updatedBatch?.certificate || {}), cmsDesignId: designId } };
+                            setViewBatch(refreshed);
+                          }
+                        }
+                        void fetchBatches({ q: '', origin: undefined, limit: 50, offset: 0 });
+                      } catch (err) {
+                        setViewBatchLocalError(err?.message || tRaw('operationFailed'));
+                      } finally {
+                        setViewBatchSaving(false);
+                      }
+                    }}
+                  >
+                    {viewBatchSaving ? t('saving') : t('saveChanges')}
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>

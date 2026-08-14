@@ -23,6 +23,42 @@ const patchSchema = z.object({
   cmsDesignId: z.number().int().nullable().optional()
 });
 
+const bulkAssignDesignSchema = z.object({
+  certificateIds: z.array(z.string().min(1)).max(2000).optional(),
+  filters: z
+    .object({
+      batchId: z.number().int().positive().optional(),
+      productId: z.number().int().positive().optional()
+    })
+    .strict()
+    .optional(),
+  cmsDesignId: z.number().int().nullable()
+});
+
+function hasEitherCertIdsOrFilters(body) {
+  const hasIds = Array.isArray(body?.certificateIds) && body.certificateIds.length > 0;
+  const hasFilters = body?.filters && Object.keys(body.filters).length > 0;
+  return hasIds || hasFilters;
+}
+
+async function bulkAssignLandingDesign(req, res) {
+  try {
+    const parsed = bulkAssignDesignSchema.parse(req.body);
+    if (!hasEitherCertIdsOrFilters(parsed)) {
+      return res.error('Sama ada certificateIds atau filters diperlukan', 400);
+    }
+    const result = await certificateService.bulkPatchCertificates({
+      organizationId: req.organization.id,
+      certificateIds: parsed.certificateIds,
+      certificateIdFilters: parsed.filters,
+      patch: { cmsDesignId: parsed.cmsDesignId }
+    });
+    res.success(result, `Berjaya kemas kini ${result.updatedCount} certificates`);
+  } catch (error) {
+    res.error(error.message, error.status || 400);
+  }
+}
+
 async function generate(req, res) {
   try {
     const validatedData = generateSchema.parse(req.body);
@@ -151,5 +187,6 @@ module.exports = {
   revoke,
   assign,
   reissue,
-  patch
+  patch,
+  bulkAssignLandingDesign
 };
