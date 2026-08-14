@@ -158,9 +158,9 @@ model AuditLog {
   metadata       Json?
   createdAt      DateTime      @default(now())
 
-  @@index([action])
-  @@index([targetType, targetId])
-  @@index([createdAt])
+  @@index([action], map: "AuditLog_action_idx")
+  @@index([targetType, targetId], map: "AuditLog_targetType_targetId_idx")
+  @@index([createdAt], map: "AuditLog_createdAt_idx")
 }
 
 model Product {
@@ -203,12 +203,12 @@ model Product {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  @@unique([organizationId, code])
-  @@unique([organizationId, sku])
-  @@index([organizationId, category])
-  @@index([organizationId, status])
-  @@index([organizationId, cmsDesignId])
-  @@index([organizationId, cmsCertificateDesignId])
+  @@unique([organizationId, code], map: "Product_organizationId_code_key")
+  @@unique([organizationId, sku], map: "Product_organizationId_sku_key")
+  @@index([organizationId, category], map: "Product_organizationId_category_idx")
+  @@index([organizationId, status], map: "Product_organizationId_status_idx")
+  @@index([organizationId, cmsDesignId], map: "Product_organizationId_cmsDesignId_idx")
+  @@index([organizationId, cmsCertificateDesignId], map: "Product_organizationId_cmsCertDesignId_idx")
 }
 
 model ProductSupportingCertificate {
@@ -230,8 +230,8 @@ model ProductSupportingCertificate {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  @@index([organizationId, productId, sortOrder])
-  @@index([organizationId, productId])
+  @@index([organizationId, productId, sortOrder], map: "PSC_org_productId_sortOrder_idx")
+  @@index([organizationId, productId], map: "PSC_org_productId_idx")
 }
 
 model Category {
@@ -245,8 +245,8 @@ model Category {
   updatedAt      DateTime     @updatedAt
   deletedAt      DateTime?
 
-  @@unique([organizationId, code])
-  @@index([organizationId, isActive])
+  @@unique([organizationId, code], map: "Category_organizationId_code_key")
+  @@index([organizationId, isActive], map: "Category_org_isActive_idx")
 }
 
 model Batch {
@@ -263,7 +263,7 @@ model Batch {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  @@unique([organizationId, batchNo])
+  @@unique([organizationId, batchNo], map: "Batch_organizationId_batchNo_key")
 }
 
 model CorpSequence {
@@ -275,8 +275,8 @@ model CorpSequence {
   lastNo         BigInt       @default(0)
   updatedAt      DateTime     @updatedAt
 
-  @@unique([organizationId, corpPrefix, skuCode])
-  @@index([organizationId])
+  @@unique([organizationId, corpPrefix, skuCode], map: "CorpSequence_org_corpPrefix_skuCode_key")
+  @@index([organizationId], map: "CorpSequence_organizationId_idx")
 }
 
 model CorpMonthSequence {
@@ -288,8 +288,8 @@ model CorpMonthSequence {
   lastNo         BigInt       @default(0)
   updatedAt      DateTime     @updatedAt
 
-  @@unique([organizationId, corpPrefix, periodKey])
-  @@index([organizationId])
+  @@unique([organizationId, corpPrefix, periodKey], map: "CorpMonthSeq_org_corpPrefix_periodKey_key")
+  @@index([organizationId], map: "CorpMonthSequence_org_idx")
 }
 
 model CertificateSequence {
@@ -483,8 +483,8 @@ model Certificate {
 
   identities     TagIdentity[]
 
-  @@index([certificateId])
-  @@index([organizationId, cmsDesignId])
+  @@index([certificateId], map: "Certificate_certificateId_idx")
+  @@index([organizationId, cmsDesignId], map: "Certificate_org_cmsDesignId_idx")
 }
 
 model ScanLog {
@@ -589,8 +589,8 @@ model CmsDesign {
   updatedAt           DateTime     @updatedAt
   deletedAt           DateTime?
 
-  @@unique([organizationId, slug])
-  @@index([organizationId, kind])
+  @@unique([organizationId, slug], map: "CmsDesign_organizationId_slug_key")
+  @@index([organizationId, kind], map: "CmsDesign_organizationId_kind_idx")
 }
 
 model CmsPage {
@@ -629,9 +629,9 @@ model CmsPage {
   updatedAt           DateTime     @updatedAt
   deletedAt           DateTime?
 
-  @@unique([organizationId, slug])
-  @@index([organizationId, kind])
-  @@index([organizationId, designId])
+  @@unique([organizationId, slug], map: "CmsPage_organizationId_slug_key")
+  @@index([organizationId, kind], map: "CmsPage_organizationId_kind_idx")
+  @@index([organizationId, designId], map: "CmsPage_organizationId_designId_idx")
 }
 
 model CmsVersion {
@@ -647,8 +647,8 @@ model CmsVersion {
   layoutJson        Json
   createdAt         DateTime     @default(now())
 
-  @@unique([pageId, versionNo])
-  @@index([organizationId, pageId])
+  @@unique([pageId, versionNo], map: "CmsVersion_pageId_versionNo_key")
+  @@index([organizationId, pageId], map: "CmsVersion_org_pageId_idx")
 }
 
 model CmsTranslation {
@@ -661,8 +661,8 @@ model CmsTranslation {
   contentJson    Json
   updatedAt      DateTime     @updatedAt
 
-  @@unique([pageId, language])
-  @@index([organizationId, pageId])
+  @@unique([pageId, language], map: "CmsTranslation_pageId_language_key")
+  @@index([organizationId, pageId], map: "CmsTranslation_org_pageId_idx")
 }
 
 model CmsLayout {
