@@ -756,12 +756,7 @@ async function exportBatchProductionTemplateXlsx({ organizationId, batchId }) {
 async function exportBatchImportTemplateXlsx() {
   const header = [
     'EPC',
-    'Barcode',
-    'Individual Label (CAIQ)',
-    'Net Weight',
-    'Manufacture Date',
-    'Batch Number',
-    'Swiftlet House Number'
+    'Manufacture Date'
   ];
 
   const ws = XLSX.utils.aoa_to_sheet([header]);
@@ -1822,26 +1817,18 @@ async function importProductionXlsx({ organizationId, batchId, base64 }) {
 
 function extractUniqueBatchMetaFromUpdates(updates) {
   const dates = new Set();
-  const batchNumbers = new Set();
-  const swiftletHouseNumbers = new Set();
 
   for (const u of Array.isArray(updates) ? updates : []) {
     if (u?.productionDate instanceof Date && !Number.isNaN(u.productionDate.getTime())) {
       dates.add(u.productionDate.toISOString().slice(0, 10));
     }
-    if (u?.batchNumber) batchNumbers.add(String(u.batchNumber).trim());
-    if (u?.swiftletHouseNumber) swiftletHouseNumbers.add(String(u.swiftletHouseNumber).trim());
   }
 
   const manufactureDate = dates.size === 1 ? Array.from(dates)[0] : null;
-  const batchNumber = batchNumbers.size === 1 ? Array.from(batchNumbers)[0] : null;
-  const swiftletHouseNumber = swiftletHouseNumbers.size === 1 ? Array.from(swiftletHouseNumbers)[0] : null;
 
   if (!manufactureDate) throw new Error('Manufacture date must be present and unique in the uploaded XLSX.');
-  if (!batchNumber) throw new Error('Batch number must be present and unique in the uploaded XLSX.');
-  if (!swiftletHouseNumber) throw new Error('Swiftlet house number must be present and unique in the uploaded XLSX.');
 
-  return { manufactureDate, batchNumber, swiftletHouseNumber };
+  return { manufactureDate, batchNumber: null, swiftletHouseNumber: null };
 }
 
 function getBatchImportDocTypes() {

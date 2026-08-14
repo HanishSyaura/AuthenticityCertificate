@@ -201,15 +201,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
     try {
       if (token) {
         const api = createAdminApi({ token });
-        const itemRes = await api.get('/epc/items/by-epc', { params: { epc } });
-        const item = itemRes?.data?.data || null;
-        const ok =
-          String(item?.batchNumber || '').trim().length > 0 && String(item?.swiftletHouseNumber || '').trim().length > 0;
-        if (!ok) {
-          setPreviewData(null);
-          setPreviewError('EPC certification is not active yet. Please fill in Batch Number and Swiftlet House Number first.');
-          return;
-        }
+        await api.get('/epc/items/by-epc', { params: { epc } });
       }
       const base = getPublicApiBaseUrl();
       const out = await axios.get(`${base}/resolve`, { params: { epc, ...(lang ? { lang } : {}) } });

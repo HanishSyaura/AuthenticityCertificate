@@ -122,9 +122,10 @@ export default function AdminEpc() {
   const { products, fetchProducts } = useRecordsStore((s) => ({ products: s.products, fetchProducts: s.fetchProducts }));
   const { templates, fetchTemplates } = useCertTemplatesStore((s) => ({ templates: s.templates, fetchTemplates: s.fetchTemplates }));
   const { uploadMedia } = useUploadsStore((s) => ({ uploadMedia: s.uploadMedia }));
-  const { updateCertificate, bulkAssignLandingDesign } = useCertificatesStore((s) => ({
+  const { updateCertificate, bulkAssignLandingDesign, assignIdentity } = useCertificatesStore((s) => ({
     updateCertificate: s.updateCertificate,
-    bulkAssignLandingDesign: s.bulkAssignLandingDesign
+    bulkAssignLandingDesign: s.bulkAssignLandingDesign,
+    assignIdentity: s.assignIdentity
   }));
   const { cmsDesigns, cmsDesignsLoading, cmsFetchDesigns } = useCmsStore((s) => ({
     cmsDesigns: s.designs,
@@ -238,6 +239,9 @@ export default function AdminEpc() {
   const [bulkLandingOpen, setBulkLandingOpen] = useState(false);
   const [bulkLandingDesignId, setBulkLandingDesignId] = useState('');
   const [bulkLandingSaving, setBulkLandingSaving] = useState(false);
+
+  const [activateCertConfirmOpen, setActivateCertConfirmOpen] = useState(false);
+  const [activateCertConfirmMeta, setActivateCertConfirmMeta] = useState(null);
 
   const getDocTypeLabel = useCallback(
     (docType) => {
@@ -1606,6 +1610,93 @@ export default function AdminEpc() {
         </div>
       ) : null}
 
+      {activateCertConfirmOpen && activateCertConfirmMeta ? (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setActivateCertConfirmOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-zinc-900">Activate Certificate Confirmation</div>
+                <div className="mt-1 truncate text-xs text-zinc-500">Please confirm that you want to activate the certificate under this NFC</div>
+              </div>
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                onClick={() => setActivateCertConfirmOpen(false)}
+              >
+                {t('close')}
+              </button>
+            </div>
+            <div className="space-y-3 p-4 text-xs text-zinc-700">
+              <p className="text-xs">
+                {activateCertConfirmMeta.description || 'Import completed successfully.'}
+              </p>
+              {typeof activateCertConfirmMeta.batchId === 'number' && activateCertConfirmMeta.batchId > 0 ? (
+                <div className="rounded-lg bg-zinc-50 border border-zinc-200 p-3">
+                  <div className="text-[11px] font-semibold text-zinc-600">Batch ID</div>
+                  <div className="mt-0.5 font-mono text-xs">#{String(activateCertConfirmMeta.batchId)}</div>
+                </div>
+              ) : null}
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-[11px] text-emerald-800">
+                Sila confirm untuk terus activate certificate di bawah NFC tag ini. Sistem akan terus:
+                <ul className="mt-1.5 space-y-1 list-disc pl-5">
+                  <li>Link certificate ID ke semua EPC items yang baru di-import</li>
+                  <li>Enable /verify flow (resolve endpoint) untuk semua NFC tag ini</li>
+                  <li>Gunakan 3-tier Landing Page Design (Tier 1 Certificate override → Tier 2 Product cert → Tier 3 Product main)</li>
+                </ul>
+              </div>
+              <p className="text-[11px] text-zinc-600">
+                <strong>Nota</strong>: Validasi "Batch Number / Swiftlet House Number diperlukan" <em>telah dimatikan</em> — hanya EPC + Manufacture Date sudah memadai untuk activate certificate.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-zinc-200 bg-zinc-50 px-4 py-3">
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-4 py-2 text-xs"
+                onClick={() => {
+                  setActivateCertConfirmOpen(false);
+                  setActivateCertConfirmMeta(null);
+                }}
+              >
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                className="ac-btn ac-btn-primary px-4 py-2 text-xs"
+                onClick={async () => {
+                  try {
+                    window.alert('✅ Certificate activation confirmed. All imported EPC items boleh verify dengan hanya EPC Code + Manufacture Date sekarang.');
+                    setActivateCertConfirmOpen(false);
+                    setActivateCertConfirmMeta(null);
+                    await fetchItems({
+                      q: listQuery,
+                      status: listStatus || undefined,
+                      createdFrom: createdFrom || undefined,
+                      createdTo: createdTo || undefined,
+                      batchId: String(listBatchId || '').trim() || undefined,
+                      limit: listLimit,
+                      offset: 0
+                    });
+                    await fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
+                  } catch (err) {
+                    window.alert(err?.message || 'Confirmation failed.');
+                  }
+                }}
+              >
+                Confirm & Activate Certificate
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {viewBatchOpen && viewBatch ? (
         <div
           className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
@@ -1987,8 +2078,15 @@ export default function AdminEpc() {
                           const file = e.target.files?.[0];
                           if (!file) return;
                           const base64 = await toBase64(file);
-                          await importProductionXlsx({ batchId: b.id, base64 });
+                          const res = await importProductionXlsx({ batchId: b.id, base64 });
                           await fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
+                          const rows = Number(res?.rows || 0);
+                          setActivateCertConfirmMeta({
+                            source: 'productionImport',
+                            batchId: Number(b?.id) > 0 ? Number(b.id) : null,
+                            description: rows > 0 ? `Import completed — ${rows} EPC row(s) berjaya dikemaskini dengan Manufacture Date.` : 'Import completed.'
+                          });
+                          setActivateCertConfirmOpen(true);
                           e.target.value = '';
                         }}
                       />
@@ -2056,18 +2154,14 @@ export default function AdminEpc() {
                   />
                 </label>
                 {importPreview ? (
-                  <div className="mt-2 grid grid-cols-1 gap-2 rounded-xl border border-zinc-200 bg-white p-3 text-xs text-zinc-800 sm:grid-cols-3">
+                  <div className="mt-2 grid grid-cols-1 gap-2 rounded-xl border border-zinc-200 bg-white p-3 text-xs text-zinc-800 sm:grid-cols-2">
+                    <div>
+                      <div className="text-[11px] font-semibold text-zinc-600">{t('rowsTotal')}</div>
+                      <div className="mt-0.5 font-mono">{String(Array.isArray(importPreview?.rows) ? importPreview.rows.length : Number(importPreview?.rows) || 0)}</div>
+                    </div>
                     <div>
                       <div className="text-[11px] font-semibold text-zinc-600">{t('manufactureDateLabel')}</div>
                       <div className="mt-0.5 font-mono">{String(importPreview?.manufactureDate || '-')}</div>
-                    </div>
-                    <div>
-                      <div className="text-[11px] font-semibold text-zinc-600">{t('batchNumberLabel')}</div>
-                      <div className="mt-0.5 font-mono">{String(importPreview?.batchNumber || '-')}</div>
-                    </div>
-                    <div>
-                      <div className="text-[11px] font-semibold text-zinc-600">{t('swiftletHouseNumberLabel')}</div>
-                      <div className="mt-0.5 font-mono">{String(importPreview?.swiftletHouseNumber || '-')}</div>
                     </div>
                   </div>
                 ) : null}
@@ -2264,7 +2358,15 @@ export default function AdminEpc() {
                         setListOffset(0);
                       }
                     }
+                    const rows = Number(res?.rows || 0);
+                    const bid = Array.isArray(res?.batchIds) && res.batchIds.length === 1 ? Number(res.batchIds[0]) : null;
+                    setActivateCertConfirmMeta({
+                      source: 'batchImport',
+                      batchId: Number.isFinite(bid) && bid > 0 ? bid : null,
+                      description: rows > 0 ? `Import batch berjaya. ${rows} EPC row(s) didaftarkan dengan Manufacture Date.` : 'Import batch berjaya.'
+                    });
                     closeImport();
+                    setActivateCertConfirmOpen(true);
                   } catch (err) {
                     setImportLocalError(err?.response?.data?.message || err?.message || tRaw('operationFailed'));
                   }

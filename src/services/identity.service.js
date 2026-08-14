@@ -57,18 +57,6 @@ async function resolveCertificateId({ organizationId, nfcUid, epc, requireEpcBat
       dbTimeoutMs
     );
     if (found?.certificateId) {
-      if (requireEpcBatchMeta && e) {
-        const meta = await withTimeout(
-          prisma.epcItem.findUnique({
-            where: { organizationId_epcCode: { organizationId: orgId, epcCode: e } },
-            select: { batchNumber: true, swiftletHouseNumber: true }
-          }),
-          dbTimeoutMs
-        );
-        const ok =
-          String(meta?.batchNumber || '').trim().length > 0 && String(meta?.swiftletHouseNumber || '').trim().length > 0;
-        if (!ok) throw new Error('epc_inactive_missing_batch_meta');
-      }
       return found.certificateId;
     }
 
@@ -81,12 +69,6 @@ async function resolveCertificateId({ organizationId, nfcUid, epc, requireEpcBat
         dbTimeoutMs
       );
       if (epcItem?.batch?.certificateId) {
-        if (requireEpcBatchMeta) {
-          const ok =
-            String(epcItem?.batchNumber || '').trim().length > 0 &&
-            String(epcItem?.swiftletHouseNumber || '').trim().length > 0;
-          if (!ok) throw new Error('epc_inactive_missing_batch_meta');
-        }
         return epcItem.batch.certificateId;
       }
     }
@@ -106,19 +88,10 @@ async function resolveCertificateIdGlobal({ nfcUid, epc, requireEpcBatchMeta = f
   if (!uid && !e) return null;
   const dbTimeoutMs = getDbTimeoutMs();
 
-  const checkEpcBatchMeta = async (organizationId) => {
-    if (!requireEpcBatchMeta || !e) return;
-    const meta = await withTimeout(
-      prisma.epcItem.findUnique({
-        where: { organizationId_epcCode: { organizationId: Number(organizationId), epcCode: e } },
-        select: { batchNumber: true, swiftletHouseNumber: true }
-      }),
-      dbTimeoutMs
-    );
-    const ok =
-      String(meta?.batchNumber || '').trim().length > 0 && String(meta?.swiftletHouseNumber || '').trim().length > 0;
-    if (!ok) throw new Error('epc_inactive_missing_batch_meta');
+  const checkEpcBatchMeta = async () => {
+    /* Batch meta (BatchNumber/SwiftletHouse) check removed — activation now allowed with only Production Date + EPC */
   };
+  void requireEpcBatchMeta;
 
   try {
     const rows = await withTimeout(
@@ -135,7 +108,6 @@ async function resolveCertificateIdGlobal({ nfcUid, epc, requireEpcBatchMeta = f
     if (Array.isArray(rows) && rows.length === 1) {
       const row = rows[0];
       if (!row?.certificateId || !row?.organizationId) return null;
-      await checkEpcBatchMeta(row.organizationId);
       return { certificateId: row.certificateId, organizationId: row.organizationId };
     }
     if (Array.isArray(rows) && rows.length > 1) return null;
@@ -158,18 +130,12 @@ async function resolveCertificateIdGlobal({ nfcUid, epc, requireEpcBatchMeta = f
         const it = items[0];
         const certId = String(it?.batch?.certificateId || '').trim();
         if (!certId || !it?.organizationId) return null;
-        if (requireEpcBatchMeta) {
-          const ok =
-            String(it?.batchNumber || '').trim().length > 0 && String(it?.swiftletHouseNumber || '').trim().length > 0;
-          if (!ok) throw new Error('epc_inactive_missing_batch_meta');
-        }
         return { certificateId: certId, organizationId: it.organizationId };
       }
     }
 
     return null;
   } catch (err) {
-    if (err?.message === 'epc_inactive_missing_batch_meta') throw err;
     return null;
   }
 }

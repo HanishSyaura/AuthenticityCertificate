@@ -119,7 +119,7 @@ const useCmsStore = create((set, get) => ({
 
   setSelectedDesignId: (id) => {
     const target = id === null || id === '' || id === 'null' ? null : Number(id);
-    set({ selectedDesignId: target, layoutsByPageKey: {}, selectedPageId: null });
+    set({ selectedDesignId: target, pages: [], layoutsByPageKey: {}, selectedPageId: null });
   },
 
   fetchDesigns: async ({ kind } = {}) => {

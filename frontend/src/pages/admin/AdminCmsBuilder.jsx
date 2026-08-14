@@ -200,7 +200,8 @@ export default function AdminCmsBuilder() {
 
   useEffect(() => {
     const list = Array.isArray(pages) ? pages : [];
-    if (!selectedPageId && list[0]?.id) {
+    const hasValidSelection = selectedPageId && list.some((p) => String(p.id) === String(selectedPageId));
+    if (!hasValidSelection && list[0]?.id) {
       selectPage(list[0].id);
     }
   }, [pages, selectPage, selectedPageId]);
