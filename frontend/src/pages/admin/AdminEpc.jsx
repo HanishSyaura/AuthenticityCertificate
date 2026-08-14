@@ -39,6 +39,96 @@ function toBase64(file) {
   });
 }
 
+const EPC_EXPORT_COLUMN_META = {
+  epcCode: { labelKey: 'epcCode', defaultOn: true, alwaysOffer: true },
+  runningNo: { labelKey: 'runningNo', defaultOn: false, alwaysOffer: true },
+  netWeight: { labelKey: 'netWeight', defaultOn: true },
+  productionDate: { labelKey: 'productionDate', defaultOn: true },
+  caiqNumber: { labelKey: 'caiqNumber', defaultOn: true },
+  barcode: { labelKey: 'barcode', defaultOn: true },
+  manufactureDate: { labelKey: 'manufactureDate', defaultOn: true },
+  batchNumber: { labelKey: 'batchNumber', defaultOn: true },
+  swiftletHouseNumber: { labelKey: 'swiftletHouseNumber', defaultOn: true },
+  status: { labelKey: 'status', defaultOn: false },
+  createdAt: { labelKey: 'createdAt', defaultOn: false },
+  remark: { labelKey: 'remark', defaultOn: false }
+};
+
+function resolveTemplateForBatch(batch, templatesList) {
+  if (!batch) return null;
+  const list = Array.isArray(templatesList) ? templatesList : [];
+  const explicitTemplateId = batch?.certificateTemplateId ?? batch?.certificateTemplate?.id ?? null;
+  const batchCertificateId = String(batch?.certificateId ?? '').trim();
+  if (explicitTemplateId != null) {
+    const idNum = Number(explicitTemplateId);
+    if (Number.isFinite(idNum)) {
+      const found = list.find((t) => Number(t?.id) === idNum) || null;
+      if (found) return found;
+    }
+  }
+  if (batchCertificateId) {
+    const found = list.find((t) => String(t?.certificateId || '').trim() === batchCertificateId) || null;
+    if (found) return found;
+  }
+  return null;
+}
+
+function deriveExportColumns(template, mode) {
+  const isBatch = mode === 'batch';
+  const placeholders = Array.isArray(template?.placeholders) ? template.placeholders : [];
+  const detectedKeys = new Set();
+
+  for (const p of placeholders) {
+    const bindPath = String(p?.bindPath || '').trim();
+    if (!bindPath) continue;
+    if (bindPath.startsWith('epcItem.')) {
+      const key = bindPath.slice('epcItem.'.length).trim();
+      if (key) detectedKeys.add(key);
+      continue;
+    }
+    if (isBatch) continue;
+  }
+
+  const always = isBatch ? ['epcCode', 'runningNo'] : ['epcCode'];
+  for (const k of always) detectedKeys.add(k);
+
+  const meta = EPC_EXPORT_COLUMN_META;
+  const out = [];
+  const seen = new Set();
+
+  for (const k of always) {
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const m = meta[k] || { labelKey: k, defaultOn: true };
+    out.push({ key: k, labelKey: m.labelKey, defaultOn: !!m.defaultOn });
+  }
+
+  for (const k of detectedKeys) {
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const m = meta[k] || { labelKey: k, defaultOn: true };
+    out.push({ key: k, labelKey: m.labelKey, defaultOn: !!m.defaultOn });
+  }
+
+  const offerRest = [];
+  for (const [k, m] of Object.entries(meta)) {
+    if (!m.alwaysOffer) continue;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    offerRest.push({ key: k, labelKey: m.labelKey, defaultOn: !!m.defaultOn });
+  }
+
+  for (const extra of offerRest) out.push(extra);
+
+  return out;
+}
+
+function buildDefaultSelection(cols) {
+  const sel = {};
+  for (const c of Array.isArray(cols) ? cols : []) sel[c.key] = !!c.defaultOn;
+  return sel;
+}
+
 export default function AdminEpc() {
   const { t } = useT();
   const navigate = useNavigate();
@@ -152,28 +242,13 @@ export default function AdminEpc() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState(null);
   const [exportItemColsOpen, setExportItemColsOpen] = useState(false);
-  const [exportItemCols, setExportItemCols] = useState({
-    epcCode: true,
-    barcode: true,
-    caiqNumber: true,
-    netWeight: true,
-    manufactureDate: true,
-    batchNumber: true,
-    swiftletHouseNumber: true,
-    status: false,
-    createdAt: false,
-    remark: false
-  });
+  const [exportItemCols, setExportItemCols] = useState({});
+  const [exportItemColsList, setExportItemColsList] = useState([]);
 
   const [exportColsOpen, setExportColsOpen] = useState(false);
   const [exportColsBatch, setExportColsBatch] = useState(null);
-  const [exportCols, setExportCols] = useState({
-    epcCode: true,
-    runningNo: false,
-    netWeight: true,
-    productionDate: true,
-    caiqNumber: true
-  });
+  const [exportCols, setExportCols] = useState({});
+  const [exportColsList, setExportColsList] = useState([]);
 
   const DEFAULT_SUPPORTING_TYPES = useMemo(
     () => [
@@ -185,6 +260,23 @@ export default function AdminEpc() {
     []
   );
 
+  const cleanFilenameToDocKey = useCallback((name, fallback = 'document') => {
+    const base = String(name || '')
+      .replace(/\.[^.]+$/, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    return base || String(fallback || 'document');
+  }, []);
+
+  const isAutoPlaceholderDocKey = useCallback((k, idx) => {
+    const v = String(k || '').trim();
+    if (!v) return true;
+    if (/^supporting_\d+$/.test(v)) return true;
+    if (typeof idx === 'number' && v === `supporting_${idx + 1}`) return true;
+    return false;
+  }, []);
+
   const [importOpen, setImportOpen] = useState(false);
   const [importBatch, setImportBatch] = useState(null);
   const [importBase64, setImportBase64] = useState('');
@@ -192,20 +284,9 @@ export default function AdminEpc() {
   const [importProductId, setImportProductId] = useState('');
   const [importSku, setImportSku] = useState('');
   const [importAuthTemplateId, setImportAuthTemplateId] = useState('');
-  const [importDocRows, setImportDocRows] = useState(() =>
-    [
-      { key: 'moh_health_certificate', url: '' },
-      { key: 'export_permit', url: '' },
-      { key: 'dvs_health_certificate', url: '' },
-      { key: 'dvs_coo_certificate', url: '' }
-    ]
-  );
-  const [importDocUploading, setImportDocUploading] = useState(() => ({
-    moh_health_certificate: false,
-    export_permit: false,
-    dvs_health_certificate: false,
-    dvs_coo_certificate: false
-  }));
+  const [importCmsDesignId, setImportCmsDesignId] = useState('');
+  const [importDocRows, setImportDocRows] = useState(() => []);
+  const [importDocUploading, setImportDocUploading] = useState(() => ({}));
   const [importLocalError, setImportLocalError] = useState('');
   const [importLastResult, setImportLastResult] = useState(null);
   const [importHistory, setImportHistory] = useState([]);
@@ -255,6 +336,8 @@ export default function AdminEpc() {
   const closeExportCols = useCallback(() => {
     setExportColsOpen(false);
     setExportColsBatch(null);
+    setExportColsList([]);
+    setExportCols({});
   }, []);
 
   const closeDetail = useCallback(() => {
@@ -262,17 +345,36 @@ export default function AdminEpc() {
     setDetailItem(null);
   }, []);
 
-  const openExportCols = useCallback((b) => {
-    setExportColsBatch(b || null);
-    setExportCols({
-      epcCode: true,
-      runningNo: false,
-      netWeight: true,
-      productionDate: true,
-      caiqNumber: true
-    });
-    setExportColsOpen(true);
+  const openExportCols = useCallback(
+    (b) => {
+      const batch = b || null;
+      setExportColsBatch(batch);
+      const tpl = resolveTemplateForBatch(batch, templates);
+      const cols = deriveExportColumns(tpl, 'batch');
+      setExportColsList(cols);
+      setExportCols(buildDefaultSelection(cols));
+      setExportColsOpen(true);
+    },
+    [templates]
+  );
+
+  const closeExportItemCols = useCallback(() => {
+    setExportItemColsOpen(false);
+    setExportItemColsList([]);
+    setExportItemCols({});
   }, []);
+
+  const openExportItemCols = useCallback(
+    (contextBatch) => {
+      const batch = contextBatch || null;
+      const tpl = resolveTemplateForBatch(batch, templates);
+      const cols = deriveExportColumns(tpl, 'items');
+      setExportItemColsList(cols);
+      setExportItemCols(buildDefaultSelection(cols));
+      setExportItemColsOpen(true);
+    },
+    [templates]
+  );
 
   const closeImport = useCallback(() => {
     setImportOpen(false);
@@ -282,18 +384,9 @@ export default function AdminEpc() {
     setImportProductId('');
     setImportSku('');
     setImportAuthTemplateId('');
-    setImportDocRows([
-      { key: 'moh_health_certificate', url: '' },
-      { key: 'export_permit', url: '' },
-      { key: 'dvs_health_certificate', url: '' },
-      { key: 'dvs_coo_certificate', url: '' }
-    ]);
-    setImportDocUploading({
-      moh_health_certificate: false,
-      export_permit: false,
-      dvs_health_certificate: false,
-      dvs_coo_certificate: false
-    });
+    setImportCmsDesignId('');
+    setImportDocRows([]);
+    setImportDocUploading({});
     setImportLocalError('');
   }, []);
 
@@ -337,10 +430,17 @@ export default function AdminEpc() {
       setImportBase64('');
       setImportPreview(null);
       setImportLocalError('');
+      setImportDocRows([]);
+      setImportDocUploading({});
+      setImportAuthTemplateId('');
+      setImportCmsDesignId('');
       await fetchTemplates({ lang: 'en' });
       await fetchProducts({ status: 'all' });
+      if (!Array.isArray(cmsDesigns) || cmsDesigns.length === 0) {
+        try { await cmsFetchDesigns(); } catch (_) { /* ignore */ }
+      }
     },
-    [fetchProducts, fetchTemplates]
+    [cmsDesigns, cmsFetchDesigns, fetchProducts, fetchTemplates]
   );
 
   const resolveBatchAuthCertificate = useCallback(
@@ -449,7 +549,7 @@ export default function AdminEpc() {
     setLpProductCmsDesignId(item?.batch?.product?.cmsDesignId ?? null);
     setLpProductCmsCertDesignId(item?.batch?.product?.cmsCertificateDesignId ?? null);
     if (!certId) {
-      setLpNoCertError('EPC ini belum dikaitkan dengan Certificate Identity. Tidak boleh edit landing page.');
+      setLpNoCertError('This EPC is not linked to any Certificate Identity. Cannot edit landing page.');
     } else {
       setLpNoCertError('');
     }
@@ -530,7 +630,7 @@ export default function AdminEpc() {
                   type="button"
                   className="ac-btn ac-btn-soft px-3 py-2 text-xs"
                   disabled={loading || (Number(itemTotal) || 0) === 0}
-                  onClick={() => setExportItemColsOpen(true)}
+                  onClick={() => openExportItemCols(null)}
                 >
                   {t('exportXlsx')}
                 </button>
@@ -552,7 +652,7 @@ export default function AdminEpc() {
                     setBulkLandingOpen(true);
                   }}
                 >
-                  {t('assignLandingDesign') || 'Assign Landing Page'}
+                  Assign Landing Page
                 </button>
               ) : null}
               {canDelete ? (
@@ -1065,7 +1165,7 @@ export default function AdminEpc() {
           className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
           role="dialog"
           aria-modal="true"
-          onClick={() => setExportItemColsOpen(false)}
+          onClick={closeExportItemCols}
         >
           <div
             className="w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
@@ -1076,7 +1176,7 @@ export default function AdminEpc() {
                 <div className="truncate text-sm font-semibold text-zinc-900">{t('exportColumnsTitleEpcList')}</div>
                 <div className="mt-1 text-[11px] text-zinc-500">{t('total', { value: Number(itemTotal) || 0 })}</div>
               </div>
-              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => setExportItemColsOpen(false)}>
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={closeExportItemCols}>
                 {t('close')}
               </button>
             </div>
@@ -1086,95 +1186,43 @@ export default function AdminEpc() {
                 <button
                   type="button"
                   className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                  onClick={() =>
-                    setExportItemCols({
-                      epcCode: true,
-                      barcode: true,
-                      caiqNumber: true,
-                      netWeight: true,
-                      manufactureDate: true,
-                      batchNumber: true,
-                      swiftletHouseNumber: true,
-                      status: true,
-                      createdAt: true,
-                      remark: true
-                    })
-                  }
+                  onClick={() => {
+                    const next = {};
+                    for (const c of exportItemColsList) next[c.key] = true;
+                    setExportItemCols(next);
+                  }}
                 >
                   {t('select')}
                 </button>
                 <button
                   type="button"
                   className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                  onClick={() =>
-                    setExportItemCols({
-                      epcCode: false,
-                      barcode: false,
-                      caiqNumber: false,
-                      netWeight: false,
-                      manufactureDate: false,
-                      batchNumber: false,
-                      swiftletHouseNumber: false,
-                      status: false,
-                      createdAt: false,
-                      remark: false
-                    })
-                  }
+                  onClick={() => {
+                    const next = {};
+                    for (const c of exportItemColsList) next[c.key] = false;
+                    setExportItemCols(next);
+                  }}
                 >
                   {t('clear')}
                 </button>
               </div>
 
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <label className="flex items-center gap-2 text-xs text-zinc-800">
-                  <input type="checkbox" checked={Boolean(exportItemCols.epcCode)} onChange={(e) => setExportItemCols((p) => ({ ...p, epcCode: e.target.checked }))} />
-                  {t('epcCode')}
-                </label>
-                <label className="flex items-center gap-2 text-xs text-zinc-800">
-                  <input type="checkbox" checked={Boolean(exportItemCols.barcode)} onChange={(e) => setExportItemCols((p) => ({ ...p, barcode: e.target.checked }))} />
-                  {t('barcode')}
-                </label>
-                <label className="flex items-center gap-2 text-xs text-zinc-800">
-                  <input type="checkbox" checked={Boolean(exportItemCols.caiqNumber)} onChange={(e) => setExportItemCols((p) => ({ ...p, caiqNumber: e.target.checked }))} />
-                  {t('individualLabelCaiq')}
-                </label>
-                <label className="flex items-center gap-2 text-xs text-zinc-800">
-                  <input type="checkbox" checked={Boolean(exportItemCols.netWeight)} onChange={(e) => setExportItemCols((p) => ({ ...p, netWeight: e.target.checked }))} />
-                  {t('netWeight')}
-                </label>
-                <label className="flex items-center gap-2 text-xs text-zinc-800">
-                  <input type="checkbox" checked={Boolean(exportItemCols.manufactureDate)} onChange={(e) => setExportItemCols((p) => ({ ...p, manufactureDate: e.target.checked }))} />
-                  {t('manufactureDate')}
-                </label>
-                <label className="flex items-center gap-2 text-xs text-zinc-800">
-                  <input type="checkbox" checked={Boolean(exportItemCols.batchNumber)} onChange={(e) => setExportItemCols((p) => ({ ...p, batchNumber: e.target.checked }))} />
-                  {t('batchNumber')}
-                </label>
-                <label className="flex items-center gap-2 text-xs text-zinc-800">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(exportItemCols.swiftletHouseNumber)}
-                    onChange={(e) => setExportItemCols((p) => ({ ...p, swiftletHouseNumber: e.target.checked }))}
-                  />
-                  {t('swiftletHouseNumber')}
-                </label>
-                <label className="flex items-center gap-2 text-xs text-zinc-800">
-                  <input type="checkbox" checked={Boolean(exportItemCols.status)} onChange={(e) => setExportItemCols((p) => ({ ...p, status: e.target.checked }))} />
-                  {t('status')}
-                </label>
-                <label className="flex items-center gap-2 text-xs text-zinc-800">
-                  <input type="checkbox" checked={Boolean(exportItemCols.createdAt)} onChange={(e) => setExportItemCols((p) => ({ ...p, createdAt: e.target.checked }))} />
-                  {t('createdAt')}
-                </label>
-                <label className="flex items-center gap-2 text-xs text-zinc-800">
-                  <input type="checkbox" checked={Boolean(exportItemCols.remark)} onChange={(e) => setExportItemCols((p) => ({ ...p, remark: e.target.checked }))} />
-                  {t('remark')}
-                </label>
+                {exportItemColsList.map((c) => (
+                  <label key={c.key} className="flex items-center gap-2 text-xs text-zinc-800">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(exportItemCols[c.key])}
+                      onChange={(e) => setExportItemCols((p) => ({ ...p, [c.key]: e.target.checked }))}
+                    />
+                    {t(c.labelKey)}
+                  </label>
+                ))}
               </div>
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-2 border-t border-zinc-200 bg-white px-4 py-3">
-              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => setExportItemColsOpen(false)}>
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={closeExportItemCols}>
                 {t('close')}
               </button>
               <button
@@ -1182,25 +1230,14 @@ export default function AdminEpc() {
                 className="ac-btn ac-btn-primary px-3 py-2 text-xs"
                 disabled={loading || (Number(itemTotal) || 0) === 0 || Object.values(exportItemCols || {}).filter(Boolean).length === 0}
                 onClick={async () => {
-                  const cols = [
-                    'epcCode',
-                    'barcode',
-                    'caiqNumber',
-                    'netWeight',
-                    'manufactureDate',
-                    'batchNumber',
-                    'swiftletHouseNumber',
-                    'status',
-                    'createdAt',
-                    'remark'
-                  ].filter((k) => Boolean(exportItemCols?.[k]));
+                  const cols = exportItemColsList.map((c) => c.key).filter((k) => Boolean(exportItemCols?.[k]));
                   await exportItemsXlsx({
                     q: listQuery,
                     createdFrom: createdFrom || undefined,
                     createdTo: createdTo || undefined,
                     columns: cols
                   });
-                  setExportItemColsOpen(false);
+                  closeExportItemCols();
                 }}
               >
                 {t('exportXlsx')}
@@ -1238,76 +1275,38 @@ export default function AdminEpc() {
                 <button
                   type="button"
                   className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                  onClick={() =>
-                    setExportCols({
-                      epcCode: true,
-                      runningNo: true,
-                      netWeight: true,
-                      productionDate: true,
-                      caiqNumber: true
-                    })
-                  }
+                  onClick={() => {
+                    const next = {};
+                    for (const c of exportColsList) next[c.key] = true;
+                    setExportCols(next);
+                  }}
                 >
                   {t('select')}
                 </button>
                 <button
                   type="button"
                   className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                  onClick={() =>
-                    setExportCols({
-                      epcCode: false,
-                      runningNo: false,
-                      netWeight: false,
-                      productionDate: false,
-                      caiqNumber: false
-                    })
-                  }
+                  onClick={() => {
+                    const next = {};
+                    for (const c of exportColsList) next[c.key] = false;
+                    setExportCols(next);
+                  }}
                 >
                   {t('clear')}
                 </button>
               </div>
 
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <label className="flex items-center gap-2 text-xs text-zinc-800">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(exportCols.epcCode)}
-                    onChange={(e) => setExportCols((prev) => ({ ...prev, epcCode: e.target.checked }))}
-                  />
-                  {t('epcCode')}
-                </label>
-                <label className="flex items-center gap-2 text-xs text-zinc-800">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(exportCols.runningNo)}
-                    onChange={(e) => setExportCols((prev) => ({ ...prev, runningNo: e.target.checked }))}
-                  />
-                  {t('runningNo')}
-                </label>
-                <label className="flex items-center gap-2 text-xs text-zinc-800">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(exportCols.netWeight)}
-                    onChange={(e) => setExportCols((prev) => ({ ...prev, netWeight: e.target.checked }))}
-                  />
-                  {t('netWeight')}
-                </label>
-                <label className="flex items-center gap-2 text-xs text-zinc-800">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(exportCols.productionDate)}
-                    onChange={(e) => setExportCols((prev) => ({ ...prev, productionDate: e.target.checked }))}
-                  />
-                  {t('productionDate')}
-                </label>
-                <label className="flex items-center gap-2 text-xs text-zinc-800">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(exportCols.caiqNumber)}
-                    onChange={(e) => setExportCols((prev) => ({ ...prev, caiqNumber: e.target.checked }))}
-                  />
-                  {t('caiqNumber')}
-                </label>
+                {exportColsList.map((c) => (
+                  <label key={c.key} className="flex items-center gap-2 text-xs text-zinc-800">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(exportCols[c.key])}
+                      onChange={(e) => setExportCols((prev) => ({ ...prev, [c.key]: e.target.checked }))}
+                    />
+                    {t(c.labelKey)}
+                  </label>
+                ))}
               </div>
             </div>
 
@@ -1324,7 +1323,7 @@ export default function AdminEpc() {
                   Object.values(exportCols || {}).filter(Boolean).length === 0
                 }
                 onClick={async () => {
-                  const cols = ['epcCode', 'runningNo', 'netWeight', 'productionDate', 'caiqNumber'].filter((k) => Boolean(exportCols?.[k]));
+                  const cols = exportColsList.map((c) => c.key).filter((k) => Boolean(exportCols?.[k]));
                   const ok = await exportBatchXlsxCustom({ batchId: exportColsBatch.id, columns: cols });
                   if (ok) closeExportCols();
                 }}
@@ -1573,7 +1572,7 @@ export default function AdminEpc() {
                       }
                       const certificateIds = Array.from(certIdsSet);
                       if (certificateIds.length === 0) {
-                        throw new Error('Tiada certificate yang boleh dipadamkan daripada EPC items dipilih.');
+                        throw new Error('No certificate can be unlinked from the selected EPC items.');
                       }
                       const designRaw = String(bulkLandingDesignId || '').trim();
                       const cmsDesignId = designRaw ? Number(designRaw) : null;
@@ -1645,15 +1644,15 @@ export default function AdminEpc() {
                 </div>
               ) : null}
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-[11px] text-emerald-800">
-                Sila confirm untuk terus activate certificate di bawah NFC tag ini. Sistem akan terus:
+                Please confirm to proceed with certificate activation for these NFC tags. The system will:
                 <ul className="mt-1.5 space-y-1 list-disc pl-5">
-                  <li>Link certificate ID ke semua EPC items yang baru di-import</li>
-                  <li>Enable /verify flow (resolve endpoint) untuk semua NFC tag ini</li>
-                  <li>Gunakan 3-tier Landing Page Design (Tier 1 Certificate override → Tier 2 Product cert → Tier 3 Product main)</li>
+                  <li>Link certificate ID to all newly imported EPC items</li>
+                  <li>Enable /verify flow (resolve endpoint) for all these NFC tags</li>
+                  <li>Apply 3-tier Landing Page Design (Tier 1 Certificate override → Tier 2 Product cert → Tier 3 Product main)</li>
                 </ul>
               </div>
               <p className="text-[11px] text-zinc-600">
-                <strong>Nota</strong>: Validasi "Batch Number / Swiftlet House Number diperlukan" <em>telah dimatikan</em> — hanya EPC + Manufacture Date sudah memadai untuk activate certificate.
+                <strong>Note</strong>: Validation for "Batch Number / Swiftlet House Number is required" has been disabled — only EPC + Manufacture Date are needed to activate the certificate.
               </p>
             </div>
             <div className="flex items-center justify-end gap-2 border-t border-zinc-200 bg-zinc-50 px-4 py-3">
@@ -1672,7 +1671,7 @@ export default function AdminEpc() {
                 className="ac-btn ac-btn-primary px-4 py-2 text-xs"
                 onClick={async () => {
                   try {
-                    window.alert('✅ Certificate activation confirmed. All imported EPC items boleh verify dengan hanya EPC Code + Manufacture Date sekarang.');
+                    window.alert('✅ Certificate activation confirmed. All imported EPC items can now be verified with just EPC Code + Manufacture Date.');
                     setActivateCertConfirmOpen(false);
                     setActivateCertConfirmMeta(null);
                     await fetchItems({
@@ -1883,14 +1882,7 @@ export default function AdminEpc() {
                     }));
 
                     const defaultKeys = DEFAULT_SUPPORTING_TYPES.map((d) => d.key);
-                    const existingKeys = new Set(existing.filter((x) => x.key).map((x) => x.key));
-                    const missingDefaults = defaultKeys.filter((k) => !existingKeys.has(k));
-                    const rows = [
-                      ...existing,
-                      ...(canEditBatchDocs
-                        ? missingDefaults.map((k) => ({ key: k, mediaUrl: '', uploadedAt: null }))
-                        : [])
-                    ];
+                    const rows = [...existing];
 
                     if (rows.length === 0) {
                       return <div className="text-[11px] text-zinc-500">{t('notUploaded')}</div>;
@@ -2199,23 +2191,39 @@ export default function AdminEpc() {
               </div>
 
               <div>
+                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('landingPageDesign')}</div>
+                <select
+                  value={importCmsDesignId}
+                  onChange={(e) => setImportCmsDesignId(e.target.value)}
+                  className="ac-input"
+                  disabled={cmsDesignsLoading}
+                >
+                  <option value="">{t('useProductLandingDesign')}</option>
+                  {(Array.isArray(cmsDesigns) ? cmsDesigns : []).map((d) => (
+                    <option key={String(d.id)} value={String(d.id)}>
+                      {String(d.name || `Design #${d.id}`)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
-                  <div>
-                    <div className="text-[11px] font-semibold text-zinc-600">{t('supportingCertificates')}</div>
-                    <div className="text-[11px] text-zinc-500">
-                      {t('supportingCertsUploaded', {
-                        value: importDocRows.filter((row) => String(row?.url || '').trim()).length
-                      })}
-                      <span className="ml-2">(Optional — boleh tambah custom doc type apa-apa)</span>
-                    </div>
-                  </div>
+                  <div className="text-[11px] font-semibold text-zinc-600">{t('supportingCertificates')}</div>
                   <button
                     type="button"
                     className="ac-btn ac-btn-soft px-3 py-2 text-xs"
                     onClick={() =>
                       setImportDocRows((prev) => {
                         const next = Array.isArray(prev) ? [...prev] : [];
-                        next.push({ key: '', url: '' });
+                        const existingKeys = new Set(next.map((r) => String(r?.key || '').trim()).filter(Boolean));
+                        let i = 1;
+                        let autoKey = '';
+                        while (!autoKey || existingKeys.has(autoKey)) {
+                          autoKey = `supporting_${i}`;
+                          i += 1;
+                        }
+                        next.push({ key: autoKey, url: '' });
                         return next;
                       })
                     }
@@ -2237,12 +2245,14 @@ export default function AdminEpc() {
                       <div key={rowKey} className="flex flex-col gap-2 rounded-xl border border-zinc-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 sm:flex-1 min-w-0">
                           <div className="w-full sm:max-w-[200px] min-w-0">
-                            <label className="text-[10px] font-semibold text-zinc-500">Doc key {isDefault ? null : '(*)'}:</label>
+                            <label className="text-[10px] font-semibold text-zinc-500">
+                              Doc name {isDefault ? '(preset)' : '(optional)'}:
+                            </label>
                             <input
                               type="text"
                               className="ac-input mt-1 w-full px-2 py-2 text-xs"
                               value={row.key}
-                              placeholder={`e.g. halal_cert, my_sijil...`}
+                              placeholder={`e.g. halal_cert, sop_docs...`}
                               onChange={(e) => {
                                 setImportLocalError('');
                                 const v = e.target.value;
@@ -2280,7 +2290,22 @@ export default function AdminEpc() {
                                     if (!mediaUrl) throw new Error(tRaw('operationFailed'));
                                     setImportDocRows((prev) => {
                                       const next = [...prev];
-                                      next[idx] = { ...(next[idx] || {}), url: mediaUrl };
+                                      const cur = { ...(next[idx] || {}) };
+                                      if (isAutoPlaceholderDocKey(cur.key, idx)) {
+                                        const taken = new Set(
+                                          next.map((r, j) => (j === idx ? '' : String(r?.key || '').trim())).filter(Boolean)
+                                        );
+                                        let base = cleanFilenameToDocKey(file.name, 'supporting');
+                                        let candidate = base;
+                                        let suffix = 2;
+                                        while (taken.has(candidate)) {
+                                          candidate = `${base}_${suffix}`;
+                                          suffix += 1;
+                                        }
+                                        cur.key = candidate;
+                                      }
+                                      cur.url = mediaUrl;
+                                      next[idx] = cur;
                                       return next;
                                     });
                                   } catch (err) {
@@ -2334,11 +2359,24 @@ export default function AdminEpc() {
                     if (missingCount > 0) throw new Error(t('missingEpcError'));
 
                     const documents = {};
+                    const usedKeys = new Set();
+                    let autoIdx = 1;
                     for (const row of importDocRows) {
-                      const k = String(row?.key || '').trim();
                       const v = String(row?.url || '').trim();
-                      if (!k) continue;
                       if (!v) continue;
+                      let k = String(row?.key || '').trim();
+                      if (!k || /^supporting_\d+$/.test(k) || usedKeys.has(k)) {
+                        const fromUrl = cleanFilenameToDocKey(v.split('/').pop() || v.split('\\').pop() || '', 'supporting');
+                        let candidate = fromUrl;
+                        let suffix = autoIdx;
+                        while (usedKeys.has(candidate)) {
+                          candidate = `${fromUrl}_${suffix}`;
+                          suffix += 1;
+                        }
+                        autoIdx = suffix + 1;
+                        k = candidate;
+                      }
+                      usedKeys.add(k);
                       documents[k] = v;
                     }
 
@@ -2350,20 +2388,35 @@ export default function AdminEpc() {
                       documents
                     });
                     setImportLastResult(res || null);
-                    if (Array.isArray(res?.batchIds) && res.batchIds.length === 1) {
-                      const bid = Number(res.batchIds[0]);
-                      if (Number.isFinite(bid) && bid > 0) {
-                        setTab('batches');
-                        setListBatchId(String(bid));
-                        setListOffset(0);
+
+                    const bid = Array.isArray(res?.batchIds) && res.batchIds.length === 1 ? Number(res.batchIds[0]) : null;
+                    const realBid = Number.isFinite(bid) && bid > 0 ? bid : Number(res?.batchId || res?.batch?.id || 0);
+                    const tplCertId = String(res?.batch?.certificateTemplate?.certificateId || '').trim() || '';
+                    const cmsDesignRaw = String(importCmsDesignId || '').trim();
+                    if (realBid > 0 && tplCertId && cmsDesignRaw) {
+                      try {
+                        const designId = Number(cmsDesignRaw);
+                        if (Number.isFinite(designId) && designId > 0) {
+                          await updateCertificate({
+                            certificateId: tplCertId,
+                            patch: { cmsDesignId: designId }
+                          });
+                        }
+                      } catch (_ignore) {
+                        // ignore non-critical landing design assign failure on import success
                       }
                     }
+
+                    if (realBid > 0) {
+                      setTab('batches');
+                      setListBatchId(String(realBid));
+                      setListOffset(0);
+                    }
                     const rows = Number(res?.rows || 0);
-                    const bid = Array.isArray(res?.batchIds) && res.batchIds.length === 1 ? Number(res.batchIds[0]) : null;
                     setActivateCertConfirmMeta({
                       source: 'batchImport',
-                      batchId: Number.isFinite(bid) && bid > 0 ? bid : null,
-                      description: rows > 0 ? `Import batch berjaya. ${rows} EPC row(s) didaftarkan dengan Manufacture Date.` : 'Import batch berjaya.'
+                      batchId: realBid > 0 ? realBid : null,
+                      description: rows > 0 ? `Batch import successful. ${rows} EPC row(s) registered with Manufacture Date.` : 'Batch import successful.'
                     });
                     closeImport();
                     setActivateCertConfirmOpen(true);

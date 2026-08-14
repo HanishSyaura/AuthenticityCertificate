@@ -822,7 +822,7 @@ export const STRINGS = {
     skuRequired: 'SKU is required.',
     authCertRequired: 'Auth certificate is required.',
     allSupportingCertsRequired: 'All 4 supporting certificates are required.',
-    supportingCertsUploaded: 'Supporting certificates: {{value}}/4 uploaded',
+    supportingCertsUploaded: 'Supporting certificates: {{value}} uploaded',
     noProductAssigned: 'No product assigned',
     uploadPdf: 'Upload PDF',
     mohHealthCertificate: 'MOH Health Certificate',

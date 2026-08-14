@@ -124,6 +124,94 @@ function formatYyyyMmDd(d = new Date(), timeZone = null) {
   return `${yyyy}${mm}${dd}`;
 }
 
+const EPC_EXPORT_COLUMN_META = {
+  epcCode: { header: 'EPC code', defaultOn: true, alwaysOffer: true, requires: null, aliasFor: null },
+  runningNo: { header: 'Running no', defaultOn: false, alwaysOffer: true, requires: null, aliasFor: null },
+  netWeight: { header: 'Net Weight', defaultOn: true, alwaysOffer: false, requires: null, aliasFor: null },
+  productionDate: { header: 'Production Date', defaultOn: true, alwaysOffer: false, requires: null, aliasFor: null },
+  manufactureDate: { header: 'Manufacture date', defaultOn: true, alwaysOffer: false, requires: null, aliasFor: 'productionDate' },
+  caiqNumber: { header: 'CAIQ number', defaultOn: true, alwaysOffer: false, requires: null, aliasFor: null },
+  barcode: { header: 'Barcode', defaultOn: true, alwaysOffer: true, requires: null, aliasFor: null },
+  batchNumber: { header: 'Batch number', defaultOn: true, alwaysOffer: false, requires: null, aliasFor: null },
+  swiftletHouseNumber: { header: 'Swiftlet house number', defaultOn: true, alwaysOffer: false, requires: null, aliasFor: null },
+  status: { header: 'Status', defaultOn: false, alwaysOffer: false, requires: 'status', aliasFor: null },
+  createdAt: { header: 'Created at', defaultOn: false, alwaysOffer: false, requires: null, aliasFor: null },
+  remark: { header: 'Remark', defaultOn: false, alwaysOffer: false, requires: 'batch.remark', aliasFor: null }
+};
+
+const EPC_EXPORT_ALLOWED_KEYS = new Set(Object.keys(EPC_EXPORT_COLUMN_META));
+
+const EPC_EXPORT_ITEM_SELECT = {
+  id: true,
+  epcCode: true,
+  runningNo: true,
+  createdAt: true,
+  netWeight: true,
+  productionDate: true,
+  caiqNumber: true,
+  barcode: true,
+  batchNumber: true,
+  swiftletHouseNumber: true,
+  organizationId: true,
+  batchId: true
+};
+
+function parseExportUniqueColumns(requested) {
+  const list = Array.isArray(requested) ? requested : [];
+  const out = [];
+  for (const c of list) {
+    const key = String(c || '').trim();
+    if (!key || !EPC_EXPORT_ALLOWED_KEYS.has(key) || out.includes(key)) continue;
+    out.push(key);
+  }
+  return out;
+}
+
+function deriveColumnsFromTemplate(template) {
+  const placeholders = Array.isArray(template?.placeholders) ? template.placeholders : [];
+  const keys = new Set();
+  for (const p of placeholders) {
+    const bindPath = String(p?.bindPath || '').trim();
+    if (!bindPath || !bindPath.startsWith('epcItem.')) continue;
+    const rest = bindPath.slice('epcItem.'.length).trim();
+    if (!rest) continue;
+    if (EPC_EXPORT_ALLOWED_KEYS.has(rest)) keys.add(rest);
+    else {
+      const found = Object.entries(EPC_EXPORT_COLUMN_META).find(([k, m]) => m.aliasFor === rest && EPC_EXPORT_ALLOWED_KEYS.has(k));
+      if (found) keys.add(found[0]);
+    }
+  }
+  return Array.from(keys);
+}
+
+function formatExportCellValue(it, col, extras = {}) {
+  const meta = EPC_EXPORT_COLUMN_META[col] || null;
+  const effectiveField = meta?.aliasFor && it[meta.aliasFor] !== undefined ? meta.aliasFor : col;
+
+  if (col === 'status') {
+    const active = extras?.activeSet instanceof Set ? extras.activeSet.has(String(it?.epcCode || '').trim()) : false;
+    return active ? 'ACTIVE' : 'INACTIVE';
+  }
+  if (col === 'remark') {
+    const v = it?.batch?.remark;
+    return v == null ? '' : String(v);
+  }
+  if (effectiveField === 'createdAt') {
+    const v = it?.createdAt;
+    return v ? new Date(v).toISOString().slice(0, 19).replace('T', ' ') : '';
+  }
+  if (effectiveField === 'productionDate') {
+    const v = it?.productionDate;
+    return v ? new Date(v).toISOString().slice(0, 10) : '';
+  }
+  if (effectiveField === 'manufactureDate') {
+    const v = it?.productionDate;
+    return v ? new Date(v).toISOString().slice(0, 10) : '';
+  }
+  const v = it?.[effectiveField];
+  return v == null ? '' : String(v);
+}
+
 function normalizeSkuCode(product) {
   const skuLen = getSkuLen();
   const rawSku = String(product?.sku || '').trim();
@@ -596,7 +684,7 @@ async function exportBatchXlsx({ organizationId, batchId, columns }) {
       where: { id, organizationId: orgId },
       include: {
         product: { select: { id: true, sku: true, name: true, code: true } },
-        certificateTemplate: { select: { id: true, certificateId: true, name: true } }
+        certificateTemplate: { select: { id: true, certificateId: true, name: true, placeholders: true } }
       }
     }),
     2500
@@ -607,36 +695,36 @@ async function exportBatchXlsx({ organizationId, batchId, columns }) {
     prisma.epcItem.findMany({
       where: { organizationId: orgId, batchId: id },
       orderBy: { runningNo: 'asc' },
-      select: { epcCode: true, runningNo: true, createdAt: true, netWeight: true, productionDate: true, caiqNumber: true }
+      select: EPC_EXPORT_ITEM_SELECT
     }),
     12_000
   );
 
-  const allowedColumns = new Set(['epcCode', 'runningNo', 'netWeight', 'productionDate', 'caiqNumber']);
-  const requested = Array.isArray(columns) ? columns : [];
-  const unique = [];
-  for (const c of requested) {
-    const key = String(c || '').trim();
-    if (!key || !allowedColumns.has(key) || unique.includes(key)) continue;
-    unique.push(key);
+  const template = batch.certificateTemplate || null;
+  const templateCols = deriveColumnsFromTemplate(template);
+  const tplSet = new Set(templateCols);
+  const defaultCols = ['epcCode'];
+  for (const k of ['epcCode', 'runningNo']) {
+    if (EPC_EXPORT_COLUMN_META[k]?.alwaysOffer && !tplSet.has(k)) tplSet.add(k);
   }
-  const exportColumns = unique.length > 0 ? unique : ['epcCode', 'netWeight', 'productionDate', 'caiqNumber'];
+  for (const k of templateCols) defaultCols.push(k);
 
-  const wsItems = XLSX.utils.json_to_sheet(
-    items.map((it) => {
-      const row = {};
-      for (const col of exportColumns) {
-        if (col === 'productionDate') {
-          row[col] = it.productionDate ? new Date(it.productionDate).toISOString().slice(0, 10) : '';
-          continue;
-        }
-        const v = it[col];
-        row[col] = v == null ? '' : String(v);
-      }
-      return row;
-    }),
-    { header: exportColumns }
-  );
+  const explicit = parseExportUniqueColumns(columns);
+  const exportColumns = explicit.length > 0
+    ? explicit
+    : defaultCols;
+
+  const rows = items.map((it) => {
+    const row = {};
+    for (const col of exportColumns) {
+      const header = EPC_EXPORT_COLUMN_META[col]?.header || col;
+      row[header] = formatExportCellValue(it, col, {});
+    }
+    return row;
+  });
+
+  const header = exportColumns.map((c) => EPC_EXPORT_COLUMN_META[c]?.header || c);
+  const wsItems = XLSX.utils.json_to_sheet(rows, { header });
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, wsItems, 'epc');
@@ -807,7 +895,7 @@ async function exportItemsXlsx({ organizationId, itemIds, q, createdFrom, create
   const items = await withTimeout(
     prisma.epcItem.findMany({
       where,
-      include: { batch: { select: { remark: true } } },
+      include: { batch: { select: { remark: true, certificateTemplateId: true, certificateTemplate: { select: { placeholders: true } } } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: maxRows
     }),
@@ -834,47 +922,28 @@ async function exportItemsXlsx({ organizationId, itemIds, q, createdFrom, create
     }
   }
 
-  const allowedColumns = new Set([
-    'epcCode',
-    'status',
-    'barcode',
-    'caiqNumber',
-    'netWeight',
-    'manufactureDate',
-    'batchNumber',
-    'swiftletHouseNumber',
-    'createdAt',
-    'remark'
-  ]);
-  const requested = Array.isArray(columns) ? columns : [];
-  const unique = [];
-  for (const c of requested) {
-    const key = String(c || '').trim();
-    if (!key || !allowedColumns.has(key) || unique.includes(key)) continue;
-    unique.push(key);
+  const firstTpl = items[0]?.batch?.certificateTemplate || null;
+  const tplCols = deriveColumnsFromTemplate(firstTpl);
+  const tplColSet = new Set(tplCols);
+  for (const k of ['epcCode']) {
+    if (EPC_EXPORT_COLUMN_META[k]?.alwaysOffer && !tplColSet.has(k)) tplColSet.add(k);
   }
-  const exportColumns =
-    unique.length > 0
-      ? unique
-      : ['epcCode', 'barcode', 'caiqNumber', 'netWeight', 'manufactureDate', 'batchNumber', 'swiftletHouseNumber'];
+  const defaultCols = ['epcCode', ...tplCols];
+
+  const explicit = parseExportUniqueColumns(columns);
+  const exportColumns = explicit.length > 0 ? explicit : defaultCols;
 
   const rows = (Array.isArray(items) ? items : []).map((it) => {
-    const status = activeSet.has(String(it.epcCode || '').trim()) ? 'ACTIVE' : 'INACTIVE';
     const row = {};
     for (const col of exportColumns) {
-      if (col === 'status') row[col] = status;
-      else if (col === 'remark') row[col] = it.batch?.remark == null ? '' : String(it.batch.remark);
-      else if (col === 'createdAt') row[col] = it.createdAt ? new Date(it.createdAt).toISOString().slice(0, 19).replace('T', ' ') : '';
-      else if (col === 'manufactureDate') row[col] = it.productionDate ? new Date(it.productionDate).toISOString().slice(0, 10) : '';
-      else {
-        const v = it[col];
-        row[col] = v == null ? '' : String(v);
-      }
+      const header = EPC_EXPORT_COLUMN_META[col]?.header || col;
+      row[header] = formatExportCellValue(it, col, { activeSet });
     }
     return row;
   });
 
-  const ws = XLSX.utils.json_to_sheet(rows, { header: exportColumns });
+  const header = exportColumns.map((c) => EPC_EXPORT_COLUMN_META[c]?.header || c);
+  const ws = XLSX.utils.json_to_sheet(rows, { header });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'epc_items');
   const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });

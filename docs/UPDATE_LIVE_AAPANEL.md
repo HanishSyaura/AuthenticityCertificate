@@ -19,29 +19,41 @@ Asumsi:
 Paste satu blok ini dalam SSH:
 
 ```bash
-cd /www/wwwroot/nfc.cert.demo.clbgroups.com/app
+cd /www/wwwroot/nfc.cert.demo.clbgroups.com/app || exit 1
 
-echo "== 1) Pull latest code =="
+echo "== 1) Clean frontend build files =="
+git restore frontend/dist 2>/dev/null || true
+git clean -fd frontend/dist 2>/dev/null || true
+
+echo "== 2) Check local changes =="
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "ERROR: Local tracked changes detected."
+  git status --short
+  exit 1
+fi
+
+echo "== 3) Pull latest code =="
 git fetch origin
 git checkout demo
-git pull origin demo
+git pull --ff-only origin demo
 
-echo "== 1b) Confirm branch + commit =="
-git rev-parse --abbrev-ref HEAD
+echo "== 4) Confirm version =="
 git log -1 --oneline
 
-echo "== 2) Backend deps + Prisma =="
+echo "== 5) Backend dependencies =="
 npm ci || npm install
-npx prisma generate
 
-echo "== 2b) Sync DB schema (Prisma) =="
-npx prisma db push
+echo "== 6) Prisma check =="
+npx prisma validate || exit 1
+npx prisma generate || exit 1
+npx prisma db push || exit 1
 
-echo "== 3) Restart backend =="
-pm2 restart nfccertdemo-api
+echo "== 7) Restart backend =="
+pm2 restart nfccertdemo-api --update-env
 
-echo "== 4) Frontend deps + build =="
-cd frontend
+echo "== 8) Frontend build =="
+cd frontend || exit 1
+
 npm ci || npm install
 
 if [ ! -f ".env.production" ]; then
@@ -49,12 +61,16 @@ if [ ! -f ".env.production" ]; then
 fi
 
 rm -rf dist
-npm run build
+npm run build || exit 1
 
-echo "== 5) Quick checks =="
-curl -s http://127.0.0.1:5015/health
+echo "== 9) Health check =="
+curl -fsS http://127.0.0.1:5015/health
 echo
+
+echo "== 10) PM2 status =="
 pm2 status nfccertdemo-api
+
+echo "== DEPLOYMENT DONE =="
 ```
 
 Lepas run, test di browser:
