@@ -19,6 +19,10 @@ const reissueSchema = z.object({
   reason: z.string().min(1).optional()
 });
 
+const patchSchema = z.object({
+  cmsDesignId: z.number().int().nullable().optional()
+});
+
 async function generate(req, res) {
   try {
     const validatedData = generateSchema.parse(req.body);
@@ -125,11 +129,27 @@ async function get(req, res) {
   }
 }
 
+async function patch(req, res) {
+  try {
+    const { id } = req.params;
+    const patchData = patchSchema.parse(req.body);
+    const cert = await certificateService.patchCertificate({
+      organizationId: req.organization.id,
+      certificateId: id,
+      patch: patchData
+    });
+    res.success(cert, 'Certificate updated');
+  } catch (error) {
+    res.error(error.message, 400);
+  }
+}
+
 module.exports = {
   list,
   get,
   generate,
   revoke,
   assign,
-  reissue
+  reissue,
+  patch
 };

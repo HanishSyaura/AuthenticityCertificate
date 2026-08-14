@@ -37,6 +37,15 @@ router.delete(
   auditAction('DELETE_CMS_DESIGN', { targetType: 'cms_design', getTargetId: (req) => String(req.params?.id || '') }),
   cmsController.removeDesign
 );
+router.post(
+  '/design/default-rename',
+  verifyToken,
+  attachAccessContext,
+  requirePermission('cms.write'),
+  requireOrganization,
+  auditAction('MATERIALIZE_DEFAULT_DESIGN', { targetType: 'cms_design' }),
+  cmsController.materializeDefaultDesign
+);
 
 // ===== CmsPage (inner pages/seksyen dalam satu design bundle) =====
 router.post(

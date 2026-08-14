@@ -111,6 +111,19 @@ async function removeDesign(req, res) {
   }
 }
 
+async function materializeDefaultDesign(req, res) {
+  try {
+    const v = designSchema.parse(req.body || {});
+    const row = await cmsService.materializeDefaultDesign({
+      organizationId: req.organization.id,
+      ...v
+    });
+    res.success(row, 'Default design renamed successfully');
+  } catch (e) {
+    res.error(resolveMessage(e), resolveStatus(e, 400));
+  }
+}
+
 async function createPage(req, res) {
   try {
     const validatedData = pageSchema.parse(req.body);
@@ -255,4 +268,5 @@ module.exports = {
   createDesign,
   patchDesign,
   removeDesign,
+  materializeDefaultDesign,
 };

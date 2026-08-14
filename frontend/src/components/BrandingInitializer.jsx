@@ -30,37 +30,68 @@ function writeCache(value) {
   }
 }
 
+(function applyImmediateBootBranding() {
+  if (typeof document === 'undefined') return;
+  const cached = readCache();
+  applyBranding({
+    appTitle: cached?.appTitle || DEFAULT_APP_TITLE,
+    faviconUrl: cached?.faviconUrl || null
+  });
+})();
+
 export default function BrandingInitializer() {
   const token = useAdminAuthStore((s) => s.token);
   const adminSettings = useAdminSettingsStore((s) => s.settings);
+  const fetchAdminSettings = useAdminSettingsStore((s) => s.fetchSettings);
   const appliedAdminRef = useRef(false);
+  const fetchedPublicRef = useRef(false);
 
   useEffect(() => {
-    applyBranding({ appTitle: DEFAULT_APP_TITLE });
+    applyBranding({ appTitle: DEFAULT_APP_TITLE, faviconUrl: null });
+    const cached = readCache();
+    if (cached) applyBranding(cached);
   }, []);
 
   useEffect(() => {
-    if (!token) {
-      appliedAdminRef.current = false;
-      return;
+    if (token && typeof fetchAdminSettings === 'function' && !useAdminSettingsStore.getState?.()?.loadedAt) {
+      try {
+        fetchAdminSettings();
+      } catch {
+        void 0;
+      }
     }
+  }, [token, fetchAdminSettings]);
+
+  useEffect(() => {
     const appTitle = adminSettings?.appTitle || null;
     const faviconUrl = adminSettings?.faviconUrl || null;
-    if (!appTitle && !faviconUrl) return;
-    applyBranding({ appTitle, faviconUrl });
-    appliedAdminRef.current = true;
+    if (!appTitle && !faviconUrl) {
+      if (token) return;
+    }
+    if (token) {
+      applyBranding({ appTitle, faviconUrl });
+      writeCache({
+        appTitle: appTitle || readCache()?.appTitle || null,
+        faviconUrl: faviconUrl || readCache()?.faviconUrl || null
+      });
+      appliedAdminRef.current = true;
+    }
   }, [adminSettings?.appTitle, adminSettings?.faviconUrl, token]);
 
   useEffect(() => {
     if (token) return;
+    appliedAdminRef.current = false;
+    fetchedPublicRef.current = false;
     const cached = readCache();
     if (cached) applyBranding(cached);
 
     let alive = true;
     const run = async () => {
+      if (fetchedPublicRef.current) return;
+      fetchedPublicRef.current = true;
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 1500);
+        const timeout = setTimeout(() => controller.abort(), 3000);
         const base = getPublicApiBaseUrl();
         const res = await fetch(`${base}/settings/`, { signal: controller.signal });
         clearTimeout(timeout);
@@ -69,10 +100,11 @@ export default function BrandingInitializer() {
         const appTitle = next?.appTitle ? String(next.appTitle).trim() : null;
         const faviconUrl = next?.faviconUrl ? String(next.faviconUrl).trim() : null;
         if (!alive) return;
-        if (appTitle || faviconUrl) {
-          applyBranding({ appTitle, faviconUrl });
-          writeCache({ appTitle, faviconUrl });
-        }
+        applyBranding({ appTitle, faviconUrl });
+        writeCache({
+          appTitle: appTitle || cached?.appTitle || null,
+          faviconUrl: faviconUrl || cached?.faviconUrl || null
+        });
       } catch {
         void 0;
       }

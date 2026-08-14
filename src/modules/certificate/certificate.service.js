@@ -484,6 +484,42 @@ async function listCertificates({ organizationId, q, status, type, batchNo, prod
   return { total, items, limit: l, offset: o };
 }
 
+async function patchCertificate({ organizationId, certificateId, patch }) {
+  if (!certificateId) throw new Error('certificateId is required');
+  if (!patch || typeof patch !== 'object') throw new Error('patch is required');
+
+  const cert = await prisma.certificate.findUnique({
+    where: { organizationId, certificateId }
+  });
+  if (!cert) throw new Error('Certificate not found');
+
+  const data = {};
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'cmsDesignId')) {
+    const designId = patch.cmsDesignId == null ? null : Number(patch.cmsDesignId);
+    if (designId != null) {
+      const design = await prisma.cmsDesign.findUnique({
+        where: { id: designId, organizationId, deletedAt: null }
+      });
+      if (!design) throw new Error('CmsDesign not found');
+    }
+    data.cmsDesignId = designId;
+  }
+
+  if (Object.keys(data).length === 0) {
+    return cert;
+  }
+
+  return prisma.certificate.update({
+    where: { organizationId, certificateId },
+    data,
+    include: {
+      batch: { include: { product: true } },
+      identities: { where: { unassignedAt: null }, orderBy: { assignedAt: 'desc' }, take: 5 }
+    }
+  });
+}
+
 module.exports = {
   generateCertificates,
   revokeCertificate,
@@ -494,5 +530,6 @@ module.exports = {
   getCertificateDetails,
   getCertificateDetailsCached,
   getCertificateDetailsForAdmin,
-  listCertificates
+  listCertificates,
+  patchCertificate
 };

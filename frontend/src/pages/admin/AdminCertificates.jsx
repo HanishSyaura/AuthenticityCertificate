@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import useCertificatesStore from '../../store/useCertificatesStore';
+import useCmsStore from '../../store/useCmsStore';
 import { useT } from '../../i18n/useT';
 import DataTable from '../../components/ui/DataTable';
 import TablePager from '../../components/ui/TablePager';
@@ -29,7 +30,8 @@ export default function AdminCertificates() {
     fetchCertificates,
     assignIdentity,
     revokeCertificate,
-    reissueCertificate
+    reissueCertificate,
+    updateCertificate
   } = useCertificatesStore((s) => ({
     items: s.items,
     total: s.total,
@@ -41,7 +43,14 @@ export default function AdminCertificates() {
     fetchCertificates: s.fetchCertificates,
     assignIdentity: s.assignIdentity,
     revokeCertificate: s.revokeCertificate,
-    reissueCertificate: s.reissueCertificate
+    reissueCertificate: s.reissueCertificate,
+    updateCertificate: s.updateCertificate
+  }));
+
+  const { cmsDesigns, cmsDesignsLoading, cmsFetchDesigns } = useCmsStore((s) => ({
+    cmsDesigns: s.designs,
+    cmsDesignsLoading: s.loadingDesigns || s.loading,
+    cmsFetchDesigns: s.fetchDesigns
   }));
 
   const [q, setQ] = useState('');
@@ -54,9 +63,16 @@ export default function AdminCertificates() {
   const [assignEpc, setAssignEpc] = useState('');
   const [assignExp, setAssignExp] = useState('');
 
+  const [lpOpen, setLpOpen] = useState(false);
+  const [lpCertId, setLpCertId] = useState('');
+  const [lpCertCmsDesignId, setLpCertCmsDesignId] = useState('');
+  const [lpProductCmsDesignId, setLpProductCmsDesignId] = useState(null);
+  const [lpProductCmsCertDesignId, setLpProductCmsCertDesignId] = useState(null);
+
   useEffect(() => {
     void fetchCertificates({});
-  }, [fetchCertificates]);
+    void cmsFetchDesigns();
+  }, [fetchCertificates, cmsFetchDesigns]);
 
   return (
     <div className="ac-page">
@@ -187,6 +203,17 @@ export default function AdminCertificates() {
                     }
                   },
                   {
+                    key: 'landing',
+                    label: 'Reassign Landing Page',
+                    onSelect: () => {
+                      setLpCertId(c.certificateId);
+                      setLpCertCmsDesignId(c.cmsDesignId != null ? String(c.cmsDesignId) : '');
+                      setLpProductCmsDesignId(c.batch?.product?.cmsDesignId ?? null);
+                      setLpProductCmsCertDesignId(c.batch?.product?.cmsCertificateDesignId ?? null);
+                      setLpOpen(true);
+                    }
+                  },
+                  {
                     key: 'revoke',
                     label: t('revoke'),
                     tone: 'danger',
@@ -247,6 +274,85 @@ export default function AdminCertificates() {
                 onClick={async () => {
                   await assignIdentity({ certificateId: assignCertId, nfcUid: assignNfc, epc: assignEpc, expiresAt: assignExp });
                   setAssignOpen(false);
+                  await fetchCertificates({ q, status, type });
+                }}
+              >
+                {t('save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {lpOpen ? (
+        <div className="ac-modal-backdrop">
+          <div className="ac-modal">
+            <div className="mb-1 text-sm font-semibold text-zinc-900">Reassign Landing Page</div>
+            <div className="mb-3 text-[11px] text-zinc-500">
+              Set per-EPC override. Kosongkan untuk ikut fallback Product setting.
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('certificateId')}</div>
+                <input value={lpCertId} readOnly className="ac-input bg-zinc-50 px-3 py-2 text-xs" />
+              </div>
+
+              <div>
+                <div className="mb-1 text-[11px] font-semibold text-zinc-600">
+                  EPC Landing Page Override (Tier 1 — Highest)
+                </div>
+                <select
+                  value={lpCertCmsDesignId}
+                  onChange={(e) => setLpCertCmsDesignId(e.target.value)}
+                  disabled={cmsDesignsLoading}
+                  className="ac-input px-3 py-2 text-xs w-full"
+                >
+                  <option value="">— Fallback to Product (no per-EPC override) —</option>
+                  {Array.isArray(cmsDesigns)
+                    ? cmsDesigns.map((d) => (
+                        <option key={d.id} value={String(d.id)}>
+                          [{d.id}] {d.name || '(unnamed)'}
+                        </option>
+                      ))
+                    : null}
+                </select>
+                <div className="mt-1 text-[10px] text-zinc-500">
+                  * Pilih design bundle untuk EPC ini sahaja. Akan override setting Product.
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-[11px] space-y-1.5">
+                <div className="font-semibold text-zinc-700">Current fallback chain (if above empty):</div>
+                <div>
+                  <span className="text-zinc-500">Tier 2 — Product.cmsCertificateDesignId:</span>{' '}
+                  <span className="font-mono text-zinc-800">
+                    {lpProductCmsCertDesignId != null ? `#${lpProductCmsCertDesignId}` : '(empty)'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-zinc-500">Tier 3 — Product.cmsDesignId:</span>{' '}
+                  <span className="font-mono text-zinc-800">
+                    {lpProductCmsDesignId != null ? `#${lpProductCmsDesignId}` : '(empty)'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => setLpOpen(false)}>
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                className="ac-btn px-3 py-2 text-xs"
+                onClick={async () => {
+                  const cmsDesignId = lpCertCmsDesignId.trim() === '' ? null : Number(lpCertCmsDesignId);
+                  await updateCertificate({
+                    certificateId: lpCertId,
+                    patch: { cmsDesignId }
+                  });
+                  setLpOpen(false);
                   await fetchCertificates({ q, status, type });
                 }}
               >

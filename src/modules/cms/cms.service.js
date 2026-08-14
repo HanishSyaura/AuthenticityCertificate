@@ -348,6 +348,7 @@ module.exports = {
   createDesign,
   listDesigns,
   updateDesign,
+  materializeDefaultDesign,
   deleteDesign,
   getDesignById
 };
@@ -409,9 +410,68 @@ async function updateDesign({ organizationId, id, name, slug, kind, description 
     prisma.cmsDesign.updateMany({
       where: { id: designId, organizationId: orgId, deletedAt: null },
       data,
-    }),
+  }),
     DEFAULT_TIMEOUT_MS
   );
+}
+
+async function materializeDefaultDesign({ organizationId, name, slug, kind, description }) {
+  const orgId = Number(organizationId);
+  const k = (kind || 'landing').toString();
+  const finalName = String(name || '').trim() || 'Default Design';
+  const finalSlug = (String(slug || '').trim() || 'default') + '-' + orgId;
+
+  const result = await prisma.$transaction(async (tx) => {
+    let existing = await withTimeout(
+      tx.cmsDesign.findFirst({
+        where: {
+          organizationId: orgId,
+          kind: k,
+          OR: [
+            { slug: { equals: finalSlug } },
+            { slug: { in: [`default-${orgId}`, 'default-' + orgId + '-landing'] } }
+          ]
+        },
+        select: { id: true, name: true, slug: true }
+      }),
+      DEFAULT_TIMEOUT_MS
+    );
+
+    if (existing) {
+      existing = await withTimeout(
+        tx.cmsDesign.update({
+          where: { id: existing.id },
+          data: {
+            name: finalName,
+            description: description ? String(description).trim() : undefined,
+          }
+        }),
+        DEFAULT_TIMEOUT_MS
+      );
+    } else {
+      existing = await withTimeout(
+        tx.cmsDesign.create({
+          data: {
+            organizationId: orgId,
+            name: finalName,
+            slug: finalSlug,
+            kind: k,
+            description: description ? String(description).trim() : null,
+          }
+        }),
+        DEFAULT_TIMEOUT_MS
+      );
+    }
+
+    await tx.cmsPage.updateMany({
+      where: { organizationId: orgId, kind: k, designId: null },
+      data: { designId: existing.id }
+    });
+
+    return existing;
+  });
+
+  return result;
 }
 
 async function deleteDesign({ organizationId, id }) {

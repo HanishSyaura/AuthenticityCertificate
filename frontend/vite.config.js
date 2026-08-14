@@ -73,6 +73,28 @@ function pdfjsAssetsPlugin() {
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react(), pdfjsAssetsPlugin()],
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    cssCodeSplit: true,
+    sourcemap: false,
+    reportCompressedSize: false,
+    chunkSizeWarningLimit: 2000,
+    rollupOptions: {
+      output: {
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]',
+        manualChunks: {
+          pdf: ['pdfjs-dist'],
+          quill: ['react-quill', 'quill'],
+          katex: ['katex'],
+          react: ['react', 'react-dom', 'react-router-dom'],
+          framer: ['framer-motion']
+        }
+      }
+    }
+  },
   server: {
     port: 3000,
     proxy: {

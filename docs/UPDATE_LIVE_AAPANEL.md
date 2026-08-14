@@ -19,8 +19,6 @@ Asumsi:
 Paste satu blok ini dalam SSH:
 
 ```bash
-set -e
-
 cd /www/wwwroot/nfc.cert.demo.clbgroups.com/app
 
 echo "== 1) Pull latest code =="

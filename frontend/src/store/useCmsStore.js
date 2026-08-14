@@ -205,6 +205,28 @@ const useCmsStore = create((set, get) => ({
     }
   },
 
+  materializeDefaultDesign: async ({ name, slug, kind, description }) => {
+    const { token } = useAdminAuthStore.getState();
+    if (!token) throw new Error(tRaw('notAuthenticated'));
+    const k = typeof kind === 'string' && kind ? kind : 'landing';
+    const safeSlug = slug ? safeSlugify(slug) : undefined;
+    try {
+      const api = createAdminApi({ token });
+      const res = await api.post('/cms/design/default-rename', { name, slug: safeSlug, kind: k, description });
+      const row = res?.data?.data;
+      const existing = get().designs || [];
+      const exists = existing.some((d) => String(d.id) === String(row?.id));
+      const designs = sanitizeDesignsList(exists
+        ? existing.map((d) => String(d.id) === String(row?.id) && row ? { ...d, ...row } : d)
+        : [...existing, row].filter(Boolean));
+      set({ designs, selectedDesignId: row?.id ?? get().selectedDesignId ?? null });
+      return row;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      throw new Error(msg);
+    }
+  },
+
   // =============================================================
   // STATE: CmsPage (inner pages / sections WITHIN currently-selected design)
   // =============================================================

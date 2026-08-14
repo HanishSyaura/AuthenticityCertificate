@@ -71,6 +71,7 @@ export default function AdminCmsBuilder() {
     createDesign,
     patchDesign,
     deleteDesign,
+    materializeDefaultDesign,
     pages,
     layoutsByPageKey,
     selectedPageId,
@@ -94,6 +95,7 @@ export default function AdminCmsBuilder() {
     createDesign: s.createDesign,
     patchDesign: s.patchDesign,
     deleteDesign: s.deleteDesign,
+    materializeDefaultDesign: s.materializeDefaultDesign,
     pages: s.pages,
     layoutsByPageKey: s.layoutsByPageKey,
     selectedPageId: s.selectedPageId,
@@ -131,6 +133,10 @@ export default function AdminCmsBuilder() {
   const [designEditName, setDesignEditName] = useState('');
   const [designEditSlug, setDesignEditSlug] = useState('');
   const [designEditDesc, setDesignEditDesc] = useState('');
+  const [designDefaultRenameOpen, setDesignDefaultRenameOpen] = useState(false);
+  const [designDefaultRenameName, setDesignDefaultRenameName] = useState('');
+  const [designDefaultRenameSlug, setDesignDefaultRenameSlug] = useState('');
+  const [designDefaultRenameDesc, setDesignDefaultRenameDesc] = useState('');
 
   const [pagesOpen, setPagesOpen] = useState(() => {
     try {
@@ -466,18 +472,104 @@ export default function AdminCmsBuilder() {
                 {designsOpen ? (
                   <>
                     {/* Default (legacy) group option — pages with designId = NULL */}
-                    <button
-                      type="button"
-                      onClick={() => setSelectedDesignId(null)}
-                      className={`mb-1 flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${
-                        selectedDesignId == null
-                          ? 'bg-brand-50 ring-1 ring-inset ring-brand-200 text-brand-900 font-semibold'
-                          : 'hover:bg-zinc-50 text-zinc-800'
-                      }`}
-                    >
-                      <span className="flex min-w-0 truncate">✨ {t('defaultDesign')}</span>
-                      <span className="shrink-0 rounded bg-white px-1.5 text-[10px] text-zinc-500">{t('legacy')}</span>
-                    </button>
+                    {designDefaultRenameOpen ? (
+                      <div className="mb-2 space-y-1 rounded-md border border-amber-200 bg-amber-50 p-2">
+                        <div className="text-[11px] font-medium text-amber-900">{t('renameDefaultDesign')}</div>
+                        <p className="text-[10px] leading-snug text-amber-800">{t('renameDefaultDesignHint')}</p>
+                        <input
+                          className="ac-input !py-1 text-[11px]"
+                          placeholder={`${t('name')} — e.g. Old Landing Pages`}
+                          value={designDefaultRenameName}
+                          onChange={(e) => setDesignDefaultRenameName(e.target.value)}
+                        />
+                        <input
+                          className="ac-input !py-1 text-[11px]"
+                          placeholder={`slug (${t('optional')}) — e.g. old-default`}
+                          value={designDefaultRenameSlug}
+                          onChange={(e) => setDesignDefaultRenameSlug(e.target.value)}
+                        />
+                        <textarea
+                          className="ac-input !py-1 text-[11px] h-12"
+                          placeholder={`${t('description')} (${t('optional')})`}
+                          value={designDefaultRenameDesc}
+                          onChange={(e) => setDesignDefaultRenameDesc(e.target.value)}
+                        />
+                        <div className="flex justify-end gap-1 pt-1">
+                          <button
+                            type="button"
+                            className="ac-btn ac-btn-soft !px-2 !py-1 text-[10px]"
+                            onClick={() => {
+                              setDesignDefaultRenameOpen(false);
+                              setDesignDefaultRenameName('');
+                              setDesignDefaultRenameSlug('');
+                              setDesignDefaultRenameDesc('');
+                            }}
+                          >
+                            {t('cancel')}
+                          </button>
+                          <button
+                            type="button"
+                            className="ac-btn !px-2 !py-1 text-[10px]"
+                            onClick={async () => {
+                              const name = String(designDefaultRenameName || '').trim();
+                              if (!name) return;
+                              try {
+                                const row = await materializeDefaultDesign({
+                                  name,
+                                  slug: designDefaultRenameSlug || undefined,
+                                  kind: 'landing',
+                                  description: designDefaultRenameDesc ? String(designDefaultRenameDesc).trim() : undefined
+                                });
+                                setDesignDefaultRenameOpen(false);
+                                setDesignDefaultRenameName('');
+                                setDesignDefaultRenameSlug('');
+                                setDesignDefaultRenameDesc('');
+                                if (row?.id != null) {
+                                  setSelectedDesignId(row.id);
+                                  void fetchPages({ kind: 'landing' });
+                                }
+                              } catch {
+                                /* handled globally */
+                              }
+                            }}
+                          >
+                            {t('rename')}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        className={`mb-1 group rounded-md transition ${
+                          selectedDesignId == null ? 'bg-brand-50 ring-1 ring-inset ring-brand-200' : 'hover:bg-zinc-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDesignId(null)}
+                            className={`flex-1 min-w-0 px-2 py-1.5 text-left text-xs ${
+                              selectedDesignId == null ? 'font-semibold text-brand-900' : 'text-zinc-800'
+                            }`}
+                          >
+                            <div className="truncate">{t('defaultDesign')}</div>
+                            <div className="truncate text-[10px] text-zinc-500">{t('legacy')}</div>
+                          </button>
+                          <button
+                            type="button"
+                            className="mr-1 rounded px-2 py-0.5 text-[10px] text-zinc-500 opacity-0 group-hover:opacity-100 hover:bg-zinc-200 hover:text-zinc-900"
+                            title={t('renameDefaultDesign')}
+                            onClick={() => {
+                              setDesignDefaultRenameOpen(true);
+                              setDesignDefaultRenameName(t('defaultDesign'));
+                              setDesignDefaultRenameSlug('default');
+                              setDesignDefaultRenameDesc('');
+                            }}
+                          >
+                            {t('rename')}
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Created CmsDesign bundles */}
                     {(designs || []).map((d) => {
@@ -566,7 +658,7 @@ export default function AdminCmsBuilder() {
                             </button>
                             <button
                               type="button"
-                              className="px-1 text-[10px] text-zinc-500 opacity-0 group-hover:opacity-100 hover:text-zinc-900"
+                              className="rounded px-2 py-0.5 text-[10px] text-zinc-500 opacity-0 group-hover:opacity-100 hover:bg-zinc-200 hover:text-zinc-900"
                               title={t('edit')}
                               onClick={() => {
                                 setDesignEditingId(d.id);
@@ -575,11 +667,11 @@ export default function AdminCmsBuilder() {
                                 setDesignEditDesc(d.description || '');
                               }}
                             >
-                              ✎
+                              {t('edit')}
                             </button>
                             <button
                               type="button"
-                              className="mr-1 px-1 text-[10px] text-rose-500 opacity-0 group-hover:opacity-100 hover:text-rose-700"
+                              className="mr-1 rounded px-2 py-0.5 text-[10px] text-rose-500 opacity-0 group-hover:opacity-100 hover:bg-rose-100 hover:text-rose-800"
                               title={t('delete')}
                               onClick={async () => {
                                 const confirmMsg =
@@ -598,7 +690,7 @@ export default function AdminCmsBuilder() {
                                 }
                               }}
                             >
-                              🗑
+                              {t('delete')}
                             </button>
                           </div>
                         </div>

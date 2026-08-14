@@ -15,6 +15,8 @@ router.use(requireAccess({ read: 'certificates.read', write: 'certificates.write
 router.get('/', certificateController.list);
 router.get('/:id', certificateController.get);
 
+router.patch('/:id', auditAction('UPDATE_CERT', { targetType: 'certificate', getTargetId: (req) => req.params.id }), certificateController.patch);
+
 router.post('/generate', auditAction('CREATE_CERT', { targetType: 'certificate' }), certificateController.generate);
 
 router.post(

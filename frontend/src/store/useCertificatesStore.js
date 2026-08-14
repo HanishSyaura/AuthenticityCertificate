@@ -94,6 +94,20 @@ const useCertificatesStore = create((set, get) => ({
       set({ loading: false, error: msg });
       throw e;
     }
+  },
+
+  updateCertificate: async ({ certificateId, patch }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.patch(`/certificates/${encodeURIComponent(certificateId)}`, patch || {});
+      set({ loading: false, lastSyncAt: Date.now() });
+      return res?.data?.data;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || tRaw('updateFailed');
+      set({ loading: false, error: msg });
+      throw e;
+    }
   }
 }));
 
