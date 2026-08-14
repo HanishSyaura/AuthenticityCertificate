@@ -895,7 +895,7 @@ async function exportItemsXlsx({ organizationId, itemIds, q, createdFrom, create
   const items = await withTimeout(
     prisma.epcItem.findMany({
       where,
-      include: { batch: { select: { remark: true, certificateTemplateId: true, certificateTemplate: { select: { placeholders: true } } } },
+      include: { batch: { select: { remark: true, certificateTemplateId: true, certificateTemplate: { select: { placeholders: true } } } } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: maxRows
     }),
