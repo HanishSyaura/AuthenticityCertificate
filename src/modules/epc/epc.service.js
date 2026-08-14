@@ -1173,6 +1173,46 @@ async function deleteAllGeneratedBatches({ organizationId, corpPrefix }) {
   };
 }
 
+async function attachIdentitiesToItems({ organizationId, items, take = 5 }) {
+  const orgId = Number(organizationId);
+  const list = Array.isArray(items) ? items : [];
+  if (list.length === 0) return;
+  const codes = list
+    .map((it) => String(it?.epcCode || '').trim())
+    .filter((s) => s);
+  if (codes.length === 0) return;
+
+  const rows = await withTimeout(
+    prisma.tagIdentity.findMany({
+      where: {
+        organizationId: orgId,
+        epc: { in: codes },
+        unassignedAt: null
+      },
+      orderBy: { assignedAt: 'desc' },
+      select: { id: true, epc: true, nfcUid: true, certificateId: true, assignedAt: true }
+    }),
+    2500
+  );
+
+  const byEpc = new Map();
+  for (const r of Array.isArray(rows) ? rows : []) {
+    const key = String(r?.epc || '').trim().toUpperCase();
+    if (!key) continue;
+    const arr = byEpc.get(key);
+    if (!arr) {
+      byEpc.set(key, [r]);
+    } else if (arr.length < take) {
+      arr.push(r);
+    }
+  }
+
+  for (const it of list) {
+    const key = String(it?.epcCode || '').trim().toUpperCase();
+    it.identities = byEpc.get(key) || [];
+  }
+}
+
 async function listBatches({ organizationId, q, origin, limit, offset }) {
   const orgId = Number(organizationId);
   const originKey = typeof origin === 'string' ? origin.trim().toLowerCase() : '';
@@ -1357,17 +1397,13 @@ async function listItems({ organizationId, q, batchId, pendingOnly, status, crea
               createdAt: true,
               product: { select: { id: true, sku: true, name: true, code: true, cmsDesignId: true, cmsCertificateDesignId: true } }
             }
-          },
-          identities: {
-            where: { unassignedAt: null },
-            orderBy: { assignedAt: 'desc' },
-            take: 5,
-            select: { id: true, epc: true, nfcUid: true, certificateId: true, assignedAt: true }
           }
         }
       }),
       2500
     );
+
+    await attachIdentitiesToItems({ organizationId: orgId, items, take: 5 });
 
     const byId = new Map((Array.isArray(items) ? items : []).map((it) => [Number(it.id), it]));
     const ordered = ids.map((id) => byId.get(id)).filter(Boolean);
@@ -1419,12 +1455,6 @@ async function listItems({ organizationId, q, batchId, pendingOnly, status, crea
               createdAt: true,
               product: { select: { id: true, sku: true, name: true, code: true, cmsDesignId: true, cmsCertificateDesignId: true } }
             }
-          },
-          identities: {
-            where: { unassignedAt: null },
-            orderBy: { assignedAt: 'desc' },
-            take: 5,
-            select: { id: true, epc: true, nfcUid: true, certificateId: true, assignedAt: true }
           }
         },
         orderBy: { createdAt: 'desc' },
@@ -1435,22 +1465,14 @@ async function listItems({ organizationId, q, batchId, pendingOnly, status, crea
     2500
   );
 
-  const codes = (Array.isArray(items) ? items : [])
-    .map((it) => String(it?.epcCode || '').trim())
-    .filter((s) => s);
+  await attachIdentitiesToItems({ organizationId: orgId, items, take: 5 });
 
   const activeSet = new Set();
-  if (codes.length) {
-    const actives = await withTimeout(
-      prisma.tagIdentity.findMany({
-        where: { organizationId: orgId, epc: { in: codes }, unassignedAt: null },
-        select: { epc: true }
-      }),
-      2500
-    );
-    for (const r of Array.isArray(actives) ? actives : []) {
-      const epc = String(r?.epc || '').trim().toUpperCase();
-      if (epc) activeSet.add(epc);
+  for (const it of Array.isArray(items) ? items : []) {
+    const idents = Array.isArray(it?.identities) ? it.identities : [];
+    if (idents.length > 0) {
+      const key = String(it?.epcCode || '').trim().toUpperCase();
+      if (key) activeSet.add(key);
     }
   }
 
@@ -1478,12 +1500,6 @@ const EPC_ITEM_INCLUDE = {
       createdAt: true,
       product: { select: { id: true, sku: true, name: true, code: true, cmsDesignId: true, cmsCertificateDesignId: true } }
     }
-  },
-  identities: {
-    where: { unassignedAt: null },
-    orderBy: { assignedAt: 'desc' },
-    take: 5,
-    select: { id: true, epc: true, nfcUid: true, certificateId: true, assignedAt: true }
   }
 };
 
@@ -1504,6 +1520,7 @@ async function getItemByEpc({ organizationId, epcCode }) {
     err.status = 404;
     throw err;
   }
+  await attachIdentitiesToItems({ organizationId: orgId, items: [item], take: 5 });
   return item;
 }
 
@@ -1535,6 +1552,7 @@ async function updateItemProduction({ organizationId, itemId, patch, actor, expe
     err.status = 404;
     throw err;
   }
+  await attachIdentitiesToItems({ organizationId: orgId, items: [existing], take: 5 });
 
   const data = {};
   if (Object.prototype.hasOwnProperty.call(patch || {}, 'netWeight')) {
@@ -1613,6 +1631,7 @@ async function updateItemProduction({ organizationId, itemId, patch, actor, expe
   if (Object.keys(data).length === 0) return existing;
 
   const updated = await withTimeout(prisma.epcItem.update({ where: { id }, data, include: EPC_ITEM_INCLUDE }), 1500);
+  await attachIdentitiesToItems({ organizationId: orgId, items: [updated], take: 5 });
   return updated;
 }
 
