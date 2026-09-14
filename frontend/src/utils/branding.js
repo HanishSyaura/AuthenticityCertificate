@@ -48,23 +48,36 @@ function cacheBustedHref(rawHref) {
 export function applyFaviconUrl(nextUrl) {
   if (typeof document === 'undefined') return;
   const raw = String(nextUrl || '').trim();
-  const resolvedHref = raw ? resolvePublicMediaUrl(raw) : DEFAULT_FAVICON_HREF;
-  if (!resolvedHref) return;
+  const removeAllFavicons = () => {
+    removeLinks('link[rel="icon"]');
+    removeLinks('link[rel="shortcut icon"]');
+    removeLinks('link[rel="apple-touch-icon"]');
+    removeLinks('link[rel="apple-touch-icon-precomposed"]');
+    removeLinks('link[rel="mask-icon"]');
+  };
+  if (!raw) {
+    removeAllFavicons();
+    return;
+  }
+  const resolvedHref = resolvePublicMediaUrl(raw);
+  if (!resolvedHref) {
+    removeAllFavicons();
+    return;
+  }
+  removeAllFavicons();
   const finalHref = cacheBustedHref(resolvedHref);
   const mime = guessFaviconMime(finalHref);
-
   const iconRels = ['icon', 'shortcut icon'];
-  removeLinks('link[rel="icon"]');
-  removeLinks('link[rel="shortcut icon"]');
-  removeLinks('link[rel="apple-touch-icon"]');
-  removeLinks('link[rel="apple-touch-icon-precomposed"]');
-  removeLinks('link[rel="mask-icon"]');
 
   iconRels.forEach((rel) => {
     const link = document.createElement('link');
     link.rel = rel;
     if (mime) link.type = mime;
     link.href = finalHref;
+    link.referrerPolicy = 'no-referrer';
+    link.onerror = () => {
+      try { link.parentNode?.removeChild(link); } catch {}
+    };
     document.head.appendChild(link);
   });
 
@@ -73,21 +86,11 @@ export function applyFaviconUrl(nextUrl) {
   appleLink.sizes = '180x180';
   if (mime) appleLink.type = mime;
   appleLink.href = finalHref;
+  appleLink.referrerPolicy = 'no-referrer';
+  appleLink.onerror = () => {
+    try { appleLink.parentNode?.removeChild(appleLink); } catch {}
+  };
   document.head.appendChild(appleLink);
-
-  try {
-    const u = new URL(finalHref, typeof window !== 'undefined' ? window.location.href : undefined);
-    if (u.protocol !== 'data:') {
-      const prefetch = document.createElement('link');
-      prefetch.rel = 'preload';
-      prefetch.as = 'image';
-      prefetch.href = finalHref;
-      if (mime) prefetch.type = mime;
-      document.head.appendChild(prefetch);
-      setTimeout(() => prefetch.parentNode?.removeChild(prefetch), 3000);
-    }
-  } catch {
-  }
 }
 
 export function applyBranding({ appTitle, faviconUrl } = {}) {

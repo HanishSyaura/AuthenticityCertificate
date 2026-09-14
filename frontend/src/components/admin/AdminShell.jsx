@@ -62,6 +62,7 @@ export default function AdminShell() {
       return false;
     }
   });
+  const [logoErrored, setLogoErrored] = useState(false);
   const { openTour, setNavigator } = useTourStore((s) => ({ openTour: s.openTour, setNavigator: s.setNavigator }));
   const { token, user, logout } = useAdminAuthStore((s) => ({
     token: s.token,
@@ -124,9 +125,14 @@ export default function AdminShell() {
           } md:block`}
         >
           <div className={`flex h-14 items-center gap-2 border-b border-slate-800 ${sidebarCollapsed ? 'px-3' : 'px-4'}`}>
-            {settings?.logoUrl ? (
+            {settings?.logoUrl && !logoErrored ? (
               <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded bg-white/10">
-                <img src={resolvePublicMediaUrl(settings.logoUrl)} alt="Brand logo" className="h-full w-full object-contain" />
+                <img
+                  src={resolvePublicMediaUrl(settings.logoUrl)}
+                  alt="Brand logo"
+                  className="h-full w-full object-contain"
+                  onError={() => setLogoErrored(true)}
+                />
               </div>
             ) : (
               <div className="h-7 w-7 rounded bg-orange-500" />
