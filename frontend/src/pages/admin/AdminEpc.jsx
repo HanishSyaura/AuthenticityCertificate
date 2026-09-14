@@ -2439,12 +2439,40 @@ export default function AdminEpc() {
             <div className="space-y-3">
               <div>
                 <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('corpCode')}</div>
-                <input
-                  value={String(generateCorpPrefix || (Array.isArray(corpCodes) && corpCodes[0]) || 'DA01')}
-                  onChange={(e) => setGenerateCorpPrefix(e.target.value)}
-                  className="ac-input px-3 py-2 text-xs"
-                  placeholder="e.g. DA01"
-                />
+                {Array.isArray(corpCodes) && corpCodes.length > 0 ? (
+                  <select
+                    value={String(generateCorpPrefix || corpCodes[0] || '')}
+                    onChange={(e) => setGenerateCorpPrefix(e.target.value)}
+                    className="ac-input px-3 py-2 text-xs"
+                  >
+                    {corpCodes.map((code) => (
+                      <option key={String(code)} value={String(code)}>
+                        {String(code)}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <>
+                    <input
+                      value={String(generateCorpPrefix || '').toUpperCase()}
+                      onChange={(e) =>
+                        setGenerateCorpPrefix(
+                          String(e.target.value || '')
+                            .toUpperCase()
+                            .replace(/[^0-9A-F]/g, '')
+                            .slice(0, 8)
+                        )
+                      }
+                      className="ac-input px-3 py-2 text-xs font-mono"
+                      placeholder="e.g. DA03, AB01, FF00, 1A2B"
+                      pattern="^[0-9A-F]{2,8}$"
+                      maxLength={8}
+                    />
+                    <div className="mt-1 text-[10px] text-zinc-500">
+                      Hexadecimal sahaja (0–9, A–F), panjang 2–8 aksara. Contoh: DA03, AB01, 1A2B3C
+                    </div>
+                  </>
+                )}
               </div>
               <div>
                 <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('batchQty')}</div>
@@ -2473,15 +2501,27 @@ export default function AdminEpc() {
               <button
                 type="button"
                 className="ac-btn ac-btn-primary px-3 py-2 text-xs"
-                disabled={loading || !batchQty}
+                disabled={
+                  loading ||
+                  !batchQty ||
+                  (Array.isArray(corpCodes) && corpCodes.length === 0 &&
+                    !/^[0-9A-F]{2,8}$/i.test(String(generateCorpPrefix || '').trim()))
+                }
                 onClick={async () => {
-                  const corpPrefix = String(generateCorpPrefix || (Array.isArray(corpCodes) && corpCodes[0]) || 'DA01').trim();
+                  const isWhitelistMode = Array.isArray(corpCodes) && corpCodes.length > 0;
+                  const corpPrefix = String(
+                    generateCorpPrefix || (isWhitelistMode && corpCodes[0] ? corpCodes[0] : '')
+                  ).trim().toUpperCase();
+                  if (!isWhitelistMode && !/^[0-9A-F]{2,8}$/.test(corpPrefix)) {
+                    alert('Corp code mestilah format hex (0-9, A-F), panjang 2-8 aksara');
+                    return;
+                  }
                   const created = await generateBatch({ corpPrefix, batchQty, remark: String(remark || '').trim() || undefined });
                   if (created?.batch?.id != null) await exportBatchImportTemplateXlsx();
                   setGenerateOpen(false);
                   setBatchQty(1);
                   setRemark('');
-                  setGenerateCorpPrefix(Array.isArray(corpCodes) && corpCodes[0] ? corpCodes[0] : 'DA01');
+                  setGenerateCorpPrefix(isWhitelistMode && corpCodes[0] ? corpCodes[0] : '');
                   setListOffset(0);
                   await fetchItems({
                     q: listQuery,

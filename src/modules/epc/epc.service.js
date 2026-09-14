@@ -29,7 +29,42 @@ function getAllowedCorpPrefixes() {
       .filter(Boolean);
     if (list.length) return list;
   }
-  return ['DA01', 'AB01'];
+  return [];
+}
+
+function useCorpPrefixWhitelist() {
+  return getAllowedCorpPrefixes().length > 0;
+}
+
+function isValidHexCorpPrefix(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return false;
+  if (s.length < 2 || s.length > 8) return false;
+  return /^[0-9A-Fa-f]+$/.test(s);
+}
+
+function validateCorpPrefix(raw) {
+  const prefix = String(raw || '').trim().toUpperCase();
+  if (!prefix) {
+    const err = new Error('Corp code diperlukan');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (useCorpPrefixWhitelist()) {
+    const allowed = getAllowedCorpPrefixes();
+    if (!allowed.includes(prefix)) {
+      const err = new Error('Corp code tidak dibenarkan');
+      err.statusCode = 400;
+      throw err;
+    }
+    return prefix;
+  }
+  if (!isValidHexCorpPrefix(prefix)) {
+    const err = new Error('Corp code mestilah dalam format hexadecimal (0-9, A-F), panjang 2-8 aksara');
+    err.statusCode = 400;
+    throw err;
+  }
+  return prefix;
 }
 
 function getRunningPadLen() {
@@ -302,9 +337,19 @@ function looksLikeEpcCodeFormat(raw) {
   const padLen = getRunningPadLen();
   const skuLen = getSkuLen();
   const prefixes = getAllowedCorpPrefixes();
-  for (const p of prefixes) {
-    const prefix = String(p || '').trim().toUpperCase();
-    if (!prefix) continue;
+  const candidates = [];
+  if (prefixes.length > 0) {
+    for (const p of prefixes) {
+      const pf = String(p || '').trim().toUpperCase();
+      if (pf) candidates.push(pf);
+    }
+  } else {
+    for (let len = 2; len <= Math.min(8, code.length - 6 - padLen); len++) {
+      const pf = code.slice(0, len);
+      if (/^[0-9A-F]+$/.test(pf)) candidates.push(pf);
+    }
+  }
+  for (const prefix of candidates) {
     const expectedLegacyLen = prefix.length + skuLen + 4 + padLen;
     const expectedNewLen = prefix.length + 6 + padLen;
     if (code.length !== expectedLegacyLen && code.length !== expectedNewLen) continue;
@@ -327,11 +372,7 @@ function chunkArray(arr, size) {
 
 async function deleteAllBatches({ organizationId, corpPrefix }) {
   const orgId = Number(organizationId);
-  const prefix = corpPrefix == null ? null : String(corpPrefix || '').trim().toUpperCase();
-  if (prefix) {
-    const allowed = getAllowedCorpPrefixes();
-    if (!allowed.includes(prefix)) throw new Error('Corp code tidak dibenarkan');
-  }
+  const prefix = corpPrefix == null ? null : validateCorpPrefix(corpPrefix);
 
   const result = await prisma.$transaction(async (tx) => {
     const batches = await tx.epcBatch.findMany({
@@ -422,9 +463,7 @@ async function peekCertificateId({ organizationId } = {}) {
 }
 
 async function generateEpcBatch({ organizationId, corpPrefix, batchQty, remark }) {
-  const allowed = getAllowedCorpPrefixes();
-  const prefix = String(corpPrefix || '').trim().toUpperCase();
-  if (!allowed.includes(prefix)) throw new Error('Corp code tidak dibenarkan');
+  const prefix = validateCorpPrefix(corpPrefix);
 
   const orgId = Number(organizationId);
   const qty = Number(batchQty);
@@ -1101,11 +1140,7 @@ async function deleteItems({ organizationId, itemIds, cleanup }) {
 
 async function deleteAllGeneratedBatches({ organizationId, corpPrefix }) {
   const orgId = Number(organizationId);
-  const prefix = corpPrefix == null ? null : String(corpPrefix || '').trim().toUpperCase();
-  if (prefix) {
-    const allowed = getAllowedCorpPrefixes();
-    if (!allowed.includes(prefix)) throw new Error('Corp code tidak dibenarkan');
-  }
+  const prefix = corpPrefix == null ? null : validateCorpPrefix(corpPrefix);
 
   const result = await prisma.$transaction(async (tx) => {
     const batches = await tx.epcBatch.findMany({
@@ -2672,10 +2707,7 @@ async function deleteBatch({ organizationId, batchId }) {
 
 async function recalculateCorpSequence({ organizationId, corpPrefix }) {
   const orgId = Number(organizationId);
-  const prefix = String(corpPrefix || '').trim().toUpperCase();
-  if (!prefix) throw new Error('corpPrefix required');
-  const allowed = getAllowedCorpPrefixes();
-  if (!allowed.includes(prefix)) throw new Error('Corp code tidak dibenarkan');
+  const prefix = validateCorpPrefix(corpPrefix);
 
   const result = await prisma.$transaction(async (tx) => {
     await tx.corpSequence.deleteMany({ where: { organizationId: orgId, corpPrefix: prefix } });
