@@ -23,7 +23,7 @@ function getUploadsRoot() {
 }
 
 function makeFileName(originalName) {
-  const ext = path.extname(String(originalName || '')).slice(0, 10);
+  const ext = path.extname(String(originalName || '')).slice(0, 10).toLowerCase();
   const rand = crypto.randomBytes(16).toString('hex');
   return `${Date.now()}-${rand}${ext}`;
 }

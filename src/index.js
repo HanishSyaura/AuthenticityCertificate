@@ -90,6 +90,22 @@ async function fileExists(absPath) {
   }
 }
 
+async function findSourceImagePath(dirAbs, base) {
+  const extCandidates = new Set(['.jpg', '.jpeg', '.png', '.webp', '.tif', '.tiff', '.avif']);
+
+  try {
+    const names = await fs.readdir(dirAbs);
+    for (const name of names) {
+      const parsed = path.parse(String(name || ''));
+      if (parsed.name !== base) continue;
+      if (!extCandidates.has(String(parsed.ext || '').toLowerCase())) continue;
+      return path.join(dirAbs, name);
+    }
+  } catch {}
+
+  return null;
+}
+
 function isSafeRelPath(relPath) {
   const raw = String(relPath || '');
   if (!raw) return false;
@@ -108,21 +124,13 @@ async function tryServeWebpVariant(req, res, next) {
   if (!isSafeRelPath(dirRel)) return next();
   if (!/^[A-Za-z0-9_-]+$/.test(base)) return next();
 
-  const extCandidates = ['.jpg', '.jpeg', '.png', '.webp', '.tif', '.tiff', '.avif'];
   for (const root of uploadRoots) {
     const dirAbs = path.resolve(root, dirRel);
     if (!dirAbs.startsWith(root)) continue;
     const outAbs = path.join(dirAbs, `${base}-w${width}.webp`);
     if (await fileExists(outAbs)) return next();
 
-    let inAbs = null;
-    for (const ext of extCandidates) {
-      const p = path.join(dirAbs, `${base}${ext}`);
-      if (await fileExists(p)) {
-        inAbs = p;
-        break;
-      }
-    }
+    const inAbs = await findSourceImagePath(dirAbs, base);
     if (!inAbs) continue;
 
     try {
