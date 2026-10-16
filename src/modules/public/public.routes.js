@@ -536,6 +536,11 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
       productCmsCertificatePage: resolvedProduct?.cmsCertificatePage,
       productCmsPage: resolvedProduct?.cmsPage
     });
+    const legacySinglePageDesignIdRaw = legacySinglePage?.designId != null ? Number(legacySinglePage.designId) : NaN;
+    const legacySinglePageDesignId =
+      effectiveDesignId == null && Number.isFinite(legacySinglePageDesignIdRaw) && legacySinglePageDesignIdRaw > 0
+        ? legacySinglePageDesignIdRaw
+        : null;
     const legacySinglePageId = legacySinglePage && legacySinglePage.id ? Number(legacySinglePage.id) : null;
 
     const certificateLayout = null;
@@ -549,6 +554,10 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
           // NEW: Strict scoping to the resolved CmsDesign bundle → only pages that
           // belong to this specific designId bundle get included in the composed layout
           pagesWhere.designId = Number(effectiveDesignId);
+        } else if (legacySinglePageDesignId != null) {
+          // Migration-safe fallback: if the legacy single page actually lives inside a
+          // design bundle, render the whole bundle instead of just that one page.
+          pagesWhere.designId = Number(legacySinglePageDesignId);
         } else if (legacySinglePageId != null) {
           // Backward compat: user linked via old single-page FK → include only that page
           // plus any pages still in the default (designId = NULL) group that follow it

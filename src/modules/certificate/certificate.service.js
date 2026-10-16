@@ -338,6 +338,12 @@ async function getCertificateDetails(certificateId) {
           productCmsPage: product?.cmsPage
         })
       : null;
+  const legacySinglePageDesignIdRaw = legacySinglePage?.designId != null ? Number(legacySinglePage.designId) : NaN;
+  const legacySinglePageDesignId =
+    effectiveDesignId == null && Number.isFinite(legacySinglePageDesignIdRaw) && legacySinglePageDesignIdRaw > 0
+      ? legacySinglePageDesignIdRaw
+      : null;
+  const resolvedBundleDesignId = effectiveDesignId ?? legacySinglePageDesignId ?? null;
 
   const orgId = Number(cert.organizationId);
 
@@ -345,9 +351,9 @@ async function getCertificateDetails(certificateId) {
   //         Each page comes with its publishedVersion.layoutJson so composeLayouts can stack them
   let cmsPages = [];
   try {
-    if (effectiveDesignId != null) {
+    if (resolvedBundleDesignId != null) {
       cmsPages = await prisma.cmsPage.findMany({
-        where: { organizationId: orgId, designId: Number(effectiveDesignId), deletedAt: null },
+        where: { organizationId: orgId, designId: Number(resolvedBundleDesignId), deletedAt: null },
         orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
         include: {
           layout: true,
@@ -378,7 +384,7 @@ async function getCertificateDetails(certificateId) {
   // composeLayouts({ pages: cmsPages }) in the public view can now stack every inner section.
   const enriched = {
     ...cert,
-    cmsEffectiveDesignId: effectiveDesignId,
+    cmsEffectiveDesignId: resolvedBundleDesignId,
     cmsEffectiveSource:
       cert.cmsDesignId != null
         ? 'cert.cmsDesignId'
@@ -386,6 +392,8 @@ async function getCertificateDetails(certificateId) {
           ? 'product.cmsCertificateDesignId'
           : product?.cmsDesignId != null
             ? 'product.cmsDesignId'
+            : legacySinglePageDesignId != null
+              ? 'legacy.cmsPage.designId'
             : legacySinglePage
               ? 'legacy.cmsPageId'
               : 'default.designNull',

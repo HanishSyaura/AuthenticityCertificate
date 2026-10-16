@@ -22,6 +22,14 @@ describe('resolveCmsVideoSource', () => {
     expect(resolveCmsVideoSource('https://youtu.be/AbC_123')).toEqual({ kind: 'iframe', src: 'https://www.youtube-nocookie.com/embed/AbC_123' });
   });
 
+  it('recovers accidentally slash-prefixed absolute YouTube URLs', () => {
+    expect(resolveCmsVideoSource('/https://youtu.be/AbC_123')).toEqual({ kind: 'iframe', src: 'https://www.youtube-nocookie.com/embed/AbC_123' });
+  });
+
+  it('accepts scheme-less YouTube short URLs', () => {
+    expect(resolveCmsVideoSource('youtu.be/AbC_123')).toEqual({ kind: 'iframe', src: 'https://www.youtube-nocookie.com/embed/AbC_123' });
+  });
+
   it('converts Vimeo URL to embed', () => {
     expect(resolveCmsVideoSource('https://vimeo.com/123456')).toEqual({ kind: 'iframe', src: 'https://player.vimeo.com/video/123456' });
   });

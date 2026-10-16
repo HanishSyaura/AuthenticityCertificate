@@ -46,6 +46,20 @@ function VerifyLanguageSwitcher() {
   );
 }
 
+function VerifyViewport({ children, className = '', style = undefined }) {
+  return (
+    <div
+      className={`relative h-[100dvh] w-full overflow-y-auto overflow-x-hidden ${className}`.trim()}
+      style={{
+        WebkitOverflowScrolling: 'touch',
+        ...style
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 const VerifyPage = () => {
   const { id } = useParams();
   const location = useLocation();
@@ -135,10 +149,10 @@ const VerifyPage = () => {
 
   if (showLoader) {
     return (
-      <div className="min-h-[100dvh]">
+      <VerifyViewport>
         <VerifyLanguageSwitcher />
         <VerifyLoadingScreen meta={loadingMeta} mode={loadingMode} />
-      </div>
+      </VerifyViewport>
     );
   }
 
@@ -146,8 +160,7 @@ const VerifyPage = () => {
     if (Array.isArray(certificate?.layout)) {
       const pageBg = String(certificate?.certificateTemplate?.backgroundColor || '').trim() || '#ffffff';
       return (
-        <div
-          className="relative min-h-[100dvh] w-full overflow-x-hidden"
+        <VerifyViewport
           style={{
             backgroundColor: pageBg,
             backgroundImage: undefined,
@@ -160,14 +173,14 @@ const VerifyPage = () => {
           <div className="relative z-10 w-full">
             <PublicRenderer layout={certificate.layout} data={certificate} responsive responsiveMode="viewport" baseWidth={390} />
           </div>
-        </div>
+        </VerifyViewport>
       );
     }
     const statusUpper = String(certificate.status || '').toUpperCase();
     const statusOk = statusUpper === 'VALID';
     const statusPreview = statusUpper === 'PREVIEW';
     return (
-      <div className="min-h-[100dvh]">
+      <VerifyViewport>
         <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 lg:px-8">
           <VerifyLanguageSwitcher />
           <div
@@ -195,7 +208,7 @@ const VerifyPage = () => {
               const pageBg = String(certificate?.certificateTemplate?.backgroundColor || '').trim() || '#ffffff';
               return (
                 <div
-                  className="relative min-h-[100dvh] overflow-x-hidden"
+                  className="relative w-full"
                   style={{
                     backgroundColor: pageBg,
                     backgroundImage: undefined,
@@ -244,12 +257,12 @@ const VerifyPage = () => {
             </div>
           )}
         </div>
-      </div>
+      </VerifyViewport>
     );
   }
 
   return (
-    <div className="flex min-h-[100dvh] flex-col items-center justify-center px-4 py-8">
+    <VerifyViewport className="flex flex-col items-center justify-center px-4 py-8">
       <div className="mx-auto w-full max-w-md">
         <VerifyLanguageSwitcher />
         <div className="ac-card p-6 text-center">
@@ -282,7 +295,7 @@ const VerifyPage = () => {
 
         <p className="mt-6 text-center text-sm text-zinc-500 sm:text-base">{t('publicFooter')}</p>
       </div>
-    </div>
+    </VerifyViewport>
   );
 };
 

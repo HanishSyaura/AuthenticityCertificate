@@ -145,7 +145,18 @@ function PreviewStage({
   );
 }
 
-export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPage, layout, previewLayout, setLayout, selectedBlockId, setSelectedBlockId, layoutLocked = false }) {
+export default function CmsCanvasPanel({
+  viewMode,
+  kind = 'landing',
+  selectedDesignId = null,
+  selectedPage,
+  layout,
+  previewLayout,
+  setLayout,
+  selectedBlockId,
+  setSelectedBlockId,
+  layoutLocked = false
+}) {
   const { t, lang } = useT();
   const safeLayout = useMemo(() => (Array.isArray(layout) ? layout.filter((b) => b && typeof b === 'object') : []), [layout]);
   const layoutRef = useRef(safeLayout);
@@ -223,16 +234,24 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
     setPreviewError(null);
     const run = async () => {
       try {
-        const api = createAdminApi({ token });
-        const res = await api.get('/epc/items', { params: { limit: 1, offset: 0 } });
-        const epc = res?.data?.data?.items?.[0]?.epcCode ? String(res.data.data.items[0].epcCode) : '';
-        if (!alive) return;
-        setPreviewEpc(epc);
-        setPreviewEpcInput((prev) => (prev ? prev : epc));
-        if (!epc) {
+        const designId = Number(selectedDesignId);
+        if (!Number.isFinite(designId) || designId <= 0) {
+          if (!alive) return;
+          setPreviewEpc('');
           setPreviewData(null);
           return;
         }
+        const api = createAdminApi({ token });
+        const res = await api.get('/epc/items', { params: { limit: 1, offset: 0, cmsDesignId: designId } });
+        const epc = res?.data?.data?.items?.[0]?.epcCode ? String(res.data.data.items[0].epcCode) : '';
+        if (!alive) return;
+        if (!epc) {
+          setPreviewEpc('');
+          setPreviewData(null);
+          return;
+        }
+        setPreviewEpc(epc);
+        setPreviewEpcInput(epc);
         await loadPreviewByEpc(epc);
       } catch (e) {
         if (!alive) return;
@@ -247,7 +266,7 @@ export default function CmsCanvasPanel({ viewMode, kind = 'landing', selectedPag
     return () => {
       alive = false;
     };
-  }, [lang, token, viewMode]);
+  }, [lang, selectedDesignId, token, viewMode]);
 
   useEffect(() => {
     if (viewMode !== 'preview' && viewMode !== 'split') return;

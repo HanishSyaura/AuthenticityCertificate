@@ -7,6 +7,24 @@ function isSafeRelativeUrl(raw) {
   return true;
 }
 
+function normalizeVideoInput(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return '';
+
+  const fixedAbsoluteUrl = raw.replace(/^\/+(?=https?:\/\/)/i, '');
+  if (/^https?:\/\//i.test(fixedAbsoluteUrl)) return fixedAbsoluteUrl;
+
+  if (/^(?:www\.)?(?:youtube\.com|m\.youtube\.com|youtu\.be|vimeo\.com)\//i.test(raw)) {
+    return `https://${raw}`;
+  }
+
+  if (/^player\.vimeo\.com\//i.test(raw)) {
+    return `https://${raw}`;
+  }
+
+  return raw;
+}
+
 function firstNumericPathSegment(pathname) {
   const parts = String(pathname || '')
     .split('/')
@@ -66,7 +84,7 @@ function resolveVimeoEmbed(urlObj) {
 }
 
 export function resolveCmsVideoSource(input, baseOrigin = 'https://example.invalid') {
-  const raw = String(input || '').trim();
+  const raw = normalizeVideoInput(input);
   if (!raw) return null;
 
   if (!/^[a-z][a-z0-9+.-]*:/i.test(raw)) {

@@ -93,6 +93,9 @@ export function normalizePublicMediaPath(inputPath) {
   const rawPath = String(inputPath || '').trim();
   if (!rawPath) return '';
 
+  const fixedAbsoluteUrl = rawPath.replace(/^\/+(?=https?:\/\/)/i, '');
+  if (isAbsoluteUrl(fixedAbsoluteUrl)) return maybeUpgradeToHttps(fixedAbsoluteUrl);
+
   const p = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
   const normalized = p
     .replace(/^\/admin\/api\/uploads\//, '/uploads/')

@@ -806,6 +806,7 @@ export default function AdminCmsBuilder() {
           <CmsCanvasPanel
             viewMode={viewMode}
             kind="landing"
+            selectedDesignId={selectedDesignId}
             selectedPage={selectedPage}
             layout={layout}
             previewLayout={previewLayout}

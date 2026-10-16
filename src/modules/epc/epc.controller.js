@@ -190,6 +190,9 @@ async function listItems(req, res) {
     const { limit, offset } = parseLimitOffset(req.query);
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     const batchId = req.query.batchId ? Number(req.query.batchId) : null;
+    const cmsDesignIdRaw = typeof req.query.cmsDesignId === 'string' ? req.query.cmsDesignId.trim() : '';
+    const cmsDesignId = cmsDesignIdRaw ? Number(cmsDesignIdRaw) : null;
+    if (cmsDesignIdRaw && (!Number.isFinite(cmsDesignId) || cmsDesignId <= 0)) return res.error('Invalid cmsDesignId', 400);
     const pendingOnly = String(req.query.pending || '').trim() === '1';
     const statusRaw = typeof req.query.status === 'string' ? req.query.status.trim() : '';
     const status = statusRaw ? statusRaw.toUpperCase().replace(/[^A-Z]/g, '') : '';
@@ -206,6 +209,7 @@ async function listItems(req, res) {
       organizationId: req.organization.id,
       q,
       batchId,
+      cmsDesignId,
       pendingOnly,
       status: status || null,
       createdFrom,

@@ -1414,9 +1414,10 @@ async function getEpcStats({ organizationId }) {
   return { generatedCount: Number(generatedCount) || 0, activeCount, inactiveCount };
 }
 
-async function listItems({ organizationId, q, batchId, pendingOnly, status, createdFrom, createdTo, limit, offset }) {
+async function listItems({ organizationId, q, batchId, cmsDesignId, pendingOnly, status, createdFrom, createdTo, limit, offset }) {
   const orgId = Number(organizationId);
   const statusNorm = status ? String(status).trim().toUpperCase() : '';
+  const designId = Number.isFinite(Number(cmsDesignId)) && Number(cmsDesignId) > 0 ? Number(cmsDesignId) : null;
 
   if (statusNorm === 'ACTIVE' || statusNorm === 'INACTIVE') {
     const statusFilter =
@@ -1435,6 +1436,18 @@ async function listItems({ organizationId, q, batchId, pendingOnly, status, crea
               AND t.epc = i.epcCode
               AND t.unassignedAt IS NULL
           )`;
+    const designFilter = designId
+      ? Prisma.sql`AND EXISTS (
+          SELECT 1
+          FROM \`EpcBatch\` b
+          INNER JOIN \`Product\` p
+            ON p.id = b.productId
+          WHERE b.id = i.batchId
+            AND b.organizationId = i.organizationId
+            AND p.organizationId = i.organizationId
+            AND p.cmsDesignId = ${designId}
+        )`
+      : Prisma.sql``;
 
     const [totalRows, idRows] = await withTimeout(
       Promise.all([
@@ -1448,6 +1461,7 @@ async function listItems({ organizationId, q, batchId, pendingOnly, status, crea
             ${createdTo ? Prisma.sql`AND i.createdAt <= ${createdTo}` : Prisma.sql``}
             ${pendingOnly ? Prisma.sql`AND (i.netWeight IS NULL OR i.netWeight = '')` : Prisma.sql``}
             ${q ? Prisma.sql`AND i.epcCode LIKE ${`%${q}%`}` : Prisma.sql``}
+            ${designFilter}
             ${statusFilter}
           `
         ),
@@ -1461,6 +1475,7 @@ async function listItems({ organizationId, q, batchId, pendingOnly, status, crea
             ${createdTo ? Prisma.sql`AND i.createdAt <= ${createdTo}` : Prisma.sql``}
             ${pendingOnly ? Prisma.sql`AND (i.netWeight IS NULL OR i.netWeight = '')` : Prisma.sql``}
             ${q ? Prisma.sql`AND i.epcCode LIKE ${`%${q}%`}` : Prisma.sql``}
+            ${designFilter}
             ${statusFilter}
             ORDER BY i.createdAt DESC
             LIMIT ${limit} OFFSET ${offset}
@@ -1513,6 +1528,15 @@ async function listItems({ organizationId, q, batchId, pendingOnly, status, crea
   const where = {
     organizationId: orgId,
     ...(batchId ? { batchId: Number(batchId) } : {}),
+    ...(designId
+      ? {
+          batch: {
+            product: {
+              cmsDesignId: designId
+            }
+          }
+        }
+      : {}),
     ...((createdFrom || createdTo)
       ? {
           createdAt: {

@@ -15,6 +15,23 @@ function snap(n, grid) {
   return Math.round(n / grid) * grid;
 }
 
+function normalizeCmsBlockUrl(blockType, rawValue) {
+  const raw = String(rawValue || '').trim();
+  if (!raw) return '';
+  if (blockType === 'video') {
+    if (/^(?:\/+)?https?:\/\//i.test(raw)) {
+      return raw.replace(/^\/+(?=https?:\/\/)/i, '');
+    }
+    if (/^(?:www\.)?(?:youtube\.com|m\.youtube\.com|youtu\.be|vimeo\.com)\//i.test(raw)) {
+      return `https://${raw}`;
+    }
+    if (/^player\.vimeo\.com\//i.test(raw)) {
+      return `https://${raw}`;
+    }
+  }
+  return normalizePublicMediaPath(raw);
+}
+
 export default function CmsInspectorPanel({
   selectedBlock,
   layout,
@@ -581,7 +598,7 @@ export default function CmsInspectorPanel({
               <label className="block text-xs font-medium text-zinc-700">{t('url')}</label>
               <input
                 value={selectedBlock.content?.url || ''}
-                onChange={(e) => updateSelectedContent({ url: normalizePublicMediaPath(e.target.value) })}
+                onChange={(e) => updateSelectedContent({ url: normalizeCmsBlockUrl(selectedBlock.type, e.target.value) })}
                 className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                 placeholder="https://..."
               />
