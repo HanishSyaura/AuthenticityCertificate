@@ -201,6 +201,11 @@ function uploadMedia(req, res) {
               { mediaAssetId: created.id },
               { jobId: `generate_webp_variants__${created.id}`, attempts: 2, backoff: { type: 'exponential', delay: 2000 } }
             );
+          } else {
+            const baseName = path.parse(fileName).name;
+            if (baseName) {
+              await generateWebpVariants({ filePath, destDir, baseName });
+            }
           }
         } catch {}
       }

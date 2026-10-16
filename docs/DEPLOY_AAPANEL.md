@@ -46,6 +46,7 @@ Jangan upload (akan dibuat/generated di server):
 - `.env` (buat di server sahaja)
 - `logs/` (kalau ada)
 - apa-apa test/smoke scripts (kalau anda nak deployment clean)
+- **PENTING:** Folder `uploads/` (fail gambar/video user) — **JANGAN sekali commit / gantikan semasa deploy**. Sebaiknya letak di LUAR folder projek (lihat bahagian Storage Setup di bawah).
 
 Dalam repo ini, bahagian backend adalah semua content di root project kecuali folder `frontend/`.
 
@@ -67,6 +68,21 @@ Recommended untuk production:
 Disyorkan:
 
 - `NODE_ENV=production`
+
+### ⚠️ UPLOADS STORAGE (CRITICAL)
+
+**PALING PENTING untuk production:**
+
+Fail gambar/video user (CMS, Product, EPC docs) disimpan di `UPLOADS_ROOT`.
+
+- **JANGAN guna path dalam folder projek** seperti `./uploads` — berisiko terpadam semasa `git reset --hard` atau `git clean -fd`.
+- **GUNA path LUAR folder projek** (contoh):
+  ```
+  UPLOADS_ROOT=/www/wwwroot/nfc.cert.demo.clbgroups.com/uploads
+  ```
+- Pastikan folder tersebut wujud dan boleh ditulis (chown www / permission 755).
+
+Jika belum migrate, sekurang-kurangnya PASTIKAN `uploads/` ada dalam `.gitignore` (repo terkini sudah ada ini).
 
 ## Env variables (frontend)
 
@@ -229,11 +245,15 @@ location ^~ /integrations/ { proxy_pass http://127.0.0.1:5000; }
 
 ### Serve uploads (public media)
 
-Untuk elakkan media (`/uploads/media/...`) require token, serve folder uploads sebagai static melalui Nginx (dan pastikan path ini sama dengan `UPLOADS_DIR` backend):
+Untuk elakkan media (`/uploads/media/...`) require token, serve folder uploads sebagai static melalui Nginx (dan pastikan path ini SAMA dengan `UPLOADS_ROOT` dalam `.env` backend).
+
+**DISYORKAN — path LUAR folder app (paling selamat):**
 
 ```
+# ⚠️ Path ini MESTI SAMA dgn UPLOADS_ROOT dalam .env backend
+# Contoh jika backend .env: UPLOADS_ROOT=/www/wwwroot/nfc.cert.demo.clbgroups.com/uploads
 location ^~ /uploads/ {
-  alias /www/wwwroot/domain.com/AuthenticityCertificate/uploads/;
+  alias /www/wwwroot/domain.com/uploads/;
   try_files $uri =404;
   expires 30d;
   add_header Accept-Ranges bytes always;
@@ -241,11 +261,32 @@ location ^~ /uploads/ {
 }
 ```
 
-Kalau frontend consume media melalui `/public/uploads/...`, anda boleh serve endpoint itu terus dari folder yang sama (lebih laju + kurang load backend):
+Kalau frontend consume media melalui `/public/uploads/...` atau `/api/public/uploads/...`, serve endpoint itu terus dari folder yang sama (lebih laju + kurang load backend):
 
 ```
 location ^~ /public/uploads/ {
-  alias /www/wwwroot/domain.com/AuthenticityCertificate/uploads/;
+  alias /www/wwwroot/domain.com/uploads/;
+  try_files $uri =404;
+  expires 30d;
+  add_header Accept-Ranges bytes always;
+  add_header Cache-Control "public, max-age=2592000" always;
+}
+
+location ^~ /api/public/uploads/ {
+  alias /www/wwwroot/domain.com/uploads/;
+  try_files $uri =404;
+  expires 30d;
+  add_header Accept-Ranges bytes always;
+  add_header Cache-Control "public, max-age=2592000" always;
+}
+```
+
+**Legacy fallback (jika masih guna path dalam projek):**
+```
+# Hanya guna jika UPLOADS_ROOT masih dalam folder app.
+# Lebih baik migrate ke luar — rujuk UPDATE_LIVE_AAPANEL.md Section G.
+location ^~ /uploads/ {
+  alias /www/wwwroot/domain.com/app/uploads/;
   try_files $uri =404;
   expires 30d;
   add_header Accept-Ranges bytes always;
