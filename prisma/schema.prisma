@@ -600,6 +600,7 @@ model CmsPage {
 
   // ========== NEW: belongs to a CmsDesign (bundle/group) — NULL = legacy default group ==========
   designId            Int?
+  design              CmsDesign?   @relation(fields: [designId], references: [id])
 
   name                String
   slug                String
