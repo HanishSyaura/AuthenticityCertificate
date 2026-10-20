@@ -17,6 +17,13 @@ function makeId(prefix) {
   return `${prefix}-${Math.random().toString(16).slice(2)}-${Date.now()}`;
 }
 
+const DEFAULT_CANVAS_WIDTH = 390;
+const DEFAULT_CANVAS_HEIGHT = 844;
+const MIN_CANVAS_WIDTH = 240;
+const MAX_CANVAS_WIDTH = 1200;
+const MIN_CANVAS_HEIGHT = 240;
+const MAX_CANVAS_HEIGHT = 2400;
+
 function normalizeTemplateId(input) {
   const s = String(input ?? '').trim();
   if (!s) return null;
@@ -153,10 +160,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     deleteTemplate: s.deleteTemplate
   }));
   const { uploadMedia } = useUploadsStore((s) => ({ uploadMedia: s.uploadMedia }));
-  const { batches, fetchBatches, updateBatch } = useEpcStore((s) => ({
+  const { batches, fetchBatches, updateBatch, fetchDynamicFields } = useEpcStore((s) => ({
     batches: s.batches,
     fetchBatches: s.fetchBatches,
-    updateBatch: s.updateBatch
+    updateBatch: s.updateBatch,
+    fetchDynamicFields: s.fetchDynamicFields
   }));
 
   const isDesigner = String(uiMode || 'builder') === 'designer';
@@ -172,9 +180,13 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const [fieldPageSize, setFieldPageSize] = useState(5);
   const [backgroundMode, setBackgroundMode] = useState('background');
   const [templateSettingsOpen, setTemplateSettingsOpen] = useState(false);
+  const [canvasWidthInput, setCanvasWidthInput] = useState(String(DEFAULT_CANVAS_WIDTH));
+  const [canvasHeightInput, setCanvasHeightInput] = useState(String(DEFAULT_CANVAS_HEIGHT));
+  const [activeCanvasInput, setActiveCanvasInput] = useState(null);
   const [assignedBatchIds, setAssignedBatchIds] = useState(() => new Set());
   const [draftPlaceholders, setDraftPlaceholders] = useState([]);
   const [draftLayout, setDraftLayout] = useState([]);
+  const [epcBatchFields, setEpcBatchFields] = useState([]);
   const [saveStatus, setSaveStatus] = useState('idle');
   const [designerRightTab, setDesignerRightTab] = useState('preview');
   const [designerZoomMode, setDesignerZoomMode] = useState('fit');
@@ -214,8 +226,8 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const layoutLocked = String(contentLang || 'en') !== 'en';
 
   const selected = useMemo(() => templates.find((it) => String(it.id) === String(selectedId)) || null, [templates, selectedId]);
-  const canvasW = Number(selected?.canvasWidth) > 0 ? Number(selected.canvasWidth) : 390;
-  const canvasH = Number(selected?.canvasHeight) > 0 ? Number(selected.canvasHeight) : 844;
+  const canvasW = Number(selected?.canvasWidth) > 0 ? Number(selected.canvasWidth) : DEFAULT_CANVAS_WIDTH;
+  const canvasH = Number(selected?.canvasHeight) > 0 ? Number(selected.canvasHeight) : DEFAULT_CANVAS_HEIGHT;
   const canvasBgColor = String(selected?.backgroundColor || '#ffffff');
   const templateBackgroundValue = String(selected?.background || '').trim();
   const templateBackgroundModeLabel =
@@ -262,6 +274,17 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const canvasScale = isDesigner ? designerScale : fitBuilderScale;
 
   const placeholders = useMemo(() => (Array.isArray(draftPlaceholders) ? draftPlaceholders : []), [draftPlaceholders]);
+  const epcBatchFieldOptions = useMemo(
+    () =>
+      (Array.isArray(epcBatchFields) ? epcBatchFields : [])
+        .filter((field) => field?.fieldKey)
+        .map((field) => ({
+          value: `templateData.${String(field.fieldKey).trim()}`,
+          fieldKey: String(field.fieldKey).trim(),
+          label: String(field.label || field.fieldKey || '').trim()
+        })),
+    [epcBatchFields]
+  );
   const fieldCount = placeholders.length;
   const placedFieldCount = Array.isArray(draftLayout) ? draftLayout.length : 0;
   const saveStateLabel =
@@ -393,7 +416,9 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         continue;
       }
       if (source === 'batch') {
-        templateData[key] = getBatchTemplateValue(key) || sampleBatchValueByKey(key);
+        const mappedKey = bindPath.startsWith('templateData.') ? bindPath.slice('templateData.'.length).trim() : bindPath;
+        const resolvedKey = mappedKey || key;
+        templateData[key] = getBatchTemplateValue(resolvedKey) || sampleBatchValueByKey(resolvedKey || key);
         continue;
       }
       templateData[key] = '';
@@ -518,6 +543,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   useEffect(() => () => flushPendingPatch(), [flushPendingPatch]);
 
   useEffect(() => {
+    if (activeCanvasInput !== 'width') setCanvasWidthInput(String(canvasW));
+    if (activeCanvasInput !== 'height') setCanvasHeightInput(String(canvasH));
+  }, [activeCanvasInput, canvasH, canvasW, selected?.id]);
+
+  useEffect(() => {
     const id = selected?.id ? String(selected.id) : null;
     if (!id) return;
     const langKey = String(contentLangRef.current || contentLang || 'en');
@@ -609,6 +639,52 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       })();
     }, 350);
   }, [selected?.id, updateTemplate]);
+
+  const handleCanvasSizeChange = useCallback((field, rawValue) => {
+    const nextValue = String(rawValue ?? '');
+    const isWidth = field === 'width';
+    const min = isWidth ? MIN_CANVAS_WIDTH : MIN_CANVAS_HEIGHT;
+    const max = isWidth ? MAX_CANVAS_WIDTH : MAX_CANVAS_HEIGHT;
+
+    if (isWidth) setCanvasWidthInput(nextValue);
+    else setCanvasHeightInput(nextValue);
+
+    if (!nextValue.trim()) return;
+
+    const parsed = Number(nextValue);
+    if (!Number.isFinite(parsed)) return;
+
+    const normalized = clamp(Math.round(parsed), min, max);
+    queueBasePatch(isWidth ? { canvasWidth: normalized } : { canvasHeight: normalized });
+  }, [queueBasePatch]);
+
+  const handleCanvasSizeBlur = useCallback((field) => {
+    const isWidth = field === 'width';
+    const inputValue = isWidth ? canvasWidthInput : canvasHeightInput;
+    const currentValue = isWidth ? canvasW : canvasH;
+    const min = isWidth ? MIN_CANVAS_WIDTH : MIN_CANVAS_HEIGHT;
+    const max = isWidth ? MAX_CANVAS_WIDTH : MAX_CANVAS_HEIGHT;
+    const setInput = isWidth ? setCanvasWidthInput : setCanvasHeightInput;
+
+    setActiveCanvasInput((prev) => (prev === field ? null : prev));
+
+    if (!String(inputValue || '').trim()) {
+      setInput(String(currentValue));
+      return;
+    }
+
+    const parsed = Number(inputValue);
+    if (!Number.isFinite(parsed)) {
+      setInput(String(currentValue));
+      return;
+    }
+
+    const normalized = clamp(Math.round(parsed), min, max);
+    setInput(String(normalized));
+    if (normalized !== currentValue) {
+      queueBasePatch(isWidth ? { canvasWidth: normalized } : { canvasHeight: normalized });
+    }
+  }, [canvasH, canvasHeightInput, canvasW, canvasWidthInput, queueBasePatch]);
 
   const updateSelected = async (patch) => {
     if (!selected) return;
@@ -835,7 +911,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       if (key && seen.has(norm)) errors.push(`${t('key')} "${key}": duplicate`);
       if (key) seen.add(norm);
       if (!label) errors.push(`${t('fieldLabel')} #${i + 1}: required`);
-      if (source === 'product' && !bindPath) errors.push(`${t('bindTo')} #${i + 1}: required`);
+      if ((source === 'product' || source === 'batch') && !bindPath) errors.push(`${t('bindTo')} #${i + 1}: required`);
     }
     return { ok: errors.length === 0, errors };
   }, [placeholders, t]);
@@ -857,7 +933,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       if (duplicateCount > 0) errors.push(`${t('key')} "${key}": duplicate`);
     }
     if (!label) errors.push(`${t('fieldLabel')} #${idx + 1}: required`);
-    if (source === 'product' && !bindPath) errors.push(`${t('bindTo')} #${idx + 1}: required`);
+    if ((source === 'product' || source === 'batch') && !bindPath) errors.push(`${t('bindTo')} #${idx + 1}: required`);
     return errors;
   }, [placeholders, selectedPlaceholder, selectedPlaceholderIndex, t]);
 
@@ -876,6 +952,13 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   useEffect(() => {
     void fetchBatches({ limit: 200, offset: 0 });
   }, [fetchBatches]);
+
+  useEffect(() => {
+    void (async () => {
+      const rows = await fetchDynamicFields({ activeOnly: true });
+      setEpcBatchFields(Array.isArray(rows) ? rows : []);
+    })();
+  }, [fetchDynamicFields]);
 
   useEffect(() => {
     if (selectedId != null) return;
@@ -1455,8 +1538,17 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           <label className="block text-xs font-medium text-zinc-700">{t('canvasWidth')}</label>
                           <input
                             type="number"
-                            value={canvasW}
-                            onChange={(e) => queueBasePatch({ canvasWidth: Number(e.target.value) || 390 })}
+                            min={MIN_CANVAS_WIDTH}
+                            max={MAX_CANVAS_WIDTH}
+                            step={1}
+                            inputMode="numeric"
+                            value={canvasWidthInput}
+                            onFocus={(e) => {
+                              setActiveCanvasInput('width');
+                              e.target.select();
+                            }}
+                            onChange={(e) => handleCanvasSizeChange('width', e.target.value)}
+                            onBlur={() => handleCanvasSizeBlur('width')}
                             disabled={layoutLocked}
                             className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                           />
@@ -1465,8 +1557,17 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                           <label className="block text-xs font-medium text-zinc-700">{t('canvasHeight')}</label>
                           <input
                             type="number"
-                            value={canvasH}
-                            onChange={(e) => queueBasePatch({ canvasHeight: Number(e.target.value) || 844 })}
+                            min={MIN_CANVAS_HEIGHT}
+                            max={MAX_CANVAS_HEIGHT}
+                            step={1}
+                            inputMode="numeric"
+                            value={canvasHeightInput}
+                            onFocus={(e) => {
+                              setActiveCanvasInput('height');
+                              e.target.select();
+                            }}
+                            onChange={(e) => handleCanvasSizeChange('height', e.target.value)}
+                            onBlur={() => handleCanvasSizeBlur('height')}
                             disabled={layoutLocked}
                             className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
                           />
@@ -1843,6 +1944,14 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                               ? t('sourceBatch')
                                               : t('sourceManual')}
                                       </div>
+                                      {uiSource === 'batch' && String(p?.bindPath || '').trim() ? (
+                                        <div className="mt-1 truncate text-[11px] text-zinc-400">
+                                          {t('bindTo')}: {String(
+                                            epcBatchFieldOptions.find((opt) => opt.value === String(p?.bindPath || '').trim())?.label ||
+                                              String(p?.bindPath || '').replace(/^templateData\./, '')
+                                          )}
+                                        </div>
+                                      ) : null}
                                     </button>
                                     <button
                                       type="button"
@@ -2031,6 +2140,58 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                           </datalist>
                                         </div>
                                       </div>
+                                    ) : uiSource === 'batch' ? (
+                                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[260px_minmax(0,1fr)]">
+                                        <select
+                                          value={uiSource}
+                                          onChange={(e) => {
+                                            if (layoutLocked) return;
+                                            const nextSource = e.target.value;
+                                            const next = placeholders.slice();
+                                            const cur = next[idx] || {};
+                                            const currentBindPath = String(cur.bindPath || '').trim();
+                                            next[idx] = {
+                                              ...cur,
+                                              source: nextSource,
+                                              bindPath:
+                                                nextSource === 'batch'
+                                                  ? (currentBindPath.startsWith('templateData.') ? currentBindPath : String(epcBatchFieldOptions?.[0]?.value || ''))
+                                                  : String(cur.bindPath || '')
+                                            };
+                                            replacePlaceholders(next);
+                                          }}
+                                          disabled={layoutLocked}
+                                          className="h-9 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm"
+                                        >
+                                          <option value="title">{t('sourceTitle')}</option>
+                                          <option value="static">{t('sourceManual')}</option>
+                                          <option value="batch">{t('sourceBatch')}</option>
+                                          <option value="product">{t('bindTo')}</option>
+                                        </select>
+                                        <div className="min-w-0">
+                                          <select
+                                            value={String(p?.bindPath || '')}
+                                            onChange={(e) => {
+                                              if (layoutLocked) return;
+                                              const next = placeholders.slice();
+                                              next[idx] = { ...(next[idx] || {}), bindPath: String(e.target.value || '') };
+                                              replacePlaceholders(next);
+                                            }}
+                                            disabled={layoutLocked || epcBatchFieldOptions.length === 0}
+                                            className="h-9 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 text-sm"
+                                          >
+                                            <option value="">{t('selectBatchField')}</option>
+                                            {epcBatchFieldOptions.map((opt) => (
+                                              <option key={opt.value} value={opt.value}>
+                                                {opt.label}
+                                              </option>
+                                            ))}
+                                          </select>
+                                          <div className="mt-1 text-[11px] text-zinc-500">
+                                            {epcBatchFieldOptions.length > 0 ? t('batchFieldBindingHint') : t('noBatchFieldsConfigured')}
+                                          </div>
+                                        </div>
+                                      </div>
                                     ) : (
                                       <div className="max-w-[260px]">
                                         <select
@@ -2040,7 +2201,17 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                             const nextSource = e.target.value;
                                             const next = placeholders.slice();
                                             const cur = next[idx] || {};
-                                            next[idx] = { ...cur, source: nextSource };
+                                            const currentBindPath = String(cur.bindPath || '').trim();
+                                            next[idx] = {
+                                              ...cur,
+                                              source: nextSource,
+                                              bindPath:
+                                                nextSource === 'batch'
+                                                  ? (currentBindPath.startsWith('templateData.') ? currentBindPath : String(epcBatchFieldOptions?.[0]?.value || ''))
+                                                  : nextSource === 'product'
+                                                    ? currentBindPath
+                                                    : ''
+                                            };
                                             replacePlaceholders(next);
                                           }}
                                           disabled={layoutLocked}
@@ -2423,10 +2594,17 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                     <label className="block text-xs font-medium text-zinc-700">{t('canvasWidth')}</label>
                     <input
                       type="number"
-                      min={240}
-                      max={1200}
-                      value={canvasW}
-                      onChange={(e) => queueBasePatch({ canvasWidth: Number(e.target.value) || 390 })}
+                      min={MIN_CANVAS_WIDTH}
+                      max={MAX_CANVAS_WIDTH}
+                      step={1}
+                      inputMode="numeric"
+                      value={canvasWidthInput}
+                      onFocus={(e) => {
+                        setActiveCanvasInput('width');
+                        e.target.select();
+                      }}
+                      onChange={(e) => handleCanvasSizeChange('width', e.target.value)}
+                      onBlur={() => handleCanvasSizeBlur('width')}
                       disabled={layoutLocked}
                       className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
                     />
@@ -2435,10 +2613,17 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                     <label className="block text-xs font-medium text-zinc-700">{t('canvasHeight')}</label>
                     <input
                       type="number"
-                      min={240}
-                      max={2400}
-                      value={canvasH}
-                      onChange={(e) => queueBasePatch({ canvasHeight: Number(e.target.value) || 844 })}
+                      min={MIN_CANVAS_HEIGHT}
+                      max={MAX_CANVAS_HEIGHT}
+                      step={1}
+                      inputMode="numeric"
+                      value={canvasHeightInput}
+                      onFocus={(e) => {
+                        setActiveCanvasInput('height');
+                        e.target.select();
+                      }}
+                      onChange={(e) => handleCanvasSizeChange('height', e.target.value)}
+                      onBlur={() => handleCanvasSizeBlur('height')}
                       disabled={layoutLocked}
                       className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm"
                     />

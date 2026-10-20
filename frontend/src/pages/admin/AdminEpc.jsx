@@ -11,6 +11,8 @@ import { tRaw } from '../../i18n/tRaw';
 import DataTable from '../../components/ui/DataTable';
 import TablePager from '../../components/ui/TablePager';
 import RowActionsMenu from '../../components/ui/RowActionsMenu';
+import EpcDynamicFieldsPanel from '../../components/admin/epc/EpcDynamicFieldsPanel';
+import EpcDynamicEntryGrid from '../../components/admin/epc/EpcDynamicEntryGrid';
 import { hasPermission } from '../../utils/permissions';
 import { resolvePublicMediaUrl } from '../../utils/apiBase';
 import { sortRows } from '../../utils/tableSort';
@@ -58,13 +60,6 @@ function toDdMmYyFromIso(input) {
 const EPC_EXPORT_COLUMN_META = {
   epcCode: { labelKey: 'epcCode', defaultOn: true, alwaysOffer: true },
   runningNo: { labelKey: 'runningNo', defaultOn: false, alwaysOffer: true },
-  netWeight: { labelKey: 'netWeight', defaultOn: true },
-  productionDate: { labelKey: 'productionDate', defaultOn: true },
-  caiqNumber: { labelKey: 'caiqNumber', defaultOn: true },
-  barcode: { labelKey: 'barcode', defaultOn: true },
-  manufactureDate: { labelKey: 'manufactureDate', defaultOn: true },
-  batchNumber: { labelKey: 'batchNumber', defaultOn: true },
-  swiftletHouseNumber: { labelKey: 'swiftletHouseNumber', defaultOn: true },
   status: { labelKey: 'status', defaultOn: false },
   createdAt: { labelKey: 'createdAt', defaultOn: false },
   remark: { labelKey: 'remark', defaultOn: false }
@@ -89,8 +84,7 @@ function resolveTemplateForBatch(batch, templatesList) {
   return null;
 }
 
-function deriveExportColumns(template, mode) {
-  const isBatch = mode === 'batch';
+function deriveExportColumns(template, batch, activeFields, mode) {
   const placeholders = Array.isArray(template?.placeholders) ? template.placeholders : [];
   const detectedKeys = new Set();
 
@@ -102,10 +96,20 @@ function deriveExportColumns(template, mode) {
       if (key) detectedKeys.add(key);
       continue;
     }
-    if (isBatch) continue;
   }
 
-  const always = isBatch ? ['epcCode', 'runningNo'] : ['epcCode'];
+  const snapshotFields = Array.isArray(batch?.fieldSchemaSnapshot) && batch.fieldSchemaSnapshot.length > 0 ? batch.fieldSchemaSnapshot : activeFields;
+  const dynamicFields = (Array.isArray(snapshotFields) ? snapshotFields : [])
+    .map((field) => ({
+      key: String(field?.fieldKey || '').trim(),
+      label: String(field?.label || field?.fieldKey || '').trim(),
+      labelKey: String(field?.label || field?.fieldKey || '').trim(),
+      isDynamic: true,
+      defaultOn: true
+    }))
+    .filter((field) => field.key);
+
+  const always = mode === 'batch' ? ['epcCode', 'runningNo'] : ['epcCode'];
   for (const k of always) detectedKeys.add(k);
 
   const meta = EPC_EXPORT_COLUMN_META;
@@ -136,13 +140,39 @@ function deriveExportColumns(template, mode) {
 
   for (const extra of offerRest) out.push(extra);
 
-  return out;
+  return [...out, ...dynamicFields];
 }
 
 function buildDefaultSelection(cols) {
   const sel = {};
   for (const c of Array.isArray(cols) ? cols : []) sel[c.key] = !!c.defaultOn;
   return sel;
+}
+
+function resolveExportColumnLabel(t, column) {
+  if (column?.isDynamic) return String(column?.label || column?.key || '-');
+  return t(column?.labelKey || column?.key || '-');
+}
+
+function formatDynamicFieldDisplay(value) {
+  if (value == null) return '-';
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed || '-';
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    const parts = value.map((entry) => formatDynamicFieldDisplay(entry)).filter((entry) => entry && entry !== '-');
+    return parts.length ? parts.join(', ') : '-';
+  }
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return '-';
+    }
+  }
+  return String(value);
 }
 
 function TabButton({ active, children, ...props }) {
@@ -232,6 +262,7 @@ export default function AdminEpc() {
   const canProduction = allow('epc.production.access');
   const canBatchImport = allow('epc.batch_import.access');
   const canEditBatchDocs = allow('epc.write', 'epc.production.access', 'epc.batch_import.access');
+  const canManageDynamicFields = canBatchImport;
 
   const {
     corpCodes,
@@ -258,6 +289,10 @@ export default function AdminEpc() {
     exportItemsXlsx,
     deleteItems,
     deleteAllGeneratedBatches,
+    fetchDynamicFields,
+    createDynamicField,
+    updateDynamicField,
+    deleteDynamicField,
     updateBatchDocuments,
     updateBatch
   } = useEpcStore((s) => ({
@@ -285,6 +320,10 @@ export default function AdminEpc() {
     exportItemsXlsx: s.exportItemsXlsx,
     deleteItems: s.deleteItems,
     deleteAllGeneratedBatches: s.deleteAllGeneratedBatches,
+    fetchDynamicFields: s.fetchDynamicFields,
+    createDynamicField: s.createDynamicField,
+    updateDynamicField: s.updateDynamicField,
+    deleteDynamicField: s.deleteDynamicField,
     updateBatchDocuments: s.updateBatchDocuments,
     updateBatch: s.updateBatch
   }));
@@ -304,6 +343,7 @@ export default function AdminEpc() {
   }));
 
   const [tab, setTab] = useState('batches');
+  const [dynamicFields, setDynamicFields] = useState([]);
 
   const authTemplates = useMemo(() => (Array.isArray(templates) ? templates : []).filter((tpl) => String(tpl?.templateType || '').toLowerCase() === 'auth'), [templates]);
 
@@ -383,6 +423,9 @@ export default function AdminEpc() {
   const [rangeDocRows, setRangeDocRows] = useState(() => []);
   const [rangeDocUploading, setRangeDocUploading] = useState(() => ({}));
   const [rangeLocalError, setRangeLocalError] = useState('');
+  const [rangeRowValues, setRangeRowValues] = useState({});
+  const [rangeBatchFillValues, setRangeBatchFillValues] = useState({});
+  const [rangeEntryOpen, setRangeEntryOpen] = useState(false);
   const [importHistory, setImportHistory] = useState([]);
   const [importHistoryTotal, setImportHistoryTotal] = useState(0);
   const [importHistoryOffset, setImportHistoryOffset] = useState(0);
@@ -481,11 +524,26 @@ export default function AdminEpc() {
   }, [paddedRangeEndRunningNo, paddedRangeStartRunningNo, rangeCorpCode, rangeDate]);
 
   const rangePreviewItems = useMemo(() => (Array.isArray(rangePreview?.items) ? rangePreview.items : []), [rangePreview]);
+  const rangeFieldSchema = useMemo(() => {
+    const previewFields = Array.isArray(rangePreview?.fieldSchema) ? rangePreview.fieldSchema : [];
+    if (previewFields.length > 0) return previewFields;
+    return (Array.isArray(dynamicFields) ? dynamicFields : []).filter((field) => field?.isActive !== false);
+  }, [dynamicFields, rangePreview]);
   const selectableRangeRows = useMemo(() => rangePreviewItems.filter((row) => row?.selectable), [rangePreviewItems]);
   const allSelectableRangeChecked = useMemo(() => {
     if (selectableRangeRows.length === 0) return false;
     return selectableRangeRows.every((row) => rangeSelectedEpcs.has(String(row.epcCode || '')));
   }, [rangeSelectedEpcs, selectableRangeRows]);
+  const importPreviewFieldSchema = useMemo(() => (Array.isArray(importPreview?.fieldSchema) ? importPreview.fieldSchema : []), [importPreview]);
+  const importPreviewFieldPresenceRows = useMemo(
+    () =>
+      importPreviewFieldSchema.map((field) => ({
+        fieldKey: String(field?.fieldKey || '').trim(),
+        label: String(field?.label || field?.fieldKey || '').trim(),
+        value: Number(importPreview?.fieldPresence?.[field?.fieldKey] || 0)
+      })),
+    [importPreview?.fieldPresence, importPreviewFieldSchema]
+  );
 
   const closeExportCols = useCallback(() => {
     setExportColsOpen(false);
@@ -504,12 +562,12 @@ export default function AdminEpc() {
       const batch = b || null;
       setExportColsBatch(batch);
       const tpl = resolveTemplateForBatch(batch, templates);
-      const cols = deriveExportColumns(tpl, 'batch');
+      const cols = deriveExportColumns(tpl, batch, dynamicFields, 'batch');
       setExportColsList(cols);
       setExportCols(buildDefaultSelection(cols));
       setExportColsOpen(true);
     },
-    [templates]
+    [dynamicFields, templates]
   );
 
   const closeExportItemCols = useCallback(() => {
@@ -522,12 +580,12 @@ export default function AdminEpc() {
     (contextBatch) => {
       const batch = contextBatch || null;
       const tpl = resolveTemplateForBatch(batch, templates);
-      const cols = deriveExportColumns(tpl, 'items');
+      const cols = deriveExportColumns(tpl, batch, dynamicFields, 'items');
       setExportItemColsList(cols);
       setExportItemCols(buildDefaultSelection(cols));
       setExportItemColsOpen(true);
     },
-    [templates]
+    [dynamicFields, templates]
   );
 
   const closeImport = useCallback(() => {
@@ -558,6 +616,9 @@ export default function AdminEpc() {
     setRangeDocRows([]);
     setRangeDocUploading({});
     setRangeLocalError('');
+    setRangeRowValues({});
+    setRangeBatchFillValues({});
+    setRangeEntryOpen(false);
   }, [corpCodes]);
 
   const closeViewBatch = useCallback(() => {
@@ -685,6 +746,14 @@ export default function AdminEpc() {
   }, [detailOpen, fetchTemplates, templates, viewBatchOpen]);
 
   useEffect(() => {
+    if (!canManageDynamicFields) return;
+    void (async () => {
+      const rows = await fetchDynamicFields({ activeOnly: true });
+      setDynamicFields(Array.isArray(rows) ? rows : []);
+    })();
+  }, [canManageDynamicFields, fetchDynamicFields]);
+
+  useEffect(() => {
     if (tab === 'import' && canBatchImport) {
       void fetchBatches({ origin: 'import', limit: 50, offset: 0 });
     } else if (tab === 'production' && canProduction) {
@@ -705,10 +774,12 @@ export default function AdminEpc() {
     if (tab === 'batches' && canBatchView) return;
     if (tab === 'import' && canBatchImport) return;
     if (tab === 'production' && canProduction) return;
+    if (tab === 'fields' && canManageDynamicFields) return;
     if (canBatchView) setTab('batches');
     else if (canBatchImport) setTab('import');
     else if (canProduction) setTab('production');
-  }, [canBatchImport, canBatchView, canProduction, tab]);
+    else if (canManageDynamicFields) setTab('fields');
+  }, [canBatchImport, canBatchView, canManageDynamicFields, canProduction, tab]);
 
   useEffect(() => {
     if (tab !== 'batches' || !canBatchView) return;
@@ -1066,6 +1137,35 @@ export default function AdminEpc() {
     () => (Array.isArray(importHistoryDetail?.metadata?.items) ? importHistoryDetail.metadata.items : []),
     [importHistoryDetail]
   );
+  const importHistoryDetailFieldSchema = useMemo(() => {
+    const metadataSchema = Array.isArray(importHistoryDetail?.metadata?.fieldSchema) ? importHistoryDetail.metadata.fieldSchema : [];
+    if (metadataSchema.length > 0) return metadataSchema;
+
+    const activeMap = new Map(
+      (Array.isArray(dynamicFields) ? dynamicFields : [])
+        .filter((field) => field?.fieldKey)
+        .map((field) => [String(field.fieldKey).trim(), field])
+    );
+
+    const keys = new Set();
+    for (const row of Array.isArray(importHistoryDetailRows) ? importHistoryDetailRows : []) {
+      const values = row?.dynamicFields && typeof row.dynamicFields === 'object' && !Array.isArray(row.dynamicFields) ? row.dynamicFields : {};
+      for (const key of Object.keys(values)) {
+        const clean = String(key || '').trim();
+        if (clean) keys.add(clean);
+      }
+    }
+
+    return Array.from(keys).map((fieldKey, index) => {
+      const active = activeMap.get(fieldKey);
+      return {
+        fieldKey,
+        label: String(active?.label || active?.fieldKey || fieldKey),
+        sortOrder: Number(active?.sortOrder ?? index),
+        fieldType: String(active?.fieldType || 'text')
+      };
+    });
+  }, [dynamicFields, importHistoryDetail, importHistoryDetailRows]);
   const importHistoryDetailColumns = useMemo(
     () => [
       {
@@ -1076,34 +1176,21 @@ export default function AdminEpc() {
         sortValue: (r) => String(r?.epcCode || ''),
         cell: (r) => <span className="font-mono text-sm text-slate-700">{String(r?.epcCode || '')}</span>
       },
-      {
-        id: 'product',
-        header: t('product'),
-        minWidth: 260,
-        sortValue: (r) =>
-          String(
-            r?.productName ||
-              r?.product?.name ||
-              importHistoryDetail?.summary?.productName ||
-              r?.productId ||
-              importHistoryDetail?.summary?.productId ||
-              ''
-          ),
-        cell: (r) => (
-          <span className="text-sm text-slate-700">
-            {String(
-              r?.productName ||
-                r?.product?.name ||
-                importHistoryDetail?.summary?.productName ||
-                r?.productId ||
-                importHistoryDetail?.summary?.productId ||
-                '-'
-            )}
-          </span>
-        )
-      }
+      ...importHistoryDetailFieldSchema.map((field) => ({
+        id: `dynamic_${String(field?.fieldKey || '')}`,
+        header: String(field?.label || field?.fieldKey || '-'),
+        minWidth: 180,
+        sortValue: (r) => {
+          const values = r?.dynamicFields && typeof r.dynamicFields === 'object' && !Array.isArray(r.dynamicFields) ? r.dynamicFields : {};
+          return formatDynamicFieldDisplay(values?.[field.fieldKey]);
+        },
+        cell: (r) => {
+          const values = r?.dynamicFields && typeof r.dynamicFields === 'object' && !Array.isArray(r.dynamicFields) ? r.dynamicFields : {};
+          return <span className="text-sm text-slate-700">{formatDynamicFieldDisplay(values?.[field.fieldKey])}</span>;
+        }
+      }))
     ],
-    [importHistoryDetail, t]
+    [importHistoryDetailFieldSchema, t]
   );
   const sortedImportHistoryDetailRows = useMemo(
     () => sortRows(importHistoryDetailRows, importHistoryDetailSort, importHistoryDetailColumns),
@@ -1305,7 +1392,7 @@ export default function AdminEpc() {
                     setActivateCertConfirmMeta({
                       source: 'productionImport',
                       batchId: Number(b?.id) > 0 ? Number(b.id) : null,
-                      description: rows > 0 ? `Import completed - ${rows} EPC row(s) berjaya dikemaskini dengan Manufacture Date.` : 'Import completed.'
+                      description: rows > 0 ? `Import completed - ${rows} EPC row(s) updated with the configured dynamic fields.` : 'Import completed.'
                     });
                     setActivateCertConfirmOpen(true);
                     e.target.value = '';
@@ -1351,6 +1438,12 @@ export default function AdminEpc() {
     [batches, productionColumns, productionSort]
   );
   const handleRefreshActiveTab = useCallback(async () => {
+    if (tab === 'fields' && canManageDynamicFields) {
+      const rows = await fetchDynamicFields({ activeOnly: true });
+      setDynamicFields(Array.isArray(rows) ? rows : []);
+      return;
+    }
+
     if (tab === 'import' && canBatchImport) {
       const data = await fetchBatchImportHistory({ limit: importHistoryLimit, offset: importHistoryOffset });
       setImportHistory(Array.isArray(data?.items) ? data.items : []);
@@ -1378,9 +1471,11 @@ export default function AdminEpc() {
   }, [
     canBatchImport,
     canBatchView,
+    canManageDynamicFields,
     canProduction,
     createdFrom,
     createdTo,
+    fetchDynamicFields,
     fetchBatchImportHistory,
     fetchBatches,
     fetchItems,
@@ -1393,6 +1488,68 @@ export default function AdminEpc() {
     listStatus,
     tab
   ]);
+
+  const handleRefreshDynamicFields = useCallback(async () => {
+    const rows = await fetchDynamicFields({ activeOnly: true });
+    setDynamicFields(Array.isArray(rows) ? rows : []);
+    return rows;
+  }, [fetchDynamicFields]);
+
+  const handleRangeToggleAll = useCallback(() => {
+    setRangeSelectedEpcs(() => {
+      if (allSelectableRangeChecked) return new Set();
+      return new Set(selectableRangeRows.map((row) => String(row.epcCode || '')));
+    });
+  }, [allSelectableRangeChecked, selectableRangeRows]);
+
+  const handleRangeToggleRow = useCallback((epcCode, checked) => {
+    const code = String(epcCode || '').trim();
+    if (!code) return;
+    setRangeSelectedEpcs((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(code);
+      else next.delete(code);
+      return next;
+    });
+  }, []);
+
+  const handleRangeRowValueChange = useCallback((epcCode, fieldKey, value) => {
+    const code = String(epcCode || '').trim();
+    const key = String(fieldKey || '').trim();
+    if (!code || !key) return;
+    setRangeRowValues((prev) => ({
+      ...prev,
+      [code]: {
+        ...(prev?.[code] || {}),
+        [key]: value
+      }
+    }));
+  }, []);
+
+  const handleRangeBatchFillChange = useCallback((fieldKey, value) => {
+    const key = String(fieldKey || '').trim();
+    if (!key) return;
+    setRangeBatchFillValues((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const handleApplyRangeBatchFill = useCallback(
+    (fieldKey) => {
+      const key = String(fieldKey || '').trim();
+      if (!key || rangeSelectedEpcs.size === 0) return;
+      const fillValue = rangeBatchFillValues?.[key] ?? '';
+      setRangeRowValues((prev) => {
+        const next = { ...(prev || {}) };
+        for (const epcCode of rangeSelectedEpcs) {
+          next[epcCode] = {
+            ...(next?.[epcCode] || {}),
+            [key]: fillValue
+          };
+        }
+        return next;
+      });
+    },
+    [rangeBatchFillValues, rangeSelectedEpcs]
+  );
 
   return (
     <div className="space-y-4 p-4 sm:p-5 lg:p-6" data-tour="epc-page">
@@ -1431,6 +1588,11 @@ export default function AdminEpc() {
         {canProduction ? (
           <TabButton active={tab === 'production'} onClick={() => setTab('production')}>
             {t('labelProductionRecord')}
+          </TabButton>
+        ) : null}
+        {canManageDynamicFields ? (
+          <TabButton active={tab === 'fields'} onClick={() => setTab('fields')}>
+            {t('batchFields')}
           </TabButton>
         ) : null}
       </div>
@@ -1973,7 +2135,7 @@ export default function AdminEpc() {
                       checked={Boolean(exportItemCols[c.key])}
                       onChange={(e) => setExportItemCols((p) => ({ ...p, [c.key]: e.target.checked }))}
                     />
-                    {t(c.labelKey)}
+                    {resolveExportColumnLabel(t, c)}
                   </label>
                 ))}
               </div>
@@ -2062,7 +2224,7 @@ export default function AdminEpc() {
                       checked={Boolean(exportCols[c.key])}
                       onChange={(e) => setExportCols((prev) => ({ ...prev, [c.key]: e.target.checked }))}
                     />
-                    {t(c.labelKey)}
+                    {resolveExportColumnLabel(t, c)}
                   </label>
                 ))}
               </div>
@@ -2189,6 +2351,21 @@ export default function AdminEpc() {
         </SectionShell>
       ) : null}
 
+      {tab === 'fields' && canManageDynamicFields ? (
+        <SectionShell title={t('batchFields')} hint={t('batchFieldsHint')}>
+          <EpcDynamicFieldsPanel
+            t={t}
+            fields={dynamicFields}
+            loading={loading}
+            error={error}
+            onRefresh={handleRefreshDynamicFields}
+            onCreate={createDynamicField}
+            onUpdate={updateDynamicField}
+            onDelete={deleteDynamicField}
+          />
+        </SectionShell>
+      ) : null}
+
       {importHistoryOpen && importHistoryDetail ? (
         <div className="ac-modal-backdrop">
           <div className="ac-modal my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-[84rem] flex-col overflow-hidden">
@@ -2204,12 +2381,27 @@ export default function AdminEpc() {
               </div>
             </div>
 
+            <div className="mb-3 grid grid-cols-1 gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-700 sm:grid-cols-3">
+              <div>
+                <div className="text-[11px] font-semibold text-zinc-600">{t('qtyEpc')}</div>
+                <div className="mt-0.5 font-mono">{String(importHistoryDetailRows.length || importHistoryDetail?.summary?.uniqueEpcs || 0)}</div>
+              </div>
+              <div>
+                <div className="text-[11px] font-semibold text-zinc-600">{t('fieldsConfigured')}</div>
+                <div className="mt-0.5 font-mono">{String(importHistoryDetailFieldSchema.length)}</div>
+              </div>
+              <div>
+                <div className="text-[11px] font-semibold text-zinc-600">{t('source')}</div>
+                <div className="mt-0.5">{String(importHistoryDetail?.summary?.source || importHistoryDetail?.metadata?.source || '-')}</div>
+              </div>
+            </div>
+
             <div className="min-h-0 flex-1 overflow-auto">
               <DataTable
                 sortState={importHistoryDetailSort}
                 onSortChange={setImportHistoryDetailSort}
                 density="compact"
-                minWidth={640}
+                minWidth={Math.max(640, 220 + importHistoryDetailFieldSchema.length * 180)}
                 rows={sortedImportHistoryDetailRows}
                 rowKey={(r) => String(r?.epcCode || '')}
                 loading={loading}
@@ -2218,7 +2410,7 @@ export default function AdminEpc() {
                 columns={importHistoryDetailColumns}
                 columnTools={{
                   enabled: true,
-                  storageKey: scopedColumnKey('ac_epc_import_history_detail_v4'),
+                  storageKey: scopedColumnKey('ac_epc_import_history_detail_v5'),
                   initialPinnedIds: ['epc'],
                   defaultColumnWidth: 112
                 }}
@@ -2395,7 +2587,7 @@ export default function AdminEpc() {
                 </ul>
               </div>
               <p className="text-[11px] text-zinc-600">
-                <strong>Note</strong>: Validation for "Batch Number / Swiftlet House Number is required" has been disabled — only EPC + Manufacture Date are needed to activate the certificate.
+                <strong>Note</strong>: Activation now follows the configured EPC dynamic field schema. Only EPC is always mandatory unless a field is marked required in Batch Fields.
               </p>
             </div>
             <div className="flex items-center justify-end gap-2 border-t border-zinc-200 bg-zinc-50 px-4 py-3">
@@ -2414,7 +2606,7 @@ export default function AdminEpc() {
                 className="ac-btn ac-btn-primary px-4 py-2 text-xs"
                 onClick={async () => {
                   try {
-                    window.alert('✅ Certificate activation confirmed. All imported EPC items can now be verified with just EPC Code + Manufacture Date.');
+                    window.alert('Certificate activation confirmed. Imported EPC items are now available in the verification flow.');
                     setActivateCertConfirmOpen(false);
                     setActivateCertConfirmMeta(null);
                     await fetchItems({
@@ -2920,6 +3112,9 @@ export default function AdminEpc() {
                             certificateTemplateId: String(rangeAuthTemplateId || '').trim() || undefined
                           });
                           setRangePreview(preview);
+                          setRangeRowValues({});
+                          setRangeBatchFillValues({});
+                          setRangeEntryOpen(false);
                           const defaultSelected = new Set(
                             (Array.isArray(preview?.items) ? preview.items : [])
                               .filter((row) => row?.defaultSelected)
@@ -3174,96 +3369,28 @@ export default function AdminEpc() {
                               type="button"
                               className="mt-2 ac-btn ac-btn-soft px-3 py-2 text-xs"
                               disabled={selectableRangeRows.length === 0}
-                              onClick={() => {
-                                setRangeSelectedEpcs((prev) => {
-                                  if (allSelectableRangeChecked) return new Set();
-                                  return new Set(selectableRangeRows.map((row) => String(row.epcCode || '')));
-                                });
-                              }}
+                              onClick={handleRangeToggleAll}
                             >
                               {allSelectableRangeChecked ? t('clearSelection') : t('selectAll')}
                             </button>
                           </div>
                         </div>
 
-                        <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
-                          <div className="max-h-[28rem] overflow-auto">
-                            <table className="min-w-full divide-y divide-slate-200 text-xs">
-                              <thead className="bg-slate-50">
-                                <tr>
-                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                                    <input
-                                      type="checkbox"
-                                      checked={allSelectableRangeChecked}
-                                      onChange={() => {
-                                        setRangeSelectedEpcs((prev) => {
-                                          if (allSelectableRangeChecked) return new Set();
-                                          return new Set(selectableRangeRows.map((row) => String(row.epcCode || '')));
-                                        });
-                                      }}
-                                      disabled={selectableRangeRows.length === 0}
-                                    />
-                                  </th>
-                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t('epcCode')}</th>
-                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t('batchName')}</th>
-                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t('previewStatus')}</th>
-                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t('currentAssignment')}</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-200 bg-white">
-                                {rangePreviewItems.map((row) => {
-                                  const code = String(row?.epcCode || '');
-                                  const checked = rangeSelectedEpcs.has(code);
-                                  const status = String(row?.previewStatus || '');
-                                  const statusClass =
-                                    status === 'ready'
-                                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                      : status === 'already_assigned'
-                                        ? 'border-amber-200 bg-amber-50 text-amber-700'
-                                        : status === 'conflict'
-                                          ? 'border-rose-200 bg-rose-50 text-rose-700'
-                                          : 'border-slate-200 bg-slate-100 text-slate-700';
-                                  return (
-                                    <tr key={code}>
-                                      <td className="px-3 py-2 align-top">
-                                        <input
-                                          type="checkbox"
-                                          checked={checked}
-                                          disabled={!row?.selectable}
-                                          onChange={(e) => {
-                                            const nextChecked = e.target.checked;
-                                            setRangeSelectedEpcs((prev) => {
-                                              const next = new Set(prev);
-                                              if (nextChecked) next.add(code);
-                                              else next.delete(code);
-                                              return next;
-                                            });
-                                          }}
-                                        />
-                                      </td>
-                                      <td className="px-3 py-2 align-top font-mono text-slate-900">{code}</td>
-                                      <td className="px-3 py-2 align-top text-slate-700">
-                                        <div>{row?.batchName || '-'}</div>
-                                        <div className="mt-1 text-[11px] text-slate-500">{row?.productName || '-'}</div>
-                                      </td>
-                                      <td className="px-3 py-2 align-top">
-                                        <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClass}`}>
-                                          {status === 'ready'
-                                            ? t('readyToActivate')
-                                            : status === 'already_assigned'
-                                              ? t('alreadyAssignedEpcs')
-                                              : status === 'conflict'
-                                                ? t('conflictingEpcs')
-                                                : t('missingEpcLabel')}
-                                        </span>
-                                        <div className="mt-1 text-[11px] text-slate-500">{row?.message || '-'}</div>
-                                      </td>
-                                      <td className="px-3 py-2 align-top text-slate-700">{row?.currentCertificateId || '-'}</td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
+                        <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-semibold text-slate-900">{t('dataEntryTitle')}</div>
+                              <div className="mt-1 text-xs text-slate-500">
+                                {t('dataEntryHint')}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                              onClick={() => setRangeEntryOpen(true)}
+                            >
+                              {t('openDataEntry')}
+                            </button>
                           </div>
                         </div>
                       </>
@@ -3299,6 +3426,10 @@ export default function AdminEpc() {
                       startRunningNo: rangeStartRunningNo,
                       endRunningNo: rangeEndRunningNo,
                       epcCodes: Array.from(rangeSelectedEpcs),
+                      rowValues: Array.from(rangeSelectedEpcs).reduce((acc, epcCode) => {
+                        acc[epcCode] = { ...(rangeRowValues?.[epcCode] || {}) };
+                        return acc;
+                      }, {}),
                       productId: String(rangeProductId || '').trim(),
                       certificateTemplateId: String(rangeAuthTemplateId || '').trim() || undefined,
                       documents
@@ -3347,6 +3478,57 @@ export default function AdminEpc() {
         </div>
       ) : null}
 
+      {rangeOpen && rangeEntryOpen && rangePreview ? (
+        <div className="ac-modal-backdrop">
+          <div className="ac-modal my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-[88rem] flex-col overflow-hidden">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-zinc-900">{t('dataEntryTitle')}</div>
+                <div className="mt-1 text-xs text-zinc-500">
+                  {rangePreview ? `${rangePreview.startEpc} - ${rangePreview.endEpc}` : t('dataEntryHint')}
+                </div>
+              </div>
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => setRangeEntryOpen(false)}>
+                {t('close')}
+              </button>
+            </div>
+
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+              <div>{t('selectedEpcsCount', { value: rangeSelectedEpcs.size })}</div>
+              <div>{t('fieldsConfigured')}: {String(rangeFieldSchema.length)}</div>
+            </div>
+
+            {rangeFieldSchema.length > 0 ? (
+              <div className="mb-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-xs text-brand-900">
+                {t('dataEntryModeHint')}
+              </div>
+            ) : (
+              <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+                {t('noBatchFieldsConfigured')}
+              </div>
+            )}
+
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <EpcDynamicEntryGrid
+                t={t}
+                fieldSchema={rangeFieldSchema}
+                previewItems={rangePreviewItems}
+                selectedEpcs={rangeSelectedEpcs}
+                allSelectableChecked={allSelectableRangeChecked}
+                selectableRows={selectableRangeRows}
+                rowValues={rangeRowValues}
+                batchFillValues={rangeBatchFillValues}
+                onToggleAll={handleRangeToggleAll}
+                onToggleRow={handleRangeToggleRow}
+                onChangeRowValue={handleRangeRowValueChange}
+                onChangeBatchFill={handleRangeBatchFillChange}
+                onApplyBatchFill={handleApplyRangeBatchFill}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {importOpen ? (
         <div className="ac-modal-backdrop">
           <div className="ac-modal">
@@ -3386,14 +3568,38 @@ export default function AdminEpc() {
                   />
                 </label>
                 {importPreview ? (
-                  <div className="mt-2 grid grid-cols-1 gap-2 rounded-xl border border-zinc-200 bg-white p-3 text-xs text-zinc-800 sm:grid-cols-2">
+                  <div className="mt-2 grid grid-cols-1 gap-2 rounded-xl border border-zinc-200 bg-white p-3 text-xs text-zinc-800 sm:grid-cols-2 lg:grid-cols-4">
                     <div>
                       <div className="text-[11px] font-semibold text-zinc-600">{t('rowsTotal')}</div>
                       <div className="mt-0.5 font-mono">{String(Array.isArray(importPreview?.rows) ? importPreview.rows.length : Number(importPreview?.rows) || 0)}</div>
                     </div>
                     <div>
-                      <div className="text-[11px] font-semibold text-zinc-600">{t('manufactureDateLabel')}</div>
-                      <div className="mt-0.5 font-mono">{String(importPreview?.manufactureDate || '-')}</div>
+                      <div className="text-[11px] font-semibold text-zinc-600">{t('uniqueEpcLabel')}</div>
+                      <div className="mt-0.5 font-mono">{String(importPreview?.uniqueEpcs || 0)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold text-zinc-600">{t('existingEpcs')}</div>
+                      <div className="mt-0.5 font-mono">{String(importPreview?.existingEpcs || 0)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold text-zinc-600">{t('fieldsConfigured')}</div>
+                      <div className="mt-0.5 font-mono">{String(importPreviewFieldSchema.length)}</div>
+                    </div>
+                  </div>
+                ) : null}
+                {importPreviewFieldPresenceRows.length > 0 ? (
+                  <div className="mt-2 rounded-xl border border-zinc-200 bg-white p-3">
+                    <div className="mb-2 text-[11px] font-semibold text-zinc-600">{t('templateFieldCoverage')}</div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {importPreviewFieldPresenceRows.map((row) => (
+                        <div key={row.fieldKey} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                          <div className="text-[11px] font-semibold text-slate-700">{row.label}</div>
+                          <div className="mt-0.5 text-[11px] text-slate-500">{row.fieldKey}</div>
+                          <div className="mt-1 font-mono text-sm text-slate-900">
+                            {row.value} {t('fieldsPopulated')}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ) : null}
@@ -3657,7 +3863,7 @@ export default function AdminEpc() {
                     setActivateCertConfirmMeta({
                       source: 'batchImport',
                       batchId: realBid > 0 ? realBid : null,
-                      description: rows > 0 ? `Batch import successful. ${rows} EPC row(s) registered with Manufacture Date.` : 'Batch import successful.'
+                      description: rows > 0 ? `Batch import successful. ${rows} EPC row(s) registered with the configured dynamic fields.` : 'Batch import successful.'
                     });
                     closeImport();
                     setActivateCertConfirmOpen(true);

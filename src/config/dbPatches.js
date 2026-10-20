@@ -756,6 +756,7 @@ async function ensureEpcSchemaCompat() {
   } catch {
   }
   await ensureColumn('EpcBatch', 'templateData', `ALTER TABLE \`EpcBatch\` ADD COLUMN \`templateData\` JSON NULL`, null, null);
+  await ensureColumn('EpcBatch', 'fieldSchemaSnapshot', `ALTER TABLE \`EpcBatch\` ADD COLUMN \`fieldSchemaSnapshot\` JSON NULL`, null, null);
   await ensureColumn(
     'EpcBatch',
     'productionUploadedAt',
@@ -821,6 +822,195 @@ async function ensureEpcSchemaCompat() {
     null,
     null
   );
+  await ensureColumn('EpcItem', 'dynamicFields', `ALTER TABLE \`EpcItem\` ADD COLUMN \`dynamicFields\` JSON NULL`, null, null);
+}
+
+async function ensureEpcDynamicFieldSchemaCompat() {
+  const tableName = 'EpcDynamicField';
+  if (!(await tableExists(tableName))) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`${tableName}\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`organizationId\` INT NOT NULL,
+        \`fieldKey\` VARCHAR(191) NOT NULL,
+        \`label\` VARCHAR(191) NOT NULL,
+        \`fieldType\` VARCHAR(32) NOT NULL DEFAULT 'text',
+        \`placeholder\` VARCHAR(191) NULL,
+        \`helpText\` VARCHAR(191) NULL,
+        \`defaultEntryMode\` VARCHAR(32) NOT NULL DEFAULT 'both',
+        \`isRequired\` TINYINT(1) NOT NULL DEFAULT 0,
+        \`isActive\` TINYINT(1) NOT NULL DEFAULT 1,
+        \`sortOrder\` INT NOT NULL DEFAULT 0,
+        \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+
+  await ensureColumn(
+    tableName,
+    'organizationId',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`organizationId\` INT NULL`,
+    null,
+    `ALTER TABLE \`${tableName}\` MODIFY \`organizationId\` INT NOT NULL`
+  );
+  await ensureColumn(
+    tableName,
+    'fieldKey',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`fieldKey\` VARCHAR(191) NULL`,
+    null,
+    `ALTER TABLE \`${tableName}\` MODIFY \`fieldKey\` VARCHAR(191) NOT NULL`
+  );
+  await ensureColumn(
+    tableName,
+    'label',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`label\` VARCHAR(191) NULL`,
+    `UPDATE \`${tableName}\` SET \`label\` = \`fieldKey\` WHERE \`label\` IS NULL OR TRIM(\`label\`) = ''`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`label\` VARCHAR(191) NOT NULL`
+  );
+  await ensureColumn(
+    tableName,
+    'fieldType',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`fieldType\` VARCHAR(32) NULL`,
+    `UPDATE \`${tableName}\` SET \`fieldType\` = 'text' WHERE \`fieldType\` IS NULL OR TRIM(\`fieldType\`) = ''`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`fieldType\` VARCHAR(32) NOT NULL DEFAULT 'text'`
+  );
+  await ensureColumn(tableName, 'placeholder', `ALTER TABLE \`${tableName}\` ADD COLUMN \`placeholder\` VARCHAR(191) NULL`, null, null);
+  await ensureColumn(tableName, 'helpText', `ALTER TABLE \`${tableName}\` ADD COLUMN \`helpText\` VARCHAR(191) NULL`, null, null);
+  await ensureColumn(
+    tableName,
+    'defaultEntryMode',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`defaultEntryMode\` VARCHAR(32) NULL`,
+    `UPDATE \`${tableName}\` SET \`defaultEntryMode\` = 'both' WHERE \`defaultEntryMode\` IS NULL OR TRIM(\`defaultEntryMode\`) = ''`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`defaultEntryMode\` VARCHAR(32) NOT NULL DEFAULT 'both'`
+  );
+  await ensureColumn(
+    tableName,
+    'isRequired',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`isRequired\` TINYINT(1) NULL`,
+    `UPDATE \`${tableName}\` SET \`isRequired\` = 0 WHERE \`isRequired\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`isRequired\` TINYINT(1) NOT NULL DEFAULT 0`
+  );
+  await ensureColumn(
+    tableName,
+    'isActive',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`isActive\` TINYINT(1) NULL`,
+    `UPDATE \`${tableName}\` SET \`isActive\` = 1 WHERE \`isActive\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`isActive\` TINYINT(1) NOT NULL DEFAULT 1`
+  );
+  await ensureColumn(
+    tableName,
+    'sortOrder',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`sortOrder\` INT NULL`,
+    `UPDATE \`${tableName}\` SET \`sortOrder\` = 0 WHERE \`sortOrder\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`sortOrder\` INT NOT NULL DEFAULT 0`
+  );
+  await ensureColumn(
+    tableName,
+    'createdAt',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`createdAt\` DATETIME NULL`,
+    `UPDATE \`${tableName}\` SET \`createdAt\` = NOW() WHERE \`createdAt\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`
+  );
+  await ensureColumn(
+    tableName,
+    'updatedAt',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`updatedAt\` DATETIME NULL`,
+    `UPDATE \`${tableName}\` SET \`updatedAt\` = NOW() WHERE \`updatedAt\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`
+  );
+
+  const uniq = `${tableName}_organizationId_fieldKey_key`;
+  if (!(await indexExists(tableName, uniq))) {
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX \`${uniq}\` ON \`${tableName}\` (\`organizationId\`, \`fieldKey\`)`);
+  }
+  const idx = `${tableName}_organizationId_isActive_sortOrder_idx`;
+  if (!(await indexExists(tableName, idx))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${idx}\` ON \`${tableName}\` (\`organizationId\`, \`isActive\`, \`sortOrder\`)`);
+  }
+}
+
+async function ensureEpcDocumentSchemaCompat() {
+  const batchTable = 'EpcBatchDocument';
+  if (!(await tableExists(batchTable))) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`${batchTable}\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`organizationId\` INT NOT NULL,
+        \`batchId\` INT NOT NULL,
+        \`docType\` VARCHAR(191) NOT NULL,
+        \`mediaUrl\` VARCHAR(2048) NOT NULL,
+        \`uploadedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+
+  await ensureColumn(batchTable, 'organizationId', `ALTER TABLE \`${batchTable}\` ADD COLUMN \`organizationId\` INT NULL`, null, `ALTER TABLE \`${batchTable}\` MODIFY \`organizationId\` INT NOT NULL`);
+  await ensureColumn(batchTable, 'batchId', `ALTER TABLE \`${batchTable}\` ADD COLUMN \`batchId\` INT NULL`, null, `ALTER TABLE \`${batchTable}\` MODIFY \`batchId\` INT NOT NULL`);
+  await ensureColumn(batchTable, 'docType', `ALTER TABLE \`${batchTable}\` ADD COLUMN \`docType\` VARCHAR(191) NULL`, null, `ALTER TABLE \`${batchTable}\` MODIFY \`docType\` VARCHAR(191) NOT NULL`);
+  await ensureColumn(batchTable, 'mediaUrl', `ALTER TABLE \`${batchTable}\` ADD COLUMN \`mediaUrl\` VARCHAR(2048) NULL`, null, `ALTER TABLE \`${batchTable}\` MODIFY \`mediaUrl\` VARCHAR(2048) NOT NULL`);
+  await ensureColumn(
+    batchTable,
+    'uploadedAt',
+    `ALTER TABLE \`${batchTable}\` ADD COLUMN \`uploadedAt\` DATETIME NULL`,
+    `UPDATE \`${batchTable}\` SET \`uploadedAt\` = NOW() WHERE \`uploadedAt\` IS NULL`,
+    `ALTER TABLE \`${batchTable}\` MODIFY \`uploadedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`
+  );
+
+  const batchUniq = `${batchTable}_batchId_docType_key`;
+  if (!(await indexExists(batchTable, batchUniq))) {
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX \`${batchUniq}\` ON \`${batchTable}\` (\`batchId\`, \`docType\`)`);
+  }
+  const batchOrgIdx = `${batchTable}_organizationId_uploadedAt_idx`;
+  if (!(await indexExists(batchTable, batchOrgIdx))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${batchOrgIdx}\` ON \`${batchTable}\` (\`organizationId\`, \`uploadedAt\`)`);
+  }
+  const batchIdIdx = `${batchTable}_batchId_idx`;
+  if (!(await indexExists(batchTable, batchIdIdx))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${batchIdIdx}\` ON \`${batchTable}\` (\`batchId\`)`);
+  }
+
+  const itemTable = 'EpcItemDocument';
+  if (!(await tableExists(itemTable))) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`${itemTable}\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`organizationId\` INT NOT NULL,
+        \`epcItemId\` INT NOT NULL,
+        \`docType\` VARCHAR(191) NOT NULL,
+        \`mediaUrl\` VARCHAR(2048) NOT NULL,
+        \`uploadedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+
+  await ensureColumn(itemTable, 'organizationId', `ALTER TABLE \`${itemTable}\` ADD COLUMN \`organizationId\` INT NULL`, null, `ALTER TABLE \`${itemTable}\` MODIFY \`organizationId\` INT NOT NULL`);
+  await ensureColumn(itemTable, 'epcItemId', `ALTER TABLE \`${itemTable}\` ADD COLUMN \`epcItemId\` INT NULL`, null, `ALTER TABLE \`${itemTable}\` MODIFY \`epcItemId\` INT NOT NULL`);
+  await ensureColumn(itemTable, 'docType', `ALTER TABLE \`${itemTable}\` ADD COLUMN \`docType\` VARCHAR(191) NULL`, null, `ALTER TABLE \`${itemTable}\` MODIFY \`docType\` VARCHAR(191) NOT NULL`);
+  await ensureColumn(itemTable, 'mediaUrl', `ALTER TABLE \`${itemTable}\` ADD COLUMN \`mediaUrl\` VARCHAR(2048) NULL`, null, `ALTER TABLE \`${itemTable}\` MODIFY \`mediaUrl\` VARCHAR(2048) NOT NULL`);
+  await ensureColumn(
+    itemTable,
+    'uploadedAt',
+    `ALTER TABLE \`${itemTable}\` ADD COLUMN \`uploadedAt\` DATETIME NULL`,
+    `UPDATE \`${itemTable}\` SET \`uploadedAt\` = NOW() WHERE \`uploadedAt\` IS NULL`,
+    `ALTER TABLE \`${itemTable}\` MODIFY \`uploadedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`
+  );
+
+  const itemUniq = `${itemTable}_epcItemId_docType_key`;
+  if (!(await indexExists(itemTable, itemUniq))) {
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX \`${itemUniq}\` ON \`${itemTable}\` (\`epcItemId\`, \`docType\`)`);
+  }
+  const itemOrgIdx = `${itemTable}_organizationId_uploadedAt_idx`;
+  if (!(await indexExists(itemTable, itemOrgIdx))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${itemOrgIdx}\` ON \`${itemTable}\` (\`organizationId\`, \`uploadedAt\`)`);
+  }
+  const itemIdIdx = `${itemTable}_epcItemId_idx`;
+  if (!(await indexExists(itemTable, itemIdIdx))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${itemIdIdx}\` ON \`${itemTable}\` (\`epcItemId\`)`);
+  }
 }
 
 async function ensureOrganizationSettingsSchemaCompat() {
@@ -1472,6 +1662,8 @@ async function applyDbPatches() {
   await ensureCertificateSchemaCompat();
   await ensureCertificateSequenceSchemaCompat();
   await ensureEpcSchemaCompat();
+  await ensureEpcDynamicFieldSchemaCompat();
+  await ensureEpcDocumentSchemaCompat();
   await ensureEpcScanGroupSchemaCompat();
   await ensureOrganizationSettingsSchemaCompat();
   await ensureAccessControlSchemaCompat();

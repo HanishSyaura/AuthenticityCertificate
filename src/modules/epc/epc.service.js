@@ -159,19 +159,15 @@ function formatYyyyMmDd(d = new Date(), timeZone = null) {
   return `${yyyy}${mm}${dd}`;
 }
 
+const EPC_DYNAMIC_FIELD_TYPES = new Set(['text', 'number', 'date']);
+const EPC_DYNAMIC_ENTRY_MODES = new Set(['batch', 'individual', 'both']);
+
 const EPC_EXPORT_COLUMN_META = {
-  epcCode: { header: 'EPC code', defaultOn: true, alwaysOffer: true, requires: null, aliasFor: null },
-  runningNo: { header: 'Running no', defaultOn: false, alwaysOffer: true, requires: null, aliasFor: null },
-  netWeight: { header: 'Net Weight', defaultOn: true, alwaysOffer: false, requires: null, aliasFor: null },
-  productionDate: { header: 'Production Date', defaultOn: true, alwaysOffer: false, requires: null, aliasFor: null },
-  manufactureDate: { header: 'Manufacture date', defaultOn: true, alwaysOffer: false, requires: null, aliasFor: 'productionDate' },
-  caiqNumber: { header: 'CAIQ number', defaultOn: true, alwaysOffer: false, requires: null, aliasFor: null },
-  barcode: { header: 'Barcode', defaultOn: true, alwaysOffer: true, requires: null, aliasFor: null },
-  batchNumber: { header: 'Batch number', defaultOn: true, alwaysOffer: false, requires: null, aliasFor: null },
-  swiftletHouseNumber: { header: 'Swiftlet house number', defaultOn: true, alwaysOffer: false, requires: null, aliasFor: null },
-  status: { header: 'Status', defaultOn: false, alwaysOffer: false, requires: 'status', aliasFor: null },
-  createdAt: { header: 'Created at', defaultOn: false, alwaysOffer: false, requires: null, aliasFor: null },
-  remark: { header: 'Remark', defaultOn: false, alwaysOffer: false, requires: 'batch.remark', aliasFor: null }
+  epcCode: { header: 'EPC', defaultOn: true, alwaysOffer: true },
+  runningNo: { header: 'Running no', defaultOn: false, alwaysOffer: true },
+  status: { header: 'Status', defaultOn: false, alwaysOffer: false },
+  createdAt: { header: 'Created at', defaultOn: false, alwaysOffer: false },
+  remark: { header: 'Remark', defaultOn: false, alwaysOffer: false }
 };
 
 const EPC_EXPORT_ALLOWED_KEYS = new Set(Object.keys(EPC_EXPORT_COLUMN_META));
@@ -181,15 +177,254 @@ const EPC_EXPORT_ITEM_SELECT = {
   epcCode: true,
   runningNo: true,
   createdAt: true,
-  netWeight: true,
-  productionDate: true,
-  caiqNumber: true,
-  barcode: true,
-  batchNumber: true,
-  swiftletHouseNumber: true,
+  dynamicFields: true,
   organizationId: true,
   batchId: true
 };
+
+function sanitizeDynamicFieldKey(raw) {
+  const base = String(raw || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase();
+  return base.slice(0, 64);
+}
+
+function normalizeDynamicFieldType(raw) {
+  const value = String(raw || 'text').trim().toLowerCase();
+  return EPC_DYNAMIC_FIELD_TYPES.has(value) ? value : 'text';
+}
+
+function normalizeDynamicEntryMode(raw) {
+  const value = String(raw || 'both').trim().toLowerCase();
+  return EPC_DYNAMIC_ENTRY_MODES.has(value) ? value : 'both';
+}
+
+function normalizeDynamicFieldDefinition(input = {}) {
+  const fieldKey = sanitizeDynamicFieldKey(input.fieldKey || input.key || input.label);
+  if (!fieldKey) throw new Error('Field key is required.');
+  const label = String(input.label || '').trim();
+  if (!label) throw new Error('Field label is required.');
+  return {
+    fieldKey,
+    label,
+    fieldType: normalizeDynamicFieldType(input.fieldType || input.type),
+    placeholder: String(input.placeholder || '').trim() || null,
+    helpText: String(input.helpText || '').trim() || null,
+    defaultEntryMode: normalizeDynamicEntryMode(input.defaultEntryMode || input.entryModeDefault || input.entryMode),
+    isRequired: Boolean(input.isRequired),
+    isActive: input.isActive === undefined ? true : Boolean(input.isActive),
+    sortOrder: Number.isFinite(Number(input.sortOrder)) ? Math.max(0, Math.floor(Number(input.sortOrder))) : 0
+  };
+}
+
+function serializeDynamicFieldDefinition(row = {}) {
+  return {
+    id: row?.id != null ? Number(row.id) : null,
+    fieldKey: String(row?.fieldKey || '').trim(),
+    label: String(row?.label || '').trim(),
+    fieldType: normalizeDynamicFieldType(row?.fieldType),
+    placeholder: String(row?.placeholder || '').trim() || '',
+    helpText: String(row?.helpText || '').trim() || '',
+    defaultEntryMode: normalizeDynamicEntryMode(row?.defaultEntryMode),
+    isRequired: Boolean(row?.isRequired),
+    isActive: Boolean(row?.isActive),
+    sortOrder: Number(row?.sortOrder) || 0
+  };
+}
+
+async function listDynamicFields({ organizationId, activeOnly = false } = {}) {
+  const orgId = Number(organizationId);
+  const rows = await withTimeout(
+    prisma.epcDynamicField.findMany({
+      where: {
+        organizationId: orgId,
+        ...(activeOnly ? { isActive: true } : {})
+      },
+      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }]
+    }),
+    2500
+  );
+  return (Array.isArray(rows) ? rows : []).map(serializeDynamicFieldDefinition);
+}
+
+async function createDynamicField({ organizationId, input } = {}) {
+  const orgId = Number(organizationId);
+  const data = normalizeDynamicFieldDefinition(input);
+  const existing = await withTimeout(
+    prisma.epcDynamicField.findFirst({
+      where: { organizationId: orgId, fieldKey: data.fieldKey },
+      select: { id: true }
+    }),
+    1500
+  );
+  if (existing) {
+    const err = new Error('Field key already exists.');
+    err.status = 409;
+    throw err;
+  }
+  const created = await withTimeout(
+    prisma.epcDynamicField.create({
+      data: { organizationId: orgId, ...data }
+    }),
+    1500
+  );
+  return serializeDynamicFieldDefinition(created);
+}
+
+async function updateDynamicField({ organizationId, fieldId, input } = {}) {
+  const orgId = Number(organizationId);
+  const id = Number(fieldId);
+  if (!Number.isFinite(id) || id <= 0) throw new Error('Invalid field id.');
+  const existing = await withTimeout(
+    prisma.epcDynamicField.findFirst({ where: { id, organizationId: orgId } }),
+    1500
+  );
+  if (!existing) {
+    const err = new Error('Field not found.');
+    err.status = 404;
+    throw err;
+  }
+  const data = normalizeDynamicFieldDefinition({
+    ...existing,
+    ...input,
+    fieldKey: input?.fieldKey ?? existing.fieldKey,
+    label: input?.label ?? existing.label
+  });
+  const duplicate = await withTimeout(
+    prisma.epcDynamicField.findFirst({
+      where: {
+        organizationId: orgId,
+        fieldKey: data.fieldKey,
+        id: { not: id }
+      },
+      select: { id: true }
+    }),
+    1500
+  );
+  if (duplicate) {
+    const err = new Error('Field key already exists.');
+    err.status = 409;
+    throw err;
+  }
+  const updated = await withTimeout(
+    prisma.epcDynamicField.update({
+      where: { id },
+      data
+    }),
+    1500
+  );
+  return serializeDynamicFieldDefinition(updated);
+}
+
+async function deleteDynamicField({ organizationId, fieldId } = {}) {
+  const orgId = Number(organizationId);
+  const id = Number(fieldId);
+  if (!Number.isFinite(id) || id <= 0) throw new Error('Invalid field id.');
+  const existing = await withTimeout(
+    prisma.epcDynamicField.findFirst({ where: { id, organizationId: orgId }, select: { id: true } }),
+    1500
+  );
+  if (!existing) {
+    const err = new Error('Field not found.');
+    err.status = 404;
+    throw err;
+  }
+  await withTimeout(prisma.epcDynamicField.delete({ where: { id } }), 1500);
+  return { deleted: true, id };
+}
+
+async function getActiveDynamicFields({ organizationId, tx } = {}) {
+  const client = tx || prisma;
+  const orgId = Number(organizationId);
+  const rows = await withTimeout(
+    client.epcDynamicField.findMany({
+      where: { organizationId: orgId, isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }]
+    }),
+    2500
+  );
+  return (Array.isArray(rows) ? rows : []).map(serializeDynamicFieldDefinition);
+}
+
+function normalizeDynamicFieldValue(field, rawValue) {
+  if (rawValue == null) return '';
+  const str = String(rawValue).trim();
+  if (!str) return '';
+  const type = normalizeDynamicFieldType(field?.fieldType);
+  if (type === 'date') {
+    const parsed = toDateOrNull(str);
+    if (!parsed) throw new Error(`Invalid date for "${String(field?.label || field?.fieldKey || 'field').trim()}".`);
+    return parsed.toISOString().slice(0, 10);
+  }
+  if (type === 'number') {
+    const numeric = Number(str.replace(/,/g, ''));
+    if (!Number.isFinite(numeric)) throw new Error(`Invalid number for "${String(field?.label || field?.fieldKey || 'field').trim()}".`);
+    return str;
+  }
+  return str;
+}
+
+function normalizeDynamicFieldMap(input, fieldDefs, opts = {}) {
+  const { requireAll = false } = opts;
+  const source = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+  const defs = Array.isArray(fieldDefs) ? fieldDefs : [];
+  const out = {};
+  for (const def of defs) {
+    const key = String(def?.fieldKey || '').trim();
+    if (!key) continue;
+    const rawValue = Object.prototype.hasOwnProperty.call(source, key) ? source[key] : '';
+    const value = normalizeDynamicFieldValue(def, rawValue);
+    if (def?.isRequired && !value) {
+      throw new Error(`"${String(def?.label || key)}" is required.`);
+    }
+    if (value) out[key] = value;
+    else if (requireAll) out[key] = '';
+  }
+  return out;
+}
+
+function resolveDynamicFieldDefinitionsForBatch(batch, fallbackDefs = []) {
+  const snapshot = Array.isArray(batch?.fieldSchemaSnapshot) ? batch.fieldSchemaSnapshot : [];
+  if (snapshot.length > 0) {
+    return snapshot.map((row) => serializeDynamicFieldDefinition(row)).filter((row) => row.fieldKey);
+  }
+  return (Array.isArray(fallbackDefs) ? fallbackDefs : []).map((row) => serializeDynamicFieldDefinition(row)).filter((row) => row.fieldKey);
+}
+
+async function syncBatchFieldSchemaSnapshot({ tx, organizationId, batchIds, fieldDefs } = {}) {
+  const ids = Array.isArray(batchIds) ? batchIds.map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0) : [];
+  if (!ids.length) return;
+  const defs = (Array.isArray(fieldDefs) ? fieldDefs : []).map(serializeDynamicFieldDefinition);
+  for (const group of chunkArray(ids, 1000)) {
+    await tx.epcBatch.updateMany({
+      where: { organizationId: Number(organizationId), id: { in: group } },
+      data: { fieldSchemaSnapshot: defs }
+    });
+  }
+}
+
+function extractDynamicFieldValuesFromRow(normalizedRow, fieldDefs) {
+  const defs = Array.isArray(fieldDefs) ? fieldDefs : [];
+  const out = {};
+  for (const def of defs) {
+    const key = String(def?.fieldKey || '').trim();
+    if (!key) continue;
+    const raw = pickRawByPrefix(normalizedRow, [key, def?.label]);
+    const value = normalizeDynamicFieldValue(def, raw);
+    if (def?.isRequired && !value) {
+      throw new Error(`"${String(def?.label || key)}" is required.`);
+    }
+    if (value) out[key] = value;
+  }
+  return out;
+}
+
+function buildDynamicTemplateHeaders(fieldDefs) {
+  const defs = Array.isArray(fieldDefs) ? fieldDefs : [];
+  return ['EPC', ...defs.map((def) => String(def?.label || def?.fieldKey || '').trim()).filter(Boolean)];
+}
 
 function parseExportUniqueColumns(requested) {
   const list = Array.isArray(requested) ? requested : [];
@@ -209,20 +444,12 @@ function deriveColumnsFromTemplate(template) {
     const bindPath = String(p?.bindPath || '').trim();
     if (!bindPath || !bindPath.startsWith('epcItem.')) continue;
     const rest = bindPath.slice('epcItem.'.length).trim();
-    if (!rest) continue;
     if (EPC_EXPORT_ALLOWED_KEYS.has(rest)) keys.add(rest);
-    else {
-      const found = Object.entries(EPC_EXPORT_COLUMN_META).find(([k, m]) => m.aliasFor === rest && EPC_EXPORT_ALLOWED_KEYS.has(k));
-      if (found) keys.add(found[0]);
-    }
   }
   return Array.from(keys);
 }
 
 function formatExportCellValue(it, col, extras = {}) {
-  const meta = EPC_EXPORT_COLUMN_META[col] || null;
-  const effectiveField = meta?.aliasFor && it[meta.aliasFor] !== undefined ? meta.aliasFor : col;
-
   if (col === 'status') {
     const active = extras?.activeSet instanceof Set ? extras.activeSet.has(String(it?.epcCode || '').trim()) : false;
     return active ? 'ACTIVE' : 'INACTIVE';
@@ -231,19 +458,11 @@ function formatExportCellValue(it, col, extras = {}) {
     const v = it?.batch?.remark;
     return v == null ? '' : String(v);
   }
-  if (effectiveField === 'createdAt') {
+  if (col === 'createdAt') {
     const v = it?.createdAt;
     return v ? new Date(v).toISOString().slice(0, 19).replace('T', ' ') : '';
   }
-  if (effectiveField === 'productionDate') {
-    const v = it?.productionDate;
-    return v ? new Date(v).toISOString().slice(0, 10) : '';
-  }
-  if (effectiveField === 'manufactureDate') {
-    const v = it?.productionDate;
-    return v ? new Date(v).toISOString().slice(0, 10) : '';
-  }
-  const v = it?.[effectiveField];
+  const v = it?.[col];
   return v == null ? '' : String(v);
 }
 
@@ -468,6 +687,7 @@ async function generateEpcBatch({ organizationId, corpPrefix, batchQty, remark }
   const orgId = Number(organizationId);
   const qty = Number(batchQty);
   if (!Number.isFinite(qty) || qty < 1 || qty > 5000) throw new Error('Invalid batch quantity');
+  const activeFieldDefs = await getActiveDynamicFields({ organizationId: orgId });
 
   let timeZone = null;
   try {
@@ -534,6 +754,7 @@ async function generateEpcBatch({ organizationId, corpPrefix, batchQty, remark }
           certificateId: null,
           certificateTemplateId: null,
           templateData: null,
+          fieldSchemaSnapshot: activeFieldDefs,
           productionUploadedAt: null,
           productionDoneAt: null
         },
@@ -552,9 +773,7 @@ async function generateEpcBatch({ organizationId, corpPrefix, batchQty, remark }
           batchId: batch.id,
           epcCode,
           runningNo,
-          netWeight: null,
-          productionDate: null,
-          caiqNumber: null
+          dynamicFields: {}
         });
       }
 
@@ -585,6 +804,7 @@ async function importExistingEpc({ organizationId, productId, batchName, base64 
   const orgId = Number(organizationId);
   const prodId = Number(productId);
   if (!Number.isFinite(prodId)) throw new Error('Invalid product');
+  const activeFieldDefs = await getActiveDynamicFields({ organizationId: orgId });
 
   const corpPrefix = 'DA01';
 
@@ -666,6 +886,7 @@ async function importExistingEpc({ organizationId, productId, batchName, base64 
         certificateId: batchCertId,
         certificateTemplateId: null,
         templateData: null,
+        fieldSchemaSnapshot: activeFieldDefs,
         productionUploadedAt: null,
         productionDoneAt: null
       },
@@ -681,9 +902,7 @@ async function importExistingEpc({ organizationId, productId, batchName, base64 
         batchId: batch.id,
         epcCode: it.epcCode,
         runningNo: it.runningNo,
-        netWeight: null,
-        productionDate: null,
-        caiqNumber: null
+        dynamicFields: {}
       })),
       skipDuplicates: true
     });
@@ -717,6 +936,7 @@ async function exportBatchXlsx({ organizationId, batchId, columns }) {
   const orgId = Number(organizationId);
   const id = Number(batchId);
   if (!Number.isFinite(id)) throw new Error('Invalid batch id');
+  const activeFieldDefs = await getActiveDynamicFields({ organizationId: orgId });
 
   const batch = await withTimeout(
     prisma.epcBatch.findFirst({
@@ -729,6 +949,7 @@ async function exportBatchXlsx({ organizationId, batchId, columns }) {
     2500
   );
   if (!batch) throw new Error('Batch tidak dijumpai');
+  const fieldDefs = resolveDynamicFieldDefinitionsForBatch(batch, activeFieldDefs);
 
   const items = await withTimeout(
     prisma.epcItem.findMany({
@@ -741,17 +962,11 @@ async function exportBatchXlsx({ organizationId, batchId, columns }) {
 
   const template = batch.certificateTemplate || null;
   const templateCols = deriveColumnsFromTemplate(template);
-  const tplSet = new Set(templateCols);
-  const defaultCols = ['epcCode'];
-  for (const k of ['epcCode', 'runningNo']) {
-    if (EPC_EXPORT_COLUMN_META[k]?.alwaysOffer && !tplSet.has(k)) tplSet.add(k);
-  }
-  for (const k of templateCols) defaultCols.push(k);
+  const defaultCols = ['epcCode', ...templateCols.filter((col) => EPC_EXPORT_ALLOWED_KEYS.has(col))];
+  const fieldKeySet = new Set(fieldDefs.map((field) => String(field.fieldKey || '').trim()).filter(Boolean));
 
   const explicit = parseExportUniqueColumns(columns);
-  const exportColumns = explicit.length > 0
-    ? explicit
-    : defaultCols;
+  const exportColumns = explicit.length > 0 ? explicit : defaultCols;
 
   const rows = items.map((it) => {
     const row = {};
@@ -759,10 +974,19 @@ async function exportBatchXlsx({ organizationId, batchId, columns }) {
       const header = EPC_EXPORT_COLUMN_META[col]?.header || col;
       row[header] = formatExportCellValue(it, col, {});
     }
+    const dynamicValues = it?.dynamicFields && typeof it.dynamicFields === 'object' && !Array.isArray(it.dynamicFields) ? it.dynamicFields : {};
+    for (const def of fieldDefs) {
+      const key = String(def?.fieldKey || '').trim();
+      if (!key || !fieldKeySet.has(key)) continue;
+      row[String(def.label || key)] = dynamicValues[key] == null ? '' : String(dynamicValues[key]);
+    }
     return row;
   });
 
-  const header = exportColumns.map((c) => EPC_EXPORT_COLUMN_META[c]?.header || c);
+  const header = [
+    ...exportColumns.map((c) => EPC_EXPORT_COLUMN_META[c]?.header || c),
+    ...fieldDefs.map((def) => String(def.label || def.fieldKey || '').trim()).filter(Boolean)
+  ];
   const wsItems = XLSX.utils.json_to_sheet(rows, { header });
 
   const wb = XLSX.utils.book_new();
@@ -827,6 +1051,7 @@ async function exportBatchProductionTemplateXlsx({ organizationId, batchId }) {
   const orgId = Number(organizationId);
   const id = Number(batchId);
   if (!Number.isFinite(id)) throw new Error('Invalid batch id');
+  const activeFieldDefs = await getActiveDynamicFields({ organizationId: orgId });
 
   const batch = await withTimeout(
     prisma.epcBatch.findFirst({
@@ -836,6 +1061,7 @@ async function exportBatchProductionTemplateXlsx({ organizationId, batchId }) {
     2500
   );
   if (!batch) throw new Error('Batch tidak dijumpai');
+  const fieldDefs = resolveDynamicFieldDefinitionsForBatch(batch, activeFieldDefs);
 
   const items = await withTimeout(
     prisma.epcItem.findMany({
@@ -846,26 +1072,14 @@ async function exportBatchProductionTemplateXlsx({ organizationId, batchId }) {
     12_000
   );
 
-  const header = [
-    'EPC',
-    'Barcode',
-    'Individual Label (CAIQ)',
-    'Net Weight',
-    'Manufacture Date',
-    'Batch Number',
-    'Swiftlet House Number'
-  ];
+  const header = buildDynamicTemplateHeaders(fieldDefs);
 
   const ws = XLSX.utils.json_to_sheet(
-    items.map((it) => ({
-      [header[0]]: String(it.epcCode || '').trim(),
-      [header[1]]: '',
-      [header[2]]: '',
-      [header[3]]: '',
-      [header[4]]: '',
-      [header[5]]: '',
-      [header[6]]: ''
-    })),
+    items.map((it) => {
+      const row = { [header[0]]: String(it.epcCode || '').trim() };
+      for (const col of header.slice(1)) row[col] = '';
+      return row;
+    }),
     { header }
   );
   const wb = XLSX.utils.book_new();
@@ -880,11 +1094,9 @@ async function exportBatchProductionTemplateXlsx({ organizationId, batchId }) {
   return { buffer, filename };
 }
 
-async function exportBatchImportTemplateXlsx() {
-  const header = [
-    'EPC',
-    'Manufacture Date'
-  ];
+async function exportBatchImportTemplateXlsx({ organizationId }) {
+  const fieldDefs = await getActiveDynamicFields({ organizationId: Number(organizationId) });
+  const header = buildDynamicTemplateHeaders(fieldDefs);
 
   const ws = XLSX.utils.aoa_to_sheet([header]);
   const wb = XLSX.utils.book_new();
@@ -1507,6 +1719,7 @@ async function listItems({ organizationId, q, batchId, cmsDesignId, pendingOnly,
               certificateId: true,
               certificateTemplateId: true,
               certificateTemplate: { select: { id: true, name: true } },
+              fieldSchemaSnapshot: true,
               sku: true,
               createdAt: true,
               product: { select: { id: true, sku: true, name: true, code: true, cmsDesignId: true, cmsCertificateDesignId: true } }
@@ -1574,6 +1787,7 @@ async function listItems({ organizationId, q, batchId, cmsDesignId, pendingOnly,
               certificateId: true,
               certificateTemplateId: true,
               certificateTemplate: { select: { id: true, name: true } },
+              fieldSchemaSnapshot: true,
               sku: true,
               createdAt: true,
               product: { select: { id: true, sku: true, name: true, code: true, cmsDesignId: true, cmsCertificateDesignId: true } }
@@ -1607,7 +1821,20 @@ async function listItems({ organizationId, q, batchId, cmsDesignId, pendingOnly,
   return { items: itemsWithStatus, total, limit, offset };
 }
 
-const EPC_ITEM_INCLUDE = {
+const EPC_ITEM_SELECT = {
+  id: true,
+  organizationId: true,
+  batchId: true,
+  epcCode: true,
+  runningNo: true,
+  barcode: true,
+  batchNumber: true,
+  swiftletHouseNumber: true,
+  netWeight: true,
+  productionDate: true,
+  caiqNumber: true,
+  dynamicFields: true,
+  createdAt: true,
   batch: {
     select: {
       id: true,
@@ -1619,6 +1846,7 @@ const EPC_ITEM_INCLUDE = {
       certificateId: true,
       certificateTemplateId: true,
       certificateTemplate: { select: { id: true, name: true } },
+      fieldSchemaSnapshot: true,
       sku: true,
       createdAt: true,
       product: { select: { id: true, sku: true, name: true, code: true, cmsDesignId: true, cmsCertificateDesignId: true } }
@@ -1634,7 +1862,7 @@ async function getItemByEpc({ organizationId, epcCode }) {
   const item = await withTimeout(
     prisma.epcItem.findUnique({
       where: { organizationId_epcCode: { organizationId: orgId, epcCode: code } },
-      include: EPC_ITEM_INCLUDE
+      select: EPC_ITEM_SELECT
     }),
     1500
   );
@@ -1667,7 +1895,7 @@ async function updateItemProduction({ organizationId, itemId, patch, actor, expe
   const overrideAllowed = canOverrideItem({ actor });
 
   const existing = await withTimeout(
-    prisma.epcItem.findFirst({ where: { id, organizationId: orgId }, include: EPC_ITEM_INCLUDE }),
+    prisma.epcItem.findFirst({ where: { id, organizationId: orgId }, select: EPC_ITEM_SELECT }),
     1500
   );
   if (!existing) {
@@ -1753,7 +1981,7 @@ async function updateItemProduction({ organizationId, itemId, patch, actor, expe
 
   if (Object.keys(data).length === 0) return existing;
 
-  const updated = await withTimeout(prisma.epcItem.update({ where: { id }, data, include: EPC_ITEM_INCLUDE }), 1500);
+  const updated = await withTimeout(prisma.epcItem.update({ where: { id }, data, select: EPC_ITEM_SELECT }), 1500);
   await attachIdentitiesToItems({ organizationId: orgId, items: [updated], take: 5 });
   return updated;
 }
@@ -1882,52 +2110,41 @@ async function importProductionXlsx({ organizationId, batchId, base64 }) {
   const { rows } = parseXlsxBase64(base64);
   if (!Array.isArray(rows) || rows.length === 0) throw new Error('Excel kosong');
 
-  const updates = [];
-  for (const r of rows) {
-    const n = normalizeRowKeys(r);
-    const epcCode = String(n.epccode || n.epc || n.code || '').trim().toUpperCase();
-    if (!epcCode) continue;
-    updates.push({
-      epcCode,
-      barcode: pickByPrefix(n, ['barcode']),
-      batchNumber: pickByPrefix(n, ['batchnumber', 'batchno', 'batch']),
-      swiftletHouseNumber: pickByPrefix(n, ['swiftlethousenumber', 'swiftlethouse', 'housenumber']),
-      netWeight: pickByPrefix(n, ['netweight', 'net_weight']),
-      productionDate: toDateOrNull(pickByPrefix(n, ['manufacturedate', 'productiondate', 'dateofproduction', 'production_date'])),
-      caiqNumber: pickByPrefix(n, [
-        'individuallabel(caiq)',
-        'individuallabel',
-        'caiqnumber',
-        'caiq',
-        'caiqlabel',
-        'caiq_label'
-      ])
-    });
-  }
-  if (updates.length === 0) throw new Error('Tiada EPC code dalam Excel');
-
   const result = await prisma.$transaction(async (tx) => {
-    const batch = await tx.epcBatch.findFirst({ where: { id, organizationId: orgId } });
+    const batch = await tx.epcBatch.findFirst({ where: { id, organizationId: orgId }, select: { id: true, fieldSchemaSnapshot: true } });
     if (!batch) throw new Error('Batch tidak dijumpai');
+    const activeFieldDefs = await getActiveDynamicFields({ organizationId: orgId, tx });
+    const fieldDefs = resolveDynamicFieldDefinitionsForBatch(batch, activeFieldDefs);
+
+    const updates = [];
+    for (const r of rows) {
+      const n = normalizeRowKeys(r);
+      const epcCode = String(n.epccode || n.epc || n.code || '').trim().toUpperCase();
+      if (!epcCode) continue;
+      updates.push({
+        epcCode,
+        dynamicFields: extractDynamicFieldValuesFromRow(n, fieldDefs)
+      });
+    }
+    if (updates.length === 0) throw new Error('Tiada EPC code dalam Excel');
 
     let updated = 0;
     for (const u of updates) {
-      const res = await tx.epcItem.updateMany({
+      const item = await tx.epcItem.findFirst({
         where: { organizationId: orgId, batchId: id, epcCode: u.epcCode },
-        data: {
-          barcode: u.barcode,
-          batchNumber: u.batchNumber,
-          swiftletHouseNumber: u.swiftletHouseNumber,
-          netWeight: u.netWeight,
-          productionDate: u.productionDate,
-          caiqNumber: u.caiqNumber
-        }
+        select: { id: true, dynamicFields: true }
       });
-      updated += res.count || 0;
+      if (!item) continue;
+      const prev = item?.dynamicFields && typeof item.dynamicFields === 'object' && !Array.isArray(item.dynamicFields) ? item.dynamicFields : {};
+      await tx.epcItem.update({
+        where: { id: Number(item.id) },
+        data: { dynamicFields: { ...prev, ...u.dynamicFields } }
+      });
+      updated += 1;
     }
 
     await tx.epcBatch.update({ where: { id }, data: { productionUploadedAt: new Date() } });
-    return { batchId: id, rows: updates.length, updated };
+    return { batchId: id, rows: updates.length, updated, fields: fieldDefs };
   });
 
   try {
@@ -2181,6 +2398,7 @@ async function activateEpcIdentities({ tx, orgId, certificateId, epcCodes }) {
 async function previewBatchImportRange({ organizationId, corpPrefix, dateCode, startRunningNo, endRunningNo, certificateTemplateId }) {
   const orgId = Number(organizationId);
   const range = expandEpcRange({ corpPrefix, dateCode, startRunningNo, endRunningNo, maxSize: 500 });
+  const fieldSchema = await getActiveDynamicFields({ organizationId: orgId });
 
   let targetCertificateId = null;
   if (certificateTemplateId !== undefined) {
@@ -2306,6 +2524,7 @@ async function previewBatchImportRange({ organizationId, corpPrefix, dateCode, s
     startEpc: range.startEpc,
     endEpc: range.endEpc,
     targetCertificateId,
+    fieldSchema,
     summary,
     items
   };
@@ -2315,10 +2534,16 @@ async function previewBatchImportXlsx({ organizationId, batchId, base64 }) {
   const orgId = Number(organizationId);
   const id = batchId == null ? null : Number(batchId);
   if (id != null && !Number.isFinite(id)) throw new Error('Invalid batch id');
+  const activeFieldDefs = await getActiveDynamicFields({ organizationId: orgId });
 
+  let batchFieldDefs = activeFieldDefs;
   if (id != null) {
-    const exists = await withTimeout(prisma.epcBatch.findFirst({ where: { id, organizationId: orgId }, select: { id: true } }), 1500);
+    const exists = await withTimeout(
+      prisma.epcBatch.findFirst({ where: { id, organizationId: orgId }, select: { id: true, fieldSchemaSnapshot: true } }),
+      1500
+    );
     if (!exists) throw new Error('Batch not found');
+    batchFieldDefs = resolveDynamicFieldDefinitionsForBatch(exists, activeFieldDefs);
   }
 
   const { rows } = parseXlsxBase64(base64);
@@ -2331,19 +2556,7 @@ async function previewBatchImportXlsx({ organizationId, batchId, base64 }) {
     if (!epcCode) continue;
     updates.push({
       epcCode,
-      barcode: pickByPrefix(n, ['barcode']),
-      batchNumber: pickByPrefix(n, ['batchnumber', 'batchno', 'batch']),
-      swiftletHouseNumber: pickByPrefix(n, ['swiftlethousenumber', 'swiftlethouse', 'housenumber']),
-      netWeight: pickByPrefix(n, ['netweight', 'net_weight']),
-      productionDate: toDateOrNull(pickRawByPrefix(n, ['manufacturedate', 'productiondate', 'dateofproduction', 'production_date'])),
-      caiqNumber: pickByPrefix(n, [
-        'individuallabel(caiq)',
-        'individuallabel',
-        'caiqnumber',
-        'caiq',
-        'caiqlabel',
-        'caiq_label'
-      ])
+      dynamicFields: extractDynamicFieldValuesFromRow(n, batchFieldDefs)
     });
   }
   if (updates.length === 0) throw new Error('No EPC code found in the uploaded XLSX.');
@@ -2367,24 +2580,15 @@ async function previewBatchImportXlsx({ organizationId, batchId, base64 }) {
     }
   }
 
-  const summarizeSet = (set) => {
-    const values = Array.from(set);
-    if (values.length === 0) return null;
-    if (values.length === 1) return values[0];
-    const shown = values.slice(0, 3).map((v) => String(v || '').trim()).filter(Boolean);
-    return `${shown.join(', ')}${values.length > shown.length ? ', ...' : ''}`;
-  };
-
-  const batchNumberSet = new Set();
-  const swiftletHouseNumberSet = new Set();
-  const manufactureDateSet = new Set();
+  const fieldPresence = {};
+  for (const def of batchFieldDefs) {
+    fieldPresence[def.fieldKey] = 0;
+  }
   for (const u of updates) {
-    const bn = String(u?.batchNumber || '').trim();
-    if (bn) batchNumberSet.add(bn);
-    const sh = String(u?.swiftletHouseNumber || '').trim();
-    if (sh) swiftletHouseNumberSet.add(sh);
-    const d = u?.productionDate;
-    if (d instanceof Date && !Number.isNaN(d.getTime())) manufactureDateSet.add(d.toISOString().slice(0, 10));
+    const values = u?.dynamicFields && typeof u.dynamicFields === 'object' && !Array.isArray(u.dynamicFields) ? u.dynamicFields : {};
+    for (const def of batchFieldDefs) {
+      if (String(values?.[def.fieldKey] || '').trim()) fieldPresence[def.fieldKey] += 1;
+    }
   }
 
   return {
@@ -2393,9 +2597,8 @@ async function previewBatchImportXlsx({ organizationId, batchId, base64 }) {
     existingEpcs: found,
     missingEpcs: missing.length,
     missingSample: missing.slice(0, 10),
-    manufactureDate: summarizeSet(manufactureDateSet),
-    batchNumber: summarizeSet(batchNumberSet),
-    swiftletHouseNumber: summarizeSet(swiftletHouseNumberSet)
+    fieldSchema: batchFieldDefs,
+    fieldPresence
   };
 }
 
@@ -2409,6 +2612,7 @@ async function createImportBatchFromXlsx({
   actor
 }) {
   const orgId = Number(organizationId);
+  const activeFieldDefs = await getActiveDynamicFields({ organizationId: orgId });
   const { rows } = parseXlsxBase64(base64);
   if (!Array.isArray(rows) || rows.length === 0) throw new Error('Excel is empty');
 
@@ -2424,31 +2628,14 @@ async function createImportBatchFromXlsx({
     if (!epcCode) continue;
     updates.push({
       epcCode,
-      barcode: pickByPrefix(n, ['barcode']),
-      batchNumber: pickByPrefix(n, ['batchnumber', 'batchno', 'batch']),
-      swiftletHouseNumber: pickByPrefix(n, ['swiftlethousenumber', 'swiftlethouse', 'housenumber']),
-      netWeight: pickByPrefix(n, ['netweight', 'net_weight']),
-      productionDate: toDateOrNull(pickRawByPrefix(n, ['manufacturedate', 'productiondate', 'dateofproduction', 'production_date'])),
-      caiqNumber: pickByPrefix(n, [
-        'individuallabel(caiq)',
-        'individuallabel',
-        'caiqnumber',
-        'caiq',
-        'caiqlabel',
-        'caiq_label'
-      ])
+      dynamicFields: extractDynamicFieldValuesFromRow(n, activeFieldDefs)
     });
   }
   if (updates.length === 0) throw new Error('No EPC code found in the uploaded XLSX.');
 
   const auditItems = updates.map((u) => ({
     epcCode: String(u.epcCode || '').trim(),
-    barcode: u.barcode != null ? u.barcode : null,
-    batchNumber: u.batchNumber != null ? u.batchNumber : null,
-    swiftletHouseNumber: u.swiftletHouseNumber != null ? u.swiftletHouseNumber : null,
-    netWeight: u.netWeight != null ? u.netWeight : null,
-    productionDate: u.productionDate ? new Date(u.productionDate).toISOString() : null,
-    caiqNumber: u.caiqNumber != null ? u.caiqNumber : null
+    dynamicFields: u.dynamicFields || {}
   }));
 
   const epcCodes = updates.map((u) => String(u.epcCode || '').trim()).filter(Boolean);
@@ -2546,7 +2733,8 @@ async function createImportBatchFromXlsx({
             if (!b) continue;
             const data = {
               productId: assignedProductId,
-              productionUploadedAt: now
+              productionUploadedAt: now,
+              fieldSchemaSnapshot: activeFieldDefs
             };
             const existingSku = String(b.sku || '').trim() || null;
             if (!existingSku && assignedProductSku) data.sku = assignedProductSku;
@@ -2585,19 +2773,17 @@ async function createImportBatchFromXlsx({
 
       let updated = 0;
       for (const u of updates) {
-        const data = {};
-        if (u.barcode != null) data.barcode = u.barcode;
-        if (u.batchNumber != null) data.batchNumber = u.batchNumber;
-        if (u.swiftletHouseNumber != null) data.swiftletHouseNumber = u.swiftletHouseNumber;
-        if (u.netWeight != null) data.netWeight = u.netWeight;
-        if (u.productionDate != null) data.productionDate = u.productionDate;
-        if (u.caiqNumber != null) data.caiqNumber = u.caiqNumber;
-        if (Object.keys(data).length === 0) continue;
-        const res = await tx.epcItem.updateMany({
-          where: { organizationId: orgId, epcCode: String(u.epcCode || '').trim() },
-          data
+        const meta = epcItemByEpc.get(String(u.epcCode || '').trim());
+        const itemId = meta?.id != null ? Number(meta.id) : null;
+        if (!Number.isFinite(itemId) || itemId <= 0) continue;
+        const current = await tx.epcItem.findFirst({ where: { id: itemId, organizationId: orgId }, select: { id: true, dynamicFields: true } });
+        if (!current) continue;
+        const prev = current?.dynamicFields && typeof current.dynamicFields === 'object' && !Array.isArray(current.dynamicFields) ? current.dynamicFields : {};
+        await tx.epcItem.update({
+          where: { id: itemId },
+          data: { dynamicFields: { ...prev, ...u.dynamicFields } }
         });
-        updated += Number(res.count) || 0;
+        updated += 1;
       }
 
       if (tplCertId) {
@@ -2629,6 +2815,7 @@ async function createImportBatchFromXlsx({
         certificateId: tplCertId,
         productId: assignedProductId,
         batchIds: touchedBatchIds,
+        fieldSchema: activeFieldDefs,
         items: auditItems
       };
     },
@@ -2646,6 +2833,7 @@ async function submitBatchImportRange({
   startRunningNo,
   endRunningNo,
   epcCodes,
+  rowValues,
   productId,
   certificateTemplateId,
   documents,
@@ -2653,6 +2841,7 @@ async function submitBatchImportRange({
 }) {
   const orgId = Number(organizationId);
   const range = expandEpcRange({ corpPrefix, dateCode, startRunningNo, endRunningNo, maxSize: 500 });
+  const activeFieldDefs = await getActiveDynamicFields({ organizationId: orgId });
 
   const selectedCodes = Array.from(
     new Set((Array.isArray(epcCodes) ? epcCodes : []).map((c) => normalizeIdentityEpc(c)).filter(Boolean))
@@ -2669,7 +2858,11 @@ async function submitBatchImportRange({
     { skipEmpty: true }
   );
 
-  const auditItems = selectedCodes.map((epcCode) => ({ epcCode }));
+  const normalizedRowValues = rowValues && typeof rowValues === 'object' && !Array.isArray(rowValues) ? rowValues : {};
+  const auditItems = selectedCodes.map((epcCode) => ({
+    epcCode,
+    dynamicFields: normalizeDynamicFieldMap(normalizedRowValues[epcCode], activeFieldDefs)
+  }));
 
   const result = await prisma.$transaction(
     async (tx) => {
@@ -2778,7 +2971,8 @@ async function submitBatchImportRange({
           if (!b) continue;
           const data = {
             productId: assignedProductId,
-            productionUploadedAt: now
+            productionUploadedAt: now,
+            fieldSchemaSnapshot: activeFieldDefs
           };
           const existingSku = String(b.sku || '').trim() || null;
           if (!existingSku && assignedProductSku) data.sku = assignedProductSku;
@@ -2818,6 +3012,21 @@ async function submitBatchImportRange({
         }
       }
 
+      let updated = 0;
+      for (const row of auditItems) {
+        const meta = epcItemByEpc.get(String(row.epcCode || '').trim().toUpperCase());
+        const itemId = meta?.id != null ? Number(meta.id) : null;
+        if (!Number.isFinite(itemId) || itemId <= 0) continue;
+        const current = await tx.epcItem.findFirst({ where: { id: itemId, organizationId: orgId }, select: { id: true, dynamicFields: true } });
+        if (!current) continue;
+        const prev = current?.dynamicFields && typeof current.dynamicFields === 'object' && !Array.isArray(current.dynamicFields) ? current.dynamicFields : {};
+        await tx.epcItem.update({
+          where: { id: itemId },
+          data: { dynamicFields: { ...prev, ...row.dynamicFields } }
+        });
+        updated += 1;
+      }
+
       let activation = { activated: 0, created: 0 };
       if (tplCertId) {
         const existingCert = await tx.certificate.findUnique({
@@ -2845,12 +3054,13 @@ async function submitBatchImportRange({
       return {
         rows: selectedCodes.length,
         uniqueEpcs: selectedCodes.length,
-        updated: 0,
+        updated,
         activated: Number(activation?.activated) || 0,
         created: Number(activation?.created) || 0,
         certificateId: tplCertId,
         productId: assignedProductId,
         batchIds: touchedBatchIds,
+        fieldSchema: activeFieldDefs,
         items: auditItems
       };
     },
@@ -2872,6 +3082,7 @@ async function submitBatchImport({
   const orgId = Number(organizationId);
   const id = Number(batchId);
   if (!Number.isFinite(id)) throw new Error('Invalid batch id');
+  const activeFieldDefs = await getActiveDynamicFields({ organizationId: orgId });
 
   const { rows } = parseXlsxBase64(base64);
   if (!Array.isArray(rows) || rows.length === 0) throw new Error('Excel is empty');
@@ -2883,17 +3094,11 @@ async function submitBatchImport({
     if (!epcCode) continue;
     updates.push({
       epcCode,
-      barcode: pickByPrefix(n, ['barcode']),
-      batchNumber: pickByPrefix(n, ['batchnumber', 'batchno', 'batch']),
-      swiftletHouseNumber: pickByPrefix(n, ['swiftlethousenumber', 'swiftlethouse', 'housenumber']),
-      netWeight: pickByPrefix(n, ['netweight', 'net_weight']),
-      productionDate: toDateOrNull(pickRawByPrefix(n, ['manufacturedate', 'productiondate', 'dateofproduction', 'production_date'])),
-      caiqNumber: pickByPrefix(n, ['individuallabel(caiq)', 'caiqnumber', 'caiq', 'caiqlabel', 'caiq_label'])
+      dynamicFields: extractDynamicFieldValuesFromRow(n, activeFieldDefs)
     });
   }
   if (updates.length === 0) throw new Error('No EPC code found in the uploaded XLSX.');
 
-  const meta = extractUniqueBatchMetaFromUpdates(updates);
   const skuCode = String(sku || '').trim();
   if (!skuCode) throw new Error('SKU code is required.');
 
@@ -2902,7 +3107,7 @@ async function submitBatchImport({
   const result = await prisma.$transaction(async (tx) => {
     const batch = await tx.epcBatch.findFirst({
       where: { id, organizationId: orgId },
-      select: { id: true, templateData: true }
+      select: { id: true }
     });
     if (!batch) throw new Error('Batch not found');
 
@@ -2934,29 +3139,18 @@ async function submitBatchImport({
 
     let updated = 0;
     for (const u of updates) {
-      const data = {};
-      if (u.barcode != null) data.barcode = u.barcode;
-      if (u.batchNumber != null) data.batchNumber = u.batchNumber;
-      if (u.swiftletHouseNumber != null) data.swiftletHouseNumber = u.swiftletHouseNumber;
-      if (u.netWeight != null) data.netWeight = u.netWeight;
-      if (u.productionDate != null) data.productionDate = u.productionDate;
-      if (u.caiqNumber != null) data.caiqNumber = u.caiqNumber;
-      if (Object.keys(data).length === 0) continue;
-      const res = await tx.epcItem.updateMany({
+      const current = await tx.epcItem.findFirst({
         where: { organizationId: orgId, batchId: id, epcCode: u.epcCode },
-        data
+        select: { id: true, dynamicFields: true }
       });
-      updated += res.count || 0;
+      if (!current) continue;
+      const prev = current?.dynamicFields && typeof current.dynamicFields === 'object' && !Array.isArray(current.dynamicFields) ? current.dynamicFields : {};
+      await tx.epcItem.update({
+        where: { id: Number(current.id) },
+        data: { dynamicFields: { ...prev, ...u.dynamicFields } }
+      });
+      updated += 1;
     }
-
-    const prev = batch.templateData && typeof batch.templateData === 'object' && !Array.isArray(batch.templateData) ? batch.templateData : {};
-    const nextTemplateData = {
-      ...prev,
-      manufactureDate: meta.manufactureDate,
-      batchNumber: meta.batchNumber,
-      swiftletHouseNumber: meta.swiftletHouseNumber
-    };
-    const nextTemplateDataAliased = mergeTemplateMetaAliases(nextTemplateData);
 
     if (tplCertId) {
       const existingCert = await tx.certificate.findUnique({
@@ -2986,7 +3180,7 @@ async function submitBatchImport({
         sku: skuCode,
         ...(tplCertId ? { certificateId: tplCertId } : {}),
         certificateTemplateId: tplId,
-        templateData: nextTemplateDataAliased,
+        fieldSchemaSnapshot: activeFieldDefs,
         productionUploadedAt: new Date()
       }
     });
@@ -3028,10 +3222,11 @@ async function submitBatchImport({
       include: {
         product: { select: { id: true, sku: true, name: true, code: true } },
         certificateTemplate: { select: { id: true, certificateId: true, name: true } },
+        fieldSchemaSnapshot: true,
         documents: { select: { docType: true, mediaUrl: true, uploadedAt: true } }
       }
     });
-    return { batchId: id, rows: updates.length, updated, meta, batch: full };
+    return { batchId: id, rows: updates.length, updated, fieldSchema: activeFieldDefs, batch: full };
   });
 
   return result;
@@ -3584,6 +3779,10 @@ async function assignScanGroupProduct({ organizationId, scanGroupId, productId, 
 
 module.exports = {
   getAllowedCorpPrefixes,
+  listDynamicFields,
+  createDynamicField,
+  updateDynamicField,
+  deleteDynamicField,
   getNextCertificateId,
   peekCertificateId,
   generateEpcBatch,

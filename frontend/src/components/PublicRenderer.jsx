@@ -950,7 +950,7 @@ const PublicRenderer = ({
                       if (ph && (source === 'static' || source === 'title')) {
                         val = String(ph?.staticValue || '');
                       } else if (!String(val || '').trim() && ph) {
-                        if (source === 'product') {
+                        if (source === 'product' || source === 'batch') {
                           const bindPath = String(ph?.bindPath || '').trim();
                           if (bindPath) {
                             const normalizedBindPath = bindPath.startsWith('templateData.') ? `certificate.${bindPath}` : bindPath;

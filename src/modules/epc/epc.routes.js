@@ -17,6 +17,33 @@ router.get(
   epcController.getCorpCodes
 );
 
+router.get(
+  '/dynamic-fields',
+  requirePermission(['epc.read', 'epc.write', 'epc.batch.view', 'epc.batch_import.access', 'epc.production.access']),
+  epcController.listDynamicFields
+);
+
+router.post(
+  '/dynamic-fields',
+  requirePermission(['epc.write', 'epc.batch_import.access']),
+  auditAction('CREATE_EPC_DYNAMIC_FIELD', { targetType: 'epc_dynamic_field' }),
+  epcController.createDynamicField
+);
+
+router.patch(
+  '/dynamic-fields/:id',
+  requirePermission(['epc.write', 'epc.batch_import.access']),
+  auditAction('UPDATE_EPC_DYNAMIC_FIELD', { targetType: 'epc_dynamic_field', getTargetId: (req) => String(req.params?.id || '') }),
+  epcController.updateDynamicField
+);
+
+router.delete(
+  '/dynamic-fields/:id',
+  requirePermission(['epc.write', 'epc.batch_import.access']),
+  auditAction('DELETE_EPC_DYNAMIC_FIELD', { targetType: 'epc_dynamic_field', getTargetId: (req) => String(req.params?.id || '') }),
+  epcController.deleteDynamicField
+);
+
 router.get('/certificate-id/next', requirePermission(['epc.write', 'epc.batch.create']), epcController.getNextCertificateId);
 router.get('/certificate-id/peek', requirePermission(['epc.write', 'epc.batch.create']), epcController.peekCertificateId);
 

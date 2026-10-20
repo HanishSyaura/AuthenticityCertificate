@@ -402,6 +402,7 @@ app.use((err, req, res, next) => {
   console.error(err.stack);
   const code = err?.code;
   if (code === 'P2021') return res.error('Database schema belum siap (table tiada). Sila jalankan patch/migrasi DB.', 503);
+  if (code === 'P2022') return res.error('Database schema belum siap (column tiada). Sila jalankan patch/migrasi DB.', 503);
   if (err?.name === 'ZodError' || (err && (Array.isArray(err.issues) || Array.isArray(err.errors)))) {
     const firstMsg = err.issues?.[0]?.message || err.errors?.[0]?.message || 'Invalid input';
     return res.error(firstMsg, 400);

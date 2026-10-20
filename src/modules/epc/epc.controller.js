@@ -14,6 +14,7 @@ function resolveStatus(error, fallback = 400) {
   if (Number.isFinite(status) && status >= 400 && status <= 599) return status;
   if (msg === 'db_timeout') return 503;
   if (code === 'P2021') return 503;
+  if (code === 'P2022') return 503;
   if (code === 'P1001' || code === 'P1002' || code === 'P1003') return 503;
   if (lower.includes('database') && (lower.includes('timeout') || lower.includes('unavailable') || lower.includes('connect'))) return 503;
   return fallback;
@@ -24,6 +25,7 @@ function resolveMessage(error) {
   const code = error?.code;
   if (msg === 'db_timeout') return 'Database tidak dapat diakses (timeout). Sila cuba lagi.';
   if (code === 'P2021') return 'Database schema belum siap (table tiada). Sila jalankan patch/migrasi DB.';
+  if (code === 'P2022') return 'Database schema belum siap (column tiada). Sila jalankan patch/migrasi DB.';
   return msg;
 }
 
@@ -39,6 +41,18 @@ const importProductionSchema = z.object({
 
 const previewBatchImportSchema = z.object({
   base64: z.string().min(1)
+});
+
+const dynamicFieldSchema = z.object({
+  fieldKey: z.string().trim().min(1).max(64).optional(),
+  label: z.string().trim().min(1).max(191),
+  fieldType: z.enum(['text', 'number', 'date']).optional(),
+  placeholder: z.string().max(191).optional().nullable(),
+  helpText: z.string().max(191).optional().nullable(),
+  defaultEntryMode: z.enum(['batch', 'individual', 'both']).optional(),
+  isRequired: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+  sortOrder: z.number().int().min(0).max(999).optional()
 });
 
 const previewBatchImportRangeSchema = z.object({
@@ -62,6 +76,7 @@ const submitBatchImportRangeSchema = z.object({
   startRunningNo: z.string().trim().min(1),
   endRunningNo: z.string().trim().min(1),
   epcCodes: z.array(z.string().trim().min(1)).min(1).max(500),
+  rowValues: z.record(z.string(), z.record(z.string(), z.union([z.string(), z.number(), z.null()]))).optional(),
   productId: z.union([z.number().int().positive(), z.null()]).optional(),
   certificateTemplateId: z.union([z.number().int().positive(), z.null()]).optional(),
   documents: z.record(z.string(), z.string()).optional()
@@ -191,7 +206,7 @@ async function listBatches(req, res) {
     const data = await epcService.listBatches({ organizationId: req.organization.id, q, origin, limit, offset });
     res.success(data);
   } catch (e) {
-    res.error(e.message, 400);
+    res.error(resolveMessage(e), resolveStatus(e, 400));
   }
 }
 
@@ -200,7 +215,7 @@ async function getEpcStats(req, res) {
     const data = await epcService.getEpcStats({ organizationId: req.organization.id });
     res.success(data);
   } catch (e) {
-    res.error(e.message, 400);
+    res.error(resolveMessage(e), resolveStatus(e, 400));
   }
 }
 
@@ -238,7 +253,7 @@ async function listItems(req, res) {
     });
     res.success(data);
   } catch (e) {
-    res.error(e.message, 400);
+    res.error(resolveMessage(e), resolveStatus(e, 400));
   }
 }
 
@@ -485,7 +500,7 @@ async function exportBatchProductionTemplate(req, res) {
 
 async function exportBatchImportTemplate(req, res) {
   try {
-    const { buffer, filename } = await epcService.exportBatchImportTemplateXlsx();
+    const { buffer, filename } = await epcService.exportBatchImportTemplateXlsx({ organizationId: req.organization.id });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.status(200).send(buffer);
@@ -546,6 +561,49 @@ async function previewBatchImportRange(req, res) {
       return res.error(`Invalid input (${field})${detail}`, 400);
     }
     res.error(resolveMessage(e), resolveStatus(e, 400));
+  }
+}
+
+async function listDynamicFields(req, res) {
+  try {
+    const activeOnly = String(req.query.active || '').trim() === '1';
+    const fields = await epcService.listDynamicFields({ organizationId: req.organization.id, activeOnly });
+    res.success(fields);
+  } catch (e) {
+    res.error(resolveMessage(e), resolveStatus(e, 400));
+  }
+}
+
+async function createDynamicField(req, res) {
+  try {
+    const data = dynamicFieldSchema.parse(req.body || {});
+    const field = await epcService.createDynamicField({ organizationId: req.organization.id, input: data });
+    res.success(field, 'Dynamic EPC field created');
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.error(e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input', 400);
+    res.error(e.message, Number(e.status) || 400);
+  }
+}
+
+async function updateDynamicField(req, res) {
+  try {
+    const fieldId = Number(req.params.id);
+    const data = dynamicFieldSchema.parse(req.body || {});
+    const field = await epcService.updateDynamicField({ organizationId: req.organization.id, fieldId, input: data });
+    res.success(field, 'Dynamic EPC field updated');
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.error(e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input', 400);
+    res.error(e.message, Number(e.status) || 400);
+  }
+}
+
+async function deleteDynamicField(req, res) {
+  try {
+    const fieldId = Number(req.params.id);
+    const result = await epcService.deleteDynamicField({ organizationId: req.organization.id, fieldId });
+    res.success(result, 'Dynamic EPC field deleted');
+  } catch (e) {
+    res.error(e.message, Number(e.status) || 400);
   }
 }
 
@@ -627,6 +685,7 @@ async function submitBatchImportRange(req, res) {
       startRunningNo: data.startRunningNo,
       endRunningNo: data.endRunningNo,
       epcCodes: data.epcCodes,
+      rowValues: Object.prototype.hasOwnProperty.call(data, 'rowValues') ? data.rowValues : {},
       productId: Object.prototype.hasOwnProperty.call(data, 'productId') ? data.productId : undefined,
       certificateTemplateId: Object.prototype.hasOwnProperty.call(data, 'certificateTemplateId') ? data.certificateTemplateId : undefined,
       documents: Object.prototype.hasOwnProperty.call(data, 'documents') ? data.documents : {},
@@ -861,6 +920,10 @@ async function deleteAllGenerated(req, res) {
 
 module.exports = {
   getCorpCodes,
+  listDynamicFields,
+  createDynamicField,
+  updateDynamicField,
+  deleteDynamicField,
   getNextCertificateId,
   peekCertificateId,
   generateBatch,

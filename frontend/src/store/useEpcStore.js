@@ -322,6 +322,62 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
+  fetchDynamicFields: async ({ activeOnly = false } = {}) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.get('/epc/dynamic-fields', { params: activeOnly ? { active: 1 } : undefined });
+      set({ loading: false });
+      return Array.isArray(res?.data?.data) ? res.data.data : [];
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      set({ loading: false, error: msg });
+      return [];
+    }
+  },
+
+  createDynamicField: async (input = {}) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.post('/epc/dynamic-fields', input);
+      set({ loading: false });
+      return res?.data?.data || null;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
+  updateDynamicField: async ({ fieldId, input } = {}) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.patch(`/epc/dynamic-fields/${Number(fieldId)}`, input || {});
+      set({ loading: false });
+      return res?.data?.data || null;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
+  deleteDynamicField: async (fieldId) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.delete(`/epc/dynamic-fields/${Number(fieldId)}`);
+      set({ loading: false });
+      return res?.data?.data || null;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
   submitBatchImport: async ({ batchId, base64, productId, certificateTemplateId, documents } = {}) => {
     set({ loading: true, error: null });
     try {
@@ -347,7 +403,7 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
-  submitBatchImportRange: async ({ corpCode, date, startRunningNo, endRunningNo, epcCodes, productId, certificateTemplateId, documents } = {}) => {
+  submitBatchImportRange: async ({ corpCode, date, startRunningNo, endRunningNo, epcCodes, rowValues, productId, certificateTemplateId, documents } = {}) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
@@ -357,6 +413,7 @@ const useEpcStore = create((set, get) => ({
         startRunningNo: String(startRunningNo || '').trim(),
         endRunningNo: String(endRunningNo || '').trim(),
         epcCodes: Array.isArray(epcCodes) ? epcCodes.map((code) => String(code || '').trim()).filter(Boolean) : [],
+        ...(rowValues && typeof rowValues === 'object' ? { rowValues } : {}),
         ...(productId != null && String(productId).trim() !== '' ? { productId: Number(productId) } : {}),
         ...(certificateTemplateId != null && String(certificateTemplateId).trim() !== '' ? { certificateTemplateId: Number(certificateTemplateId) } : {}),
         ...(documents && typeof documents === 'object' ? { documents } : {})

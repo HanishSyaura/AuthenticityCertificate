@@ -435,6 +435,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
               barcode: true,
               batchNumber: true,
               swiftletHouseNumber: true,
+              dynamicFields: true,
               batch: {
                 select: {
                   id: true,
@@ -464,12 +465,15 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
               caiqNumber: row.caiqNumber,
               barcode: row.barcode || null,
               batchNumber: row.batchNumber || null,
-              swiftletHouseNumber: row.swiftletHouseNumber || null
+              swiftletHouseNumber: row.swiftletHouseNumber || null,
+              dynamicFields:
+                row?.dynamicFields && typeof row.dynamicFields === 'object' && !Array.isArray(row.dynamicFields) ? row.dynamicFields : {}
             }
           : null;
         epcBatchTemplate = row?.batch?.certificateTemplate || null;
         templateData = mergeTemplateMetaAliases({
           ...(row?.batch?.templateData && typeof row.batch.templateData === 'object' && !Array.isArray(row.batch.templateData) ? row.batch.templateData : {}),
+          ...(row?.dynamicFields && typeof row.dynamicFields === 'object' && !Array.isArray(row.dynamicFields) ? row.dynamicFields : {}),
           epcCode: resolvedEpc,
           barcode: row?.barcode || null,
           netWeight: row?.netWeight || null,

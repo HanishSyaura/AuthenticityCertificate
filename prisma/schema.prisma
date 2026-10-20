@@ -68,6 +68,7 @@ model Organization {
   corpMonthSequences CorpMonthSequence[]
   epcBatches      EpcBatch[]
   epcItems        EpcItem[]
+  epcDynamicFields EpcDynamicField[]
   epcBatchDocuments EpcBatchDocument[]
   epcItemDocuments  EpcItemDocument[]
   epcScanGroups     EpcScanGroup[]
@@ -336,6 +337,7 @@ model EpcBatch {
   certificateTemplateId Int?
   certificateTemplate   CertificateTemplate? @relation("EpcBatchTemplate", fields: [certificateTemplateId], references: [id])
   templateData          Json?
+  fieldSchemaSnapshot   Json?
   productionUploadedAt  DateTime?
   productionDoneAt      DateTime?
 
@@ -367,6 +369,7 @@ model EpcItem {
   netWeight      String?
   productionDate DateTime?
   caiqNumber     String?
+  dynamicFields  Json?
   createdAt      DateTime  @default(now())
 
   documents EpcItemDocument[]
@@ -375,6 +378,26 @@ model EpcItem {
   @@unique([organizationId, epcCode])
   @@index([organizationId, createdAt])
   @@index([batchId])
+}
+
+model EpcDynamicField {
+  id               Int          @id @default(autoincrement())
+  organizationId   Int
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  fieldKey         String
+  label            String
+  fieldType        String       @default("text")
+  placeholder      String?
+  helpText         String?
+  defaultEntryMode String       @default("both")
+  isRequired       Boolean      @default(false)
+  isActive         Boolean      @default(true)
+  sortOrder        Int          @default(0)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([organizationId, fieldKey])
+  @@index([organizationId, isActive, sortOrder])
 }
 
 model EpcBatchDocument {
