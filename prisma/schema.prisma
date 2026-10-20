@@ -29,6 +29,11 @@ model OrganizationSetting {
   appTitle         String?  @db.VarChar(191)
   faviconUrl       String?  @db.VarChar(512)
   logoUrl          String?  @db.VarChar(512)
+  themePrimaryHex  String?  @db.VarChar(7)
+  loginHeroBadge   String?  @db.VarChar(191)
+  loginHeroTitle   String?  @db.VarChar(191)
+  loginHeroSubtitle String? @db.VarChar(512)
+  loginHeroHighlightsJson String? @db.Text
 
   // SMTP
   smtpHost         String?  @db.VarChar(191)

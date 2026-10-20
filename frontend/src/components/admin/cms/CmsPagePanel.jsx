@@ -25,14 +25,19 @@ export default function CmsPagePanel({ pages, selectedPageId, onSelectPage, onCr
       .replace(/-+/g, '-');
 
   return (
-    <div className="ac-card p-3">
+    <div className="rounded-[22px] border border-zinc-200 bg-white p-3 shadow-sm">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="text-xs font-semibold text-zinc-500">{t('pages')}</div>
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">{t('pages')}</div>
+          <div className="mt-1 text-sm font-semibold text-zinc-900">
+            {(Array.isArray(pages) ? pages : []).length} {t('pages')}
+          </div>
+        </div>
         {typeof onCollapse === 'function' ? (
           <button
             type="button"
             onClick={() => onCollapse()}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold text-zinc-900 hover:bg-zinc-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
             title={t('collapse')}
           >
             <span aria-hidden="true">{'<'}</span>
@@ -40,17 +45,19 @@ export default function CmsPagePanel({ pages, selectedPageId, onSelectPage, onCr
           </button>
         ) : null}
       </div>
-      <div className="space-y-1">
+      <div className="space-y-2">
         {(Array.isArray(pages) ? pages : []).filter((p) => p && typeof p === 'object').map((p, idx) => (
           <div
             key={p.id}
-            className={`flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm ${
-              String(p.id) === String(selectedPageId) ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'text-zinc-900 hover:bg-zinc-50'
+            className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-3 text-left text-sm transition ${
+              String(p.id) === String(selectedPageId)
+                ? 'border-brand-200 bg-brand-50/80 text-brand-900 shadow-sm'
+                : 'border-zinc-200 bg-zinc-50/60 text-zinc-900 hover:border-zinc-300 hover:bg-white'
             }`}
           >
             <button type="button" onClick={() => onSelectPage(p.id)} className="min-w-0 flex-1 text-left">
-              <div className="truncate font-semibold">{p.name}</div>
-              <div className={`truncate text-[11px] ${String(p.id) === String(selectedPageId) ? 'text-brand-700/80' : 'text-zinc-500'}`}>
+              <div className="truncate text-sm font-semibold">{p.name}</div>
+              <div className={`mt-1 truncate text-[11px] ${String(p.id) === String(selectedPageId) ? 'text-brand-700/80' : 'text-zinc-500'}`}>
                 {p.slug}
               </div>
             </button>
@@ -88,7 +95,7 @@ export default function CmsPagePanel({ pages, selectedPageId, onSelectPage, onCr
                       next[idx] = tmp;
                       onReorderPages(next);
                     }}
-                    className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-40"
+                    className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:opacity-40"
                   >
                     ↓
                   </button>
@@ -101,7 +108,7 @@ export default function CmsPagePanel({ pages, selectedPageId, onSelectPage, onCr
                     if (!window.confirm(t('confirmDelete'))) return;
                     onDeletePage(p.id);
                   }}
-                  className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold text-zinc-900 hover:bg-zinc-50"
+                  className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
                 >
                   {t('delete')}
                 </button>
@@ -111,19 +118,18 @@ export default function CmsPagePanel({ pages, selectedPageId, onSelectPage, onCr
         ))}
       </div>
 
-      <div className="mt-4 rounded-lg bg-zinc-50 p-3">
-        <div className="text-xs font-semibold text-zinc-700">{t('createPage')}</div>
+      <div className="mt-4 rounded-[20px] border border-dashed border-zinc-300 bg-zinc-50/80 p-3">
         <div className="mt-2 space-y-2">
           <input
             value={String(nextPageNo)}
             disabled
-            className="ac-input rounded-lg px-3 py-2"
+            className="ac-input rounded-lg border-zinc-200 bg-white px-3 py-2"
             placeholder={t('pageName')}
           />
           <input
             value={sectionName}
             onChange={(e) => setSectionName(e.target.value)}
-            className="ac-input rounded-lg px-3 py-2"
+            className="ac-input rounded-lg border-zinc-200 bg-white px-3 py-2"
             placeholder={t('pageSlug')}
           />
           <button
@@ -138,7 +144,7 @@ export default function CmsPagePanel({ pages, selectedPageId, onSelectPage, onCr
               onCreatePage({ name, slug });
               setSectionName('');
             }}
-            className="ac-btn w-full rounded-lg px-3 py-2 text-sm"
+            className="ac-btn w-full rounded-lg px-3 py-2 text-sm shadow-sm"
           >
             {t('create')}
           </button>

@@ -237,7 +237,7 @@ const VerifyLoadingScreen = ({ meta, mode = 'auto' }) => {
                     }
                     transition={reduceMotion ? undefined : { duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
                   >
-                    <IconShield className="h-8 w-8" style={{ color: '#f9901d' }} />
+                    <IconShield className="h-8 w-8" style={{ color: 'var(--ac-accent)' }} />
                   </motion.div>
                 </>
               )}

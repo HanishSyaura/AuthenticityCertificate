@@ -41,8 +41,27 @@ const previewBatchImportSchema = z.object({
   base64: z.string().min(1)
 });
 
+const previewBatchImportRangeSchema = z.object({
+  corpCode: z.string().trim().min(1),
+  date: z.string().trim().min(1),
+  startRunningNo: z.string().trim().min(1),
+  endRunningNo: z.string().trim().min(1),
+  certificateTemplateId: z.union([z.number().int().positive(), z.null()]).optional()
+});
+
 const submitBatchImportSchema = z.object({
   base64: z.string().min(1),
+  productId: z.union([z.number().int().positive(), z.null()]).optional(),
+  certificateTemplateId: z.union([z.number().int().positive(), z.null()]).optional(),
+  documents: z.record(z.string(), z.string()).optional()
+});
+
+const submitBatchImportRangeSchema = z.object({
+  corpCode: z.string().trim().min(1),
+  date: z.string().trim().min(1),
+  startRunningNo: z.string().trim().min(1),
+  endRunningNo: z.string().trim().min(1),
+  epcCodes: z.array(z.string().trim().min(1)).min(1).max(500),
   productId: z.union([z.number().int().positive(), z.null()]).optional(),
   certificateTemplateId: z.union([z.number().int().positive(), z.null()]).optional(),
   documents: z.record(z.string(), z.string()).optional()
@@ -507,6 +526,29 @@ async function previewBatchImportNew(req, res) {
   }
 }
 
+async function previewBatchImportRange(req, res) {
+  try {
+    const data = previewBatchImportRangeSchema.parse(req.body || {});
+    const result = await epcService.previewBatchImportRange({
+      organizationId: req.organization.id,
+      corpPrefix: data.corpCode,
+      dateCode: data.date,
+      startRunningNo: data.startRunningNo,
+      endRunningNo: data.endRunningNo,
+      certificateTemplateId: Object.prototype.hasOwnProperty.call(data, 'certificateTemplateId') ? data.certificateTemplateId : undefined
+    });
+    res.success(result);
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      const first = Array.isArray(e.issues) ? e.issues[0] : null;
+      const field = first?.path?.length ? first.path.join('.') : 'form';
+      const detail = first?.message ? `: ${first.message}` : '';
+      return res.error(`Invalid input (${field})${detail}`, 400);
+    }
+    res.error(resolveMessage(e), resolveStatus(e, 400));
+  }
+}
+
 async function submitBatchImport(req, res) {
   try {
     const batchId = Number(req.params.id);
@@ -564,6 +606,51 @@ async function submitBatchImportNew(req, res) {
       items: Array.isArray(result?.items) ? result.items : []
     };
     res.success(result, 'Batch import saved');
+  } catch (e) {
+    if (e instanceof z.ZodError) {
+      const first = Array.isArray(e.issues) ? e.issues[0] : null;
+      const field = first?.path?.length ? first.path.join('.') : 'form';
+      const detail = first?.message ? `: ${first.message}` : '';
+      return res.error(`Invalid input (${field})${detail}`, 400);
+    }
+    res.error(resolveMessage(e), resolveStatus(e, 400));
+  }
+}
+
+async function submitBatchImportRange(req, res) {
+  try {
+    const data = submitBatchImportRangeSchema.parse(req.body || {});
+    const result = await epcService.submitBatchImportRange({
+      organizationId: req.organization.id,
+      corpPrefix: data.corpCode,
+      dateCode: data.date,
+      startRunningNo: data.startRunningNo,
+      endRunningNo: data.endRunningNo,
+      epcCodes: data.epcCodes,
+      productId: Object.prototype.hasOwnProperty.call(data, 'productId') ? data.productId : undefined,
+      certificateTemplateId: Object.prototype.hasOwnProperty.call(data, 'certificateTemplateId') ? data.certificateTemplateId : undefined,
+      documents: Object.prototype.hasOwnProperty.call(data, 'documents') ? data.documents : {},
+      actor: req.user
+    });
+    res.locals.auditMetadata = {
+      type: 'batch_import_range',
+      rows: result?.rows ?? null,
+      uniqueEpcs: result?.uniqueEpcs ?? null,
+      updated: result?.updated ?? null,
+      activated: result?.activated ?? null,
+      created: result?.created ?? null,
+      productId: result?.productId ?? null,
+      certificateTemplateId: Object.prototype.hasOwnProperty.call(data, 'certificateTemplateId') ? data.certificateTemplateId : null,
+      batchIds: Array.isArray(result?.batchIds) ? result.batchIds : [],
+      range: {
+        corpCode: data.corpCode,
+        date: data.date,
+        startRunningNo: data.startRunningNo,
+        endRunningNo: data.endRunningNo
+      },
+      items: Array.isArray(result?.items) ? result.items : []
+    };
+    res.success(result, 'Batch import range saved');
   } catch (e) {
     if (e instanceof z.ZodError) {
       const first = Array.isArray(e.issues) ? e.issues[0] : null;
@@ -797,8 +884,10 @@ module.exports = {
   importProductionXlsx,
   previewBatchImport,
   previewBatchImportNew,
+  previewBatchImportRange,
   submitBatchImport,
   submitBatchImportNew,
+  submitBatchImportRange,
   listBatchImportHistory,
   getBatchImportHistory,
   markProductionDone,

@@ -207,14 +207,17 @@ export default function CmsInspectorPanel({
   );
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-3">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="text-xs font-semibold text-zinc-500">{t('inspector')}</div>
+    <div className="rounded-[22px] border border-zinc-200 bg-white p-3 shadow-sm">
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">{t('inspector')}</div>
+          <div className="mt-1 text-sm font-semibold text-zinc-900">{selectedBlock ? selectedBlock.type : t('selectBlock')}</div>
+        </div>
         {typeof onCollapse === 'function' ? (
           <button
             type="button"
             onClick={() => onCollapse()}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1 text-[11px] font-semibold text-zinc-900 hover:bg-zinc-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
             title={t('collapse')}
           >
             <span>{t('collapse')}</span>
@@ -223,27 +226,27 @@ export default function CmsInspectorPanel({
         ) : null}
       </div>
       {!selectedBlock ? (
-        <div className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-700">{t('selectBlock')}</div>
+        <div className="rounded-[18px] border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-700">{t('selectBlock')}</div>
       ) : (
         <div className="space-y-3">
           {layoutLocked ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{t('translateOnlyHint')}</div>
+            <div className="rounded-[18px] border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{t('translateOnlyHint')}</div>
           ) : null}
-          <div className="rounded-lg border border-zinc-200 bg-white p-3">
-            <div className="text-xs font-semibold text-zinc-700">{t('block')}</div>
+          <div className="rounded-[18px] border border-zinc-200 bg-zinc-50/70 p-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">{t('block')}</div>
             <div className="mt-1 text-sm font-semibold text-zinc-900">{selectedBlock.type}</div>
             <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-              <div className="rounded bg-zinc-50 p-2">x: {selectedBlock.x}</div>
-              <div className="rounded bg-zinc-50 p-2">y: {selectedBlock.y}</div>
-              <div className="rounded bg-zinc-50 p-2">w: {selectedBlock.w}</div>
-              <div className="rounded bg-zinc-50 p-2">h: {selectedBlock.h}</div>
+              <div className="rounded-lg border border-zinc-200 bg-white p-2">x: {selectedBlock.x}</div>
+              <div className="rounded-lg border border-zinc-200 bg-white p-2">y: {selectedBlock.y}</div>
+              <div className="rounded-lg border border-zinc-200 bg-white p-2">w: {selectedBlock.w}</div>
+              <div className="rounded-lg border border-zinc-200 bg-white p-2">h: {selectedBlock.h}</div>
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => onReorderLayer('toBack')}
                 disabled={layoutLocked || selectedIndex <= 0}
-                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:opacity-50"
               >
                 {t('sendToBack')}
               </button>
@@ -251,7 +254,7 @@ export default function CmsInspectorPanel({
                 type="button"
                 onClick={() => onReorderLayer('toFront')}
                 disabled={layoutLocked || selectedIndex < 0 || selectedIndex >= (Array.isArray(layout) ? layout.length - 1 : 0)}
-                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:opacity-50"
               >
                 {t('bringToFront')}
               </button>
@@ -259,7 +262,7 @@ export default function CmsInspectorPanel({
                 type="button"
                 onClick={() => onReorderLayer('backward')}
                 disabled={layoutLocked || selectedIndex <= 0}
-                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:opacity-50"
               >
                 {t('sendBackward')}
               </button>
@@ -267,7 +270,7 @@ export default function CmsInspectorPanel({
                 type="button"
                 onClick={() => onReorderLayer('forward')}
                 disabled={layoutLocked || selectedIndex < 0 || selectedIndex >= (Array.isArray(layout) ? layout.length - 1 : 0)}
-                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-50"
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:opacity-50"
               >
                 {t('bringForward')}
               </button>

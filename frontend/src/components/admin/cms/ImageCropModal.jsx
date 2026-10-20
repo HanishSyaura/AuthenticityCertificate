@@ -199,8 +199,8 @@ export default function ImageCropModal({ open, file, onClose, onConfirm, onUseOr
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-5xl rounded-2xl bg-white p-4 sm:p-5">
+    <div className="ac-overlay-center z-[60]">
+      <div className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-4 sm:p-5">
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm font-semibold text-zinc-900">{t('cropImage')}</div>
           <button

@@ -27,7 +27,6 @@ export const PERMISSION_GROUPS = [
       'epc.write',
       'epc.batch.create',
       'epc.batch.view',
-      'epc.scan.access',
       'epc.certificate.view',
       'epc.export.xlsx',
       'epc.encoding',

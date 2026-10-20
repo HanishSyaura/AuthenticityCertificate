@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import useEpcStore from '../../store/useEpcStore';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
 import useRecordsStore from '../../store/useRecordsStore';
@@ -14,6 +13,7 @@ import TablePager from '../../components/ui/TablePager';
 import RowActionsMenu from '../../components/ui/RowActionsMenu';
 import { hasPermission } from '../../utils/permissions';
 import { resolvePublicMediaUrl } from '../../utils/apiBase';
+import { sortRows } from '../../utils/tableSort';
 
 function formatDateTime(input) {
   if (!input) return '';
@@ -37,6 +37,22 @@ function toBase64(file) {
     reader.onerror = () => reject(new Error(tRaw('failedToReadFile')));
     reader.readAsDataURL(file);
   });
+}
+
+function toIsoDateInputValue(input = new Date()) {
+  const d = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(d.getTime())) return '';
+  const yyyy = String(d.getFullYear()).padStart(4, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function toDdMmYyFromIso(input) {
+  const value = String(input || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return '';
+  const [yyyy, mm, dd] = value.split('-');
+  return `${dd}${mm}${String(yyyy).slice(-2)}`;
 }
 
 const EPC_EXPORT_COLUMN_META = {
@@ -129,10 +145,71 @@ function buildDefaultSelection(cols) {
   return sel;
 }
 
+function TabButton({ active, children, ...props }) {
+  return (
+    <button
+      type="button"
+      className={
+        active
+          ? 'rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white shadow-[0_14px_28px_rgba(15,23,42,0.14)]'
+          : 'rounded-xl border border-transparent px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-200 hover:bg-slate-50'
+      }
+      style={active ? { background: 'linear-gradient(135deg, var(--ac-brand) 0%, var(--ac-brand-deep) 100%)' } : undefined}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SectionShell({ title, hint, action, children, ...props }) {
+  return (
+    <section
+      className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-[0_16px_34px_rgba(15,23,42,0.05)]"
+      {...props}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-xl font-semibold tracking-tight text-slate-950">{title}</h3>
+          {hint ? <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{hint}</p> : null}
+        </div>
+        {action ? <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div> : null}
+      </div>
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
+
+function ActionIconButton({ label, onClick, disabled = false, children, asLabel = false, className = '' }) {
+  const sharedClassName = `inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 ${
+    disabled ? 'cursor-not-allowed opacity-50' : ''
+  } ${className}`.trim();
+
+  if (asLabel) {
+    return (
+      <label className={sharedClassName} title={label} aria-label={label}>
+        {children}
+      </label>
+    );
+  }
+
+  return (
+    <button type="button" className={sharedClassName} onClick={onClick} disabled={disabled} aria-label={label} title={label}>
+      {children}
+    </button>
+  );
+}
+
 export default function AdminEpc() {
   const { t } = useT();
-  const navigate = useNavigate();
   const { user } = useAdminAuthStore((s) => ({ user: s.user }));
+  const columnPrefsUserKey = useMemo(() => {
+    const raw = String(user?.id || user?.email || 'guest').trim().toLowerCase();
+    return raw.replace(/[^a-z0-9_-]+/g, '_') || 'guest';
+  }, [user?.email, user?.id]);
+  function scopedColumnKey(base) {
+    return `${base}_${columnPrefsUserKey}`;
+  }
   const role = user?.role || 'admin';
   const perms = useMemo(() => (Array.isArray(user?.permissions) ? user.permissions : []), [user?.permissions]);
   const allow = useCallback(
@@ -141,8 +218,7 @@ export default function AdminEpc() {
     [perms, role]
   );
   const canBatchCreate = allow('epc.write', 'epc.batch.create');
-  const canBatchView = allow('epc.read', 'epc.write', 'epc.batch.view', 'epc.scan.access', 'epc.production.access', 'epc.batch_import.access');
-  const canScan = allow('epc.scan.access');
+  const canBatchView = allow('epc.read', 'epc.write', 'epc.batch.view', 'epc.production.access', 'epc.batch_import.access');
   const canExportXlsx = allow('epc.write', 'epc.export.xlsx', 'epc.production.access', 'epc.batch_import.access');
   const canEncoding = allow('epc.write', 'epc.encoding');
   const canDelete = useMemo(() => {
@@ -172,7 +248,9 @@ export default function AdminEpc() {
     exportBatchImportTemplateXlsx,
     importProductionXlsx,
     previewBatchImportXlsx,
+    previewBatchImportRange,
     submitBatchImport,
+    submitBatchImportRange,
     fetchBatchImportHistory,
     getBatchImportHistory,
     markProductionDone,
@@ -198,7 +276,9 @@ export default function AdminEpc() {
     exportBatchXlsxCustom: s.exportBatchXlsxCustom,
     importProductionXlsx: s.importProductionXlsx,
     previewBatchImportXlsx: s.previewBatchImportXlsx,
+    previewBatchImportRange: s.previewBatchImportRange,
     submitBatchImport: s.submitBatchImport,
+    submitBatchImportRange: s.submitBatchImportRange,
     fetchBatchImportHistory: s.fetchBatchImportHistory,
     getBatchImportHistory: s.getBatchImportHistory,
     markProductionDone: s.markProductionDone,
@@ -239,6 +319,7 @@ export default function AdminEpc() {
   const [listOffset, setListOffset] = useState(0);
   const [listLimit, setListLimit] = useState(50);
   const [selectedItemIds, setSelectedItemIds] = useState(() => new Set());
+  const [itemSort, setItemSort] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailItem, setDetailItem] = useState(null);
   const [exportItemColsOpen, setExportItemColsOpen] = useState(false);
@@ -289,10 +370,26 @@ export default function AdminEpc() {
   const [importDocUploading, setImportDocUploading] = useState(() => ({}));
   const [importLocalError, setImportLocalError] = useState('');
   const [importLastResult, setImportLastResult] = useState(null);
+  const [rangeOpen, setRangeOpen] = useState(false);
+  const [rangeCorpCode, setRangeCorpCode] = useState('');
+  const [rangeDate, setRangeDate] = useState(() => toIsoDateInputValue());
+  const [rangeStartRunningNo, setRangeStartRunningNo] = useState('');
+  const [rangeEndRunningNo, setRangeEndRunningNo] = useState('');
+  const [rangePreview, setRangePreview] = useState(null);
+  const [rangeSelectedEpcs, setRangeSelectedEpcs] = useState(() => new Set());
+  const [rangeProductId, setRangeProductId] = useState('');
+  const [rangeAuthTemplateId, setRangeAuthTemplateId] = useState('');
+  const [rangeCmsDesignId, setRangeCmsDesignId] = useState('');
+  const [rangeDocRows, setRangeDocRows] = useState(() => []);
+  const [rangeDocUploading, setRangeDocUploading] = useState(() => ({}));
+  const [rangeLocalError, setRangeLocalError] = useState('');
   const [importHistory, setImportHistory] = useState([]);
   const [importHistoryTotal, setImportHistoryTotal] = useState(0);
   const [importHistoryOffset, setImportHistoryOffset] = useState(0);
   const [importHistoryLimit, setImportHistoryLimit] = useState(20);
+  const [selectedImportHistoryIds, setSelectedImportHistoryIds] = useState(() => new Set());
+  const [importHistorySort, setImportHistorySort] = useState(null);
+  const [importHistoryDetailSort, setImportHistoryDetailSort] = useState(null);
   const [importHistoryOpen, setImportHistoryOpen] = useState(false);
   const [importHistoryDetail, setImportHistoryDetail] = useState(null);
   const [viewBatchOpen, setViewBatchOpen] = useState(false);
@@ -307,6 +404,8 @@ export default function AdminEpc() {
   const [viewBatchProductId, setViewBatchProductId] = useState('');
   const [viewBatchCmsDesignId, setViewBatchCmsDesignId] = useState('');
   const [viewBatchSaving, setViewBatchSaving] = useState(false);
+  const [selectedProductionIds, setSelectedProductionIds] = useState(() => new Set());
+  const [productionSort, setProductionSort] = useState(null);
 
   const [lpOpen, setLpOpen] = useState(false);
   const [lpEpcItemId, setLpEpcItemId] = useState(null);
@@ -332,6 +431,61 @@ export default function AdminEpc() {
     },
     [DEFAULT_SUPPORTING_TYPES, t]
   );
+
+  const buildDocumentsPayload = useCallback(
+    (rows) => {
+      const documents = {};
+      const usedKeys = new Set();
+      let autoIdx = 1;
+      for (const row of Array.isArray(rows) ? rows : []) {
+        const v = String(row?.url || '').trim();
+        if (!v) continue;
+        let k = String(row?.key || '').trim();
+        if (!k || /^supporting_\d+$/.test(k) || usedKeys.has(k)) {
+          const fromUrl = cleanFilenameToDocKey(v.split('/').pop() || v.split('\\').pop() || '', 'supporting');
+          let candidate = fromUrl;
+          let suffix = autoIdx;
+          while (usedKeys.has(candidate)) {
+            candidate = `${fromUrl}_${suffix}`;
+            suffix += 1;
+          }
+          autoIdx = suffix + 1;
+          k = candidate;
+        }
+        usedKeys.add(k);
+        documents[k] = v;
+      }
+      return documents;
+    },
+    [cleanFilenameToDocKey]
+  );
+
+  const normalizeRangeRunningInput = useCallback((value) => String(value ?? '').replace(/\D/g, '').slice(0, 8), []);
+
+  const paddedRangeStartRunningNo = useMemo(
+    () => (rangeStartRunningNo ? String(rangeStartRunningNo).padStart(8, '0') : ''),
+    [rangeStartRunningNo]
+  );
+  const paddedRangeEndRunningNo = useMemo(
+    () => (rangeEndRunningNo ? String(rangeEndRunningNo).padStart(8, '0') : ''),
+    [rangeEndRunningNo]
+  );
+
+  const rangePreviewLabel = useMemo(() => {
+    const corp = String(rangeCorpCode || '').trim().toUpperCase();
+    const ddmmyy = toDdMmYyFromIso(rangeDate);
+    const startRun = String(paddedRangeStartRunningNo || '').trim();
+    const endRun = String(paddedRangeEndRunningNo || '').trim();
+    if (!corp || !ddmmyy || !startRun || !endRun) return '';
+    return `${corp}${ddmmyy}${startRun} - ${corp}${ddmmyy}${endRun}`;
+  }, [paddedRangeEndRunningNo, paddedRangeStartRunningNo, rangeCorpCode, rangeDate]);
+
+  const rangePreviewItems = useMemo(() => (Array.isArray(rangePreview?.items) ? rangePreview.items : []), [rangePreview]);
+  const selectableRangeRows = useMemo(() => rangePreviewItems.filter((row) => row?.selectable), [rangePreviewItems]);
+  const allSelectableRangeChecked = useMemo(() => {
+    if (selectableRangeRows.length === 0) return false;
+    return selectableRangeRows.every((row) => rangeSelectedEpcs.has(String(row.epcCode || '')));
+  }, [rangeSelectedEpcs, selectableRangeRows]);
 
   const closeExportCols = useCallback(() => {
     setExportColsOpen(false);
@@ -390,6 +544,22 @@ export default function AdminEpc() {
     setImportLocalError('');
   }, []);
 
+  const closeRange = useCallback(() => {
+    setRangeOpen(false);
+    setRangeCorpCode(Array.isArray(corpCodes) && corpCodes.length > 0 ? corpCodes[0] : '');
+    setRangeDate(toIsoDateInputValue());
+    setRangeStartRunningNo('');
+    setRangeEndRunningNo('');
+    setRangePreview(null);
+    setRangeSelectedEpcs(new Set());
+    setRangeProductId('');
+    setRangeAuthTemplateId('');
+    setRangeCmsDesignId('');
+    setRangeDocRows([]);
+    setRangeDocUploading({});
+    setRangeLocalError('');
+  }, [corpCodes]);
+
   const closeViewBatch = useCallback(() => {
     setViewBatchOpen(false);
     setViewBatch(null);
@@ -443,6 +613,30 @@ export default function AdminEpc() {
     [cmsDesigns, cmsFetchDesigns, fetchProducts, fetchTemplates]
   );
 
+  const openRange = useCallback(async () => {
+    setRangeOpen(true);
+    setRangeLocalError('');
+    setRangeCorpCode(Array.isArray(corpCodes) && corpCodes.length > 0 ? corpCodes[0] : String(rangeCorpCode || '').trim().toUpperCase());
+    setRangeDate((prev) => prev || toIsoDateInputValue());
+    setRangeStartRunningNo('');
+    setRangeEndRunningNo('');
+    setRangePreview(null);
+    setRangeSelectedEpcs(new Set());
+    setRangeDocRows([]);
+    setRangeDocUploading({});
+    setRangeAuthTemplateId('');
+    setRangeCmsDesignId('');
+    await fetchTemplates({ lang: 'en' });
+    await fetchProducts({ status: 'all' });
+    if (!Array.isArray(cmsDesigns) || cmsDesigns.length === 0) {
+      try {
+        await cmsFetchDesigns();
+      } catch (_) {
+        /* ignore */
+      }
+    }
+  }, [cmsDesigns, cmsFetchDesigns, corpCodes, fetchProducts, fetchTemplates, rangeCorpCode]);
+
   const resolveBatchAuthCertificate = useCallback(
     (batch) => {
       if (!batch) return '-';
@@ -477,6 +671,12 @@ export default function AdminEpc() {
       setGenerateCorpPrefix(corpCodes[0]);
     }
   }, [corpCodes, generateCorpPrefix]);
+
+  useEffect(() => {
+    if (Array.isArray(corpCodes) && corpCodes.length > 0 && !rangeCorpCode) {
+      setRangeCorpCode(corpCodes[0]);
+    }
+  }, [corpCodes, rangeCorpCode]);
 
   useEffect(() => {
     if (!(detailOpen || viewBatchOpen)) return;
@@ -564,67 +764,691 @@ export default function AdminEpc() {
     [items]
   );
   const allPageSelected = useMemo(() => pageItemIds.length > 0 && pageItemIds.every((id) => selectedItemIds.has(id)), [pageItemIds, selectedItemIds]);
+  const itemColumns = useMemo(
+    () => [
+      {
+        id: 'select',
+        label: t('selectAll'),
+        lockedPosition: 'left',
+        header: (
+          <div className="flex items-center justify-center">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-300 text-slate-900"
+              checked={allPageSelected}
+              onClick={(e) => e.stopPropagation()}
+              onChange={() => {
+                setSelectedItemIds((prev) => {
+                  const next = new Set(prev);
+                  if (allPageSelected) pageItemIds.forEach((id) => next.delete(id));
+                  else pageItemIds.forEach((id) => next.add(id));
+                  return next;
+                });
+              }}
+              aria-label={t('selectAll')}
+            />
+          </div>
+        ),
+        sortable: false,
+        width: 52,
+        minWidth: 52,
+        maxWidth: 52,
+        pinnable: false,
+        hideable: false,
+        resizable: false,
+        cell: (it) => {
+          const id = Number(it?.id);
+          const checked = Number.isFinite(id) && selectedItemIds.has(id);
+          return (
+            <div className="flex items-center justify-center">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                checked={checked}
+                onClick={(e) => e.stopPropagation()}
+                onChange={() => {
+                  if (!Number.isFinite(id)) return;
+                  setSelectedItemIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(id)) next.delete(id);
+                    else next.add(id);
+                    return next;
+                  });
+                }}
+                aria-label={t('selectAll')}
+              />
+            </div>
+          );
+        },
+        align: 'center',
+        headerClassName: 'px-2',
+        className: 'px-2'
+      },
+      {
+        id: 'epcCode',
+        header: t('epcCode'),
+        width: 210,
+        minWidth: 180,
+        sortValue: (it) => String(it?.epcCode || ''),
+        cell: (it) => (
+          <button
+            type="button"
+            className="font-mono text-sm text-brand-700 underline decoration-brand-300 underline-offset-2 hover:text-brand-800"
+            onClick={() => {
+              setDetailItem(it || null);
+              setDetailOpen(true);
+            }}
+          >
+            {String(it?.epcCode || '')}
+          </button>
+        )
+      },
+      {
+        id: 'batchId',
+        header: t('batchId'),
+        width: 110,
+        minWidth: 96,
+        sortValue: (it) => Number(it?.batchId || it?.batch?.id || 0),
+        cell: (it) => <span className="font-mono text-sm text-slate-700">{String(it?.batchId || it?.batch?.id || '-')}</span>
+      },
+      {
+        id: 'status',
+        header: t('status'),
+        width: 124,
+        minWidth: 110,
+        sortValue: (it) => String(it?.status || ''),
+        cell: (it) => {
+          const s = String(it?.status || '').toUpperCase();
+          const active = s === 'ACTIVE';
+          return (
+            <span
+              className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                active ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-700'
+              }`}
+            >
+              {active ? t('active') : t('inactive')}
+            </span>
+          );
+        }
+      },
+      {
+        id: 'createdAt',
+        header: t('createdAt'),
+        width: 172,
+        minWidth: 156,
+        sortValue: (it) => String(it?.createdAt || ''),
+        cell: (it) => <span className="whitespace-nowrap text-sm text-slate-600">{formatDateTime(it?.createdAt)}</span>
+      },
+      {
+        id: 'remark',
+        header: t('remark'),
+        minWidth: 180,
+        sortValue: (it) => String(it?.batch?.remark || ''),
+        cell: (it) => <span className="text-sm text-slate-700">{it?.batch?.remark ? String(it.batch.remark) : '-'}</span>
+      },
+      {
+        id: 'actions',
+        label: t('actions'),
+        header: t('actions'),
+        align: 'right',
+        pinnable: false,
+        hideable: false,
+        sortable: false,
+        resizable: false,
+        width: 88,
+        minWidth: 88,
+        maxWidth: 88,
+        cell: (it) => (
+          <RowActionsMenu
+            ariaLabel={t('actions')}
+            items={[
+              {
+                key: 'view',
+                label: t('view'),
+                onSelect: () => {
+                  setDetailItem(it || null);
+                  setDetailOpen(true);
+                }
+              },
+              {
+                key: 'landing',
+                label: 'Reassign Landing Page',
+                onSelect: () => openLandingFromItem(it)
+              }
+            ]}
+          />
+        ),
+        headerClassName: 'pr-3',
+        className: 'pr-3'
+      }
+    ],
+    [allPageSelected, openLandingFromItem, pageItemIds, selectedItemIds, t]
+  );
+  const sortedItems = useMemo(() => sortRows(Array.isArray(items) ? items : [], itemSort, itemColumns), [itemColumns, itemSort, items]);
+
+  const importHistoryRowIds = useMemo(
+    () =>
+      (Array.isArray(importHistory) ? importHistory : [])
+        .map((r) => Number(r?.id))
+        .filter((n) => Number.isFinite(n) && n > 0),
+    [importHistory]
+  );
+  const allImportHistorySelected = useMemo(
+    () => importHistoryRowIds.length > 0 && importHistoryRowIds.every((id) => selectedImportHistoryIds.has(id)),
+    [importHistoryRowIds, selectedImportHistoryIds]
+  );
+
+  const importHistoryColumns = useMemo(
+    () => [
+      {
+        id: 'select',
+        label: t('selectAll'),
+        lockedPosition: 'left',
+        header: (
+          <div className="flex items-center justify-center">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-300 text-slate-900"
+              checked={allImportHistorySelected}
+              onClick={(e) => e.stopPropagation()}
+              onChange={() => {
+                setSelectedImportHistoryIds((prev) => {
+                  const next = new Set(prev);
+                  if (allImportHistorySelected) importHistoryRowIds.forEach((id) => next.delete(id));
+                  else importHistoryRowIds.forEach((id) => next.add(id));
+                  return next;
+                });
+              }}
+              aria-label={t('selectAll')}
+            />
+          </div>
+        ),
+        sortable: false,
+        width: 52,
+        minWidth: 52,
+        maxWidth: 52,
+        pinnable: false,
+        hideable: false,
+        resizable: false,
+        cell: (r) => {
+          const id = Number(r?.id);
+          const checked = Number.isFinite(id) && selectedImportHistoryIds.has(id);
+          return (
+            <div className="flex items-center justify-center">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                checked={checked}
+                onClick={(e) => e.stopPropagation()}
+                onChange={() => {
+                  if (!Number.isFinite(id)) return;
+                  setSelectedImportHistoryIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(id)) next.delete(id);
+                    else next.add(id);
+                    return next;
+                  });
+                }}
+                aria-label={t('selectAll')}
+              />
+            </div>
+          );
+        },
+        align: 'center',
+        headerClassName: 'px-2',
+        className: 'px-2'
+      },
+      {
+        id: 'time',
+        header: t('time'),
+        width: 176,
+        minWidth: 160,
+        sortValue: (r) => String(r?.createdAt || ''),
+        cell: (r) => <span className="whitespace-nowrap text-sm text-slate-600">{formatDateTime(r?.createdAt)}</span>
+      },
+      {
+        id: 'product',
+        header: t('product'),
+        minWidth: 180,
+        sortValue: (r) => String(r?.summary?.productName || r?.summary?.productId || ''),
+        cell: (r) => <span className="text-sm text-slate-700">{String(r?.summary?.productName || r?.summary?.productId || '-')}</span>
+      },
+      {
+        id: 'certTemplate',
+        header: t('certTemplate'),
+        minWidth: 180,
+        sortValue: (r) => String(r?.summary?.certificateTemplateName || r?.summary?.certificateTemplateId || ''),
+        cell: (r) => <span className="text-sm text-slate-700">{String(r?.summary?.certificateTemplateName || r?.summary?.certificateTemplateId || '-')}</span>
+      },
+      {
+        id: 'qtyEpc',
+        header: t('qtyEpc'),
+        width: 110,
+        minWidth: 100,
+        sortValue: (r) => Number(r?.summary?.uniqueEpcs ?? r?.summary?.rows ?? 0),
+        cell: (r) => <span className="font-mono text-sm text-slate-700">{String(r?.summary?.uniqueEpcs ?? r?.summary?.rows ?? '-')}</span>
+      },
+      {
+        id: 'action',
+        label: t('actions'),
+        header: '',
+        align: 'right',
+        pinnable: false,
+        hideable: false,
+        sortable: false,
+        resizable: false,
+        width: 92,
+        minWidth: 92,
+        maxWidth: 92,
+        cell: (r) => (
+          <button
+            type="button"
+            className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+            onClick={async () => {
+              const detail = await getBatchImportHistory(r.id);
+              setImportHistoryDetail(detail);
+              setImportHistoryOpen(true);
+            }}
+          >
+            {t('view')}
+          </button>
+        )
+      }
+    ],
+    [allImportHistorySelected, getBatchImportHistory, importHistoryRowIds, selectedImportHistoryIds, t]
+  );
+  const sortedImportHistory = useMemo(
+    () => sortRows(Array.isArray(importHistory) ? importHistory : [], importHistorySort, importHistoryColumns),
+    [importHistory, importHistoryColumns, importHistorySort]
+  );
+
+  const importHistoryDetailRows = useMemo(
+    () => (Array.isArray(importHistoryDetail?.metadata?.items) ? importHistoryDetail.metadata.items : []),
+    [importHistoryDetail]
+  );
+  const importHistoryDetailColumns = useMemo(
+    () => [
+      {
+        id: 'epc',
+        header: t('epcCode'),
+        width: 210,
+        minWidth: 180,
+        sortValue: (r) => String(r?.epcCode || ''),
+        cell: (r) => <span className="font-mono text-sm text-slate-700">{String(r?.epcCode || '')}</span>
+      },
+      {
+        id: 'product',
+        header: t('product'),
+        minWidth: 260,
+        sortValue: (r) =>
+          String(
+            r?.productName ||
+              r?.product?.name ||
+              importHistoryDetail?.summary?.productName ||
+              r?.productId ||
+              importHistoryDetail?.summary?.productId ||
+              ''
+          ),
+        cell: (r) => (
+          <span className="text-sm text-slate-700">
+            {String(
+              r?.productName ||
+                r?.product?.name ||
+                importHistoryDetail?.summary?.productName ||
+                r?.productId ||
+                importHistoryDetail?.summary?.productId ||
+                '-'
+            )}
+          </span>
+        )
+      }
+    ],
+    [importHistoryDetail, t]
+  );
+  const sortedImportHistoryDetailRows = useMemo(
+    () => sortRows(importHistoryDetailRows, importHistoryDetailSort, importHistoryDetailColumns),
+    [importHistoryDetailColumns, importHistoryDetailRows, importHistoryDetailSort]
+  );
+
+  const productionRowIds = useMemo(
+    () =>
+      (Array.isArray(batches) ? batches : [])
+        .map((b) => Number(b?.id))
+        .filter((n) => Number.isFinite(n) && n > 0),
+    [batches]
+  );
+  const allProductionSelected = useMemo(
+    () => productionRowIds.length > 0 && productionRowIds.every((id) => selectedProductionIds.has(id)),
+    [productionRowIds, selectedProductionIds]
+  );
+
+  const productionColumns = useMemo(
+    () => [
+      {
+        id: 'select',
+        label: t('selectAll'),
+        lockedPosition: 'left',
+        header: (
+          <div className="flex items-center justify-center">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-300 text-slate-900"
+              checked={allProductionSelected}
+              onClick={(e) => e.stopPropagation()}
+              onChange={() => {
+                setSelectedProductionIds((prev) => {
+                  const next = new Set(prev);
+                  if (allProductionSelected) productionRowIds.forEach((id) => next.delete(id));
+                  else productionRowIds.forEach((id) => next.add(id));
+                  return next;
+                });
+              }}
+              aria-label={t('selectAll')}
+            />
+          </div>
+        ),
+        sortable: false,
+        width: 52,
+        minWidth: 52,
+        maxWidth: 52,
+        pinnable: false,
+        hideable: false,
+        resizable: false,
+        cell: (b) => {
+          const id = Number(b?.id);
+          const checked = Number.isFinite(id) && selectedProductionIds.has(id);
+          return (
+            <div className="flex items-center justify-center">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                checked={checked}
+                onClick={(e) => e.stopPropagation()}
+                onChange={() => {
+                  if (!Number.isFinite(id)) return;
+                  setSelectedProductionIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(id)) next.delete(id);
+                    else next.add(id);
+                    return next;
+                  });
+                }}
+                aria-label={t('selectAll')}
+              />
+            </div>
+          );
+        },
+        align: 'center',
+        headerClassName: 'px-2',
+        className: 'px-2'
+      },
+      {
+        id: 'batchName',
+        header: t('batchName'),
+        minWidth: 220,
+        sortValue: (b) => String(b?.batchName || ''),
+        cell: (b) => (
+          <button type="button" className="truncate text-left text-sm font-semibold text-slate-900 hover:text-brand-700" onClick={() => openViewBatch(b)}>
+            {String(b?.batchName || '-')}
+          </button>
+        )
+      },
+      {
+        id: 'product',
+        header: t('product'),
+        minWidth: 180,
+        sortValue: (b) => String(b?.product?.name || b?.sku || ''),
+        cell: (b) => <span className="text-sm text-slate-700">{String(b?.product?.name || b?.sku || '-')}</span>
+      },
+      {
+        id: 'uploadedAt',
+        header: t('uploadedTime'),
+        width: 170,
+        minWidth: 152,
+        sortValue: (b) => String(b?.productionUploadedAt || ''),
+        cell: (b) => <span className="whitespace-nowrap text-sm text-slate-600">{b?.productionUploadedAt ? formatDateTime(b.productionUploadedAt) : t('notUploaded')}</span>
+      },
+      {
+        id: 'uploadStatus',
+        header: t('uploadStatus'),
+        width: 136,
+        minWidth: 124,
+        sortValue: (b) => (b?.productionUploadedAt ? 1 : 0),
+        cell: (b) => {
+          const uploaded = Boolean(b?.productionUploadedAt);
+          return (
+            <span
+              className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                uploaded ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-slate-200 bg-slate-100 text-slate-700'
+              }`}
+            >
+              {uploaded ? 'Uploaded' : t('notUploaded')}
+            </span>
+          );
+        }
+      },
+      {
+        id: 'productionStatus',
+        header: t('productionStatus'),
+        width: 152,
+        minWidth: 136,
+        sortValue: (b) => (b?.productionDoneAt ? 1 : 0),
+        cell: (b) => {
+          const done = Boolean(b?.productionDoneAt);
+          return (
+            <span
+              className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                done ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'
+              }`}
+            >
+              {done ? t('markDone') : t('notDone')}
+            </span>
+          );
+        }
+      },
+      {
+        id: 'actions',
+        label: t('actions'),
+        header: t('actions'),
+        align: 'right',
+        pinnable: false,
+        hideable: false,
+        sortable: false,
+        resizable: false,
+        minWidth: 232,
+        width: 248,
+        maxWidth: 248,
+        cell: (b) => {
+          const done = Boolean(b?.productionDoneAt);
+          return (
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              <ActionIconButton label={t('view')} onClick={() => openViewBatch(b)}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </ActionIconButton>
+              {canExportXlsx ? (
+                <ActionIconButton label={t('exportXlsx')} onClick={() => openExportCols(b)}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 3v11" />
+                    <path d="m7 10 5 5 5-5" />
+                    <path d="M5 21h14" />
+                  </svg>
+                </ActionIconButton>
+              ) : null}
+              {canEncoding ? (
+                <ActionIconButton label={t('exportVerifyUrlXlsx')} onClick={() => exportBatchVerifyUrlXlsx(b.id)}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07L10 4" />
+                    <path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 1 0 7.07 7.07L14 20" />
+                  </svg>
+                </ActionIconButton>
+              ) : null}
+              <ActionIconButton label={t('importXlsx')} asLabel>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 21V10" />
+                  <path d="m17 14-5-5-5 5" />
+                  <path d="M5 3h14" />
+                </svg>
+                <input
+                  type="file"
+                  accept=".xlsx"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const base64 = await toBase64(file);
+                    const res = await importProductionXlsx({ batchId: b.id, base64 });
+                    await fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
+                    const rows = Number(res?.rows || 0);
+                    setActivateCertConfirmMeta({
+                      source: 'productionImport',
+                      batchId: Number(b?.id) > 0 ? Number(b.id) : null,
+                      description: rows > 0 ? `Import completed - ${rows} EPC row(s) berjaya dikemaskini dengan Manufacture Date.` : 'Import completed.'
+                    });
+                    setActivateCertConfirmOpen(true);
+                    e.target.value = '';
+                  }}
+                />
+              </ActionIconButton>
+              <ActionIconButton
+                label={t('markDone')}
+                disabled={loading || done}
+                className="border-[rgba(var(--ac-brand-rgb),0.18)] bg-[var(--ac-brand)] text-white hover:border-[rgba(var(--ac-brand-rgb),0.3)] hover:bg-[var(--ac-brand-deep)] hover:text-white"
+                onClick={async () => {
+                  await markProductionDone({ batchId: b.id });
+                  await fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              </ActionIconButton>
+            </div>
+          );
+        }
+      }
+    ],
+    [
+      allProductionSelected,
+      canEncoding,
+      canExportXlsx,
+      exportBatchVerifyUrlXlsx,
+      fetchBatches,
+      importProductionXlsx,
+      loading,
+      markProductionDone,
+      openExportCols,
+      openViewBatch,
+      productionRowIds,
+      selectedProductionIds,
+      t
+    ]
+  );
+  const sortedProductionRows = useMemo(
+    () => sortRows(Array.isArray(batches) ? batches : [], productionSort, productionColumns),
+    [batches, productionColumns, productionSort]
+  );
+  const handleRefreshActiveTab = useCallback(async () => {
+    if (tab === 'import' && canBatchImport) {
+      const data = await fetchBatchImportHistory({ limit: importHistoryLimit, offset: importHistoryOffset });
+      setImportHistory(Array.isArray(data?.items) ? data.items : []);
+      setImportHistoryTotal(Number(data?.total) || 0);
+      return;
+    }
+
+    if (tab === 'production' && canProduction) {
+      await fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
+      return;
+    }
+
+    if (canBatchView) {
+      await fetchItems({
+        q: listQuery,
+        status: listStatus || undefined,
+        createdFrom: createdFrom || undefined,
+        createdTo: createdTo || undefined,
+        batchId: String(listBatchId || '').trim() || undefined,
+        limit: listLimit,
+        offset: listOffset
+      });
+      await fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
+    }
+  }, [
+    canBatchImport,
+    canBatchView,
+    canProduction,
+    createdFrom,
+    createdTo,
+    fetchBatchImportHistory,
+    fetchBatches,
+    fetchItems,
+    importHistoryLimit,
+    importHistoryOffset,
+    listBatchId,
+    listLimit,
+    listOffset,
+    listQuery,
+    listStatus,
+    tab
+  ]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8" data-tour="epc-page">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div data-tour="epc-header">
-          <div className="text-base font-semibold text-zinc-900">{t('epc')}</div>
-          <div className="mt-1 text-sm text-zinc-600">{t('guideStepBatchesBody')}</div>
+    <div className="space-y-4 p-4 sm:p-5 lg:p-6" data-tour="epc-page">
+      <div
+        className="flex items-start justify-between gap-4 rounded-[28px] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,var(--ac-bg-soft)_100%)] p-5 shadow-[0_18px_40px_rgba(15,23,42,0.05)]"
+        data-tour="epc-header"
+      >
+        <div className="min-w-0">
+          <h2 className="text-[1.5rem] font-semibold tracking-tight text-slate-950">{t('epcManagement')}</h2>
         </div>
-        <div className="flex items-center gap-2" data-tour="epc-tabs">
-          {canBatchView ? (
-            <button
-              type="button"
-              onClick={() => setTab('batches')}
-              className={`rounded-lg px-3 py-2 text-xs font-semibold ${
-                tab === 'batches' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
-              }`}
-            >
-              {t('epcBatches')}
-            </button>
-          ) : null}
-          {canBatchImport ? (
-            <button
-              type="button"
-              onClick={() => setTab('import')}
-              className={`rounded-lg px-3 py-2 text-xs font-semibold ${
-                tab === 'import' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
-              }`}
-            >
-              {t('batchImport')}
-            </button>
-          ) : null}
-          {canProduction ? (
-            <button
-              type="button"
-              onClick={() => setTab('production')}
-              className={`rounded-lg px-3 py-2 text-xs font-semibold ${
-                tab === 'production' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50'
-              }`}
-            >
-              {t('productionOrders')}
-            </button>
-          ) : null}
-        </div>
+        <button
+          type="button"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-[0_10px_24px_rgba(15,23,42,0.05)] transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+          onClick={() => void handleRefreshActiveTab()}
+          aria-label={t('refresh')}
+          title={t('refresh')}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <path d="M21 3v6h-6" />
+          </svg>
+        </button>
       </div>
 
-      {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
+      <div className="inline-flex w-fit rounded-[20px] border border-slate-200 bg-white p-1.5 shadow-[0_12px_28px_rgba(15,23,42,0.04)]" data-tour="epc-tabs">
+        {canBatchView ? (
+          <TabButton active={tab === 'batches'} onClick={() => setTab('batches')}>
+            {t('epcBatches')}
+          </TabButton>
+        ) : null}
+        {canBatchImport ? (
+          <TabButton active={tab === 'import'} onClick={() => setTab('import')}>
+            {t('epcAssignment')}
+          </TabButton>
+        ) : null}
+        {canProduction ? (
+          <TabButton active={tab === 'production'} onClick={() => setTab('production')}>
+            {t('labelProductionRecord')}
+          </TabButton>
+        ) : null}
+      </div>
+
+      {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div> : null}
 
       {!canBatchCreate && !canBatchView && !canBatchImport && !canProduction ? (
-        <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-700">Insufficient permissions</div>
+        <div className="rounded-[26px] border border-slate-200 bg-white p-5 text-sm text-slate-700">Insufficient permissions</div>
       ) : null}
 
       {tab === 'batches' && canBatchView ? (
-        <div className="rounded-xl border border-zinc-200 bg-white" data-tour="epc-items-card">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 px-4 py-3">
-            <div className="text-xs font-semibold text-zinc-600">{t('epcItems')}</div>
-            <div className="flex flex-wrap items-center gap-2">
-              {canScan ? (
-                <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" data-tour="epc-scan" onClick={() => navigate('/admin/epc/scan')}>
-                  {t('scanInput')}
-                </button>
-              ) : null}
+        <SectionShell
+          badge={t('epcManagement')}
+          title={t('epcItems')}
+          hint={t('guideStepBatchesBody')}
+          data-tour="epc-items-card"
+          action={
+            <>
               {canExportXlsx ? (
                 <button
                   type="button"
@@ -638,7 +1462,7 @@ export default function AdminEpc() {
               {canEditBatchDocs ? (
                 <button
                   type="button"
-                  className="ac-btn ac-btn-soft px-3 py-2 text-xs text-brand-700"
+                  className="ac-btn ac-btn-soft ac-btn-soft-brand px-3 py-2 text-xs"
                   disabled={loading || selectedItemIds.size === 0 || cmsDesignsLoading}
                   onClick={async () => {
                     if (!Array.isArray(cmsDesigns) || cmsDesigns.length === 0) {
@@ -683,7 +1507,7 @@ export default function AdminEpc() {
               {canClearGenerated ? (
                 <button
                   type="button"
-                  className="ac-btn ac-btn-soft px-3 py-2 text-xs text-rose-700"
+                  className="ac-btn ac-btn-soft ac-btn-soft-danger px-3 py-2 text-xs"
                   disabled={loading}
                   onClick={async () => {
                     if (!window.confirm(t('confirmClearAllGeneratedEpc'))) return;
@@ -710,337 +1534,271 @@ export default function AdminEpc() {
                   {t('generate')}
                 </button>
               ) : null}
-            </div>
-          </div>
-
-          <div className="p-4">
-            <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_180px_180px_240px_240px_auto]">
-              <div className="flex flex-col gap-1">
-                <label htmlFor="searchEpcCode" className="text-[11px] text-zinc-500">
-                  {t('searchEpcCode')}
-                </label>
-                <input
-                  id="searchEpcCode"
-                  value={listQuery}
-                  onChange={(e) => {
-                    setListQuery(e.target.value);
-                    setListOffset(0);
-                  }}
-                  placeholder={t('searchEpc')}
-                  className="ac-input"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="batchId" className="text-[11px] text-zinc-500">
-                  {t('batchId')}
-                </label>
-                <input
-                  id="batchId"
-                  value={listBatchId}
-                  onChange={(e) => {
-                    setListBatchId(e.target.value);
-                    setListOffset(0);
-                  }}
-                  placeholder={t('batchId')}
-                  className="ac-input"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="epcStatus" className="text-[11px] text-zinc-500">
-                  {t('status')}
-                </label>
-                <select
-                  id="epcStatus"
-                  value={listStatus}
-                  onChange={(e) => {
-                    setListStatus(e.target.value);
-                    setListOffset(0);
-                  }}
-                  className="ac-input"
-                >
-                  <option value="">{t('allStatuses')}</option>
-                  <option value="ACTIVE">{t('active')}</option>
-                  <option value="INACTIVE">{t('inactive')}</option>
-                </select>
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="createdFrom" className="text-[11px] text-zinc-500">
-                  {t('createdFrom')}
-                </label>
-                <input
-                  id="createdFrom"
-                  type="datetime-local"
-                  value={createdFrom}
-                  onChange={(e) => {
-                    setCreatedFrom(e.target.value);
-                    setListOffset(0);
-                  }}
-                  className="ac-input"
-                  placeholder={t('createdFrom')}
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="createdTo" className="text-[11px] text-zinc-500">
-                  {t('createdTo')}
-                </label>
-                <input
-                  id="createdTo"
-                  type="datetime-local"
-                  value={createdTo}
-                  onChange={(e) => {
-                    setCreatedTo(e.target.value);
-                    setListOffset(0);
-                  }}
-                  className="ac-input"
-                  placeholder={t('createdTo')}
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <div aria-hidden className="select-none text-[11px] text-transparent">
-                  .
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50/70 p-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-12">
+                <div className="flex flex-col gap-1 xl:col-span-7">
+                  <label htmlFor="searchEpcCode" className="text-[11px] font-medium text-slate-500">
+                    {t('searchEpcCode')}
+                  </label>
+                  <input
+                    id="searchEpcCode"
+                    value={listQuery}
+                    onChange={(e) => {
+                      setListQuery(e.target.value);
+                      setListOffset(0);
+                    }}
+                    placeholder={t('searchEpc')}
+                    className="ac-input"
+                  />
                 </div>
-                <button
-                  type="button"
-                  className="ac-btn ac-btn-soft px-4 py-3 text-sm"
-                  onClick={() =>
-                    fetchItems({
-                      q: listQuery,
-                      status: listStatus || undefined,
-                      createdFrom: createdFrom || undefined,
-                      createdTo: createdTo || undefined,
-                      batchId: String(listBatchId || '').trim() || undefined,
-                      limit: listLimit,
-                      offset: 0
-                    })
-                  }
-                >
-                  {t('inquire')}
-                </button>
+                <div className="flex flex-col gap-1 xl:col-span-3">
+                  <label htmlFor="batchId" className="text-[11px] font-medium text-slate-500">
+                    {t('batchId')}
+                  </label>
+                  <input
+                    id="batchId"
+                    value={listBatchId}
+                    onChange={(e) => {
+                      setListBatchId(e.target.value);
+                      setListOffset(0);
+                    }}
+                    placeholder={t('batchId')}
+                    className="ac-input"
+                  />
+                </div>
+                <div className="flex flex-col gap-1 xl:col-span-2">
+                  <label htmlFor="epcStatus" className="text-[11px] font-medium text-slate-500">
+                    {t('status')}
+                  </label>
+                  <select
+                    id="epcStatus"
+                    value={listStatus}
+                    onChange={(e) => {
+                      setListStatus(e.target.value);
+                      setListOffset(0);
+                    }}
+                    className="ac-input bg-white"
+                  >
+                    <option value="">{t('allStatuses')}</option>
+                    <option value="ACTIVE">{t('active')}</option>
+                    <option value="INACTIVE">{t('inactive')}</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1 xl:col-span-4">
+                  <label htmlFor="createdFrom" className="text-[11px] font-medium text-slate-500">
+                    {t('createdFrom')}
+                  </label>
+                  <input
+                    id="createdFrom"
+                    type="datetime-local"
+                    value={createdFrom}
+                    onChange={(e) => {
+                      setCreatedFrom(e.target.value);
+                      setListOffset(0);
+                    }}
+                    className="ac-input"
+                    placeholder={t('createdFrom')}
+                  />
+                </div>
+                <div className="flex flex-col gap-1 xl:col-span-4">
+                  <label htmlFor="createdTo" className="text-[11px] font-medium text-slate-500">
+                    {t('createdTo')}
+                  </label>
+                  <input
+                    id="createdTo"
+                    type="datetime-local"
+                    value={createdTo}
+                    onChange={(e) => {
+                      setCreatedTo(e.target.value);
+                      setListOffset(0);
+                    }}
+                    className="ac-input"
+                    placeholder={t('createdTo')}
+                  />
+                </div>
+                <div className="flex flex-col gap-1 md:col-span-2 xl:col-span-4">
+                  <div aria-hidden className="select-none text-[11px] text-transparent">
+                    .
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                    <button
+                      type="button"
+                      className="ac-btn ac-btn-soft px-4 py-3 text-sm"
+                      onClick={() =>
+                        fetchItems({
+                          q: listQuery,
+                          status: listStatus || undefined,
+                          createdFrom: createdFrom || undefined,
+                          createdTo: createdTo || undefined,
+                          batchId: String(listBatchId || '').trim() || undefined,
+                          limit: listLimit,
+                          offset: 0
+                        })
+                      }
+                    >
+                      {t('inquire')}
+                    </button>
+                    <button
+                      type="button"
+                      className="ac-btn ac-btn-soft px-4 py-3 text-sm"
+                      onClick={() => {
+                        setListQuery('');
+                        setListBatchId('');
+                        setListStatus('');
+                        setCreatedFrom('');
+                        setCreatedTo('');
+                        setListOffset(0);
+                      }}
+                    >
+                      {t('clearFilters')}
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-
-            <div className="mb-2 text-[11px] text-zinc-500">
-              {t('total', { value: Number(itemTotal) || 0 })}{' '}
-              <span className="text-zinc-400">
-                • Page {Math.floor(listOffset / listLimit) + 1} / {Math.max(1, Math.ceil((Number(itemTotal) || 0) / listLimit))}
-              </span>
             </div>
 
             <DataTable
+              sortState={itemSort}
+              onSortChange={setItemSort}
               density="compact"
               minWidth={980}
-              rows={Array.isArray(items) ? items : []}
+              rows={sortedItems}
               rowKey={(it) => it.id}
               loading={loading}
-              emptyContent={t('noEpc')}
-              columns={[
-                {
-                  id: 'select',
-                  header: (
-                    <input
-                      type="checkbox"
-                      checked={allPageSelected}
-                      onChange={() => {
-                        setSelectedItemIds((prev) => {
-                          const next = new Set(prev);
-                          if (allPageSelected) pageItemIds.forEach((id) => next.delete(id));
-                          else pageItemIds.forEach((id) => next.add(id));
-                          return next;
-                        });
-                      }}
-                    />
-                  ),
-                  cell: (it) => {
-                    const id = Number(it?.id);
-                    const checked = Number.isFinite(id) && selectedItemIds.has(id);
-                    return (
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => {
-                          if (!Number.isFinite(id)) return;
-                          setSelectedItemIds((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(id)) next.delete(id);
-                            else next.add(id);
-                            return next;
-                          });
-                        }}
-                      />
-                    );
-                  }
-                },
-                {
-                  id: 'epcCode',
-                  header: t('epcCode'),
-                  cell: (it) => (
-                    <button
-                      type="button"
-                      className="font-mono text-[11px] text-brand-700 underline decoration-brand-300 underline-offset-2 hover:text-brand-800"
-                      onClick={() => {
-                        setDetailItem(it || null);
-                        setDetailOpen(true);
-                      }}
-                    >
-                      {String(it.epcCode || '')}
-                    </button>
-                  )
-                },
-                {
-                  id: 'status',
-                  header: t('status'),
-                  cell: (it) => {
-                    const s = String(it?.status || '').toUpperCase();
-                    const active = s === 'ACTIVE';
-                    return (
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                          active ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200' : 'bg-zinc-50 text-zinc-700 ring-1 ring-inset ring-zinc-200'
-                        }`}
-                      >
-                        {active ? t('active') : t('inactive')}
-                      </span>
-                    );
-                  }
-                },
-                { id: 'createdAt', header: t('createdAt'), cell: (it) => <span className="whitespace-nowrap text-zinc-700">{formatDateTime(it.createdAt)}</span> },
-                { id: 'remark', header: t('remark'), cell: (it) => <span className="text-zinc-800">{it?.batch?.remark ? String(it.batch.remark) : '-'}</span> },
-                {
-                  id: 'actions',
-                  header: t('actions'),
-                  align: 'right',
-                  cell: (it) => (
-                    <RowActionsMenu
-                      ariaLabel={t('actions')}
-                      items={[
-                        {
-                          key: 'view',
-                          label: t('view'),
-                          onSelect: () => {
-                            setDetailItem(it || null);
-                            setDetailOpen(true);
-                          }
-                        },
-                        {
-                          key: 'landing',
-                          label: 'Reassign Landing Page',
-                          onSelect: () => openLandingFromItem(it)
-                        }
-                      ]}
-                    />
-                  ),
-                  headerClassName: 'pr-3',
-                  className: 'pr-3'
-                }
-              ]}
+              loadingContent={t('loading')}
+              emptyContent={
+                <div>
+                  <div className="text-sm font-semibold text-slate-900">{t('noEpc')}</div>
+                  <div className="mt-1 text-sm text-slate-600">{t('guideStepBatchesBody')}</div>
+                </div>
+              }
+              top={
+                <div className="space-y-3">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">{t('epcItems')}</div>
+                  </div>
+                  {selectedItemIds.size > 0 ? (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-slate-200 bg-slate-50/80 px-4 py-3">
+                      <div className="text-sm font-semibold text-slate-900">{t('selectedProducts', { value: selectedItemIds.size })}</div>
+                      <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-sm" onClick={() => setSelectedItemIds(new Set())}>
+                        {t('clearSelection')}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              }
+              bottom={
+                <TablePager
+                  offset={listOffset}
+                  limit={listLimit}
+                  total={Number(itemTotal) || 0}
+                  loading={loading}
+                  onOffsetChange={(next) => setListOffset(next)}
+                  onLimitChange={(next) => {
+                    setListLimit(next);
+                    setListOffset(0);
+                  }}
+                />
+              }
+              columns={itemColumns}
+              columnTools={{
+                enabled: true,
+                storageKey: scopedColumnKey('ac_epc_items_v3'),
+                initialPinnedIds: ['select', 'epcCode'],
+                defaultColumnWidth: 110
+              }}
             />
-
-            <div className="mt-3">
-              <TablePager
-                offset={listOffset}
-                limit={listLimit}
-                total={Number(itemTotal) || 0}
-                loading={loading}
-                onOffsetChange={(next) => setListOffset(next)}
-                onLimitChange={(next) => {
-                  setListLimit(next);
-                  setListOffset(0);
-                }}
-              />
-            </div>
           </div>
-        </div>
+        </SectionShell>
       ) : null}
 
       {detailOpen && detailItem ? (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
+          className="ac-overlay-center"
           role="dialog"
           aria-modal="true"
           onClick={closeDetail}
         >
           <div
-            className="w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+            className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-2xl overflow-y-auto rounded-[24px] border border-slate-200 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.18)]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
               <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-zinc-900">{t('epcDetails')}</div>
-                <div className="mt-1 truncate font-mono text-[11px] text-zinc-600">{String(detailItem.epcCode || '')}</div>
+                <div className="text-lg font-semibold tracking-tight text-slate-950">{t('epcDetails')}</div>
+                <div className="mt-1 truncate font-mono text-sm text-slate-600">{String(detailItem.epcCode || '')}</div>
               </div>
-              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={closeDetail}>
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-sm" onClick={closeDetail}>
                 {t('close')}
               </button>
             </div>
-            <div className="p-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <div className="text-[11px] font-semibold text-zinc-600">{t('epcCode')}</div>
-                  <div className="mt-1 font-mono text-xs text-zinc-900">{String(detailItem.epcCode || '-')}</div>
-                </div>
-                <div>
-                  <div className="text-[11px] font-semibold text-zinc-600">{t('barcode')}</div>
-                  <div className="mt-1 text-xs text-zinc-900">{detailItem.barcode ? String(detailItem.barcode) : '-'}</div>
-                </div>
-                <div>
-                  <div className="text-[11px] font-semibold text-zinc-600">{t('individualLabelCaiq')}</div>
-                  <div className="mt-1 text-xs text-zinc-900">{detailItem.caiqNumber ? String(detailItem.caiqNumber) : '-'}</div>
-                </div>
-                <div>
-                  <div className="text-[11px] font-semibold text-zinc-600">{t('netWeight')}</div>
-                  <div className="mt-1 text-xs text-zinc-900">{formatNetWeight(detailItem.netWeight)}</div>
-                </div>
-                <div>
-                  <div className="text-[11px] font-semibold text-zinc-600">{t('manufactureDate')}</div>
-                  <div className="mt-1 text-xs text-zinc-900">
-                    {detailItem.productionDate ? new Date(detailItem.productionDate).toISOString().slice(0, 10) : '-'}
+            <div className="space-y-5 px-6 py-5">
+              <div className="rounded-[20px] border border-slate-200 bg-slate-50/80 p-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="sm:col-span-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{t('epcCode')}</div>
+                    <div className="mt-2 break-all font-mono text-sm text-slate-900">{String(detailItem.epcCode || '-')}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{t('status')}</div>
+                    <div className="mt-2">
+                      {(() => {
+                        const isActive = String(detailItem?.status || '').toUpperCase() === 'ACTIVE';
+                        return (
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                              isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-700'
+                            }`}
+                          >
+                            {isActive ? t('active') : t('inactive')}
+                          </span>
+                        );
+                      })()}
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <div className="text-[11px] font-semibold text-zinc-600">{t('batchNumber')}</div>
-                  <div className="mt-1 text-xs text-zinc-900">{detailItem.batchNumber ? String(detailItem.batchNumber) : '-'}</div>
-                </div>
-                <div>
-                  <div className="text-[11px] font-semibold text-zinc-600">{t('product')}</div>
-                  <div className="mt-1 text-xs text-zinc-900">{detailItem?.batch?.product?.name ? String(detailItem.batch.product.name) : '-'}</div>
-                </div>
-                <div>
-                  <div className="text-[11px] font-semibold text-zinc-600">{t('certTemplate')}</div>
-                  <div className="mt-1 text-xs text-zinc-900">{resolveBatchAuthCertificate(detailItem?.batch)}</div>
-                </div>
-                <div className="sm:col-span-2">
-                  <div className="text-[11px] font-semibold text-zinc-600">Linked Certificate</div>
-                  <div className="mt-1 text-xs text-zinc-900 font-mono break-all">
-                    {resolveEpcCertificateId(detailItem) || '(not linked yet)'}
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="rounded-[18px] border border-slate-200 bg-white p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{t('product')}</div>
+                  <div className="mt-2 text-sm font-medium text-slate-900">
+                    {detailItem?.batch?.product?.name ? String(detailItem.batch.product.name) : '-'}
                   </div>
                 </div>
-                <div>
-                  <div className="text-[11px] font-semibold text-zinc-600">{t('remark')}</div>
-                  <div className="mt-1 text-xs text-zinc-900">{detailItem?.batch?.remark ? String(detailItem.batch.remark) : '-'}</div>
+                <div className="rounded-[18px] border border-slate-200 bg-white p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{t('certTemplate')}</div>
+                  <div className="mt-2 text-sm font-medium text-slate-900">{resolveBatchAuthCertificate(detailItem?.batch)}</div>
                 </div>
-                <div>
-                  <div className="text-[11px] font-semibold text-zinc-600">{t('swiftletHouseNumber')}</div>
-                  <div className="mt-1 text-xs text-zinc-900">
-                    {detailItem.swiftletHouseNumber ? String(detailItem.swiftletHouseNumber) : '-'}
-                  </div>
+                <div className="rounded-[18px] border border-slate-200 bg-white p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Linked Certificate</div>
+                  <div className="mt-2 break-all font-mono text-sm text-slate-900">{resolveEpcCertificateId(detailItem) || '(not linked yet)'}</div>
                 </div>
-                <div>
-                  <div className="text-[11px] font-semibold text-zinc-600">{t('createdAt')}</div>
-                  <div className="mt-1 text-xs text-zinc-900">{formatDateTime(detailItem.createdAt) || '-'}</div>
+                <div className="rounded-[18px] border border-slate-200 bg-white p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{t('createdAt')}</div>
+                  <div className="mt-2 text-sm text-slate-900">{formatDateTime(detailItem.createdAt) || '-'}</div>
+                </div>
+                <div className="rounded-[18px] border border-slate-200 bg-white p-4 sm:col-span-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{t('remark')}</div>
+                  <div className="mt-2 text-sm text-slate-900">{detailItem?.batch?.remark ? String(detailItem.batch.remark) : '-'}</div>
                 </div>
               </div>
             </div>
-            <div className="flex flex-wrap justify-between gap-2 border-t border-zinc-200 bg-zinc-50 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
               <button
                 type="button"
-                className="ac-btn px-3 py-2 text-xs"
+                className="ac-btn px-4 py-2 text-sm"
                 onClick={() => openLandingFromItem(detailItem)}
                 disabled={!resolveEpcCertificateId(detailItem)}
                 title={!resolveEpcCertificateId(detailItem) ? 'EPC belum dikaitkan dengan Certificate Identity' : ''}
               >
                 Reassign Landing Page
               </button>
-              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={closeDetail}>
+              <button type="button" className="ac-btn ac-btn-soft px-4 py-2 text-sm" onClick={closeDetail}>
                 {t('close')}
               </button>
             </div>
@@ -1050,13 +1808,13 @@ export default function AdminEpc() {
 
       {lpOpen ? (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
+          className="ac-overlay-center"
           role="dialog"
           aria-modal="true"
           onClick={() => setLpOpen(false)}
         >
           <div
-            className="w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+            className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-y-auto rounded-xl border border-zinc-200 bg-white shadow-sm"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
@@ -1162,13 +1920,13 @@ export default function AdminEpc() {
 
       {exportItemColsOpen ? (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
+          className="ac-overlay-center"
           role="dialog"
           aria-modal="true"
           onClick={closeExportItemCols}
         >
           <div
-            className="w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+            className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-y-auto rounded-xl border border-zinc-200 bg-white shadow-sm"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
@@ -1249,13 +2007,13 @@ export default function AdminEpc() {
 
       {exportColsOpen && exportColsBatch ? (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
+          className="ac-overlay-center"
           role="dialog"
           aria-modal="true"
           onClick={closeExportCols}
         >
           <div
-            className="w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+            className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-y-auto rounded-xl border border-zinc-200 bg-white shadow-sm"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
@@ -1336,10 +2094,12 @@ export default function AdminEpc() {
       ) : null}
 
       {tab === 'import' && canBatchImport ? (
-        <div className="rounded-xl border border-zinc-200 bg-white">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 px-4 py-3">
-            <div className="text-xs font-semibold text-zinc-600">{t('batchImport')}</div>
-            <div className="flex flex-wrap items-center gap-2">
+        <SectionShell
+          badge={t('epcAssignment')}
+          title={t('epcAssignment')}
+          hint={t('batchImportExistingEpcHint')}
+          action={
+            <>
               <button
                 type="button"
                 className="ac-btn ac-btn-soft px-3 py-2 text-xs"
@@ -1352,13 +2112,16 @@ export default function AdminEpc() {
               >
                 {t('refresh')}
               </button>
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" disabled={loading} onClick={openRange}>
+                {t('activateEpcRange')}
+              </button>
               <button type="button" className="ac-btn ac-btn-primary px-3 py-2 text-xs" disabled={loading} onClick={() => openImport(null)}>
                 {t('importBatchFile')}
               </button>
-            </div>
-          </div>
-          <div className="px-4 py-6 text-sm text-zinc-700">
-            {t('batchImportExistingEpcHint')}
+            </>
+          }
+        >
+          <div className="text-sm text-zinc-700">
             {importLastResult ? (
               <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
                 <div className="font-semibold">{t('save')} OK</div>
@@ -1366,6 +2129,11 @@ export default function AdminEpc() {
                   {t('rowsLabel')}: {String(importLastResult?.rows ?? 0)} • {t('uniqueEpcLabel')}: {String(importLastResult?.uniqueEpcs ?? 0)} • Updated:{' '}
                   {String(importLastResult?.updated ?? 0)}
                 </div>
+                {Number(importLastResult?.activated) > 0 || Number(importLastResult?.created) > 0 ? (
+                  <div className="mt-1">
+                    Activated: {String(importLastResult?.activated ?? 0)} • Created identities: {String(importLastResult?.created ?? 0)}
+                  </div>
+                ) : null}
                 {Array.isArray(importLastResult?.batchIds) && importLastResult.batchIds.length > 0 ? (
                   <div className="mt-1">
                     {t('batchId')}: {importLastResult.batchIds.map((id) => String(id)).join(', ')}
@@ -1375,77 +2143,55 @@ export default function AdminEpc() {
             ) : null}
 
             <div className="mt-6">
-              <div className="mb-2 text-xs font-semibold text-zinc-800">{t('importHistory')}</div>
-              <div className="mb-2 text-[11px] text-zinc-500">{t('total', { value: Number(importHistoryTotal) || 0 })}</div>
               <DataTable
+                sortState={importHistorySort}
+                onSortChange={setImportHistorySort}
                 density="compact"
                 minWidth={760}
-                rows={Array.isArray(importHistory) ? importHistory : []}
+                rows={sortedImportHistory}
                 rowKey={(r) => r.id}
                 loading={loading}
-                emptyContent={t('noImportHistory')}
-                columns={[
-                  { id: 'time', header: t('time'), cell: (r) => <span className="whitespace-nowrap text-zinc-700">{formatDateTime(r?.createdAt)}</span> },
-                  {
-                    id: 'product',
-                    header: t('product'),
-                    cell: (r) => (
-                      <span className="text-zinc-800">{String(r?.summary?.productName || r?.summary?.productId || '-')}</span>
-                    )
-                  },
-                  {
-                    id: 'certTemplate',
-                    header: t('certTemplate'),
-                    cell: (r) => <span className="text-zinc-800">{String(r?.summary?.certificateTemplateName || r?.summary?.certificateTemplateId || '-')}</span>
-                  },
-                  {
-                    id: 'qtyEpc',
-                    header: t('qtyEpc'),
-                    cell: (r) => (
-                      <span className="font-mono text-[11px] text-zinc-800">{String(r?.summary?.uniqueEpcs ?? r?.summary?.rows ?? '-')}</span>
-                    )
-                  },
-                  {
-                    id: 'action',
-                    header: '',
-                    cell: (r) => (
-                      <button
-                        type="button"
-                        className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                        onClick={async () => {
-                          const detail = await getBatchImportHistory(r.id);
-                          setImportHistoryDetail(detail);
-                          setImportHistoryOpen(true);
-                        }}
-                      >
-                        {t('view')}
-                      </button>
-                    )
-                  }
-                ]}
+                loadingContent={t('loading')}
+                emptyContent={
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">{t('noImportHistory')}</div>
+                    <div className="mt-1 text-sm text-slate-600">{t('batchImportExistingEpcHint')}</div>
+                  </div>
+                }
+                top={
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">{t('importHistory')}</div>
+                  </div>
+                }
+                bottom={
+                  <TablePager
+                    offset={importHistoryOffset}
+                    limit={importHistoryLimit}
+                    total={Number(importHistoryTotal) || 0}
+                    loading={loading}
+                    onOffsetChange={(next) => setImportHistoryOffset(next)}
+                    onLimitChange={(next) => {
+                      setImportHistoryLimit(next);
+                      setImportHistoryOffset(0);
+                    }}
+                  />
+                }
+                columns={importHistoryColumns}
+                columnTools={{
+                  enabled: true,
+                  storageKey: scopedColumnKey('ac_epc_import_history_v3'),
+                  initialPinnedIds: ['time'],
+                  defaultColumnWidth: 112
+                }}
               />
-
-              <div className="mt-3">
-                <TablePager
-                  offset={importHistoryOffset}
-                  limit={importHistoryLimit}
-                  total={Number(importHistoryTotal) || 0}
-                  loading={loading}
-                  onOffsetChange={(next) => setImportHistoryOffset(next)}
-                  onLimitChange={(next) => {
-                    setImportHistoryLimit(next);
-                    setImportHistoryOffset(0);
-                  }}
-                />
-              </div>
             </div>
           </div>
-        </div>
+        </SectionShell>
       ) : null}
 
       {importHistoryOpen && importHistoryDetail ? (
         <div className="ac-modal-backdrop">
-          <div className="ac-modal flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden">
+          <div className="ac-modal my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-[84rem] flex-col overflow-hidden">
             <div className="mb-3 text-sm font-semibold text-zinc-900">{t('importDetails')}</div>
             <div className="mb-3 grid grid-cols-1 gap-2 text-xs text-zinc-700 sm:grid-cols-2">
               <div>
@@ -1460,25 +2206,22 @@ export default function AdminEpc() {
 
             <div className="min-h-0 flex-1 overflow-auto">
               <DataTable
+                sortState={importHistoryDetailSort}
+                onSortChange={setImportHistoryDetailSort}
                 density="compact"
-                minWidth={980}
-                rows={Array.isArray(importHistoryDetail?.metadata?.items) ? importHistoryDetail.metadata.items : []}
+                minWidth={640}
+                rows={sortedImportHistoryDetailRows}
                 rowKey={(r) => String(r?.epcCode || '')}
                 loading={loading}
+                loadingContent={t('loading')}
                 emptyContent={t('noEpc')}
-                columns={[
-                  { id: 'epc', header: t('epcCode'), cell: (r) => <span className="font-mono text-[11px] text-zinc-800">{String(r?.epcCode || '')}</span> },
-                  { id: 'barcode', header: t('barcode'), cell: (r) => <span className="text-zinc-800">{r?.barcode ? String(r.barcode) : '-'}</span> },
-                  { id: 'batchNumber', header: t('batchNumber'), cell: (r) => <span className="text-zinc-800">{r?.batchNumber ? String(r.batchNumber) : '-'}</span> },
-                  { id: 'swiftlet', header: t('swiftletHouseNumber'), cell: (r) => <span className="text-zinc-800">{r?.swiftletHouseNumber ? String(r.swiftletHouseNumber) : '-'}</span> },
-                  { id: 'netWeight', header: t('netWeight'), cell: (r) => <span className="text-zinc-800">{formatNetWeight(r?.netWeight)}</span> },
-                  {
-                    id: 'productionDate',
-                    header: t('manufactureDate'),
-                    cell: (r) => <span className="text-zinc-800">{r?.productionDate ? String(r.productionDate).slice(0, 10) : '-'}</span>
-                  },
-                  { id: 'caiq', header: t('individualLabelCaiq'), cell: (r) => <span className="text-zinc-800">{r?.caiqNumber ? String(r.caiqNumber) : '-'}</span> }
-                ]}
+                columns={importHistoryDetailColumns}
+                columnTools={{
+                  enabled: true,
+                  storageKey: scopedColumnKey('ac_epc_import_history_detail_v4'),
+                  initialPinnedIds: ['epc'],
+                  defaultColumnWidth: 112
+                }}
               />
             </div>
 
@@ -1500,7 +2243,7 @@ export default function AdminEpc() {
 
       {bulkLandingOpen ? (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
+          className="ac-overlay-center"
           role="dialog"
           aria-modal="true"
           onClick={() => {
@@ -1508,7 +2251,7 @@ export default function AdminEpc() {
           }}
         >
           <div
-            className="w-full max-w-md overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+            className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-xl border border-zinc-200 bg-white shadow-sm"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
@@ -1611,13 +2354,13 @@ export default function AdminEpc() {
 
       {activateCertConfirmOpen && activateCertConfirmMeta ? (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
+          className="ac-overlay-center"
           role="dialog"
           aria-modal="true"
           onClick={() => setActivateCertConfirmOpen(false)}
         >
           <div
-            className="w-full max-w-lg overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+            className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200 bg-white shadow-sm"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
@@ -1698,13 +2441,13 @@ export default function AdminEpc() {
 
       {viewBatchOpen && viewBatch ? (
         <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 sm:items-center"
+          className="ac-overlay-center"
           role="dialog"
           aria-modal="true"
           onClick={closeViewBatch}
         >
           <div
-            className="w-full max-w-3xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+            className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-3xl overflow-y-auto rounded-xl border border-zinc-200 bg-white shadow-sm"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
@@ -1950,7 +2693,7 @@ export default function AdminEpc() {
                           {canEditBatchDocs && url && !isDefault ? (
                             <button
                               type="button"
-                              className="ac-btn ac-btn-soft shrink-0 px-2 py-2 text-xs text-red-700"
+                              className="ac-btn ac-btn-soft ac-btn-soft-danger shrink-0 px-2 py-2 text-xs"
                               title="Remove custom certificate"
                               onClick={async () => {
                                 if (!window.confirm(`Remove "${docKey}"?`)) return;
@@ -2031,80 +2774,577 @@ export default function AdminEpc() {
       ) : null}
 
       {tab === 'production' && canProduction ? (
-        <div className="rounded-xl border border-zinc-200 bg-white">
-          <div className="border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-600">{t('productionOrders')}</div>
-          <div className="divide-y divide-zinc-100">
-            {(Array.isArray(batches) ? batches : []).map((b) => {
-              const done = Boolean(b.productionDoneAt);
-              const uploaded = Boolean(b.productionUploadedAt);
-              return (
-                <div key={b.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-zinc-900">
-                      {b.batchName}
-                    </div>
-                    <div className="mt-1 text-[11px] text-zinc-500">
-                      {uploaded ? t('uploadedAt', { value: formatDateTime(b.productionUploadedAt) }) : t('notUploaded')} •{' '}
-                      {done ? t('doneAt', { value: formatDateTime(b.productionDoneAt) }) : t('notDone')}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    {canExportXlsx ? (
-                      <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openExportCols(b)}>
-                        {t('exportXlsx')}
-                      </button>
-                    ) : null}
-                    {canEncoding ? (
-                      <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => exportBatchVerifyUrlXlsx(b.id)}>
-                        {t('exportVerifyUrlXlsx')}
-                      </button>
-                    ) : null}
-                    <label className="ac-btn ac-btn-soft px-3 py-2 text-xs">
-                      {t('importXlsx')}
-                      <input
-                        type="file"
-                        accept=".xlsx"
-                        className="hidden"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          const base64 = await toBase64(file);
-                          const res = await importProductionXlsx({ batchId: b.id, base64 });
-                          await fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
-                          const rows = Number(res?.rows || 0);
-                          setActivateCertConfirmMeta({
-                            source: 'productionImport',
-                            batchId: Number(b?.id) > 0 ? Number(b.id) : null,
-                            description: rows > 0 ? `Import completed — ${rows} EPC row(s) berjaya dikemaskini dengan Manufacture Date.` : 'Import completed.'
-                          });
-                          setActivateCertConfirmOpen(true);
-                          e.target.value = '';
-                        }}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="ac-btn ac-btn-primary px-3 py-2 text-xs"
-                      disabled={loading || done}
-                      onClick={async () => {
-                        await markProductionDone({ batchId: b.id });
-                        await fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
-                      }}
-                    >
-                      {t('markDone')}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-            {(!batches || batches.length === 0) && !loading ? <div className="px-4 py-6 text-xs text-zinc-500">{t('noBatches')}</div> : null}
-          </div>
-        </div>
+        <SectionShell
+          badge={t('labelProductionRecord')}
+          title={t('labelProductionRecord')}
+          hint={`${t('exportXlsx')} • ${t('importXlsx')} • ${t('markDone')}`}
+        >
+          <DataTable
+            sortState={productionSort}
+            onSortChange={setProductionSort}
+            density="compact"
+            minWidth={1180}
+            rows={sortedProductionRows}
+            rowKey={(b) => b.id}
+            loading={loading}
+            loadingContent={t('loading')}
+            emptyContent={
+              <div>
+                <div className="text-sm font-semibold text-slate-900">{t('noBatches')}</div>
+                <div className="mt-1 text-sm text-slate-600">{`${t('exportXlsx')} • ${t('importXlsx')} • ${t('markDone')}`}</div>
+              </div>
+            }
+            top={
+              <div>
+                <div className="text-sm font-semibold text-slate-900">{t('labelProductionRecord')}</div>
+              </div>
+            }
+            columns={productionColumns}
+            columnTools={{
+              enabled: true,
+              storageKey: scopedColumnKey('ac_epc_production_v3'),
+              initialPinnedIds: ['batchName'],
+              defaultColumnWidth: 116
+            }}
+          />
+        </SectionShell>
       ) : null}
 
       {tab === 'production' && canProduction && canBatchCreate ? (
         null
+      ) : null}
+
+      {rangeOpen ? (
+        <div className="ac-modal-backdrop">
+          <div className="ac-modal my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-[72rem] flex-col overflow-hidden">
+            <div className="mb-3 text-sm font-semibold text-zinc-900">{t('activateEpcRange')}</div>
+
+            {rangeLocalError ? <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{rangeLocalError}</div> : null}
+
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+              <div className="rounded-[22px] border border-slate-200 bg-slate-50/70 p-4">
+                <div className="mb-3 text-xs text-slate-600">{t('activateEpcRangeHint')}</div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[180px_180px_180px_180px_minmax(0,1fr)]">
+                  <div>
+                    <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('corpCode')}</div>
+                    {Array.isArray(corpCodes) && corpCodes.length > 0 ? (
+                      <select
+                        value={String(rangeCorpCode || corpCodes[0] || '')}
+                        onChange={(e) => {
+                          setRangeCorpCode(String(e.target.value || '').trim().toUpperCase());
+                          setRangePreview(null);
+                          setRangeSelectedEpcs(new Set());
+                          setRangeLocalError('');
+                        }}
+                        className="ac-input"
+                      >
+                        {corpCodes.map((code) => (
+                          <option key={String(code)} value={String(code)}>
+                            {String(code)}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        value={String(rangeCorpCode || '').toUpperCase()}
+                        onChange={(e) => {
+                          setRangeCorpCode(String(e.target.value || '').toUpperCase());
+                          setRangePreview(null);
+                          setRangeSelectedEpcs(new Set());
+                          setRangeLocalError('');
+                        }}
+                        className="ac-input font-mono uppercase"
+                        placeholder="DA01"
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('date')}</div>
+                    <input
+                      type="date"
+                      value={rangeDate}
+                      onChange={(e) => {
+                        setRangeDate(String(e.target.value || '').trim());
+                        setRangePreview(null);
+                        setRangeSelectedEpcs(new Set());
+                        setRangeLocalError('');
+                      }}
+                      className="ac-input"
+                    />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('startRunningNo')}</div>
+                    <input
+                      value={rangeStartRunningNo}
+                      onChange={(e) => {
+                        setRangeStartRunningNo(normalizeRangeRunningInput(e.target.value));
+                        setRangePreview(null);
+                        setRangeSelectedEpcs(new Set());
+                        setRangeLocalError('');
+                      }}
+                      className="ac-input font-mono"
+                      inputMode="numeric"
+                      placeholder="1"
+                    />
+                    <div className="mt-1 text-[11px] text-slate-500">{rangeStartRunningNo ? t('runningNoPreview', { value: paddedRangeStartRunningNo }) : '\u00A0'}</div>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('endRunningNo')}</div>
+                    <input
+                      value={rangeEndRunningNo}
+                      onChange={(e) => {
+                        setRangeEndRunningNo(normalizeRangeRunningInput(e.target.value));
+                        setRangePreview(null);
+                        setRangeSelectedEpcs(new Set());
+                        setRangeLocalError('');
+                      }}
+                      className="ac-input font-mono"
+                      inputMode="numeric"
+                      placeholder="100"
+                    />
+                    <div className="mt-1 text-[11px] text-slate-500">{rangeEndRunningNo ? t('runningNoPreview', { value: paddedRangeEndRunningNo }) : '\u00A0'}</div>
+                  </div>
+                  <div className="flex flex-col justify-end">
+                    <button
+                      type="button"
+                      className="ac-btn ac-btn-soft px-4 py-3 text-sm"
+                      disabled={loading}
+                      onClick={async () => {
+                        try {
+                          setRangeLocalError('');
+                          const preview = await previewBatchImportRange({
+                            corpCode: rangeCorpCode,
+                            date: rangeDate,
+                            startRunningNo: rangeStartRunningNo,
+                            endRunningNo: rangeEndRunningNo,
+                            certificateTemplateId: String(rangeAuthTemplateId || '').trim() || undefined
+                          });
+                          setRangePreview(preview);
+                          const defaultSelected = new Set(
+                            (Array.isArray(preview?.items) ? preview.items : [])
+                              .filter((row) => row?.defaultSelected)
+                              .map((row) => String(row?.epcCode || '').trim())
+                              .filter(Boolean)
+                          );
+                          setRangeSelectedEpcs(defaultSelected);
+                        } catch (err) {
+                          setRangePreview(null);
+                          setRangeSelectedEpcs(new Set());
+                          setRangeLocalError(err?.response?.data?.message || err?.message || tRaw('operationFailed'));
+                        }
+                      }}
+                    >
+                      {t('previewRange')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+                <div className="space-y-4">
+                  <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+                    <div className="mb-3 text-sm font-semibold text-slate-900">{t('batchInformation')}</div>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('product')}</div>
+                        <select value={rangeProductId} onChange={(e) => setRangeProductId(e.target.value)} className="ac-input">
+                          <option value="">{t('select')}</option>
+                          {(Array.isArray(products) ? products : []).map((p) => (
+                            <option key={p.id} value={String(p.id)}>
+                              {String(p?.sku || p?.code || '').trim()
+                                ? `${String(p.sku || p.code).trim()} — ${String(p?.name || '').trim() || '-'}`
+                                : String(p?.name || '').trim() || '-'}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('authCertificate')}</div>
+                        <select
+                          value={rangeAuthTemplateId}
+                          onChange={(e) => {
+                            setRangeAuthTemplateId(e.target.value);
+                            setRangePreview(null);
+                            setRangeSelectedEpcs(new Set());
+                          }}
+                          className="ac-input"
+                        >
+                          <option value="">{t('select')}</option>
+                          {authTemplates.map((tpl) => (
+                            <option key={tpl.id} value={String(tpl.id)}>
+                              {String(tpl?.certificateId || '').trim() ? `${tpl.certificateId} — ${tpl.name}` : tpl.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('landingPageDesign')}</div>
+                        <select
+                          value={rangeCmsDesignId}
+                          onChange={(e) => setRangeCmsDesignId(e.target.value)}
+                          className="ac-input"
+                          disabled={cmsDesignsLoading}
+                        >
+                          <option value="">{t('useProductLandingDesign')}</option>
+                          {(Array.isArray(cmsDesigns) ? cmsDesigns : []).map((d) => (
+                            <option key={String(d.id)} value={String(d.id)}>
+                              {String(d.name || `Design #${d.id}`)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+                    <div className="mb-2 text-sm font-semibold text-slate-900">{t('supportingCertificates')}</div>
+                    <div className="space-y-2">
+                      {rangeDocRows.map((row, idx) => {
+                        const rowKey = `range-doc-${idx}`;
+                        const keyVal = String(row?.key || '').trim();
+                        const urlVal = String(row?.url || '').trim();
+                        const uploadingKey = keyVal || `_idx_${idx}`;
+                        const uploading = Boolean(rangeDocUploading?.[uploadingKey]);
+                        const viewUrl = urlVal ? resolvePublicMediaUrl(urlVal) : '';
+                        const isDefault = DEFAULT_SUPPORTING_TYPES.some((d) => d.key === keyVal);
+                        return (
+                          <div key={rowKey} className="flex flex-col gap-2 rounded-xl border border-zinc-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 sm:flex-1 min-w-0">
+                              <div className="w-full sm:max-w-[200px] min-w-0">
+                                <label className="text-[10px] font-semibold text-zinc-500">Doc name {isDefault ? '(preset)' : '(optional)'}:</label>
+                                <input
+                                  type="text"
+                                  className="ac-input mt-1 w-full px-2 py-2 text-xs"
+                                  value={row.key}
+                                  placeholder="e.g. halal_cert, sop_docs..."
+                                  onChange={(e) => {
+                                    setRangeLocalError('');
+                                    const v = e.target.value;
+                                    setRangeDocRows((prev) => {
+                                      const next = [...prev];
+                                      next[idx] = { ...(next[idx] || {}), key: v };
+                                      return next;
+                                    });
+                                  }}
+                                />
+                              </div>
+                              <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
+                                <div className="text-[11px] text-zinc-700 min-w-0">
+                                  {viewUrl ? (
+                                    <a href={viewUrl} target="_blank" rel="noreferrer" className="font-semibold underline truncate block">
+                                      {viewUrl}
+                                    </a>
+                                  ) : (
+                                    <span className="text-zinc-500">{t('notUploaded')}</span>
+                                  )}
+                                </div>
+                                <label className="ac-btn ac-btn-soft shrink-0 px-3 py-2 text-xs">
+                                  {uploading ? t('uploading') : t('upload')}
+                                  <input
+                                    type="file"
+                                    className="hidden"
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+                                      try {
+                                        setRangeLocalError('');
+                                        setRangeDocUploading((prev) => ({ ...prev, [uploadingKey]: true }));
+                                        const uploaded = await uploadMedia({ file });
+                                        const mediaUrl = String(uploaded?.url || '').trim();
+                                        if (!mediaUrl) throw new Error(tRaw('operationFailed'));
+                                        setRangeDocRows((prev) => {
+                                          const next = [...prev];
+                                          const cur = { ...(next[idx] || {}) };
+                                          if (isAutoPlaceholderDocKey(cur.key, idx)) {
+                                            const taken = new Set(next.map((r, j) => (j === idx ? '' : String(r?.key || '').trim())).filter(Boolean));
+                                            let base = cleanFilenameToDocKey(file.name, 'supporting');
+                                            let candidate = base;
+                                            let suffix = 2;
+                                            while (taken.has(candidate)) {
+                                              candidate = `${base}_${suffix}`;
+                                              suffix += 1;
+                                            }
+                                            cur.key = candidate;
+                                          }
+                                          cur.url = mediaUrl;
+                                          next[idx] = cur;
+                                          return next;
+                                        });
+                                      } catch (err) {
+                                        setRangeLocalError(err?.message || tRaw('operationFailed'));
+                                      } finally {
+                                        setRangeDocUploading((prev) => ({ ...prev, [uploadingKey]: false }));
+                                        e.target.value = '';
+                                      }
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              className="ac-btn ac-btn-soft ac-btn-soft-danger shrink-0 px-2 py-2 text-xs"
+                              title="Remove this entry"
+                              onClick={() => {
+                                setRangeLocalError('');
+                                setRangeDocRows((prev) => {
+                                  const next = [...prev];
+                                  next.splice(idx, 1);
+                                  return next;
+                                });
+                              }}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-3 flex justify-start">
+                      <button
+                        type="button"
+                        className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                        onClick={() =>
+                          setRangeDocRows((prev) => {
+                            const next = Array.isArray(prev) ? [...prev] : [];
+                            const existingKeys = new Set(next.map((r) => String(r?.key || '').trim()).filter(Boolean));
+                            let i = 1;
+                            let autoKey = '';
+                            while (!autoKey || existingKeys.has(autoKey)) {
+                              autoKey = `supporting_${i}`;
+                              i += 1;
+                            }
+                            next.push({ key: autoKey, url: '' });
+                            return next;
+                          })
+                        }
+                      >
+                        + {t('add')} Custom
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+                    <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">{t('previewResult')}</div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {rangePreview ? `${rangePreview.startEpc} - ${rangePreview.endEpc}` : rangePreviewLabel || t('activateEpcRangeHint')}
+                        </div>
+                      </div>
+                      {rangePreview ? (
+                        <div className="text-right text-xs text-slate-600">
+                          <div>{t('selectedEpcsCount', { value: rangeSelectedEpcs.size })}</div>
+                          {rangePreview?.targetCertificateId ? <div className="mt-1 font-mono">{rangePreview.targetCertificateId}</div> : null}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {rangePreview ? (
+                      <>
+                        <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <div className="text-[11px] font-semibold text-slate-500">{t('rowsLabel')}</div>
+                            <div className="mt-1 text-sm font-semibold text-slate-900">{String(rangePreview?.summary?.total ?? 0)}</div>
+                          </div>
+                          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                            <div className="text-[11px] font-semibold text-emerald-700">{t('selectableEpcs')}</div>
+                            <div className="mt-1 text-sm font-semibold text-emerald-900">{String(rangePreview?.summary?.selectable ?? 0)}</div>
+                          </div>
+                          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                            <div className="text-[11px] font-semibold text-amber-700">{t('alreadyAssignedEpcs')}</div>
+                            <div className="mt-1 text-sm font-semibold text-amber-900">{String(rangePreview?.summary?.alreadyAssigned ?? 0)}</div>
+                          </div>
+                          <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+                            <div className="text-[11px] font-semibold text-rose-700">{t('conflictingEpcs')}</div>
+                            <div className="mt-1 text-sm font-semibold text-rose-900">{String(rangePreview?.summary?.conflicts ?? 0)}</div>
+                          </div>
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <div className="text-[11px] font-semibold text-slate-500">{t('missingEpcLabel')}</div>
+                            <div className="mt-1 text-sm font-semibold text-slate-900">{String(rangePreview?.summary?.missing ?? 0)}</div>
+                          </div>
+                          <div className="rounded-xl border border-brand-200 bg-brand-50 p-3">
+                            <div className="text-[11px] font-semibold text-brand-700">{t('selectAllReady')}</div>
+                            <button
+                              type="button"
+                              className="mt-2 ac-btn ac-btn-soft px-3 py-2 text-xs"
+                              disabled={selectableRangeRows.length === 0}
+                              onClick={() => {
+                                setRangeSelectedEpcs((prev) => {
+                                  if (allSelectableRangeChecked) return new Set();
+                                  return new Set(selectableRangeRows.map((row) => String(row.epcCode || '')));
+                                });
+                              }}
+                            >
+                              {allSelectableRangeChecked ? t('clearSelection') : t('selectAll')}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+                          <div className="max-h-[28rem] overflow-auto">
+                            <table className="min-w-full divide-y divide-slate-200 text-xs">
+                              <thead className="bg-slate-50">
+                                <tr>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">
+                                    <input
+                                      type="checkbox"
+                                      checked={allSelectableRangeChecked}
+                                      onChange={() => {
+                                        setRangeSelectedEpcs((prev) => {
+                                          if (allSelectableRangeChecked) return new Set();
+                                          return new Set(selectableRangeRows.map((row) => String(row.epcCode || '')));
+                                        });
+                                      }}
+                                      disabled={selectableRangeRows.length === 0}
+                                    />
+                                  </th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t('epcCode')}</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t('batchName')}</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t('previewStatus')}</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t('currentAssignment')}</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-200 bg-white">
+                                {rangePreviewItems.map((row) => {
+                                  const code = String(row?.epcCode || '');
+                                  const checked = rangeSelectedEpcs.has(code);
+                                  const status = String(row?.previewStatus || '');
+                                  const statusClass =
+                                    status === 'ready'
+                                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                      : status === 'already_assigned'
+                                        ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                        : status === 'conflict'
+                                          ? 'border-rose-200 bg-rose-50 text-rose-700'
+                                          : 'border-slate-200 bg-slate-100 text-slate-700';
+                                  return (
+                                    <tr key={code}>
+                                      <td className="px-3 py-2 align-top">
+                                        <input
+                                          type="checkbox"
+                                          checked={checked}
+                                          disabled={!row?.selectable}
+                                          onChange={(e) => {
+                                            const nextChecked = e.target.checked;
+                                            setRangeSelectedEpcs((prev) => {
+                                              const next = new Set(prev);
+                                              if (nextChecked) next.add(code);
+                                              else next.delete(code);
+                                              return next;
+                                            });
+                                          }}
+                                        />
+                                      </td>
+                                      <td className="px-3 py-2 align-top font-mono text-slate-900">{code}</td>
+                                      <td className="px-3 py-2 align-top text-slate-700">
+                                        <div>{row?.batchName || '-'}</div>
+                                        <div className="mt-1 text-[11px] text-slate-500">{row?.productName || '-'}</div>
+                                      </td>
+                                      <td className="px-3 py-2 align-top">
+                                        <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClass}`}>
+                                          {status === 'ready'
+                                            ? t('readyToActivate')
+                                            : status === 'already_assigned'
+                                              ? t('alreadyAssignedEpcs')
+                                              : status === 'conflict'
+                                                ? t('conflictingEpcs')
+                                                : t('missingEpcLabel')}
+                                        </span>
+                                        <div className="mt-1 text-[11px] text-slate-500">{row?.message || '-'}</div>
+                                      </td>
+                                      <td className="px-3 py-2 align-top text-slate-700">{row?.currentCertificateId || '-'}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-xs text-slate-500">
+                        {t('previewRange')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-zinc-200 bg-white pt-4">
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={closeRange}>
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                className="ac-btn ac-btn-primary px-3 py-2 text-xs"
+                disabled={loading || !rangePreview || rangeSelectedEpcs.size === 0 || Object.values(rangeDocUploading || {}).some(Boolean)}
+                onClick={async () => {
+                  try {
+                    setRangeLocalError('');
+                    if (!rangePreview) throw new Error(t('previewRange'));
+                    if (!String(rangeProductId || '').trim()) throw new Error(t('selectProduct'));
+                    if (rangeSelectedEpcs.size === 0) throw new Error(t('noEpcSelected'));
+
+                    const documents = buildDocumentsPayload(rangeDocRows);
+                    const res = await submitBatchImportRange({
+                      corpCode: rangeCorpCode,
+                      date: rangeDate,
+                      startRunningNo: rangeStartRunningNo,
+                      endRunningNo: rangeEndRunningNo,
+                      epcCodes: Array.from(rangeSelectedEpcs),
+                      productId: String(rangeProductId || '').trim(),
+                      certificateTemplateId: String(rangeAuthTemplateId || '').trim() || undefined,
+                      documents
+                    });
+
+                    setImportLastResult(res || null);
+
+                    const certId = String(res?.certificateId || '').trim();
+                    const cmsDesignRaw = String(rangeCmsDesignId || '').trim();
+                    if (certId && cmsDesignRaw) {
+                      try {
+                        const designId = Number(cmsDesignRaw);
+                        if (Number.isFinite(designId) && designId > 0) {
+                          await updateCertificate({
+                            certificateId: certId,
+                            patch: { cmsDesignId: designId }
+                          });
+                        }
+                      } catch (_ignore) {
+                        // ignore non-critical landing design failure after successful range activation
+                      }
+                    }
+
+                    if (Array.isArray(res?.batchIds) && res.batchIds.length === 1) {
+                      setTab('batches');
+                      setListBatchId(String(res.batchIds[0]));
+                      setListOffset(0);
+                    }
+
+                    setActivateCertConfirmMeta({
+                      source: 'batchImportRange',
+                      batchId: Array.isArray(res?.batchIds) && res.batchIds.length === 1 ? Number(res.batchIds[0]) : null,
+                      description: `${String(res?.rows ?? rangeSelectedEpcs.size)} EPC row(s) processed from the selected range.`
+                    });
+                    closeRange();
+                    setActivateCertConfirmOpen(true);
+                  } catch (err) {
+                    setRangeLocalError(err?.response?.data?.message || err?.message || tRaw('operationFailed'));
+                  }
+                }}
+              >
+                {t('save')}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {importOpen ? (
@@ -2208,29 +3448,7 @@ export default function AdminEpc() {
               </div>
 
               <div>
-                <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
-                  <div className="text-[11px] font-semibold text-zinc-600">{t('supportingCertificates')}</div>
-                  <button
-                    type="button"
-                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                    onClick={() =>
-                      setImportDocRows((prev) => {
-                        const next = Array.isArray(prev) ? [...prev] : [];
-                        const existingKeys = new Set(next.map((r) => String(r?.key || '').trim()).filter(Boolean));
-                        let i = 1;
-                        let autoKey = '';
-                        while (!autoKey || existingKeys.has(autoKey)) {
-                          autoKey = `supporting_${i}`;
-                          i += 1;
-                        }
-                        next.push({ key: autoKey, url: '' });
-                        return next;
-                      })
-                    }
-                  >
-                    + {t('add')} Custom
-                  </button>
-                </div>
+                <div className="mb-2 text-[11px] font-semibold text-zinc-600">{t('supportingCertificates')}</div>
 
                 <div className="space-y-2">
                   {importDocRows.map((row, idx) => {
@@ -2321,7 +3539,7 @@ export default function AdminEpc() {
                         </div>
                         <button
                           type="button"
-                          className="ac-btn ac-btn-soft shrink-0 px-2 py-2 text-xs text-red-700"
+                          className="ac-btn ac-btn-soft ac-btn-soft-danger shrink-0 px-2 py-2 text-xs"
                           title="Remove this entry"
                           onClick={() => {
                             setImportLocalError('');
@@ -2337,6 +3555,29 @@ export default function AdminEpc() {
                       </div>
                     );
                   })}
+                </div>
+
+                <div className="mt-3 flex justify-start">
+                  <button
+                    type="button"
+                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                    onClick={() =>
+                      setImportDocRows((prev) => {
+                        const next = Array.isArray(prev) ? [...prev] : [];
+                        const existingKeys = new Set(next.map((r) => String(r?.key || '').trim()).filter(Boolean));
+                        let i = 1;
+                        let autoKey = '';
+                        while (!autoKey || existingKeys.has(autoKey)) {
+                          autoKey = `supporting_${i}`;
+                          i += 1;
+                        }
+                        next.push({ key: autoKey, url: '' });
+                        return next;
+                      })
+                    }
+                  >
+                    + {t('add')} Custom
+                  </button>
                 </div>
               </div>
             </div>

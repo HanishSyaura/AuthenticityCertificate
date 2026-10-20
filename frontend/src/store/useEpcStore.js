@@ -301,6 +301,27 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
+  previewBatchImportRange: async ({ corpCode, date, startRunningNo, endRunningNo, certificateTemplateId } = {}) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const body = {
+        corpCode: String(corpCode || '').trim(),
+        date: String(date || '').trim(),
+        startRunningNo: String(startRunningNo || '').trim(),
+        endRunningNo: String(endRunningNo || '').trim(),
+        ...(certificateTemplateId != null && String(certificateTemplateId).trim() !== '' ? { certificateTemplateId: Number(certificateTemplateId) } : {})
+      };
+      const res = await api.post('/epc/batch-import/preview-range', body);
+      set({ loading: false });
+      return res?.data?.data || null;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
   submitBatchImport: async ({ batchId, base64, productId, certificateTemplateId, documents } = {}) => {
     set({ loading: true, error: null });
     try {
@@ -316,6 +337,31 @@ const useEpcStore = create((set, get) => ({
         id != null && Number.isFinite(id)
           ? await api.post(`/epc/batches/${id}/batch-import/submit`, body)
           : await api.post('/epc/batch-import/submit', body);
+      const data = res?.data?.data || null;
+      set({ loading: false });
+      return data;
+    } catch (e) {
+      const msg = e?.response?.data?.message || tRaw('operationFailed');
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
+  submitBatchImportRange: async ({ corpCode, date, startRunningNo, endRunningNo, epcCodes, productId, certificateTemplateId, documents } = {}) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const body = {
+        corpCode: String(corpCode || '').trim(),
+        date: String(date || '').trim(),
+        startRunningNo: String(startRunningNo || '').trim(),
+        endRunningNo: String(endRunningNo || '').trim(),
+        epcCodes: Array.isArray(epcCodes) ? epcCodes.map((code) => String(code || '').trim()).filter(Boolean) : [],
+        ...(productId != null && String(productId).trim() !== '' ? { productId: Number(productId) } : {}),
+        ...(certificateTemplateId != null && String(certificateTemplateId).trim() !== '' ? { certificateTemplateId: Number(certificateTemplateId) } : {}),
+        ...(documents && typeof documents === 'object' ? { documents } : {})
+      };
+      const res = await api.post('/epc/batch-import/submit-range', body);
       const data = res?.data?.data || null;
       set({ loading: false });
       return data;

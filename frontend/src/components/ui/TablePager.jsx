@@ -19,6 +19,7 @@ export default function TablePager({ offset, limit, total, loading, onOffsetChan
     if (!list.includes(safeLimit)) list.push(safeLimit);
     return Array.from(new Set(list)).sort((a, b) => a - b);
   }, [limitOptions, safeLimit]);
+  const showLimitSelector = options.length > 1 && typeof onLimitChange === 'function';
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-600">
@@ -27,24 +28,26 @@ export default function TablePager({ offset, limit, total, loading, onOffsetChan
         {pages > 0 ? <span className="text-zinc-400">• Page {page} / {pages}</span> : null}
       </div>
       <div className="flex items-center gap-2">
-        <label className="flex items-center gap-2">
-          <span className="text-xs text-zinc-600">{t('rowsPerPage')}</span>
-          <select
-            value={String(safeLimit)}
-            disabled={loading}
-            onChange={(e) => {
-              const next = Math.max(1, Number(e.target.value) || safeLimit);
-              if (typeof onLimitChange === 'function') onLimitChange(next);
-            }}
-            className="ac-input w-[88px] px-2 py-1 text-xs"
-          >
-            {options.map((n) => (
-              <option key={n} value={String(n)}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
+        {showLimitSelector ? (
+          <label className="flex items-center gap-2">
+            <span className="text-xs text-zinc-600">{t('rowsPerPage')}</span>
+            <select
+              value={String(safeLimit)}
+              disabled={loading}
+              onChange={(e) => {
+                const next = Math.max(1, Number(e.target.value) || safeLimit);
+                if (typeof onLimitChange === 'function') onLimitChange(next);
+              }}
+              className="ac-input w-[88px] px-2 py-1 text-xs"
+            >
+              {options.map((n) => (
+                <option key={n} value={String(n)}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <button
           type="button"
           className="ac-btn ac-btn-soft px-3 py-2 text-xs"

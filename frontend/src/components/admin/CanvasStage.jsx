@@ -25,7 +25,8 @@ export default function CanvasStage({
   grid = 4,
   containerClassName = '',
   containerStyle,
-  largeUi = false
+  largeUi = false,
+  scrollable = true
 }) {
   const stageRef = useRef(null);
   const dragRef = useRef(null);
@@ -177,7 +178,10 @@ export default function CanvasStage({
   };
 
   return (
-    <div className={`w-full overflow-auto p-3 ${containerClassName}`} style={containerStyle}>
+    <div
+      className={`${scrollable ? 'w-full overflow-auto p-3' : 'flex h-full w-full items-center justify-center overflow-hidden p-3'} ${containerClassName}`}
+      style={containerStyle}
+    >
       <div className="mx-auto" style={{ width: width * scale, height: height * scale }}>
         <div
           ref={stageRef}
@@ -217,7 +221,7 @@ export default function CanvasStage({
                 }
                 loading="eager"
                 decoding="async"
-                fetchPriority="high"
+                fetchpriority="high"
                 draggable={false}
               />
             )

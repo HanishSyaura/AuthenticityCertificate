@@ -25,7 +25,7 @@ const ImageLightbox = ({ src, onClose }) => {
   if (!src) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" onClick={onClose}>
+    <div className="ac-overlay-center" role="dialog" aria-modal="true" onClick={onClose}>
       <button
         type="button"
         className="absolute right-4 top-4 rounded bg-black/50 px-3 py-1 text-sm text-white"
@@ -37,7 +37,7 @@ const ImageLightbox = ({ src, onClose }) => {
         ×
       </button>
       <div className="max-h-full max-w-full" onClick={(e) => e.stopPropagation()}>
-        <img src={src} alt="" className="max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] object-contain" draggable={false} />
+        <img src={src} alt="" className="max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] object-contain" draggable={false} />
       </div>
     </div>
   );
@@ -672,7 +672,7 @@ const PublicRenderer = ({
                   className={`${isStretch ? 'h-full w-full object-fill' : 'h-full w-full object-contain'} ${linkUrl ? 'cursor-pointer' : 'cursor-zoom-in'}`}
                   loading={isEager ? 'eager' : 'lazy'}
                   decoding="async"
-                  fetchPriority={isEager ? 'high' : 'low'}
+                  fetchpriority={isEager ? 'high' : 'low'}
                   draggable={false}
                   onClick={linkUrl ? undefined : () => setLightboxSrc(resolvedUrl)}
                 />
@@ -684,7 +684,7 @@ const PublicRenderer = ({
                 className={`${isStretch ? 'h-full w-full object-fill' : 'h-full w-full object-contain'} ${linkUrl ? 'cursor-pointer' : 'cursor-zoom-in'}`}
                 loading={isEager ? 'eager' : 'lazy'}
                 decoding="async"
-                fetchPriority={isEager ? 'high' : 'low'}
+                fetchpriority={isEager ? 'high' : 'low'}
                 draggable={false}
                 onClick={linkUrl ? undefined : () => setLightboxSrc(resolvedUrl)}
               />
@@ -852,7 +852,7 @@ const PublicRenderer = ({
                               className="max-w-none object-center"
                               loading="eager"
                               decoding="async"
-                              fetchPriority="high"
+                              fetchpriority="high"
                               draggable={false}
                             />
                           </picture>
@@ -863,7 +863,7 @@ const PublicRenderer = ({
                             className="absolute left-1/2 top-1/2 max-w-none -translate-x-1/2 -translate-y-1/2 object-center"
                             loading="eager"
                             decoding="async"
-                            fetchPriority="high"
+                            fetchpriority="high"
                             draggable={false}
                           />
                         )
@@ -877,7 +877,7 @@ const PublicRenderer = ({
                               className="h-full w-full object-contain object-center"
                               loading="eager"
                               decoding="async"
-                              fetchPriority="high"
+                              fetchpriority="high"
                               draggable={false}
                             />
                           </picture>
@@ -888,7 +888,7 @@ const PublicRenderer = ({
                             className="absolute inset-0 h-full w-full object-contain object-center"
                             loading="eager"
                             decoding="async"
-                            fetchPriority="high"
+                            fetchpriority="high"
                             draggable={false}
                           />
                         )
@@ -902,7 +902,7 @@ const PublicRenderer = ({
                               className="h-full w-full object-fill object-center"
                               loading="eager"
                               decoding="async"
-                              fetchPriority="high"
+                              fetchpriority="high"
                               draggable={false}
                             />
                           </picture>
@@ -913,7 +913,7 @@ const PublicRenderer = ({
                             className="absolute inset-0 h-full w-full object-fill object-center"
                             loading="eager"
                             decoding="async"
-                            fetchPriority="high"
+                            fetchpriority="high"
                             draggable={false}
                           />
                         )

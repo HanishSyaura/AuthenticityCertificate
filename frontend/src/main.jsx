@@ -1,8 +1,9 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
+import '@fontsource/inter'
 import './index.css'
-import 'react-quill/dist/quill.snow.css'
+import 'quill/dist/quill.snow.css'
 import 'katex/dist/katex.min.css'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 

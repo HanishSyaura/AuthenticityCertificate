@@ -22,7 +22,9 @@ function sanitizeStyle(input) {
     'text-align',
     'font-size',
     'font-family',
-    'line-height'
+    'line-height',
+    'color',
+    'background-color'
   ]);
   const parts = raw
     .split(';')
@@ -59,6 +61,7 @@ export function sanitizeLimitedHtml(input) {
   if (!raw) return '';
   if (typeof window === 'undefined' || typeof window.DOMParser !== 'function') return escapeTextToHtml(raw);
   const allowed = new Set([
+    'A',
     'BR',
     'B',
     'STRONG',
@@ -68,9 +71,14 @@ export function sanitizeLimitedHtml(input) {
     'S',
     'STRIKE',
     'SUP',
+    'SUB',
     'DIV',
     'P',
     'SPAN',
+    'H1',
+    'H2',
+    'H3',
+    'BLOCKQUOTE',
     'UL',
     'OL',
     'LI'
@@ -82,9 +90,14 @@ export function sanitizeLimitedHtml(input) {
     return escapeTextToHtml(raw);
   }
   const allowedAttrs = {
+    A: new Set(['href', 'target', 'rel', 'style', 'class']),
     DIV: new Set(['style', 'class']),
     P: new Set(['style', 'class']),
     SPAN: new Set(['style', 'class']),
+    H1: new Set(['style', 'class']),
+    H2: new Set(['style', 'class']),
+    H3: new Set(['style', 'class']),
+    BLOCKQUOTE: new Set(['style', 'class']),
     UL: new Set(['style', 'class']),
     OL: new Set(['style', 'class']),
     LI: new Set(['style', 'class']),
@@ -96,8 +109,18 @@ export function sanitizeLimitedHtml(input) {
     S: new Set(['style']),
     STRIKE: new Set(['style']),
     SUP: new Set(['style']),
+    SUB: new Set(['style']),
     BR: new Set([])
   };
+
+  const sanitizeHref = (input) => {
+    const raw = String(input || '').trim();
+    if (!raw) return '';
+    if (/^(https?:|mailto:|tel:)/i.test(raw)) return raw;
+    if (/^[#/]/.test(raw)) return raw;
+    return '';
+  };
+
   const walk = (node) => {
     const kids = Array.from(node.childNodes || []);
     for (const child of kids) {
@@ -125,6 +148,24 @@ export function sanitizeLimitedHtml(input) {
             const safe = sanitizeClass(a.value);
             if (safe) child.setAttribute('class', safe);
             else child.removeAttribute('class');
+            continue;
+          }
+          if (name === 'href') {
+            const safe = sanitizeHref(a.value);
+            if (safe) child.setAttribute('href', safe);
+            else child.removeAttribute('href');
+            continue;
+          }
+          if (name === 'target') {
+            const safe = String(a.value || '').trim() === '_blank' ? '_blank' : '';
+            if (safe) child.setAttribute('target', safe);
+            else child.removeAttribute('target');
+            continue;
+          }
+          if (name === 'rel') {
+            const hasBlankTarget = String(child.getAttribute('target') || '').trim() === '_blank';
+            if (hasBlankTarget) child.setAttribute('rel', 'noopener noreferrer');
+            else child.removeAttribute('rel');
             continue;
           }
           if (name === 'style') {

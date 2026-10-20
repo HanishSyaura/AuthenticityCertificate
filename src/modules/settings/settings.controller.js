@@ -2,6 +2,24 @@ const { z } = require('zod');
 const prisma = require('../../config/prisma');
 const settingsService = require('./settings.service');
 const emailService = require('../../services/email.service');
+const { resolveOrganization } = require('../../middleware/org.middleware');
+const DEFAULT_THEME_PRIMARY_HEX = '#1a1939';
+const DEFAULT_ORGANIZATION_NAME = 'CLB Holdings Berhad';
+const DEFAULT_ORGANIZATION_CODE = 'CLB';
+const LEGACY_BRANDING_PLACEHOLDER = 'DAMADINGJIYANWO';
+const {
+  DEFAULT_LOGIN_HERO_BADGE,
+  DEFAULT_LOGIN_HERO_TITLE,
+  DEFAULT_LOGIN_HERO_SUBTITLE,
+  DEFAULT_LOGIN_HERO_HIGHLIGHTS
+} = settingsService;
+
+function getLegacyOrganizationDefaults() {
+  return {
+    name: String(process.env.SINGLE_ORG_NAME || DEFAULT_ORGANIZATION_NAME).trim() || DEFAULT_ORGANIZATION_NAME,
+    code: String(process.env.SINGLE_ORG_CODE || DEFAULT_ORGANIZATION_CODE).trim().toUpperCase() || DEFAULT_ORGANIZATION_CODE
+  };
+}
 
 function isValidEmail(v) {
   const s = String(v || '').trim();
@@ -28,14 +46,49 @@ function isValidHttpUrl(v) {
   }
 }
 
+function parseStringArray(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 8);
+  }
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parseStringArray(parsed);
+  } catch {
+    void 0;
+  }
+  return raw
+    .split(',')
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+function getLoginContentDefaults() {
+  return {
+    badge: DEFAULT_LOGIN_HERO_BADGE,
+    title: DEFAULT_LOGIN_HERO_TITLE,
+    subtitle: DEFAULT_LOGIN_HERO_SUBTITLE,
+    highlights: Array.isArray(DEFAULT_LOGIN_HERO_HIGHLIGHTS) ? DEFAULT_LOGIN_HERO_HIGHLIGHTS : []
+  };
+}
+
+async function getResolvedOrganizationId(req) {
+  const org = await resolveOrganization(req);
+  const orgId = Number(org?.id || req.organization?.id || 0);
+  return Number.isInteger(orgId) && orgId > 0 ? orgId : null;
+}
+
 async function getSettings(req, res) {
   try {
-    const orgId = req.organization?.id;
-    if (!orgId) return res.error('Organization required', 400);
+    const orgId = await getResolvedOrganizationId(req);
+    if (!orgId) return res.error('Service temporarily unavailable', 503);
     const row = await settingsService.ensureOrganizationSettings(orgId);
     const notifyCfg = await settingsService.getEpcGeneratedEmailConfig(orgId);
     const prodCfg = await settingsService.getEpcProductionOrdersEmailConfig(orgId);
     const org = await prisma.organization.findUnique({ where: { id: orgId } });
+    const loginDefaults = getLoginContentDefaults();
 
     res.success(
       {
@@ -54,6 +107,13 @@ async function getSettings(req, res) {
               appTitle: row.appTitle ? String(row.appTitle) : null,
               faviconUrl: row.faviconUrl ? String(row.faviconUrl) : null,
               logoUrl: row.logoUrl ? String(row.logoUrl) : null,
+              themePrimaryHex: row.themePrimaryHex ? String(row.themePrimaryHex).toLowerCase() : DEFAULT_THEME_PRIMARY_HEX,
+              loginHeroBadge: row.loginHeroBadge ? String(row.loginHeroBadge) : loginDefaults.badge,
+              loginHeroTitle: row.loginHeroTitle ? String(row.loginHeroTitle) : loginDefaults.title,
+              loginHeroSubtitle: row.loginHeroSubtitle ? String(row.loginHeroSubtitle) : loginDefaults.subtitle,
+              loginHeroHighlights: parseStringArray(row.loginHeroHighlightsJson).length
+                ? parseStringArray(row.loginHeroHighlightsJson)
+                : loginDefaults.highlights,
               smtpHost: row.smtpHost ? String(row.smtpHost) : null,
               smtpPort: row.smtpPort == null ? null : Number(row.smtpPort) || null,
               smtpSecure: row.smtpSecure == null ? null : Boolean(row.smtpSecure),
@@ -84,14 +144,24 @@ async function getSettings(req, res) {
 }
 
 const updateSchema = z.object({
-  organizationName: z.string().trim().min(1).max(120).optional(),
-  organizationCode: z
-    .string()
-    .trim()
-    .min(2)
-    .max(16)
-    .regex(/^[A-Z0-9_\-]+$/)
-    .optional(),
+  organizationName: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      const s = String(v).trim();
+      return s ? s : null;
+    },
+    z.string().max(120).nullable().optional()
+  ),
+  organizationCode: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      const s = String(v).trim().toUpperCase();
+      return s ? s : null;
+    },
+    z.string().min(2).max(16).regex(/^[A-Z0-9_\-]+$/).nullable().optional()
+  ),
   defaultLocale: z.string().trim().min(2).max(20).optional(),
   defaultTimezone: z.string().trim().min(3).max(64).optional(),
   maintenanceMode: z.boolean().optional(),
@@ -121,6 +191,56 @@ const updateSchema = z.object({
       return s ? s : null;
     },
     z.string().min(1).max(512).nullable().optional()
+  ),
+  themePrimaryHex: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return DEFAULT_THEME_PRIMARY_HEX;
+      const s = String(v).trim();
+      return s ? s : DEFAULT_THEME_PRIMARY_HEX;
+    },
+    z.string().regex(/^#[0-9a-fA-F]{6}$/).optional()
+  ),
+  loginHeroBadge: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      const s = String(v).trim();
+      return s ? s : null;
+    },
+    z.string().min(1).max(191).nullable().optional()
+  ),
+  loginHeroTitle: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      const s = String(v).trim();
+      return s ? s : null;
+    },
+    z.string().min(1).max(191).nullable().optional()
+  ),
+  loginHeroSubtitle: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      const s = String(v).trim();
+      return s ? s : null;
+    },
+    z.string().min(1).max(512).nullable().optional()
+  ),
+  loginHeroHighlights: z.preprocess(
+    (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return [];
+      if (Array.isArray(v)) return v;
+      const s = String(v || '').trim();
+      if (!s) return [];
+      return s
+        .split(',')
+        .map((x) => String(x || '').trim())
+        .filter(Boolean);
+    },
+    z.array(z.string().trim().min(1).max(64)).max(8).optional()
   ),
   smtpHost: z.preprocess(
     (v) => {
@@ -253,8 +373,8 @@ const smtpTestSchema = z.object({
 
 async function updateSettings(req, res) {
   try {
-    const orgId = req.organization?.id;
-    if (!orgId) return res.error('Organization required', 400);
+    const orgId = await getResolvedOrganizationId(req);
+    if (!orgId) return res.error('Service temporarily unavailable', 503);
     const validated = updateSchema.parse(req.body || {});
 
     if (validated.smtpFromEmail != null) {
@@ -269,10 +389,18 @@ async function updateSettings(req, res) {
       return res.error('Invalid Frontend URL', 400);
     }
 
-    if (validated.organizationName || validated.organizationCode) {
+    if (
+      Object.prototype.hasOwnProperty.call(validated, 'organizationName') ||
+      Object.prototype.hasOwnProperty.call(validated, 'organizationCode')
+    ) {
+      const legacyDefaults = getLegacyOrganizationDefaults();
       const data = {};
-      if (validated.organizationName) data.name = validated.organizationName;
-      if (validated.organizationCode) data.code = validated.organizationCode.toUpperCase();
+      if (Object.prototype.hasOwnProperty.call(validated, 'organizationName')) {
+        data.name = validated.organizationName || legacyDefaults.name;
+      }
+      if (Object.prototype.hasOwnProperty.call(validated, 'organizationCode')) {
+        data.code = (validated.organizationCode || legacyDefaults.code).toUpperCase();
+      }
       try {
         await prisma.organization.update({ where: { id: orgId }, data });
       } catch (e) {
@@ -307,6 +435,7 @@ async function updateSettings(req, res) {
     const notifyCfg = await settingsService.getEpcGeneratedEmailConfig(orgId);
     const prodCfg = await settingsService.getEpcProductionOrdersEmailConfig(orgId);
     const org = await prisma.organization.findUnique({ where: { id: orgId } });
+    const loginDefaults = getLoginContentDefaults();
 
     res.success(
       {
@@ -325,6 +454,13 @@ async function updateSettings(req, res) {
               appTitle: row.appTitle ? String(row.appTitle) : null,
               faviconUrl: row.faviconUrl ? String(row.faviconUrl) : null,
               logoUrl: row.logoUrl ? String(row.logoUrl) : null,
+              themePrimaryHex: row.themePrimaryHex ? String(row.themePrimaryHex).toLowerCase() : DEFAULT_THEME_PRIMARY_HEX,
+              loginHeroBadge: row.loginHeroBadge ? String(row.loginHeroBadge) : loginDefaults.badge,
+              loginHeroTitle: row.loginHeroTitle ? String(row.loginHeroTitle) : loginDefaults.title,
+              loginHeroSubtitle: row.loginHeroSubtitle ? String(row.loginHeroSubtitle) : loginDefaults.subtitle,
+              loginHeroHighlights: parseStringArray(row.loginHeroHighlightsJson).length
+                ? parseStringArray(row.loginHeroHighlightsJson)
+                : loginDefaults.highlights,
               smtpHost: row.smtpHost ? String(row.smtpHost) : null,
               smtpPort: row.smtpPort == null ? null : Number(row.smtpPort) || null,
               smtpSecure: row.smtpSecure == null ? null : Boolean(row.smtpSecure),
@@ -372,8 +508,8 @@ async function listNotificationRoles(_req, res) {
 
 async function sendSmtpTestEmail(req, res) {
   try {
-    const orgId = req.organization?.id;
-    if (!orgId) return res.error('Organization required', 400);
+    const orgId = await getResolvedOrganizationId(req);
+    if (!orgId) return res.error('Service temporarily unavailable', 503);
     const validated = smtpTestSchema.parse(req.body || {});
     const toEmail = extractEmail(validated.to);
     if (!isValidEmail(toEmail)) return res.error('Invalid email address', 400);

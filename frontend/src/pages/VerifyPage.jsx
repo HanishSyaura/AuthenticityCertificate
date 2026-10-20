@@ -5,6 +5,8 @@ import PublicRenderer from '../components/PublicRenderer';
 import VerifyLoadingScreen from '../components/VerifyLoadingScreen';
 import { useT } from '../i18n/useT';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import useResolvedBranding from '../hooks/useResolvedBranding';
+import { resolvePublicMediaUrl } from '../utils/apiBase';
 
 function IconShieldCheck(props) {
   return (
@@ -21,6 +23,25 @@ function IconShieldAlert(props) {
       <path d="M12 2l7 4v6c0 5-3 9-7 10-4-1-7-5-7-10V6l7-4z" />
       <path d="M12 8v5" />
       <path d="M12 16h.01" />
+    </svg>
+  );
+}
+
+function IconSparkles(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="m12 3 1.4 3.6L17 8l-3.6 1.4L12 13l-1.4-3.6L7 8l3.6-1.4L12 3Z" />
+      <path d="m5 14 .8 2.2L8 17l-2.2.8L5 20l-.8-2.2L2 17l2.2-.8L5 14Z" />
+      <path d="m19 13 .9 2.1L22 16l-2.1.9L19 19l-.9-2.1L16 16l2.1-.9L19 13Z" />
+    </svg>
+  );
+}
+
+function IconRefresh(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+      <path d="M21 3v6h-6" />
     </svg>
   );
 }
@@ -60,10 +81,39 @@ function VerifyViewport({ children, className = '', style = undefined }) {
   );
 }
 
+function VerifyHeroPanel({ branding, eyebrow, title, body, chips = [], alert = false }) {
+  return (
+    <section className={`ac-public-full-hero relative flex min-h-[38vh] overflow-hidden px-6 py-8 text-white sm:px-10 sm:py-10 xl:min-h-[100dvh] xl:px-12 xl:py-12 ${alert ? 'ac-public-full-hero--alert' : ''}`}>
+      <div className="relative z-10 flex w-full flex-col justify-between">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/18 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.24em] backdrop-blur">
+            {branding.logoUrl ? (
+              <img src={resolvePublicMediaUrl(branding.logoUrl)} alt={branding.organizationName} className="h-4 w-4 rounded object-contain" />
+            ) : (
+              <IconSparkles className="h-4 w-4" />
+            )}
+            {eyebrow || branding.organizationName}
+          </div>
+          <h1 className="mt-8 max-w-[560px] text-4xl font-semibold leading-[1.02] tracking-tight sm:text-5xl xl:text-[64px]">{title}</h1>
+          <p className="mt-5 max-w-[620px] text-sm leading-7 text-white/82 sm:text-base">{body}</p>
+        </div>
+
+        <div className="mt-8 flex flex-wrap gap-2">
+          {chips.map((item) => (
+            <div key={item} className="rounded-full border border-white/18 bg-white/10 px-3 py-1.5 text-xs font-medium text-white/82 backdrop-blur">
+              {item}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 const VerifyPage = () => {
   const { id } = useParams();
   const location = useLocation();
-  const { certificate, loading, error, verifyCertificate, resolveCertificate } = useAuthStore();
+  const { certificate, loading, error, errorDetails, verifyCertificate, resolveCertificate, clearVerificationState } = useAuthStore();
   const [certId, setCertId] = useState(id || '');
   const [loadingMeta, setLoadingMeta] = useState(null);
   const [loadingMode, setLoadingMode] = useState('auto');
@@ -71,7 +121,24 @@ const VerifyPage = () => {
   const loaderStartAtRef = useRef(0);
   const loaderHideTimerRef = useRef(null);
   const { t, lang, locale } = useT();
+  const branding = useResolvedBranding();
   const hasTemplate = Boolean(Array.isArray(certificate?.certificateTemplate?.layoutJson));
+
+  const errorKind = (() => {
+    const status = Number(errorDetails?.status || 0);
+    const message = String(errorDetails?.message || error || '').toLowerCase();
+    if (status === 404 || message.includes('not found') || message.includes('tidak dijumpai')) return 'not_found';
+    if (status === 400 || message.includes('invalid') || message.includes('tidak sah')) return 'invalid';
+    if (status === 503 || message.includes('unavailable') || message.includes('maintenance')) return 'service';
+    return 'general';
+  })();
+
+  const searchedValue = String(loadingMeta?.value || certId || '').trim();
+  const searchedLabel = String(loadingMeta?.label || t('verification')).trim();
+  const checkedAt = new Date().toLocaleString(locale);
+  const statusUpper = String(certificate?.status || '').toUpperCase();
+  const statusOk = statusUpper === 'VALID';
+  const statusPreview = statusUpper === 'PREVIEW';
 
   useEffect(() => {
     if (id) {
@@ -119,32 +186,38 @@ const VerifyPage = () => {
     };
   }, [loading]);
 
-  const handleManualVerify = (e) => {
-    e.preventDefault();
-    const raw = String(certId || '').trim();
+  const runCurrentLookup = (value) => {
+    const raw = String(value || '').trim();
     if (!raw) return;
-    const value = raw.toUpperCase();
-    if (value !== certId) setCertId(value);
+    const nextValue = raw.toUpperCase();
+    if (nextValue !== certId) setCertId(nextValue);
 
-    const looksLikeCertId = /^(BN-[A-Z0-9]+|CERT\d{9,})$/.test(value);
+    const looksLikeCertId = /^(BN-[A-Z0-9]+|CERT\d{9,})$/.test(nextValue);
     if (looksLikeCertId) {
       setLoadingMode('verify');
-      setLoadingMeta({ label: t('certificateId'), value });
-      verifyCertificate(value, { lang });
+      setLoadingMeta({ label: t('certificateId'), value: nextValue });
+      verifyCertificate(nextValue, { lang });
       return;
     }
 
-    const looksLikeHex = /^[0-9A-F]+$/.test(value);
-    if (looksLikeHex && value.length >= 8 && value.length <= 32) {
+    const looksLikeHex = /^[0-9A-F]+$/.test(nextValue);
+    if (looksLikeHex && nextValue.length >= 8 && nextValue.length <= 32) {
       setLoadingMode('resolve');
-      setLoadingMeta({ label: t('nfcUid'), value });
-      resolveCertificate({ epc: null, nfcUid: value }, { lang });
+      // Hex-like values can be either EPC or NFC UID. Resolve both to keep
+      // manual input behavior consistent with direct ?epc=... deep links.
+      setLoadingMeta({ label: t('epc'), value: nextValue });
+      resolveCertificate({ epc: nextValue, nfcUid: nextValue }, { lang });
       return;
     }
 
     setLoadingMode('resolve');
-    setLoadingMeta({ label: t('epc'), value });
-    resolveCertificate({ epc: value, nfcUid: null }, { lang });
+    setLoadingMeta({ label: t('epc'), value: nextValue });
+    resolveCertificate({ epc: nextValue, nfcUid: null }, { lang });
+  };
+
+  const handleManualVerify = (e) => {
+    e.preventDefault();
+    runCurrentLookup(certId);
   };
 
   if (showLoader) {
@@ -159,47 +232,100 @@ const VerifyPage = () => {
   if (certificate) {
     if (Array.isArray(certificate?.layout)) {
       const pageBg = String(certificate?.certificateTemplate?.backgroundColor || '').trim() || '#ffffff';
-      return (
-        <VerifyViewport
-          style={{
-            backgroundColor: pageBg,
-            backgroundImage: undefined,
-            backgroundRepeat: 'no-repeat',
-            backgroundPosition: 'top center',
-            backgroundSize: undefined
-          }}
-        >
-          <VerifyLanguageSwitcher />
-          <div className="relative z-10 w-full">
+      if (statusOk || statusPreview) {
+        return (
+          <VerifyViewport
+            style={{
+              backgroundColor: pageBg,
+              backgroundImage: undefined,
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'top center',
+              backgroundSize: undefined
+            }}
+          >
+            <VerifyLanguageSwitcher />
             <PublicRenderer layout={certificate.layout} data={certificate} responsive responsiveMode="viewport" baseWidth={390} />
+          </VerifyViewport>
+        );
+      }
+
+      return (
+        <VerifyViewport className="ac-public-shell">
+          <VerifyLanguageSwitcher />
+          <div className="grid min-h-[100dvh] w-full xl:grid-cols-[0.96fr_1.04fr]">
+            <VerifyHeroPanel
+              branding={branding}
+              eyebrow={branding.organizationName}
+              title={translateCertificateStatus(t, statusUpper)}
+              body={t('publicVerifyHint')}
+              chips={[t('verification'), certificate.certificateId || '-', certificate.product?.name || t('product')]}
+            />
+            <section
+              className="relative min-h-[62vh] px-4 py-6 sm:px-6 lg:px-8 xl:min-h-[100dvh] xl:px-10 xl:py-8"
+              style={{
+                backgroundColor: pageBg,
+                backgroundImage: undefined,
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'top center',
+                backgroundSize: undefined
+              }}
+            >
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200/70 pb-4">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--ac-brand)' }}>{t('certificateTitle')}</div>
+                  <div className="mt-1 text-sm text-zinc-600">
+                    {certificate.product?.name || t('product')} • {translateCertificateStatus(t, statusUpper)}
+                  </div>
+                </div>
+                <div className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm">
+                  {certificate.certificateId || '-'}
+                </div>
+              </div>
+              <div className="relative z-10 w-full">
+                <PublicRenderer layout={certificate.layout} data={certificate} responsive responsiveMode="viewport" baseWidth={390} />
+              </div>
+            </section>
           </div>
         </VerifyViewport>
       );
     }
-    const statusUpper = String(certificate.status || '').toUpperCase();
-    const statusOk = statusUpper === 'VALID';
-    const statusPreview = statusUpper === 'PREVIEW';
-    return (
-      <VerifyViewport>
-        <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 lg:px-8">
-          <VerifyLanguageSwitcher />
-          <div
-            className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${
-              statusOk
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-                : statusPreview
-                  ? 'border-zinc-200 bg-zinc-50 text-zinc-900'
-                  : 'border-rose-200 bg-rose-50 text-rose-900'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              {statusOk || statusPreview ? <IconShieldCheck className="h-5 w-5" /> : <IconShieldAlert className="h-5 w-5" />}
-              <div className="text-sm font-semibold">{t('verification')}</div>
-              <div className="rounded-full bg-white/70 px-2 py-1 text-xs font-semibold">{translateCertificateStatus(t, statusUpper)}</div>
-            </div>
-          </div>
 
-          {hasTemplate ? (
+    return (
+      <VerifyViewport className="ac-public-shell">
+        <VerifyLanguageSwitcher />
+        <div className="grid min-h-[100dvh] w-full xl:grid-cols-[0.98fr_1.02fr]">
+          <VerifyHeroPanel
+            branding={branding}
+            eyebrow={statusOk || statusPreview ? t('verification') : t('verificationFailedBadge')}
+            title={statusOk ? t('statusValid') : translateCertificateStatus(t, statusUpper)}
+            body={statusOk ? t('publicVerifyHint') : t('verificationFailedBody_general')}
+            chips={[
+              certificate.product?.name || t('product'),
+              certificate.certificateId || '-',
+              translateCertificateStatus(t, statusUpper)
+            ]}
+            alert={!statusOk && !statusPreview}
+          />
+
+          <section className="relative flex min-h-[62vh] items-center px-5 py-8 sm:px-8 xl:min-h-[100dvh] xl:px-12 xl:py-12">
+            <div className="w-full">
+              <div className="mb-8 flex flex-wrap items-center gap-3">
+                <div
+                  className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] ${
+                    statusOk
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      : statusPreview
+                        ? 'border-zinc-200 bg-white text-zinc-700'
+                        : 'border-rose-200 bg-rose-50 text-rose-700'
+                  }`}
+                >
+                  {statusOk || statusPreview ? <IconShieldCheck className="h-4 w-4" /> : <IconShieldAlert className="h-4 w-4" />}
+                  {translateCertificateStatus(t, statusUpper)}
+                </div>
+                <div className="text-sm text-zinc-500">{certificate.certificateId || searchedValue || '-'}</div>
+              </div>
+
+              {hasTemplate ? (
             (() => {
               const canvasW = Number(certificate?.certificateTemplate?.canvasWidth || 390);
               const canvasH = Number(certificate?.certificateTemplate?.canvasHeight || 844);
@@ -207,94 +333,232 @@ const VerifyPage = () => {
               const baseH = Number.isFinite(canvasH) && canvasH > 0 ? canvasH : 844;
               const pageBg = String(certificate?.certificateTemplate?.backgroundColor || '').trim() || '#ffffff';
               return (
-                <div
-                  className="relative w-full"
-                  style={{
-                    backgroundColor: pageBg,
-                    backgroundImage: undefined,
-                    backgroundRepeat: 'no-repeat',
-                    backgroundPosition: 'top center',
-                    backgroundSize: undefined
-                  }}
-                >
-                  <div className="relative z-10 w-full">
-                    <PublicRenderer
-                      responsive
-                      responsiveMode="viewport"
-                      baseWidth={baseW}
-                      layout={[
-                        {
-                          id: '__certificate',
-                          type: 'certificate',
-                          x: 0,
-                          y: 0,
-                          w: baseW,
-                          h: baseH,
-                          content: { canvasWidth: baseW, canvasHeight: baseH }
-                        }
-                      ]}
-                      data={certificate}
-                    />
+                <div className="grid gap-6 xl:grid-cols-[0.42fr_0.58fr] xl:items-start">
+                  <div className="space-y-4">
+                    <div className="border-b border-[#dbe7ef] pb-4">
+                      <div className="text-xs font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--ac-brand)' }}>{t('product')}</div>
+                      <div className="mt-2 text-3xl font-semibold tracking-tight text-zinc-950">{certificate.product?.name || '-'}</div>
+                      <div className="mt-3 text-sm leading-7 text-zinc-600">{t('publicVerifyHint')}</div>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                      <div className="rounded-[22px] border border-[#dbe7ef] bg-white/70 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">{t('certificateId')}</div>
+                        <div className="mt-2 break-all font-mono text-sm font-semibold text-zinc-900">{certificate.certificateId || '-'}</div>
+                      </div>
+                      <div className="rounded-[22px] border border-[#dbe7ef] bg-white/70 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">{t('batch')}</div>
+                        <div className="mt-2 text-sm font-semibold text-zinc-900">{certificate.batch?.batchNo || '-'}</div>
+                      </div>
+                      <div className="rounded-[22px] border border-[#dbe7ef] bg-white/70 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">{t('date')}</div>
+                        <div className="mt-2 text-sm font-semibold text-zinc-900">
+                          {certificate.issuedAt ? new Date(certificate.issuedAt).toLocaleString(locale) : '-'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    className="relative overflow-hidden rounded-[32px] border border-white/75 bg-white/75 shadow-[0_28px_70px_rgba(15,23,42,0.08)] backdrop-blur"
+                    style={{
+                      backgroundColor: pageBg,
+                      backgroundImage: undefined,
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'top center',
+                      backgroundSize: undefined
+                    }}
+                  >
+                    <div className="relative z-10 w-full">
+                      <PublicRenderer
+                        responsive
+                        responsiveMode="viewport"
+                        baseWidth={baseW}
+                        layout={[
+                          {
+                            id: '__certificate',
+                            type: 'certificate',
+                            x: 0,
+                            y: 0,
+                            w: baseW,
+                            h: baseH,
+                            content: { canvasWidth: baseW, canvasHeight: baseH }
+                          }
+                        ]}
+                        data={certificate}
+                      />
+                    </div>
                   </div>
                 </div>
               );
             })()
-          ) : (
-            <div className="ac-card mx-auto max-w-2xl p-6 text-center">
-              <h1 className="text-xl font-semibold text-zinc-900">{certificate.product?.name || t('product')}</h1>
-              <div className="mt-4 rounded-2xl border border-dashed border-zinc-300 bg-white p-6">
-                <div className="text-xs font-semibold text-zinc-500">{t('basicDetails')}</div>
-                <div className="mt-2 font-mono text-base text-zinc-900">{certificate.certificateId}</div>
-                <div className="mx-auto mt-4 inline-block rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-left text-xs text-zinc-800">
+              ) : (
+                <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
                   <div>
-                    <span className="font-semibold">{t('batch')}:</span> {certificate.batch?.batchNo || '-'}
+                    <div className="text-xs font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--ac-brand)' }}>{t('product')}</div>
+                    <h2 className="mt-2 text-4xl font-semibold tracking-tight text-zinc-950">{certificate.product?.name || t('product')}</h2>
+                    <p className="mt-4 max-w-xl text-sm leading-7 text-zinc-600">{t('publicVerifyHint')}</p>
+
+                    <div className="mt-8 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-[24px] border border-[#dbe7ef] bg-white/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">{t('certificateId')}</div>
+                        <div className="mt-2 break-all font-mono text-sm font-semibold text-zinc-900">{certificate.certificateId || '-'}</div>
+                      </div>
+                      <div className="rounded-[24px] border border-[#dbe7ef] bg-white/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">{t('batch')}</div>
+                        <div className="mt-2 text-sm font-semibold text-zinc-900">{certificate.batch?.batchNo || '-'}</div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="mt-1">
-                    <span className="font-semibold">{t('date')}:</span> {certificate.issuedAt ? new Date(certificate.issuedAt).toLocaleString(locale) : '-'}
+
+                  <div className="grid gap-3">
+                    <div className="rounded-[24px] border border-[#dbe7ef] bg-white/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">{t('date')}</div>
+                      <div className="mt-2 text-sm font-semibold text-zinc-900">
+                        {certificate.issuedAt ? new Date(certificate.issuedAt).toLocaleString(locale) : '-'}
+                      </div>
+                    </div>
+                    <div className="rounded-[24px] border border-[#dbe7ef] bg-white/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">{t('verification')}</div>
+                      <div className="mt-2 text-2xl font-semibold text-zinc-950">{translateCertificateStatus(t, statusUpper)}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      </VerifyViewport>
+    );
+  }
+
+  if (error) {
+    return (
+      <VerifyViewport className="ac-public-shell">
+        <VerifyLanguageSwitcher />
+        <div className="grid min-h-[100dvh] w-full xl:grid-cols-[0.98fr_1.02fr]">
+          <VerifyHeroPanel
+            branding={branding}
+            eyebrow={t('verificationFailedBadge')}
+            title={t('verificationFailedTitle')}
+            body={t(`verificationFailedBody_${errorKind}`)}
+            chips={[searchedLabel, searchedValue || '-', t('whatYouCanDoNext')]}
+            alert
+          />
+
+          <section className="relative flex min-h-[62vh] items-center px-5 py-8 sm:px-8 xl:min-h-[100dvh] xl:px-12 xl:py-12">
+            <div className="w-full max-w-[720px]">
+              <div className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-rose-700">
+                <IconShieldAlert className="h-4 w-4" />
+                {t('verificationFailed')}
+              </div>
+              <h2 className="mt-5 text-4xl font-semibold tracking-tight text-zinc-950">{t('verifyAnotherCode')}</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-zinc-600">{t('verificationRetryHint')}</p>
+
+              <div className="mt-8 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-[24px] border border-[#ecd8dc] bg-white/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">{searchedLabel}</div>
+                  <div className="mt-2 break-all font-mono text-sm font-semibold text-slate-900">{searchedValue || '-'}</div>
+                </div>
+                <div className="rounded-[24px] border border-[#ecd8dc] bg-white/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">{t('checkedAt')}</div>
+                  <div className="mt-2 text-sm font-semibold text-slate-900">{checkedAt}</div>
+                </div>
+              </div>
+
+              <form onSubmit={handleManualVerify} className="mt-8 space-y-4">
+                <input
+                  type="text"
+                  placeholder={t('verifyInputPlaceholder')}
+                  value={certId}
+                  onChange={(e) => {
+                    setCertId(e.target.value);
+                    if (error) clearVerificationState();
+                  }}
+                  className="ac-input border-[#d7dfeb] bg-[#f7f9fc] text-center font-mono uppercase text-zinc-900 placeholder:text-zinc-400 focus:border-[#53a6c5] focus:ring-[#c7e5f0]"
+                />
+                <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                  <button
+                    type="submit"
+                    disabled={!certId}
+                    className="inline-flex w-full items-center justify-center rounded-[18px] px-4 py-3 text-sm font-semibold text-white transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+                    style={{ background: 'linear-gradient(135deg, var(--ac-brand) 0%, var(--ac-brand-deep) 100%)', boxShadow: '0 16px 30px rgba(var(--ac-brand-rgb), 0.25)' }}
+                  >
+                    {t('verifyNow')}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!searchedValue}
+                    onClick={() => runCurrentLookup(searchedValue)}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-[18px] border border-[#d7dfeb] bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-[0_10px_20px_rgba(15,23,42,0.05)] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <IconRefresh className="h-4 w-4" />
+                    {t('tryAgain')}
+                  </button>
+                </div>
+              </form>
+
+              <div className="mt-8 grid gap-3">
+                <div className="rounded-[24px] border border-[#ecd8dc] bg-[#fff7f8] p-5">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">{t('systemMessage')}</div>
+                  <div className="mt-2 text-sm leading-6 text-zinc-700">{error || t('verificationFailed')}</div>
+                </div>
+                <div className="rounded-[24px] border border-[#dbe7ef] bg-white/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+                  <div className="text-sm font-semibold text-slate-900">{t('whatYouCanDoNext')}</div>
+                  <div className="mt-3 space-y-3 text-sm leading-6 text-slate-600">
+                    <div>{t('verifyNextStep_retry')}</div>
+                    <div>{t('verifyNextStep_checkSource')}</div>
+                    <div>{t('verifyNextStep_contact')}</div>
                   </div>
                 </div>
               </div>
             </div>
-          )}
+          </section>
         </div>
       </VerifyViewport>
     );
   }
 
   return (
-    <VerifyViewport className="flex flex-col items-center justify-center px-4 py-8">
-      <div className="mx-auto w-full max-w-md">
-        <VerifyLanguageSwitcher />
-        <div className="ac-card p-6 text-center">
-          <IconShieldCheck className="mx-auto mb-4 h-12 w-12 text-zinc-900" />
-          <h1 className="text-lg font-semibold text-zinc-900">{t('productVerification')}</h1>
-          <p className="mt-1 text-sm text-zinc-600">{t('verifySubtitle')}</p>
+    <VerifyViewport className="ac-public-shell">
+      <VerifyLanguageSwitcher />
+      <section className="relative flex min-h-[100dvh] items-center justify-center px-5 py-8 sm:px-8 xl:px-12 xl:py-12">
+        <div className="w-full max-w-[720px]">
+          <div className="mb-4 flex flex-col items-start gap-3">
+            {branding.logoUrl ? (
+              <img
+                src={resolvePublicMediaUrl(branding.logoUrl)}
+                alt={branding.appTitle}
+                className="block h-auto max-h-14 w-auto max-w-[120px] object-contain"
+              />
+            ) : null}
+            <div className="min-w-0 text-lg font-semibold tracking-tight text-zinc-950 sm:text-xl">{branding.appTitle}</div>
+          </div>
+          <div className="text-xs font-semibold uppercase tracking-[0.24em]" style={{ color: 'var(--ac-brand)' }}>{t('publicVerifyPage')}</div>
+          <h2 className="mt-3 text-4xl font-semibold tracking-tight text-zinc-950 sm:text-5xl">{t('productVerification')}</h2>
+          <p className="mt-4 max-w-2xl text-sm leading-7 text-zinc-600 sm:text-base">{t('publicVerifyHint')}</p>
 
-          <form onSubmit={handleManualVerify} className="mt-5 space-y-3">
+          <form onSubmit={handleManualVerify} className="mt-8 space-y-4">
             <input
               type="text"
               placeholder={t('verifyInputPlaceholder')}
               value={certId}
               onChange={(e) => setCertId(e.target.value)}
-              className="ac-input text-center font-mono uppercase"
+              className="ac-input border-[#d7dfeb] bg-[#f7f9fc] text-center font-mono uppercase text-zinc-900 placeholder:text-zinc-400 focus:border-[#53a6c5] focus:ring-[#c7e5f0]"
             />
-            <button type="submit" disabled={!certId} className="ac-btn ac-btn-primary w-full disabled:cursor-not-allowed disabled:opacity-60">
-              {t('verifyNow')}
-            </button>
-          </form>
-
-          {error ? (
-            <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-              <div className="flex items-center justify-center gap-2">
-                <IconShieldAlert className="h-4 w-4" />
-                <span>{error || t('verificationFailed')}</span>
-              </div>
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+              <button
+                type="submit"
+                disabled={!certId}
+                className="inline-flex w-full items-center justify-center rounded-[18px] px-4 py-3 text-sm font-semibold text-white transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+                style={{ background: 'linear-gradient(135deg, var(--ac-brand) 0%, var(--ac-brand-deep) 100%)', boxShadow: '0 16px 30px rgba(var(--ac-brand-rgb), 0.25)' }}
+              >
+                {t('verifyNow')}
+              </button>
             </div>
-          ) : null}
+          </form>
         </div>
-
-        <p className="mt-6 text-center text-sm text-zinc-500 sm:text-base">{t('publicFooter')}</p>
-      </div>
+      </section>
     </VerifyViewport>
   );
 };

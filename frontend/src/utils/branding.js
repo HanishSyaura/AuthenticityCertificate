@@ -1,7 +1,16 @@
 import { resolvePublicMediaUrl } from './apiBase';
+import { applyTheme, DEFAULT_THEME_PRIMARY_HEX } from './theme';
 
 export const DEFAULT_APP_TITLE = 'Zora Pro PAC';
+export const LEGACY_BRANDING_PLACEHOLDER = 'DAMADINGJIYANWO';
 const DEFAULT_FAVICON_HREF = '/favicon.svg';
+
+export function sanitizeBrandingText(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (text.toUpperCase() === LEGACY_BRANDING_PLACEHOLDER) return '';
+  return text;
+}
 
 export function applyDocumentTitle(nextTitle) {
   if (typeof document === 'undefined') return;
@@ -93,7 +102,8 @@ export function applyFaviconUrl(nextUrl) {
   document.head.appendChild(appleLink);
 }
 
-export function applyBranding({ appTitle, faviconUrl } = {}) {
+export function applyBranding({ appTitle, faviconUrl, themePrimaryHex } = {}) {
   applyDocumentTitle(appTitle);
   applyFaviconUrl(faviconUrl);
+  applyTheme(themePrimaryHex || DEFAULT_THEME_PRIMARY_HEX);
 }

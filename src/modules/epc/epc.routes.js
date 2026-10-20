@@ -171,10 +171,23 @@ router.post(
 );
 
 router.post(
+  '/batch-import/preview-range',
+  requirePermission(['epc.write', 'epc.batch_import.access']),
+  epcController.previewBatchImportRange
+);
+
+router.post(
   '/batch-import/submit',
   requirePermission(['epc.write', 'epc.batch_import.access']),
   auditAction('SUBMIT_EPC_BATCH_IMPORT', { targetType: 'epc_batch', getMetadata: (req, res) => res.locals?.auditMetadata || null }),
   epcController.submitBatchImportNew
+);
+
+router.post(
+  '/batch-import/submit-range',
+  requirePermission(['epc.write', 'epc.batch_import.access']),
+  auditAction('SUBMIT_EPC_BATCH_IMPORT', { targetType: 'epc_batch', getMetadata: (req, res) => res.locals?.auditMetadata || null }),
+  epcController.submitBatchImportRange
 );
 
 router.post(

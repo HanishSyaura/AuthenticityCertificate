@@ -1995,6 +1995,75 @@ function normalizeIdentityEpc(raw) {
     .replace(/[^A-Z0-9]+/g, '');
 }
 
+function normalizeRangeDateCode(raw) {
+  const value = String(raw || '').trim();
+  if (!value) throw new Error('Date is required.');
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [yyyyStr, mmStr, ddStr] = value.split('-');
+    const yyyy = Number(yyyyStr);
+    const mm = Number(mmStr);
+    const dd = Number(ddStr);
+    const dt = new Date(yyyy, mm - 1, dd);
+    if (
+      !Number.isFinite(yyyy) ||
+      !Number.isFinite(mm) ||
+      !Number.isFinite(dd) ||
+      dt.getFullYear() !== yyyy ||
+      dt.getMonth() !== mm - 1 ||
+      dt.getDate() !== dd
+    ) {
+      throw new Error('Invalid date.');
+    }
+    return `${String(dd).padStart(2, '0')}${String(mm).padStart(2, '0')}${String(yyyy % 100).padStart(2, '0')}`;
+  }
+
+  const digits = value.replace(/\D/g, '');
+  if (/^\d{6}$/.test(digits)) return digits;
+  throw new Error('Invalid date format.');
+}
+
+function normalizeRangeRunningNo(raw, label) {
+  const padLen = getRunningPadLen();
+  const digits = String(raw ?? '').replace(/\D/g, '');
+  if (!digits) throw new Error(`${label} is required.`);
+  if (digits.length > padLen) throw new Error(`${label} must not exceed ${padLen} digits.`);
+  return padRunningNo(digits, padLen);
+}
+
+function expandEpcRange({ corpPrefix, dateCode, startRunningNo, endRunningNo, maxSize = 500 } = {}) {
+  const prefix = validateCorpPrefix(corpPrefix);
+  const ddmmyy = normalizeRangeDateCode(dateCode);
+  const startRunning = normalizeRangeRunningNo(startRunningNo, 'Start running number');
+  const endRunning = normalizeRangeRunningNo(endRunningNo, 'End running number');
+  const padLen = getRunningPadLen();
+
+  const startNo = BigInt(startRunning);
+  const endNo = BigInt(endRunning);
+  if (endNo < startNo) throw new Error('End running number must be greater than or equal to start running number.');
+
+  const totalBig = endNo - startNo + 1n;
+  const total = Number(totalBig);
+  if (!Number.isFinite(total) || total <= 0) throw new Error('Invalid EPC range size.');
+  if (total > Number(maxSize || 500)) throw new Error(`EPC range is too large. Maximum ${Number(maxSize || 500)} EPCs per request.`);
+
+  const epcCodes = [];
+  for (let i = 0n; i < totalBig; i += 1n) {
+    epcCodes.push(buildEpcCode({ corpPrefix: prefix, ddmmyy, runningNo: startNo + i }));
+  }
+
+  return {
+    corpPrefix: prefix,
+    dateCode: ddmmyy,
+    startRunningNo: startRunning,
+    endRunningNo: endRunning,
+    startEpc: buildEpcCode({ corpPrefix: prefix, ddmmyy, runningNo: startRunning }),
+    endEpc: buildEpcCode({ corpPrefix: prefix, ddmmyy, runningNo: endRunning }),
+    epcCodes,
+    total
+  };
+}
+
 function mergeTemplateMetaAliases(input) {
   const base = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
   const next = { ...base };
@@ -2107,6 +2176,139 @@ async function activateEpcIdentities({ tx, orgId, certificateId, epcCodes }) {
   }
 
   return { activated, created };
+}
+
+async function previewBatchImportRange({ organizationId, corpPrefix, dateCode, startRunningNo, endRunningNo, certificateTemplateId }) {
+  const orgId = Number(organizationId);
+  const range = expandEpcRange({ corpPrefix, dateCode, startRunningNo, endRunningNo, maxSize: 500 });
+
+  let targetCertificateId = null;
+  if (certificateTemplateId !== undefined) {
+    const tplId = certificateTemplateId == null ? null : Number(certificateTemplateId);
+    if (tplId != null) {
+      const tpl = await withTimeout(
+        prisma.certificateTemplate.findFirst({
+          where: { id: tplId, organizationId: orgId, deletedAt: null, templateType: 'auth' },
+          select: { certificateId: true }
+        }),
+        1500
+      );
+      if (!tpl) throw new Error('Auth certificate template not found.');
+      targetCertificateId = String(tpl.certificateId || '').trim() || null;
+      if (!targetCertificateId) throw new Error('Auth certificate template is missing certificateId.');
+    }
+  }
+
+  const [itemRows, identityRows] = await Promise.all([
+    withTimeout(
+      prisma.epcItem.findMany({
+        where: { organizationId: orgId, epcCode: { in: range.epcCodes } },
+        select: {
+          id: true,
+          epcCode: true,
+          batchId: true,
+          batch: {
+            select: {
+              id: true,
+              batchName: true,
+              product: { select: { id: true, name: true, sku: true, code: true } }
+            }
+          }
+        }
+      }),
+      5000
+    ),
+    withTimeout(
+      prisma.tagIdentity.findMany({
+        where: { organizationId: orgId, epc: { in: range.epcCodes.map((c) => normalizeIdentityEpc(c)) }, unassignedAt: null },
+        select: { epc: true, certificateId: true }
+      }),
+      5000
+    )
+  ]);
+
+  const itemByEpc = new Map();
+  for (const row of Array.isArray(itemRows) ? itemRows : []) {
+    const code = String(row?.epcCode || '').trim().toUpperCase();
+    if (!code) continue;
+    itemByEpc.set(code, row);
+  }
+
+  const identityByEpc = new Map();
+  for (const row of Array.isArray(identityRows) ? identityRows : []) {
+    const code = normalizeIdentityEpc(row?.epc);
+    if (!code || identityByEpc.has(code)) continue;
+    identityByEpc.set(code, String(row?.certificateId || '').trim() || null);
+  }
+
+  const summary = {
+    total: range.total,
+    found: 0,
+    missing: 0,
+    selectable: 0,
+    selectedDefault: 0,
+    conflicts: 0,
+    alreadyAssigned: 0
+  };
+
+  const items = range.epcCodes.map((epcCode) => {
+    const item = itemByEpc.get(epcCode) || null;
+    const currentCertificateId = identityByEpc.get(normalizeIdentityEpc(epcCode)) || null;
+
+    let previewStatus = 'ready';
+    let message = '';
+    let selectable = false;
+
+    if (!item) {
+      previewStatus = 'missing';
+      message = 'EPC not found in the system.';
+      summary.missing += 1;
+    } else if (targetCertificateId && currentCertificateId && currentCertificateId !== targetCertificateId) {
+      previewStatus = 'conflict';
+      message = `Already assigned to ${currentCertificateId}.`;
+      summary.found += 1;
+      summary.conflicts += 1;
+    } else if (currentCertificateId) {
+      previewStatus = 'already_assigned';
+      message = targetCertificateId && currentCertificateId === targetCertificateId ? 'Already assigned to the selected certificate.' : `Currently assigned to ${currentCertificateId}.`;
+      selectable = true;
+      summary.found += 1;
+      summary.alreadyAssigned += 1;
+      summary.selectable += 1;
+      summary.selectedDefault += 1;
+    } else {
+      previewStatus = 'ready';
+      message = 'Ready to activate.';
+      selectable = true;
+      summary.found += 1;
+      summary.selectable += 1;
+      summary.selectedDefault += 1;
+    }
+
+    return {
+      epcCode,
+      batchId: item?.batchId != null ? Number(item.batchId) : null,
+      batchName: String(item?.batch?.batchName || '').trim() || null,
+      productName: String(item?.batch?.product?.name || '').trim() || null,
+      currentCertificateId,
+      previewStatus,
+      message,
+      selectable,
+      defaultSelected: selectable
+    };
+  });
+
+  return {
+    corpPrefix: range.corpPrefix,
+    dateCode: range.dateCode,
+    startRunningNo: range.startRunningNo,
+    endRunningNo: range.endRunningNo,
+    startEpc: range.startEpc,
+    endEpc: range.endEpc,
+    targetCertificateId,
+    summary,
+    items
+  };
 }
 
 async function previewBatchImportXlsx({ organizationId, batchId, base64 }) {
@@ -2433,6 +2635,227 @@ async function createImportBatchFromXlsx({
     { timeout: 12_000, maxWait: 5_000 }
   );
 
+
+  return result;
+}
+
+async function submitBatchImportRange({
+  organizationId,
+  corpPrefix,
+  dateCode,
+  startRunningNo,
+  endRunningNo,
+  epcCodes,
+  productId,
+  certificateTemplateId,
+  documents,
+  actor
+}) {
+  const orgId = Number(organizationId);
+  const range = expandEpcRange({ corpPrefix, dateCode, startRunningNo, endRunningNo, maxSize: 500 });
+
+  const selectedCodes = Array.from(
+    new Set((Array.isArray(epcCodes) ? epcCodes : []).map((c) => normalizeIdentityEpc(c)).filter(Boolean))
+  );
+  if (!selectedCodes.length) throw new Error('Select at least one EPC to continue.');
+
+  const allowedSet = new Set(range.epcCodes.map((c) => normalizeIdentityEpc(c)));
+  for (const code of selectedCodes) {
+    if (!allowedSet.has(code)) throw new Error(`Selected EPC is outside the requested range: ${code}`);
+  }
+
+  const docEntries = validateDocEntries(
+    Object.entries(documents && typeof documents === 'object' ? documents : {}).map(([k, v]) => [String(k || '').trim(), String(v || '').trim()]),
+    { skipEmpty: true }
+  );
+
+  const auditItems = selectedCodes.map((epcCode) => ({ epcCode }));
+
+  const result = await prisma.$transaction(
+    async (tx) => {
+      const pid = productId == null ? null : Number(productId);
+      if (!Number.isFinite(pid) || pid <= 0) throw new Error('Product is required.');
+
+      const product = await tx.product.findFirst({
+        where: { id: pid, organizationId: orgId },
+        select: { id: true, sku: true, code: true }
+      });
+      if (!product) throw new Error('Product not found.');
+      const assignedProductId = Number(product.id);
+      const assignedProductSku = String(product.sku || product.code || '').trim() || null;
+
+      let tplId = null;
+      let tplCertId = null;
+      if (certificateTemplateId !== undefined) {
+        tplId = certificateTemplateId == null ? null : Number(certificateTemplateId);
+        if (tplId != null) {
+          const tpl = await tx.certificateTemplate.findFirst({
+            where: { id: tplId, organizationId: orgId, deletedAt: null, templateType: 'auth' },
+            select: { id: true, certificateId: true }
+          });
+          if (!tpl) throw new Error('Auth certificate template not found.');
+          tplCertId = String(tpl.certificateId || '').trim() || null;
+          if (!tplCertId) throw new Error('Auth certificate template is missing certificateId.');
+        }
+      }
+
+      const epcItemByEpc = new Map();
+      const identityByEpc = new Map();
+      const [itemRows, identityRows] = await Promise.all([
+        tx.epcItem.findMany({
+          where: { organizationId: orgId, epcCode: { in: selectedCodes } },
+          select: { id: true, epcCode: true, batchId: true }
+        }),
+        tx.tagIdentity.findMany({
+          where: { organizationId: orgId, epc: { in: selectedCodes }, unassignedAt: null },
+          select: { epc: true, certificateId: true }
+        })
+      ]);
+
+      for (const row of Array.isArray(itemRows) ? itemRows : []) {
+        const code = String(row?.epcCode || '').trim().toUpperCase();
+        const itemId = row?.id != null ? Number(row.id) : null;
+        const batchId = row?.batchId != null ? Number(row.batchId) : null;
+        if (!code || !Number.isFinite(itemId) || itemId <= 0) continue;
+        epcItemByEpc.set(code, { id: itemId, batchId });
+      }
+
+      for (const row of Array.isArray(identityRows) ? identityRows : []) {
+        const code = normalizeIdentityEpc(row?.epc);
+        if (!code || identityByEpc.has(code)) continue;
+        identityByEpc.set(code, String(row?.certificateId || '').trim() || null);
+      }
+
+      if (epcItemByEpc.size !== selectedCodes.length) {
+        const missing = selectedCodes.filter((code) => !epcItemByEpc.has(code)).slice(0, 10);
+        throw new Error(`Some EPC codes do not exist in the system: ${missing.join(', ')}${selectedCodes.length - epcItemByEpc.size > 10 ? ', ...' : ''}`);
+      }
+
+      if (tplCertId) {
+        const conflictSample = selectedCodes
+          .map((code) => ({ code, certificateId: identityByEpc.get(code) || null }))
+          .filter((row) => row.certificateId && row.certificateId !== tplCertId)
+          .slice(0, 10);
+        if (conflictSample.length > 0) {
+          throw new Error(
+            `Some EPC codes are already assigned to another certificate: ${conflictSample
+              .map((row) => `${row.code}→${row.certificateId}`)
+              .join(', ')}${selectedCodes.length > 10 ? ', ...' : ''}`
+          );
+        }
+      }
+
+      const batchIdSet = new Set();
+      for (const meta of epcItemByEpc.values()) {
+        const batchId = meta?.batchId != null ? Number(meta.batchId) : null;
+        if (!Number.isFinite(batchId) || batchId <= 0) throw new Error('Selected EPC is missing batch assignment.');
+        batchIdSet.add(batchId);
+      }
+      const touchedBatchIds = Array.from(batchIdSet).filter((v) => Number.isFinite(v) && v > 0);
+
+      if (touchedBatchIds.length > 0) {
+        const batches = await tx.epcBatch.findMany({
+          where: { organizationId: orgId, id: { in: touchedBatchIds } },
+          select: { id: true, batchName: true, productId: true, sku: true }
+        });
+        const byId = new Map((Array.isArray(batches) ? batches : []).map((b) => [Number(b.id), b]));
+        const overrideAllowed = canOverrideItem({ actor });
+
+        for (const bid of touchedBatchIds) {
+          const b = byId.get(Number(bid));
+          if (!b) continue;
+          const existingPid = b.productId == null ? null : Number(b.productId);
+          if (existingPid != null && existingPid !== assignedProductId && !overrideAllowed) {
+            const err = new Error(`Batch already assigned to a different product: ${String(b.batchName || bid)}`);
+            err.status = 409;
+            throw err;
+          }
+        }
+
+        const now = new Date();
+        for (const bid of touchedBatchIds) {
+          const b = byId.get(Number(bid));
+          if (!b) continue;
+          const data = {
+            productId: assignedProductId,
+            productionUploadedAt: now
+          };
+          const existingSku = String(b.sku || '').trim() || null;
+          if (!existingSku && assignedProductSku) data.sku = assignedProductSku;
+          if (tplId != null) {
+            data.certificateTemplateId = tplId;
+            data.certificateId = tplCertId;
+          }
+          await tx.epcBatch.updateMany({
+            where: { organizationId: orgId, id: Number(bid) },
+            data
+          });
+        }
+      }
+
+      if (docEntries.length > 0) {
+        const epcItemIds = Array.from(epcItemByEpc.values())
+          .map((v) => (v?.id != null ? Number(v.id) : null))
+          .filter((v) => Number.isFinite(v) && v > 0);
+        const docTypeList = docEntries.map(([k]) => k);
+        const now = new Date();
+
+        for (const group of chunkArray(epcItemIds, 1000)) {
+          await tx.epcItemDocument.deleteMany({
+            where: { organizationId: orgId, epcItemId: { in: group }, docType: { in: docTypeList } }
+          });
+          await tx.epcItemDocument.createMany({
+            data: group.flatMap((epcItemId) =>
+              docEntries.map(([docType, mediaUrl]) => ({
+                organizationId: orgId,
+                epcItemId,
+                docType,
+                mediaUrl,
+                uploadedAt: now
+              }))
+            )
+          });
+        }
+      }
+
+      let activation = { activated: 0, created: 0 };
+      if (tplCertId) {
+        const existingCert = await tx.certificate.findUnique({
+          where: { certificateId: tplCertId },
+          select: { certificateId: true, organizationId: true, status: true, issuedAt: true }
+        });
+        if (existingCert) {
+          if (Number(existingCert.organizationId) !== orgId) throw new Error('Certificate ID belongs to a different organization');
+          const s = String(existingCert.status || '').toUpperCase();
+          if (s === 'PENDING') {
+            await tx.certificate.update({
+              where: { certificateId: tplCertId },
+              data: { status: 'VALID', issuedAt: existingCert.issuedAt || new Date() }
+            });
+          }
+        } else {
+          await tx.certificate.create({
+            data: { certificateId: tplCertId, organizationId: orgId, type: 'shared', batchId: null, status: 'VALID', issuedAt: new Date() }
+          });
+        }
+
+        activation = await activateEpcIdentities({ tx, orgId, certificateId: tplCertId, epcCodes: selectedCodes });
+      }
+
+      return {
+        rows: selectedCodes.length,
+        uniqueEpcs: selectedCodes.length,
+        updated: 0,
+        activated: Number(activation?.activated) || 0,
+        created: Number(activation?.created) || 0,
+        certificateId: tplCertId,
+        productId: assignedProductId,
+        batchIds: touchedBatchIds,
+        items: auditItems
+      };
+    },
+    { timeout: 12_000, maxWait: 5_000 }
+  );
 
   return result;
 }
@@ -3178,8 +3601,10 @@ module.exports = {
   updateItemProduction,
   importProductionXlsx,
   previewBatchImportXlsx,
+  previewBatchImportRange,
   createImportBatchFromXlsx,
   submitBatchImport,
+  submitBatchImportRange,
   updateBatchDocuments,
   markProductionDone,
   updateBatch,

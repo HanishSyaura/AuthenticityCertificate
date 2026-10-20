@@ -2,14 +2,14 @@ export function getProductModuleTourSteps() {
   return [
     {
       selector: '[data-tour="records-header"]',
-      title: 'Product Module',
-      body: 'This page manages Categories and Products. Recommended flow: create Categories (only if needed), then create Products under the correct Category. We will walk through both.',
+      title: 'Master Data',
+      body: 'This page manages product-related master data. Recommended flow: create Categories when needed, then create Products under the correct Category.',
       action: { type: 'navigate', to: '/admin/records', options: { replace: false } }
     },
     {
       selector: '[data-tour="records-tabs"]',
-      title: 'Products & Categories tabs',
-      body: 'This tab container switches between Products and Categories. Categories are used for grouping and selection, while Products are what you will later generate EPC batches for.'
+      title: 'Master data tabs',
+      body: 'This tab container separates Product, Categories, Customer, and Supplier master data. Products and Categories are active today, while the other tabs are prepared for expansion.'
     },
     {
       selector: '[data-tour="records-tab-categories"]',

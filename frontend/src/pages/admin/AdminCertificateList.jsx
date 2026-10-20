@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import useEpcStore from '../../store/useEpcStore';
 import useUploadsStore from '../../store/useUploadsStore';
+import useAdminAuthStore from '../../store/useAdminAuthStore';
 import { useT } from '../../i18n/useT';
+import { sortRows } from '../../utils/tableSort';
 import DataTable from '../../components/ui/DataTable';
 import TablePager from '../../components/ui/TablePager';
 import RowActionsMenu from '../../components/ui/RowActionsMenu';
@@ -61,10 +63,30 @@ function getTemplateName(tpl) {
   return s;
 }
 
+function SectionShell({ title, hint, action, children }) {
+  const hasHeader = Boolean(title || hint || action);
+  return (
+    <section className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-[0_16px_34px_rgba(15,23,42,0.05)]">
+      {hasHeader ? (
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            {title ? <h2 className="text-xl font-semibold tracking-tight text-slate-950">{title}</h2> : null}
+            {hint ? <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{hint}</p> : null}
+          </div>
+          {action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}
+        </div>
+      ) : null}
+      <div className={hasHeader ? 'mt-4' : ''}>{children}</div>
+    </section>
+  );
+}
+
 export default function AdminCertificateList() {
   const { t } = useT();
   const navigate = useNavigate();
   const location = useLocation();
+  const user = useAdminAuthStore((s) => s.user);
+  const headerCheckboxRef = useRef(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [newCertificateId, setNewCertificateId] = useState('');
@@ -77,6 +99,8 @@ export default function AdminCertificateList() {
   const [newError, setNewError] = useState(null);
   const [tableOffset, setTableOffset] = useState(0);
   const [tableLimit, setTableLimit] = useState(50);
+  const [tableSort, setTableSort] = useState(null);
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState(() => new Set());
 
   const { templates, loading, error, fetchTemplates, createTemplate, duplicateTemplate } = useCertTemplatesStore((s) => ({
     templates: s.templates,
@@ -106,6 +130,15 @@ export default function AdminCertificateList() {
     navigate('/admin/certificates', { replace: true, state: {} });
   }, [location?.state?.openCreate, navigate]);
 
+  const columnPrefsUserKey = useMemo(() => {
+    const raw = String(user?.id || user?.email || 'guest').trim().toLowerCase();
+    return raw.replace(/[^a-z0-9_-]+/g, '_') || 'guest';
+  }, [user?.email, user?.id]);
+
+  function scopedColumnKey(base) {
+    return `${base}_${columnPrefsUserKey}`;
+  }
+
   const assignedCountByTemplateId = useMemo(() => {
     const map = new Map();
     for (const b of Array.isArray(batches) ? batches : []) {
@@ -125,153 +158,325 @@ export default function AdminCertificateList() {
     return list.filter((tpl) => !getTemplateId(tpl));
   }, [templates]);
 
+  useEffect(() => {
+    setSelectedTemplateIds((prev) => {
+      if (!(prev instanceof Set) || prev.size === 0) return prev;
+      const validIds = new Set((Array.isArray(templates) ? templates : []).map((tpl) => getTemplateId(tpl)).filter(Boolean));
+      let changed = false;
+      const next = new Set();
+      prev.forEach((id) => {
+        if (validIds.has(id)) next.add(id);
+        else changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [templates]);
+
+  const tableColumns = useMemo(
+    () => [
+      {
+        id: 'select',
+        header: (
+          <input
+            ref={headerCheckboxRef}
+            type="checkbox"
+            defaultChecked={false}
+            aria-label={t('selectAll') || 'Select all'}
+            onClick={(e) => e.stopPropagation()}
+            className="h-4 w-4 rounded border-slate-300 text-[var(--ac-brand)] focus:ring-[var(--ac-brand)]"
+          />
+        ),
+        cell: (tpl) => {
+          const id = getTemplateId(tpl);
+          const checked = id ? selectedTemplateIds.has(id) : false;
+          return (
+            <span className="inline-flex" onClick={(e) => e.stopPropagation()}>
+              <input
+                type="checkbox"
+                checked={checked}
+                disabled={!id}
+                aria-label={t('select') || 'Select'}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  if (!id) return;
+                  const nextChecked = e.target.checked;
+                  setSelectedTemplateIds((prev) => {
+                    const next = new Set(prev);
+                    if (nextChecked) next.add(id);
+                    else next.delete(id);
+                    return next;
+                  });
+                }}
+                className="h-4 w-4 rounded border-slate-300 text-[var(--ac-brand)] focus:ring-[var(--ac-brand)]"
+              />
+            </span>
+          );
+        },
+        align: 'center',
+        width: 52,
+        minWidth: 52,
+        maxWidth: 52,
+        lockedPosition: 'left',
+        pinnable: false,
+        hideable: false,
+        sortable: false,
+        resizable: false,
+        headerClassName: 'px-3',
+        className: 'px-3'
+      },
+      {
+        id: 'name',
+        header: t('certificateName'),
+        align: 'center',
+        sortValue: (tpl) => getTemplateName(tpl) || getCertificateId(tpl) || getTemplateId(tpl) || '',
+        minWidth: 220,
+        cell: (tpl) => {
+          const id = getTemplateId(tpl);
+          const nm = getTemplateName(tpl);
+          const title = nm || `#${id || ''}`;
+          return (
+            <div className="min-w-0 text-center">
+              <div className="truncate text-sm font-semibold text-slate-900">{title}</div>
+              <div className="mt-1 text-xs font-medium text-slate-600">
+                {String(tpl?.templateType || 'auth') === 'supporting' ? t('supportingCertificate') : t('authCertificate')}
+              </div>
+            </div>
+          );
+        }
+      },
+      {
+        id: 'fields',
+        header: t('fields'),
+        align: 'center',
+        sortValue: (tpl) => (Array.isArray(tpl?.layoutJson) ? tpl.layoutJson.length : 0),
+        minWidth: 108,
+        cell: (tpl) => <span className="inline-flex w-full justify-center text-sm text-slate-700">{Array.isArray(tpl?.layoutJson) ? tpl.layoutJson.length : 0}</span>
+      },
+      {
+        id: 'batches',
+        header: t('epcBatches'),
+        align: 'center',
+        sortValue: (tpl) => assignedCountByTemplateId.get(String(getTemplateId(tpl) || tpl?.id || '')) || 0,
+        minWidth: 120,
+        cell: (tpl) => (
+          <span className="inline-flex w-full justify-center text-sm text-slate-700">
+            {assignedCountByTemplateId.get(String(getTemplateId(tpl) || tpl?.id || '')) || 0}
+          </span>
+        )
+      },
+      {
+        id: 'created',
+        header: t('created'),
+        align: 'center',
+        sortValue: (tpl) => (tpl?.createdAt ? new Date(tpl.createdAt).getTime() : 0),
+        minWidth: 132,
+        cell: (tpl) => <span className="inline-flex w-full justify-center text-sm text-slate-500">{formatDate(tpl?.createdAt)}</span>
+      },
+      {
+        id: 'actions',
+        header: t('actions'),
+        align: 'center',
+        width: 84,
+        minWidth: 84,
+        maxWidth: 84,
+        pinnable: false,
+        hideable: false,
+        sortable: false,
+        resizable: false,
+        headerClassName: 'px-3',
+        className: 'px-3',
+        cell: (tpl) => (
+          <div className="flex w-full justify-center">
+            <RowActionsMenu
+              items={[
+                {
+                  key: 'open',
+                  label: t('open'),
+                  onSelect: async () => {
+                    const id = getTemplateId(tpl);
+                    if (!id) return;
+                    navigate(`/admin/certificates/${id}`);
+                  }
+                },
+                {
+                  key: 'openDesigner',
+                  label: t('openDesigner'),
+                  onSelect: async () => {
+                    const id = getTemplateId(tpl);
+                    if (!id) return;
+                    navigate(`/admin/certificates/${id}/design`);
+                  }
+                },
+                {
+                  key: 'duplicate',
+                  label: t('duplicate'),
+                  onSelect: async () => {
+                    const id = getTemplateId(tpl);
+                    if (!id) return;
+                    const created = await duplicateTemplate({ id });
+                    if (created?.id != null) navigate(`/admin/certificates/${created.id}`);
+                  }
+                }
+              ]}
+            />
+          </div>
+        )
+      }
+    ],
+    [assignedCountByTemplateId, duplicateTemplate, navigate, selectedTemplateIds, t]
+  );
+
+  const sortedTemplates = useMemo(
+    () => sortRows(Array.isArray(templates) ? templates : [], tableSort, tableColumns),
+    [tableColumns, tableSort, templates]
+  );
+
   const pagedTemplates = useMemo(() => {
-    const list = Array.isArray(templates) ? templates : [];
+    const list = Array.isArray(sortedTemplates) ? sortedTemplates : [];
     const total = list.length;
     const safeOffset = total === 0 ? 0 : Math.max(0, Math.min(tableOffset, Math.max(0, total - 1)));
     return list.slice(safeOffset, safeOffset + tableLimit);
-  }, [tableLimit, tableOffset, templates]);
+  }, [sortedTemplates, tableLimit, tableOffset]);
+
+  const visiblePageTemplateIds = useMemo(
+    () => pagedTemplates.map((tpl) => getTemplateId(tpl)).filter(Boolean),
+    [pagedTemplates]
+  );
+
+  const allPageSelected =
+    visiblePageTemplateIds.length > 0 && visiblePageTemplateIds.every((id) => selectedTemplateIds.has(id));
+  const somePageSelected =
+    visiblePageTemplateIds.length > 0 && visiblePageTemplateIds.some((id) => selectedTemplateIds.has(id)) && !allPageSelected;
+
+  useEffect(() => {
+    if (!headerCheckboxRef.current) return;
+    headerCheckboxRef.current.indeterminate = somePageSelected;
+  }, [somePageSelected]);
+
+  useEffect(() => {
+    if (!headerCheckboxRef.current) return;
+    headerCheckboxRef.current.checked = allPageSelected;
+  }, [allPageSelected]);
+
+  useEffect(() => {
+    const headerNode = headerCheckboxRef.current;
+    if (!headerNode) return;
+    headerNode.onchange = (event) => {
+      const nextChecked = event?.target?.checked;
+      setSelectedTemplateIds((prev) => {
+        const next = new Set(prev);
+        visiblePageTemplateIds.forEach((id) => {
+          if (nextChecked) next.add(id);
+          else next.delete(id);
+        });
+        return next;
+      });
+    };
+    return () => {
+      if (headerNode) headerNode.onchange = null;
+    };
+  }, [visiblePageTemplateIds]);
+
+  async function refreshPage() {
+    await fetchTemplates();
+    await fetchBatches({ limit: 200, offset: 0 });
+  }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3" data-tour="cert-header">
-        <div>
-          <h2 className="text-base font-semibold text-zinc-900">{t('certificateList')}</h2>
-          <p className="mt-1 text-sm text-zinc-600">{t('certificateListSubtitle')}</p>
-        </div>
-        <button
-          type="button"
-          className="ac-btn px-3 py-2 text-xs"
-          data-tour="cert-add"
-          onClick={() => {
-            setNewError(null);
-            setNewBgError(null);
-            setNewTemplateType('auth');
-            setCreateOpen(true);
-          }}
-        >
-          {t('addCertificate')}
-        </button>
-      </div>
+    <div className="ac-page">
+      <div className="space-y-4">
+        {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
+        {!error && invalidTemplateRows.length > 0 ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            {t('certificateTemplatesInvalidResponse', { count: invalidTemplateRows.length })}
+          </div>
+        ) : null}
 
-      {error ? <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
-      {!error && invalidTemplateRows.length > 0 ? (
-        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-          {t('certificateTemplatesInvalidResponse', { count: invalidTemplateRows.length })}
-        </div>
-      ) : null}
-
-      <div data-tour="cert-table">
-        <DataTable
-          minWidth={720}
-          rows={pagedTemplates}
-          rowKey={(tpl) => getTemplateId(tpl) || tpl?.id || tpl?.templateId || tpl?.template_id}
-          loading={loading}
-          loadingContent={t('loading')}
-          emptyContent={
-            <div>
-              <div className="text-sm font-semibold text-zinc-900">{t('noCertificates')}</div>
-              <div className="mt-1 text-xs text-zinc-600">{t('noCertificatesHint')}</div>
-            </div>
+        <SectionShell
+          title={t('certificateList')}
+          hint={t('certificateListSubtitle')}
+          action={
+            <>
+              <button
+                type="button"
+                className="ac-btn px-4 py-2.5 text-sm"
+                data-tour="cert-add"
+                onClick={() => {
+                  setNewError(null);
+                  setNewBgError(null);
+                  setNewTemplateType('auth');
+                  setCreateOpen(true);
+                }}
+              >
+                {t('addCertificate')}
+              </button>
+            </>
           }
-          onRowClick={(tpl) => {
-            const id = getTemplateId(tpl);
-            if (!id) return;
-            navigate(`/admin/certificates/${id}`);
-          }}
-          bottom={
-            <TablePager
-              offset={tableOffset}
-              limit={tableLimit}
-              total={Array.isArray(templates) ? templates.length : 0}
+        >
+          <div data-tour="cert-table">
+            <DataTable
+              minWidth={760}
+              rows={pagedTemplates}
+              rowKey={(tpl) => getTemplateId(tpl) || tpl?.id || tpl?.templateId || tpl?.template_id}
+              sortState={tableSort}
+              onSortChange={setTableSort}
+              density="compact"
               loading={loading}
-              onOffsetChange={(next) => setTableOffset(next)}
-              onLimitChange={(next) => {
-                setTableLimit(next);
-                setTableOffset(0);
+              loadingContent={t('loading')}
+              emptyContent={
+                <div className="text-center">
+                  <div className="text-sm font-semibold text-slate-900">{t('noCertificates')}</div>
+                  <div className="mt-1 text-sm text-slate-600">{t('noCertificatesHint')}</div>
+                </div>
+              }
+              top={
+                <div className="space-y-3">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">{t('listOfCertificates')}</div>
+                  </div>
+                  {selectedTemplateIds.size > 0 ? (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-slate-200 bg-slate-50/80 px-3 py-3">
+                      <div className="text-sm font-semibold text-slate-900">{t('selectedProducts', { value: selectedTemplateIds.size })}</div>
+                      <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-sm" onClick={() => setSelectedTemplateIds(new Set())}>
+                        {t('clearSelection')}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              }
+              onRowClick={(tpl) => {
+                const id = getTemplateId(tpl);
+                if (!id) return;
+                navigate(`/admin/certificates/${id}`);
+              }}
+              bottom={
+                <TablePager
+                  offset={tableOffset}
+                  limit={tableLimit}
+                  total={sortedTemplates.length}
+                  loading={loading}
+                  onOffsetChange={(next) => setTableOffset(next)}
+                  onLimitChange={(next) => {
+                    setTableLimit(next);
+                    setTableOffset(0);
+                  }}
+                />
+              }
+              columns={tableColumns}
+              columnTools={{
+                enabled: true,
+                storageKey: scopedColumnKey('ac_certificate_templates_v2'),
+                initialPinnedIds: ['select', 'name'],
+                defaultColumnWidth: 116
               }}
             />
-          }
-          columns={[
-          {
-            id: 'name',
-            header: t('certificateName'),
-            cell: (tpl) => {
-              const id = getTemplateId(tpl);
-              const nm = getTemplateName(tpl);
-              const cid = getCertificateId(tpl);
-              const title = nm || cid || `#${id || ''}`;
-              const subtitle = cid || `#${id || ''}`;
-              return (
-                <div className="min-w-0">
-                  <div className="truncate font-semibold text-zinc-900">{title}</div>
-                  <div className="mt-0.5 truncate text-[11px] text-zinc-500">{subtitle}</div>
-                <div className="mt-1 text-[11px] font-semibold text-zinc-600">
-                  {String(tpl?.templateType || 'auth') === 'supporting' ? t('supportingCertificate') : t('authCertificate')}
-                </div>
-                </div>
-              );
-            }
-          },
-          {
-            id: 'fields',
-            header: t('fields'),
-            cell: (tpl) => <span className="text-[11px] text-zinc-700">{Array.isArray(tpl.layoutJson) ? tpl.layoutJson.length : 0}</span>
-          },
-          {
-            id: 'batches',
-            header: t('epcBatches'),
-            cell: (tpl) => <span className="text-[11px] text-zinc-700">{assignedCountByTemplateId.get(String(tpl.id)) || 0}</span>
-          },
-          { id: 'created', header: t('created'), cell: (tpl) => <span className="text-[11px] text-zinc-500">{formatDate(tpl.createdAt)}</span> },
-          {
-            id: 'actions',
-            header: t('actions'),
-            align: 'right',
-            headerStyle: { width: 1 },
-            cellStyle: { width: 1 },
-            cell: (tpl) => (
-              <RowActionsMenu
-                items={[
-                  {
-                    key: 'open',
-                    label: t('open'),
-                    onSelect: async () => {
-                      const id = getTemplateId(tpl);
-                      if (!id) return;
-                      navigate(`/admin/certificates/${id}`);
-                    }
-                  },
-                  {
-                    key: 'openDesigner',
-                    label: t('openDesigner'),
-                    onSelect: async () => {
-                      const id = getTemplateId(tpl);
-                      if (!id) return;
-                      navigate(`/admin/certificates/${id}/design`);
-                    }
-                  },
-                  {
-                    key: 'duplicate',
-                    label: t('duplicate'),
-                    onSelect: async () => {
-                      const id = getTemplateId(tpl);
-                      if (!id) return;
-                      const created = await duplicateTemplate({ id });
-                      if (created?.id != null) navigate(`/admin/certificates/${created.id}`);
-                    }
-                  }
-                ]}
-              />
-            )
-          }
-          ]}
-        />
+          </div>
+        </SectionShell>
       </div>
 
       {createOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white shadow-xl">
+        <div className="ac-overlay-center">
+          <div className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200 bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
               <div className="text-sm font-semibold text-zinc-900">{t('createTemplate')}</div>
               <button

@@ -85,7 +85,7 @@ export default function AdminCertificates() {
 
   return (
     <div className="ac-page">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+      <div className="mb-4 mt-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-zinc-900">{t('certificates')}</h2>
           <div className="mt-1 text-sm text-zinc-600">{t('certificatesSubtitle')}</div>
@@ -130,7 +130,7 @@ export default function AdminCertificates() {
           </button>
           <button
             type="button"
-            className="ac-btn ac-btn-soft px-3 py-2 text-xs text-brand-700"
+            className="ac-btn ac-btn-soft ac-btn-soft-brand px-3 py-2 text-xs"
             disabled={loading || selectedCertIds.size === 0 || cmsDesignsLoading}
             onClick={() => {
               setBulkLandingDesignId('');

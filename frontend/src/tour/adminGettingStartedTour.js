@@ -17,7 +17,7 @@ export function getAdminGettingStartedTourSteps(t) {
     ...getProductModuleTourSteps(),
     {
       selector: '[data-tour="epc-header"]',
-      title: t('epc'),
+      title: t('epcManagement'),
       body: t('tourAdminEpcHeaderBody'),
       action: { type: 'navigate', to: '/admin/epc', options: { replace: false } }
     },

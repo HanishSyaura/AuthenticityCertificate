@@ -1,12 +1,13 @@
 import React from 'react';
+import InfoTooltip from '../../ui/InfoTooltip';
 
 export function Field({ label, hint, error, htmlFor, children }) {
   return (
     <div>
-      <label htmlFor={htmlFor} className="text-xs font-medium text-zinc-700">
-        {label}
+      <label htmlFor={htmlFor} className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-700">
+        <span>{label}</span>
+        {hint ? <InfoTooltip content={hint} /> : null}
       </label>
-      {hint ? <div className="mt-0.5 text-[11px] text-zinc-500">{hint}</div> : null}
       <div className="mt-2">{children}</div>
       {error ? <div className="mt-1 text-xs text-red-600">{error}</div> : null}
     </div>
@@ -24,6 +25,20 @@ export function Input({ id, value, onChange, disabled, type = 'text', placeholde
       placeholder={placeholder}
       autoComplete={autoComplete}
       className="ac-input-compact"
+    />
+  );
+}
+
+export function TextArea({ id, value, onChange, disabled, placeholder, rows = 4 }) {
+  return (
+    <textarea
+      id={id}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
+      placeholder={placeholder}
+      rows={rows}
+      className="ac-input-compact min-h-[110px] resize-y py-2.5"
     />
   );
 }

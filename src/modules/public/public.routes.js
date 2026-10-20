@@ -52,15 +52,23 @@ function shouldTriggerDbGate(err) {
 
 router.use(attachOrganization);
 
+const DEFAULT_THEME_PRIMARY_HEX = '#1a1939';
+
 router.get('/settings', async (req, res) => {
   try {
     const orgId = Number(req.organization?.id || 0);
     if (!Number.isFinite(orgId) || orgId <= 0) {
-      return res.success({ organization: null, settings: { logoUrl: null, appTitle: null, faviconUrl: null } }, 'OK');
+      return res.success(
+        { organization: null, settings: { logoUrl: null, appTitle: null, faviconUrl: null, themePrimaryHex: DEFAULT_THEME_PRIMARY_HEX } },
+        'OK'
+      );
     }
 
     if (!dbGate.shouldUseDb()) {
-      return res.success({ organization: null, settings: { logoUrl: null, appTitle: null, faviconUrl: null } }, 'OK');
+      return res.success(
+        { organization: null, settings: { logoUrl: null, appTitle: null, faviconUrl: null, themePrimaryHex: DEFAULT_THEME_PRIMARY_HEX } },
+        'OK'
+      );
     }
 
     const dbTimeoutMs = getPublicDbTimeoutMs();
@@ -71,7 +79,7 @@ router.get('/settings', async (req, res) => {
       ]),
       Promise.race([
         prisma.$queryRaw`
-          SELECT logoUrl, defaultLocale, defaultTimezone, maintenanceMode, appTitle, faviconUrl
+          SELECT logoUrl, defaultLocale, defaultTimezone, maintenanceMode, appTitle, faviconUrl, themePrimaryHex
           FROM OrganizationSettings
           WHERE organizationId = ${orgId}
           LIMIT 1
@@ -98,14 +106,18 @@ router.get('/settings', async (req, res) => {
           maintenanceMode: Boolean(row?.maintenanceMode),
           logoUrl: row?.logoUrl ? String(row.logoUrl) : null,
           appTitle: row?.appTitle ? String(row.appTitle) : null,
-          faviconUrl: row?.faviconUrl ? String(row.faviconUrl) : null
+          faviconUrl: row?.faviconUrl ? String(row.faviconUrl) : null,
+          themePrimaryHex: row?.themePrimaryHex ? String(row.themePrimaryHex).toLowerCase() : DEFAULT_THEME_PRIMARY_HEX
         }
       },
       'OK'
     );
   } catch (e) {
     if (shouldTriggerDbGate(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'GET /settings' });
-    return res.success({ organization: null, settings: { logoUrl: null, appTitle: null, faviconUrl: null } }, 'OK');
+    return res.success(
+      { organization: null, settings: { logoUrl: null, appTitle: null, faviconUrl: null, themePrimaryHex: DEFAULT_THEME_PRIMARY_HEX } },
+      'OK'
+    );
   }
 });
 

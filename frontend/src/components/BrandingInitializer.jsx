@@ -3,6 +3,7 @@ import useAdminAuthStore from '../store/useAdminAuthStore';
 import useAdminSettingsStore from '../store/useAdminSettingsStore';
 import { getPublicApiBaseUrl } from '../utils/apiBase';
 import { applyBranding, DEFAULT_APP_TITLE } from '../utils/branding';
+import { DEFAULT_THEME_PRIMARY_HEX, normalizeHexColor } from '../utils/theme';
 
 const CACHE_KEY = 'ac_public_brand_v2';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -15,7 +16,8 @@ function readCache() {
     if (!Number.isFinite(ts) || Date.now() - ts > CACHE_TTL_MS) return null;
     return {
       appTitle: typeof parsed?.appTitle === 'string' ? parsed.appTitle : null,
-      faviconUrl: typeof parsed?.faviconUrl === 'string' ? parsed.faviconUrl : null
+      faviconUrl: typeof parsed?.faviconUrl === 'string' ? parsed.faviconUrl : null,
+      themePrimaryHex: normalizeHexColor(parsed?.themePrimaryHex || DEFAULT_THEME_PRIMARY_HEX)
     };
   } catch {
     return null;
@@ -35,7 +37,8 @@ function writeCache(value) {
   const cached = readCache();
   applyBranding({
     appTitle: cached?.appTitle || DEFAULT_APP_TITLE,
-    faviconUrl: cached?.faviconUrl || null
+    faviconUrl: cached?.faviconUrl || null,
+    themePrimaryHex: cached?.themePrimaryHex || DEFAULT_THEME_PRIMARY_HEX
   });
 })();
 
@@ -47,7 +50,7 @@ export default function BrandingInitializer() {
   const fetchedPublicRef = useRef(false);
 
   useEffect(() => {
-    applyBranding({ appTitle: DEFAULT_APP_TITLE, faviconUrl: null });
+    applyBranding({ appTitle: DEFAULT_APP_TITLE, faviconUrl: null, themePrimaryHex: DEFAULT_THEME_PRIMARY_HEX });
     const cached = readCache();
     if (cached) applyBranding(cached);
   }, []);
@@ -65,18 +68,20 @@ export default function BrandingInitializer() {
   useEffect(() => {
     const appTitle = adminSettings?.appTitle || null;
     const faviconUrl = adminSettings?.faviconUrl || null;
-    if (!appTitle && !faviconUrl) {
+    const themePrimaryHex = normalizeHexColor(adminSettings?.themePrimaryHex || DEFAULT_THEME_PRIMARY_HEX);
+    if (!appTitle && !faviconUrl && !themePrimaryHex) {
       if (token) return;
     }
     if (token) {
-      applyBranding({ appTitle, faviconUrl });
+      applyBranding({ appTitle, faviconUrl, themePrimaryHex });
       writeCache({
         appTitle: appTitle || readCache()?.appTitle || null,
-        faviconUrl: faviconUrl || readCache()?.faviconUrl || null
+        faviconUrl: faviconUrl || readCache()?.faviconUrl || null,
+        themePrimaryHex
       });
       appliedAdminRef.current = true;
     }
-  }, [adminSettings?.appTitle, adminSettings?.faviconUrl, token]);
+  }, [adminSettings?.appTitle, adminSettings?.faviconUrl, adminSettings?.themePrimaryHex, token]);
 
   useEffect(() => {
     if (token) return;
@@ -99,11 +104,13 @@ export default function BrandingInitializer() {
         const next = json?.success ? json?.data?.settings || null : null;
         const appTitle = next?.appTitle ? String(next.appTitle).trim() : null;
         const faviconUrl = next?.faviconUrl ? String(next.faviconUrl).trim() : null;
+        const themePrimaryHex = normalizeHexColor(next?.themePrimaryHex || DEFAULT_THEME_PRIMARY_HEX);
         if (!alive) return;
-        applyBranding({ appTitle, faviconUrl });
+        applyBranding({ appTitle, faviconUrl, themePrimaryHex });
         writeCache({
           appTitle: appTitle || cached?.appTitle || null,
-          faviconUrl: faviconUrl || cached?.faviconUrl || null
+          faviconUrl: faviconUrl || cached?.faviconUrl || null,
+          themePrimaryHex
         });
       } catch {
         void 0;
@@ -117,4 +124,3 @@ export default function BrandingInitializer() {
 
   return null;
 }
-

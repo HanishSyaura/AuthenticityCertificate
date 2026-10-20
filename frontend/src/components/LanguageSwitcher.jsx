@@ -12,13 +12,13 @@ export default function LanguageSwitcher({ size = 'sm' }) {
   ];
   const cls =
     size === 'xs'
-      ? 'min-h-[36px] px-3 py-2 text-xs sm:min-h-0 sm:px-2 sm:py-1 sm:text-[11px]'
+      ? 'min-h-[36px] px-3 py-2 text-xs sm:min-h-0 sm:px-2.5 sm:py-1.5 sm:text-[11px]'
       : size === 'md'
-        ? 'min-h-[40px] px-3.5 py-2.5 text-sm sm:min-h-0 sm:px-3 sm:py-2 sm:text-sm'
+        ? 'min-h-[40px] px-3.5 py-2.5 text-sm sm:min-h-0 sm:px-3.5 sm:py-2 sm:text-sm'
         : 'min-h-[38px] px-3 py-2 text-sm';
 
   return (
-    <div className="inline-flex flex-nowrap whitespace-nowrap rounded-xl border border-zinc-200/80 bg-white p-1 shadow-sm shadow-zinc-900/5">
+    <div className="inline-flex flex-nowrap whitespace-nowrap rounded-2xl border border-white/80 bg-white/92 p-1 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur">
       {options.map((opt) => (
         <button
           key={opt.code}
@@ -27,7 +27,19 @@ export default function LanguageSwitcher({ size = 'sm' }) {
           aria-label={t(opt.labelKey)}
           title={t(opt.labelKey)}
           aria-pressed={lang === opt.code}
-          className={`${cls} touch-manipulation whitespace-nowrap rounded-lg font-semibold transition ${lang === opt.code ? 'bg-brand-600 text-white shadow-sm shadow-zinc-900/10' : 'text-zinc-700 hover:bg-zinc-50'}`}
+          style={
+            lang === opt.code
+              ? {
+                  background: 'linear-gradient(135deg, var(--ac-brand) 0%, var(--ac-brand-deep) 100%)',
+                  boxShadow: '0 10px 24px rgba(var(--ac-brand-rgb), 0.24)'
+                }
+              : undefined
+          }
+          className={`${cls} touch-manipulation whitespace-nowrap rounded-xl font-semibold tracking-[0.02em] transition ${
+            lang === opt.code
+              ? 'text-white'
+              : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+          }`}
         >
           {opt.shortLabel}
         </button>

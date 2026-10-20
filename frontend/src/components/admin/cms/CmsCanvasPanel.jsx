@@ -87,13 +87,10 @@ const DEVICE_PRESETS = [
   { id: 'ipad-pro-12-9', label: 'iPad Pro 12.9"', kind: 'phone', w: 1024, h: 1366 }
 ];
 
+const SPLIT_MIN_VIEWPORT = 1536;
+
 function PreviewStage({
   compact = false,
-  baseW,
-  frameH,
-  viewportW,
-  viewportH,
-  scale,
   effectivePreviewLayout,
   previewData,
   previewLoading,
@@ -103,8 +100,6 @@ function PreviewStage({
 }) {
   const scrollRef = useRef(null);
   const lastScrollTopRef = useRef(0);
-  const scrollbarOutside = 16;
-  const outsidePx = (Number(scale) > 0 ? Number(scale) : 1) * scrollbarOutside;
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -112,33 +107,41 @@ function PreviewStage({
     const maxScroll = Math.max(0, (el.scrollHeight || 0) - (el.clientHeight || 0));
     const nextTop = Math.max(0, Math.min(maxScroll, Number(lastScrollTopRef.current) || 0));
     if (Math.abs((el.scrollTop || 0) - nextTop) > 1) el.scrollTop = nextTop;
-  }, [effectivePreviewLayout, previewData, scale]);
+  }, [effectivePreviewLayout, previewData]);
 
   return (
-    <div className={`w-full overflow-auto ${compact ? 'p-2' : 'p-3'}`}>
-      <div className="mx-auto" style={{ width: viewportW + outsidePx, height: viewportH }}>
-        <div
-          className="relative rounded-xl border border-zinc-200 shadow-sm"
-          style={{ width: baseW, height: frameH, transform: `scale(${scale})`, transformOrigin: 'top left' }}
-        >
-          <div
-            ref={scrollRef}
-            onScroll={(e) => {
-              lastScrollTopRef.current = e.currentTarget.scrollTop || 0;
-            }}
-            className="ac-scrollbar-outside"
-          >
-            <PublicRenderer layout={effectivePreviewLayout} data={previewData || sampleCert()} disableResponsiveMediaOptimizations />
+    <div className={`w-full ${compact ? 'p-2' : 'p-3'}`}>
+      <div
+        ref={scrollRef}
+        onScroll={(e) => {
+          lastScrollTopRef.current = e.currentTarget.scrollTop || 0;
+        }}
+        className={`overflow-y-auto overflow-x-hidden rounded-[20px] border border-zinc-200 bg-zinc-50/60 ${
+          compact ? 'max-h-[68vh] p-2' : 'max-h-[72vh] p-3'
+        }`}
+      >
+        <div className="mx-auto w-full max-w-[390px]">
+          <div className="relative overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+            <PublicRenderer
+              layout={effectivePreviewLayout}
+              data={previewData || sampleCert()}
+              responsive
+              responsiveMode="container"
+              baseWidth={390}
+              disableResponsiveMediaOptimizations
+            />
+            {previewLoading ? (
+              <div className="absolute inset-0 flex items-center justify-center bg-white/70 text-xs font-semibold text-zinc-700">{t('loading')}</div>
+            ) : null}
+            {previewError ? (
+              <div className="absolute left-2 right-2 top-2 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">{previewError}</div>
+            ) : null}
+            {!previewLoading && !previewError && previewEpc ? (
+              <div className="absolute bottom-2 left-2 rounded-lg border border-zinc-200 bg-white/90 px-2 py-1 text-[11px] font-mono text-zinc-700 shadow-sm">
+                {previewEpc}
+              </div>
+            ) : null}
           </div>
-          {previewLoading ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-white/60 text-xs font-semibold text-zinc-700">{t('loading')}</div>
-          ) : null}
-          {previewError ? (
-            <div className="absolute left-2 right-2 top-2 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">{previewError}</div>
-          ) : null}
-          {!previewLoading && !previewError && previewEpc ? (
-            <div className="absolute bottom-2 left-2 rounded-lg border border-zinc-200 bg-white/80 px-2 py-1 text-[11px] font-mono text-zinc-700">{previewEpc}</div>
-          ) : null}
         </div>
       </div>
     </div>
@@ -147,6 +150,7 @@ function PreviewStage({
 
 export default function CmsCanvasPanel({
   viewMode,
+  setViewMode,
   kind = 'landing',
   selectedDesignId = null,
   selectedPage,
@@ -168,7 +172,10 @@ export default function CmsCanvasPanel({
   const [previewError, setPreviewError] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [devicePresetId, setDevicePresetId] = useState('fit');
+  const [viewportWidth, setViewportWidth] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : SPLIT_MIN_VIEWPORT));
+  const [canvasViewportWidth, setCanvasViewportWidth] = useState(0);
   const token = useAdminAuthStore((s) => s.token);
+  const canvasViewportRef = useRef(null);
 
   const baseW = 390;
   const baseH = 844;
@@ -179,25 +186,53 @@ export default function CmsCanvasPanel({
     if (!devicePreset.w) return 1;
     return Math.max(0.1, Math.min(2, Number(devicePreset.w) / baseW));
   }, [devicePreset]);
-  const viewportW = useMemo(() => {
-    if (Number(devicePreset?.w) > 0) return Number(devicePreset.w);
-    return baseW * scale;
-  }, [devicePreset, scale]);
-  const viewportH = useMemo(() => {
-    if (Number(devicePreset?.h) > 0) return Number(devicePreset.h);
-    return baseH * scale;
-  }, [devicePreset, scale]);
-  const frameH = useMemo(() => {
-    const h = Number(devicePreset?.h);
-    if (!Number.isFinite(h) || h <= 0) return baseH;
-    const unscaled = h / scale;
-    if (!Number.isFinite(unscaled) || unscaled <= 0) return baseH;
-    return Math.max(80, Math.min(baseH, unscaled));
-  }, [devicePreset, scale]);
+  const canvasScale = useMemo(() => {
+    if (devicePreset?.id !== 'fit') return scale;
+    const availableWidth = Math.max(0, Number(canvasViewportWidth || 0) - 32);
+    if (!availableWidth) return 1;
+    return Math.max(0.35, Math.min(1, availableWidth / baseW));
+  }, [baseW, canvasViewportWidth, devicePreset, scale]);
+  const splitSupported = viewportWidth >= SPLIT_MIN_VIEWPORT;
 
   const effectivePreviewLayout = useMemo(() => {
     return Array.isArray(previewLayout) && previewLayout.length ? previewLayout : layout;
   }, [layout, previewLayout]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const updateViewport = () => {
+      setViewportWidth(window.innerWidth || SPLIT_MIN_VIEWPORT);
+    };
+    updateViewport();
+    window.addEventListener('resize', updateViewport);
+    return () => window.removeEventListener('resize', updateViewport);
+  }, []);
+
+  useEffect(() => {
+    const el = canvasViewportRef.current;
+    if (!el) return undefined;
+    const measure = () => {
+      const nextWidth = Number(el.clientWidth || 0);
+      setCanvasViewportWidth(nextWidth > 0 ? nextWidth : 0);
+    };
+    measure();
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => measure());
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', measure);
+      return () => window.removeEventListener('resize', measure);
+    }
+    return undefined;
+  }, [viewMode, splitSupported]);
+
+  useEffect(() => {
+    if (!splitSupported) {
+      if (viewMode === 'split' && typeof setViewMode === 'function') setViewMode('edit');
+    }
+  }, [setViewMode, splitSupported, viewMode]);
 
   const loadPreviewByEpc = async (rawEpc) => {
     const epc = String(rawEpc || '').trim();
@@ -437,15 +472,54 @@ export default function CmsCanvasPanel({
   }, [safeLayout, t]);
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-3">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-xs font-semibold text-zinc-500">{t('canvas')}</div>
-          <div className="text-sm font-semibold text-zinc-900">{selectedPage ? selectedPage.name : t('selectPage')}</div>
+    <div className="rounded-[24px] border border-zinc-200 bg-white p-3 shadow-sm">
+      <div className="mb-4 flex flex-col gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">{t('canvas')}</div>
+            <div className="mt-1 text-base font-semibold text-zinc-950">{selectedPage ? selectedPage.name : t('selectPage')}</div>
+          </div>
+          {typeof setViewMode === 'function' ? (
+            <div className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setViewMode('edit')}
+                className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                  viewMode === 'edit' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'text-zinc-900 hover:bg-zinc-50'
+                }`}
+              >
+                {t('canvas')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('split')}
+                disabled={!splitSupported}
+                className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                  !splitSupported
+                    ? 'cursor-not-allowed text-zinc-400'
+                    : viewMode === 'split'
+                      ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200'
+                      : 'text-zinc-900 hover:bg-zinc-50'
+                }`}
+              >
+                {t('split')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('preview')}
+                className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                  viewMode === 'preview' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'text-zinc-900 hover:bg-zinc-50'
+                }`}
+              >
+                {t('preview')}
+              </button>
+            </div>
+          ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <select value={devicePresetId} onChange={(e) => setDevicePresetId(e.target.value)} className="ac-input w-36 rounded-lg px-3 py-2 text-xs font-semibold">
+        <div className="flex flex-col gap-3 rounded-[20px] border border-zinc-200 bg-zinc-50/80 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={devicePresetId} onChange={(e) => setDevicePresetId(e.target.value)} className="ac-input w-36 rounded-lg border-zinc-200 bg-white px-3 py-2 text-xs font-semibold shadow-sm">
             <optgroup label={t('scaleGroup')}>
               {DEVICE_PRESETS.filter((d) => d.kind === 'scale').map((d) => (
                 <option key={d.id} value={d.id}>
@@ -461,24 +535,25 @@ export default function CmsCanvasPanel({
               ))}
             </optgroup>
           </select>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-1 flex-wrap items-center gap-2">
             <input
               value={previewEpcInput}
               onChange={(e) => setPreviewEpcInput(e.target.value)}
               placeholder="Preview EPC"
-              className="ac-input w-64 px-3 py-2 text-xs font-mono"
+              className="ac-input w-full min-w-[220px] flex-1 border-zinc-200 bg-white px-3 py-2 text-xs font-mono"
             />
             <button
               type="button"
-              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
               onClick={() => void loadPreviewByEpc(previewEpcInput)}
               disabled={previewLoading}
             >
               {t('inquire')}
             </button>
           </div>
+          </div>
           {!layoutLocked ? (
-            <>
+            <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-3">
               <button
                 type="button"
                 onClick={() => {
@@ -496,7 +571,7 @@ export default function CmsCanvasPanel({
                   ];
                   setLayout(next);
                 }}
-                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
               >
                 {t('addContainer')}
               </button>
@@ -509,7 +584,7 @@ export default function CmsCanvasPanel({
                   ];
                   setLayout(next);
                 }}
-                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
               >
                 {t('addText')}
               </button>
@@ -532,7 +607,7 @@ export default function CmsCanvasPanel({
                   ];
                   setLayout(next);
                 }}
-                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
               >
                 {t('addImage')}
               </button>
@@ -542,7 +617,7 @@ export default function CmsCanvasPanel({
                   const next = [...safeLayout, { id: makeId('video'), type: 'video', x: 20, y: 300, w: 260, h: 80, content: { url: '' } }];
                   setLayout(next);
                 }}
-                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
               >
                 {t('addVideo')}
               </button>
@@ -553,7 +628,7 @@ export default function CmsCanvasPanel({
                     const next = [...safeLayout, { id: makeId('cert'), type: 'certificate', x: 0, y: 0, w: baseW, h: baseH, content: { variant: 'auth' } }];
                     setLayout(next);
                   }}
-                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
                 >
                   {t('addAuthCertificate')}
                 </button>
@@ -576,7 +651,7 @@ export default function CmsCanvasPanel({
                     ];
                     setLayout(next);
                   }}
-                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
                 >
                   {t('addSupportingCertificate')}
                 </button>
@@ -607,7 +682,7 @@ export default function CmsCanvasPanel({
                     ];
                     setLayout(next);
                   }}
-                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
                 >
                   {t('addSupportingDocument')}
                 </button>
@@ -644,24 +719,18 @@ export default function CmsCanvasPanel({
                     ];
                     setLayout(next);
                   }}
-                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
                 >
                   {t('addSupportingDocuments4')}
                 </button>
               ) : null}
-            </>
+            </div>
           ) : null}
         </div>
       </div>
 
       {viewMode === 'preview' ? (
         <PreviewStage
-          baseW={baseW}
-          baseH={baseH}
-          frameH={frameH}
-          viewportW={viewportW}
-          viewportH={viewportH}
-          scale={scale}
           effectivePreviewLayout={effectivePreviewLayout}
           previewData={previewData}
           previewLoading={previewLoading}
@@ -669,29 +738,26 @@ export default function CmsCanvasPanel({
           previewEpc={previewEpc}
           t={t}
         />
-      ) : viewMode === 'split' ? (
-        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-          <div className="min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white">
+      ) : viewMode === 'split' && splitSupported ? (
+        <div className="grid grid-cols-1 gap-3 2xl:grid-cols-2">
+          <div ref={canvasViewportRef} className="min-w-0 overflow-hidden rounded-[20px] border border-zinc-200 bg-white shadow-sm">
+            <div className="border-b border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-semibold text-zinc-600">{t('canvas')}</div>
             <CanvasStage
               width={baseW}
               height={baseH}
-              scale={scale}
+              scale={canvasScale}
               mode={layoutLocked ? 'select' : 'edit'}
               items={blocks}
               setItems={setCanvasItems}
               selectedId={selectedBlockId}
               setSelectedId={setSelectedBlockId}
+              containerClassName="max-h-[68vh]"
             />
           </div>
-          <div className="min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white">
+          <div className="min-w-0 overflow-hidden rounded-[20px] border border-zinc-200 bg-white shadow-sm">
+            <div className="border-b border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-semibold text-zinc-600">{t('preview')}</div>
             <PreviewStage
               compact
-              baseW={baseW}
-              baseH={baseH}
-              frameH={frameH}
-              viewportW={viewportW}
-              viewportH={viewportH}
-              scale={scale}
               effectivePreviewLayout={effectivePreviewLayout}
               previewData={previewData}
               previewLoading={previewLoading}
@@ -702,16 +768,19 @@ export default function CmsCanvasPanel({
           </div>
         </div>
       ) : (
-        <CanvasStage
-          width={baseW}
-          height={baseH}
-          scale={scale}
-          mode={layoutLocked ? 'select' : 'edit'}
-          items={blocks}
-          setItems={setCanvasItems}
-          selectedId={selectedBlockId}
-          setSelectedId={setSelectedBlockId}
-        />
+        <div ref={canvasViewportRef}>
+          <CanvasStage
+            width={baseW}
+            height={baseH}
+            scale={canvasScale}
+            mode={layoutLocked ? 'select' : 'edit'}
+            items={blocks}
+            setItems={setCanvasItems}
+            selectedId={selectedBlockId}
+            setSelectedId={setSelectedBlockId}
+            containerClassName="max-h-[72vh]"
+          />
+        </div>
       )}
     </div>
   );

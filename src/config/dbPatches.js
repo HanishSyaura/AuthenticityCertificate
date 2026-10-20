@@ -836,6 +836,11 @@ async function ensureOrganizationSettingsSchemaCompat() {
         \`appTitle\` VARCHAR(191) NULL,
         \`faviconUrl\` VARCHAR(512) NULL,
         \`logoUrl\` VARCHAR(512) NULL,
+        \`themePrimaryHex\` VARCHAR(7) NULL DEFAULT '#1a1939',
+        \`loginHeroBadge\` VARCHAR(191) NULL,
+        \`loginHeroTitle\` VARCHAR(191) NULL,
+        \`loginHeroSubtitle\` VARCHAR(512) NULL,
+        \`loginHeroHighlightsJson\` TEXT NULL,
         \`smtpHost\` VARCHAR(191) NULL,
         \`smtpPort\` INT NULL,
         \`smtpSecure\` TINYINT(1) NULL,
@@ -887,6 +892,42 @@ async function ensureOrganizationSettingsSchemaCompat() {
     'OrganizationSettings',
     'faviconUrl',
     'ALTER TABLE `OrganizationSettings` ADD COLUMN `faviconUrl` VARCHAR(512) NULL',
+    null,
+    null
+  );
+
+  await ensureColumn(
+    'OrganizationSettings',
+    'themePrimaryHex',
+    "ALTER TABLE `OrganizationSettings` ADD COLUMN `themePrimaryHex` VARCHAR(7) NULL DEFAULT '#1a1939'",
+    "UPDATE `OrganizationSettings` SET `themePrimaryHex` = '#1a1939' WHERE `themePrimaryHex` IS NULL OR TRIM(`themePrimaryHex`) = ''",
+    null
+  );
+  await ensureColumn(
+    'OrganizationSettings',
+    'loginHeroBadge',
+    'ALTER TABLE `OrganizationSettings` ADD COLUMN `loginHeroBadge` VARCHAR(191) NULL',
+    null,
+    null
+  );
+  await ensureColumn(
+    'OrganizationSettings',
+    'loginHeroTitle',
+    'ALTER TABLE `OrganizationSettings` ADD COLUMN `loginHeroTitle` VARCHAR(191) NULL',
+    null,
+    null
+  );
+  await ensureColumn(
+    'OrganizationSettings',
+    'loginHeroSubtitle',
+    'ALTER TABLE `OrganizationSettings` ADD COLUMN `loginHeroSubtitle` VARCHAR(512) NULL',
+    null,
+    null
+  );
+  await ensureColumn(
+    'OrganizationSettings',
+    'loginHeroHighlightsJson',
+    'ALTER TABLE `OrganizationSettings` ADD COLUMN `loginHeroHighlightsJson` TEXT NULL',
     null,
     null
   );
@@ -1340,6 +1381,27 @@ async function ensureUserSchemaCompat() {
   );
 }
 
+async function ensureSingleOrganizationUserAssignments() {
+  let org = null;
+  try {
+    const count = await prisma.organization.count();
+    if (Number(count) !== 1) return;
+    org = await prisma.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
+  } catch {
+    return;
+  }
+  if (!org?.id) return;
+  if (!(await tableExists('User')) || !(await columnExists('User', 'organizationId'))) return;
+
+  try {
+    await prisma.user.updateMany({
+      where: { deletedAt: null, organizationId: null },
+      data: { organizationId: org.id }
+    });
+  } catch {
+  }
+}
+
 async function ensureOrganizationNotificationConfigSchemaCompat() {
   const tableName = 'OrganizationNotificationConfig';
   const exists = await tableExists(tableName);
@@ -1369,8 +1431,8 @@ async function ensureOrganizationNotificationConfigSchemaCompat() {
 }
 
 async function ensureSingleOrganizationMeta() {
-  const desiredCode = String(process.env.SINGLE_ORG_CODE || 'DAMADINGJIYANWO').trim().toUpperCase();
-  const desiredName = String(process.env.SINGLE_ORG_NAME || 'DAMADINGJIYANWO').trim();
+  const desiredCode = String(process.env.SINGLE_ORG_CODE || 'CLB').trim().toUpperCase();
+  const desiredName = String(process.env.SINGLE_ORG_NAME || 'CLB Holdings Berhad').trim();
   if (!desiredCode && !desiredName) return;
 
   let count = 0;
@@ -1414,6 +1476,7 @@ async function applyDbPatches() {
   await ensureOrganizationSettingsSchemaCompat();
   await ensureAccessControlSchemaCompat();
   await ensureUserSchemaCompat();
+  await ensureSingleOrganizationUserAssignments();
   await ensureOrganizationNotificationConfigSchemaCompat();
   await ensureSingleOrganizationMeta();
 }

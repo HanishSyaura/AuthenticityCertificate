@@ -14,7 +14,6 @@ import AdminRecordDetail from './pages/admin/AdminRecordDetail';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminGuide from './pages/admin/AdminGuide';
 import AdminEpc from './pages/admin/AdminEpc';
-import AdminEpcScan from './pages/admin/AdminEpcScan';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminCertificateList from './pages/admin/AdminCertificateList';
 import AdminCertificateBuilder from './pages/admin/AdminCertificateBuilder';
@@ -24,7 +23,7 @@ import NotFound from './pages/NotFound';
 
 function App() {
   return (
-    <Router>
+    <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <BrandingInitializer />
       <Routes>
         <Route path="/" element={<VerifyPage />} />
@@ -70,7 +69,6 @@ function App() {
                   'epc.write',
                   'epc.batch.view',
                   'epc.batch.create',
-                  'epc.scan.access',
                   'epc.certificate.view',
                   'epc.export.xlsx',
                   'epc.encoding',
@@ -82,14 +80,6 @@ function App() {
                 ]}
               >
                 <AdminEpc />
-              </AdminRequirePermission>
-            }
-          />
-          <Route
-            path="epc/scan"
-            element={
-              <AdminRequirePermission anyOf={['epc.scan.access']}>
-                <AdminEpcScan />
               </AdminRequirePermission>
             }
           />

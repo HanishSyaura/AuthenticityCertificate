@@ -2,11 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useT } from '../../i18n/useT';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
 import useAdminSettingsStore from '../../store/useAdminSettingsStore';
+import useI18nStore from '../../store/useI18nStore';
 import { createAdminApi } from '../../utils/adminApi';
 import ProfileSettingsCard from '../../components/admin/settings/ProfileSettingsCard';
-import SystemSettingsCard from '../../components/admin/settings/SystemSettingsCard';
+import BrandingSettingsCard from '../../components/admin/settings/BrandingSettingsCard';
 import EmailSmtpSettingsCard from '../../components/admin/settings/EmailSmtpSettingsCard';
 import { isFileTooLarge, MAX_UPLOAD_MB } from '../../utils/uploadLimits';
+import { DEFAULT_THEME_PRIMARY_HEX, normalizeHexColor } from '../../utils/theme';
+import { sanitizeBrandingText } from '../../utils/branding';
 
 function shallowEqual(a, b) {
   const ak = Object.keys(a);
@@ -43,6 +46,7 @@ export default function AdminSettings() {
   const { t } = useT();
   const { token, user, setToken, setUser } = useAdminAuthStore((s) => ({ token: s.token, user: s.user, setToken: s.setToken, setUser: s.setUser }));
   const { setSettingsResponse } = useAdminSettingsStore((s) => ({ setSettingsResponse: s.setSettingsResponse }));
+  const { lang, setLang } = useI18nStore((s) => ({ lang: s.lang, setLang: s.setLang }));
 
   const role = user?.role || 'admin';
   const canEditEmail = role === 'super_admin' || role === 'admin';
@@ -51,7 +55,7 @@ export default function AdminSettings() {
   const [activeTab, setActiveTab] = useState(() => {
     try {
       const v = String(localStorage.getItem('ac_admin_settings_tab_v1') || '').trim();
-      if (v === 'system' || v === 'email') return v;
+      if (v === 'branding' || v === 'email') return v;
       return 'profile';
     } catch {
       return 'profile';
@@ -61,31 +65,47 @@ export default function AdminSettings() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
-  const [profileInitial, setProfileInitial] = useState({ name: '', email: '', role: '' });
-  const [profileDraft, setProfileDraft] = useState({ name: '', email: '', role: '', currentPassword: '', newPassword: '', confirmNewPassword: '' });
+  const [profileInitial, setProfileInitial] = useState({ name: '', email: '', role: '', language: 'en' });
+  const [profileDraft, setProfileDraft] = useState({
+    name: '',
+    email: '',
+    role: '',
+    language: 'en',
+    currentPassword: '',
+    newPassword: '',
+    confirmNewPassword: ''
+  });
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileNotice, setProfileNotice] = useState({ kind: '', text: '' });
   const [profileErrors, setProfileErrors] = useState({});
 
-  const [systemInitial, setSystemInitial] = useState({
-    defaultLocale: 'en',
-    defaultTimezone: 'Asia/Kuala_Lumpur',
-    maintenanceMode: false,
+  const [brandingInitial, setBrandingInitial] = useState({
+    organizationName: '',
+    organizationCode: '',
     appTitle: '',
+    loginHeroBadge: '',
+    loginHeroTitle: '',
+    loginHeroSubtitle: '',
+    loginHeroHighlights: '',
     faviconUrl: '',
-    logoUrl: ''
+    logoUrl: '',
+    themePrimaryHex: DEFAULT_THEME_PRIMARY_HEX
   });
-  const [systemDraft, setSystemDraft] = useState({
-    defaultLocale: 'en',
-    defaultTimezone: 'Asia/Kuala_Lumpur',
-    maintenanceMode: false,
+  const [brandingDraft, setBrandingDraft] = useState({
+    organizationName: '',
+    organizationCode: '',
     appTitle: '',
+    loginHeroBadge: '',
+    loginHeroTitle: '',
+    loginHeroSubtitle: '',
+    loginHeroHighlights: '',
     faviconUrl: '',
-    logoUrl: ''
+    logoUrl: '',
+    themePrimaryHex: DEFAULT_THEME_PRIMARY_HEX
   });
-  const [systemSaving, setSystemSaving] = useState(false);
-  const [systemNotice, setSystemNotice] = useState({ kind: '', text: '' });
-  const [systemErrors, setSystemErrors] = useState({});
+  const [brandingSaving, setBrandingSaving] = useState(false);
+  const [brandingNotice, setBrandingNotice] = useState({ kind: '', text: '' });
+  const [brandingErrors, setBrandingErrors] = useState({});
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoUploadError, setLogoUploadError] = useState('');
   const [faviconUploading, setFaviconUploading] = useState(false);
@@ -131,19 +151,20 @@ export default function AdminSettings() {
   const [smtpTestSending, setSmtpTestSending] = useState(false);
   const [notificationRoleOptions, setNotificationRoleOptions] = useState([]);
 
-  const localeOptions = useMemo(
+  const tabItems = useMemo(
     () => [
-      { value: 'en', label: 'English (en)' },
-      { value: 'ms', label: 'Bahasa Melayu (ms)' },
-      { value: 'zh', label: '中文 (zh)' }
+      { key: 'profile', label: t('profileTab') },
+      { key: 'branding', label: t('systemTab') },
+      { key: 'email', label: t('emailTab') }
     ],
-    []
+    [t]
   );
-  const timezoneOptions = useMemo(
+
+  const languageOptions = useMemo(
     () => [
-      { value: 'Asia/Kuala_Lumpur', label: 'Asia/Kuala_Lumpur' },
-      { value: 'Asia/Singapore', label: 'Asia/Singapore' },
-      { value: 'UTC', label: 'UTC' }
+      { value: 'en', label: 'English' },
+      { value: 'ms', label: 'Bahasa Melayu' },
+      { value: 'zh', label: '中文' }
     ],
     []
   );
@@ -176,7 +197,8 @@ export default function AdminSettings() {
         const p0 = {
           name: String(me?.name || ''),
           email: String(me?.email || ''),
-          role: String(me?.role || 'admin')
+          role: String(me?.role || 'admin'),
+          language: String(lang || 'en')
         };
         setProfileInitial(p0);
         setProfileDraft((d) => ({
@@ -184,21 +206,26 @@ export default function AdminSettings() {
           name: p0.name,
           email: p0.email,
           role: p0.role,
+          language: p0.language,
           currentPassword: '',
           newPassword: '',
           confirmNewPassword: ''
         }));
 
-        const s0 = {
-          defaultLocale: String(settings?.defaultLocale || 'en'),
-          defaultTimezone: String(settings?.defaultTimezone || 'Asia/Kuala_Lumpur'),
-          maintenanceMode: Boolean(settings?.maintenanceMode),
+        const branding0 = {
+          organizationName: sanitizeBrandingText(org?.name),
+          organizationCode: sanitizeBrandingText(org?.code),
           appTitle: String(settings?.appTitle || ''),
+          loginHeroBadge: String(settings?.loginHeroBadge || ''),
+          loginHeroTitle: String(settings?.loginHeroTitle || ''),
+          loginHeroSubtitle: String(settings?.loginHeroSubtitle || ''),
+          loginHeroHighlights: Array.isArray(settings?.loginHeroHighlights) ? settings.loginHeroHighlights.join(', ') : String(settings?.loginHeroHighlights || ''),
           faviconUrl: String(settings?.faviconUrl || ''),
-          logoUrl: String(settings?.logoUrl || '')
+          logoUrl: String(settings?.logoUrl || ''),
+          themePrimaryHex: normalizeHexColor(settings?.themePrimaryHex || DEFAULT_THEME_PRIMARY_HEX)
         };
-        setSystemInitial(s0);
-        setSystemDraft(s0);
+        setBrandingInitial(branding0);
+        setBrandingDraft(branding0);
         setSettingsResponse({ organization: org || null, settings: settings || null });
 
         const smtp0 = {
@@ -238,7 +265,12 @@ export default function AdminSettings() {
     return () => {
       mounted = false;
     };
-  }, [setSettingsResponse, t, token]);
+  }, [lang, setSettingsResponse, t, token]);
+
+  useEffect(() => {
+    setProfileInitial((prev) => (prev.language === lang ? prev : { ...prev, language: lang }));
+    setProfileDraft((prev) => (prev.language === lang ? prev : { ...prev, language: lang }));
+  }, [lang]);
 
   useEffect(() => {
     try {
@@ -266,11 +298,11 @@ export default function AdminSettings() {
     return errs;
   }
 
-  function validateSystem(draft) {
+  function validateBranding(draft) {
     const errs = {};
-    if (!String(draft.defaultLocale || '').trim()) errs.defaultLocale = t('localeRequired');
-    if (!String(draft.defaultTimezone || '').trim()) errs.defaultTimezone = t('timezoneRequired');
-
+    const code = String(draft.organizationCode || '').trim();
+    if (code && !/^[A-Z0-9_-]+$/.test(code)) errs.organizationCode = t('organizationCodeFormat');
+    if (!/^#[0-9a-f]{6}$/i.test(String(draft.themePrimaryHex || '').trim())) errs.themePrimaryHex = t('themePrimaryHexFormat');
     return errs;
   }
 
@@ -351,7 +383,8 @@ export default function AdminSettings() {
   const profileDirty = useMemo(() => {
     const baseChanged =
       String(profileDraft.name || '').trim() !== String(profileInitial.name || '').trim() ||
-      String(profileDraft.email || '').trim() !== String(profileInitial.email || '').trim();
+      String(profileDraft.email || '').trim() !== String(profileInitial.email || '').trim() ||
+      String(profileDraft.language || '').trim() !== String(profileInitial.language || '').trim();
     const pwChanged =
       String(profileDraft.currentPassword || '').trim() ||
       String(profileDraft.newPassword || '').trim() ||
@@ -359,7 +392,7 @@ export default function AdminSettings() {
     return Boolean(baseChanged || pwChanged);
   }, [profileDraft, profileInitial]);
 
-  const systemDirty = useMemo(() => !shallowEqual(systemDraft, systemInitial), [systemDraft, systemInitial]);
+  const brandingDirty = useMemo(() => !shallowEqual(brandingDraft, brandingInitial), [brandingDraft, brandingInitial]);
   const smtpDirty = useMemo(() => {
     if (smtpClearPassword) return true;
     const a = { ...smtpDraft, smtpPass: '' };
@@ -367,14 +400,12 @@ export default function AdminSettings() {
     return !shallowEqual(a, b) || Boolean(String(smtpDraft.smtpPass || '').trim());
   }, [smtpClearPassword, smtpDraft, smtpInitial]);
 
-  const profileInvalid = Object.keys(validateProfile(profileDraft)).length > 0;
-  const systemInvalid = Object.keys(validateSystem(systemDraft)).length > 0;
+  const brandingInvalid = Object.keys(validateBranding(brandingDraft)).length > 0;
   const smtpInvalid = Object.keys(validateSmtp(smtpDraft)).length > 0;
 
   async function uploadLogo(file) {
     if (!file) return;
     setLogoUploadError('');
-    setSystemNotice({ kind: '', text: '' });
     setLogoUploading(true);
     try {
       if (isFileTooLarge(file)) {
@@ -389,7 +420,7 @@ export default function AdminSettings() {
       const created = res?.data?.data;
       const url = created?.url ? String(created.url) : '';
       if (!url) throw new Error(t('uploadResponseInvalid'));
-      setSystemDraft((d) => ({ ...d, logoUrl: url }));
+      setBrandingDraft((d) => ({ ...d, logoUrl: url }));
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || t('logoUploadFailed');
       setLogoUploadError(String(msg));
@@ -401,7 +432,6 @@ export default function AdminSettings() {
   async function uploadFavicon(file) {
     if (!file) return;
     setFaviconUploadError('');
-    setSystemNotice({ kind: '', text: '' });
     setFaviconUploading(true);
     try {
       if (isFileTooLarge(file)) {
@@ -416,7 +446,7 @@ export default function AdminSettings() {
       const created = res?.data?.data;
       const url = created?.url ? String(created.url) : '';
       if (!url) throw new Error(t('uploadResponseInvalid'));
-      setSystemDraft((d) => ({ ...d, faviconUrl: url }));
+      setBrandingDraft((d) => ({ ...d, faviconUrl: url }));
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || t('faviconUploadFailed');
       setFaviconUploadError(String(msg));
@@ -434,6 +464,7 @@ export default function AdminSettings() {
     const payload = {};
     const nextName = String(profileDraft.name || '').trim();
     const nextEmail = String(profileDraft.email || '').trim();
+    const nextLanguage = String(profileDraft.language || 'en').trim() || 'en';
     if (nextName !== String(profileInitial.name || '').trim()) payload.name = nextName;
     if (canEditEmail && nextEmail !== String(profileInitial.email || '').trim()) payload.email = nextEmail;
     if (String(profileDraft.newPassword || '').trim()) {
@@ -441,22 +472,33 @@ export default function AdminSettings() {
       payload.newPassword = String(profileDraft.newPassword || '');
     }
 
-    if (Object.keys(payload).length === 0) return;
+    const languageChanged = nextLanguage !== String(profileInitial.language || 'en').trim();
+    if (Object.keys(payload).length === 0 && !languageChanged) return;
 
     setProfileSaving(true);
     try {
-      const api = createAdminApi({ token });
-      const res = await api.patch('/auth/me', payload);
-      const saved = res?.data?.data?.user;
-      const nextToken = res?.data?.data?.token;
-      if (nextToken) setToken(nextToken);
-      if (saved) setUser(saved);
-      setProfileInitial({ name: String(saved?.name || nextName), email: String(saved?.email || nextEmail), role: String(saved?.role || role) });
+      let saved = null;
+      if (Object.keys(payload).length > 0) {
+        const api = createAdminApi({ token });
+        const res = await api.patch('/auth/me', payload);
+        saved = res?.data?.data?.user;
+        const nextToken = res?.data?.data?.token;
+        if (nextToken) setToken(nextToken);
+        if (saved) setUser(saved);
+      }
+      if (languageChanged) setLang(nextLanguage);
+      setProfileInitial({
+        name: String(saved?.name || nextName),
+        email: String(saved?.email || nextEmail),
+        role: String(saved?.role || role),
+        language: nextLanguage
+      });
       setProfileDraft((d) => ({
         ...d,
         name: String(saved?.name || nextName),
         email: String(saved?.email || nextEmail),
         role: String(saved?.role || role),
+        language: nextLanguage,
         currentPassword: '',
         newPassword: '',
         confirmNewPassword: ''
@@ -471,44 +513,48 @@ export default function AdminSettings() {
     }
   }
 
-  async function saveSystem() {
-    const errs = validateSystem(systemDraft);
-    setSystemErrors(errs);
-    setSystemNotice({ kind: '', text: '' });
+  async function saveBranding() {
+    const errs = validateBranding(brandingDraft);
+    setBrandingErrors(errs);
+    setBrandingNotice({ kind: '', text: '' });
     if (Object.keys(errs).length > 0) return;
 
     const payload = {};
-    for (const k of Object.keys(systemDraft)) {
-      if (systemDraft[k] !== systemInitial[k]) payload[k] = systemDraft[k];
+    for (const k of Object.keys(brandingDraft)) {
+      if (brandingDraft[k] !== brandingInitial[k]) payload[k] = brandingDraft[k];
     }
     if (Object.keys(payload).length === 0) return;
 
-    setSystemSaving(true);
+    setBrandingSaving(true);
     try {
       const api = createAdminApi({ token });
       const res = await api.put('/settings', payload);
       const org = res?.data?.data?.organization;
       const settings = res?.data?.data?.settings;
       const next = {
-        defaultLocale: String(settings?.defaultLocale || systemDraft.defaultLocale),
-        defaultTimezone: String(settings?.defaultTimezone || systemDraft.defaultTimezone),
-        maintenanceMode: Boolean(settings?.maintenanceMode),
+        organizationName: sanitizeBrandingText(org?.name ?? brandingDraft.organizationName),
+        organizationCode: sanitizeBrandingText(org?.code ?? brandingDraft.organizationCode),
         appTitle: String(settings?.appTitle || ''),
+        loginHeroBadge: String(settings?.loginHeroBadge || ''),
+        loginHeroTitle: String(settings?.loginHeroTitle || ''),
+        loginHeroSubtitle: String(settings?.loginHeroSubtitle || ''),
+        loginHeroHighlights: Array.isArray(settings?.loginHeroHighlights) ? settings.loginHeroHighlights.join(', ') : String(settings?.loginHeroHighlights || ''),
         faviconUrl: String(settings?.faviconUrl || ''),
-        logoUrl: String(settings?.logoUrl || '')
+        logoUrl: String(settings?.logoUrl || ''),
+        themePrimaryHex: normalizeHexColor(settings?.themePrimaryHex || DEFAULT_THEME_PRIMARY_HEX)
       };
-      setSystemInitial(next);
-      setSystemDraft(next);
-      setSystemErrors({});
-      setSystemNotice({ kind: 'success', text: t('systemSettingsUpdated') });
+      setBrandingInitial(next);
+      setBrandingDraft(next);
+      setBrandingErrors({});
+      setBrandingNotice({ kind: 'success', text: t('brandingSettingsUpdated') });
       setLogoUploadError('');
       setFaviconUploadError('');
       setSettingsResponse({ organization: org || null, settings: settings || null });
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || t('failedToUpdateSystemSettings');
-      setSystemNotice({ kind: 'error', text: String(msg) });
+      setBrandingNotice({ kind: 'error', text: String(msg) });
     } finally {
-      setSystemSaving(false);
+      setBrandingSaving(false);
     }
   }
 
@@ -600,15 +646,25 @@ export default function AdminSettings() {
   if (loading) {
     return (
       <div className="ac-page">
-        <div className="mx-auto w-full max-w-5xl">
-          <div className="mb-2 text-base font-semibold text-zinc-900">{t('settings')}</div>
-          <div className="text-sm text-zinc-600">{t('settingsHint')}</div>
-          <div className="animate-pulse">
-            <div className="h-4 w-40 rounded bg-zinc-200" />
-            <div className="mt-2 h-3 w-64 rounded bg-zinc-200" />
-            <div className="mt-6 space-y-3">
-              <div className="h-40 rounded-xl border border-zinc-200 bg-white" />
-              <div className="h-40 rounded-xl border border-zinc-200 bg-white" />
+        <div className="mx-auto w-full max-w-[1480px]">
+          <div className="rounded-[30px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.82)_0%,rgba(255,255,255,0.62)_100%)] p-4 shadow-[0_24px_60px_rgba(15,23,42,0.08)] backdrop-blur md:p-5">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+              <div className="rounded-[26px] border border-[#dbe4ec] bg-[linear-gradient(135deg,#ffffff_0%,#f5f8fb_100%)] px-5 py-5 shadow-[0_16px_36px_rgba(15,23,42,0.06)]">
+                <h2 className="text-[1.7rem] font-semibold tracking-[-0.03em] text-zinc-950">{t('settings')}</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">{t('settingsHint')}</p>
+              </div>
+              <div className="rounded-[26px] border border-[#dbe4ec] bg-white/90 p-2 shadow-[0_16px_36px_rgba(15,23,42,0.06)]">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <div className="h-11 animate-pulse rounded-2xl bg-zinc-200" />
+                  <div className="h-11 animate-pulse rounded-2xl bg-zinc-200" />
+                  <div className="h-11 animate-pulse rounded-2xl bg-zinc-200" />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-5">
+              <div className="h-72 animate-pulse rounded-[26px] border border-[#e5ebf1] bg-white/85 shadow-[0_16px_36px_rgba(15,23,42,0.04)]" />
+              <div className="h-64 animate-pulse rounded-[26px] border border-[#e5ebf1] bg-white/85 shadow-[0_16px_36px_rgba(15,23,42,0.04)]" />
             </div>
           </div>
         </div>
@@ -619,10 +675,14 @@ export default function AdminSettings() {
   if (loadError) {
     return (
       <div className="ac-page">
-        <div className="mx-auto w-full max-w-5xl">
-          <div className="mb-2 text-base font-semibold text-zinc-900">{t('settings')}</div>
-          <div className="text-sm text-zinc-600">{t('settingsHint')}</div>
-          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{loadError}</div>
+        <div className="mx-auto w-full max-w-[1480px]">
+          <div className="rounded-[30px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.82)_0%,rgba(255,255,255,0.62)_100%)] p-4 shadow-[0_24px_60px_rgba(15,23,42,0.08)] backdrop-blur md:p-5">
+            <div className="rounded-[26px] border border-[#dbe4ec] bg-[linear-gradient(135deg,#ffffff_0%,#f5f8fb_100%)] px-5 py-5 shadow-[0_16px_36px_rgba(15,23,42,0.06)]">
+              <h2 className="text-[1.7rem] font-semibold tracking-[-0.03em] text-zinc-950">{t('settings')}</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">{t('settingsHint')}</p>
+              <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{loadError}</div>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -630,121 +690,104 @@ export default function AdminSettings() {
 
   return (
     <div className="ac-page">
-      <div className="mx-auto w-full max-w-5xl">
-        <div className="ac-topbar">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-zinc-900">{t('settings')}</h2>
-              <p className="mt-1 text-sm text-zinc-600">{t('settingsHint')}</p>
+      <div className="mx-auto w-full max-w-[1480px]">
+        <div className="rounded-[30px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.82)_0%,rgba(255,255,255,0.62)_100%)] p-4 shadow-[0_24px_60px_rgba(15,23,42,0.08)] backdrop-blur md:p-5">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+            <div className="rounded-[26px] border border-[#dbe4ec] bg-[linear-gradient(135deg,#ffffff_0%,#f5f8fb_100%)] px-5 py-5 shadow-[0_16px_36px_rgba(15,23,42,0.06)]">
+              <div className="min-w-0">
+                <h2 className="text-[1.7rem] font-semibold tracking-[-0.03em] text-zinc-950">{t('settings')}</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">{t('settingsHint')}</p>
+              </div>
             </div>
-            <div className="inline-flex w-full flex-wrap rounded-xl border border-zinc-200/80 bg-white p-1 sm:w-auto">
-              <button
-                type="button"
-                className={
-                  activeTab === 'profile'
-                    ? 'rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white'
-                    : 'rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50'
-                }
-                onClick={() => setActiveTab('profile')}
-              >
-                {t('profileTab')}
-              </button>
-              <button
-                type="button"
-                className={
-                  activeTab === 'system'
-                    ? 'rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white'
-                    : 'rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50'
-                }
-                onClick={() => setActiveTab('system')}
-              >
-                {t('systemTab')}
-              </button>
-              <button
-                type="button"
-                className={
-                  activeTab === 'email'
-                    ? 'rounded-lg bg-zinc-900 px-3 py-2 text-sm font-semibold text-white'
-                    : 'rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50'
-                }
-                onClick={() => setActiveTab('email')}
-              >
-                {t('emailTab')}
-              </button>
+            <div className="rounded-[26px] border border-[#dbe4ec] bg-white/90 p-2 shadow-[0_16px_36px_rgba(15,23,42,0.06)]">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {tabItems.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={
+                      activeTab === item.key
+                        ? 'rounded-2xl border border-[rgba(var(--ac-brand-rgb),0.16)] bg-[linear-gradient(135deg,var(--ac-brand)_0%,var(--ac-brand-deep)_100%)] px-4 py-3 text-sm font-semibold text-white shadow-[0_14px_28px_rgba(var(--ac-brand-rgb),0.22)]'
+                        : 'rounded-2xl border border-transparent bg-transparent px-4 py-3 text-sm font-semibold text-zinc-600 transition hover:border-zinc-200 hover:bg-zinc-50 hover:text-zinc-900'
+                    }
+                    onClick={() => setActiveTab(item.key)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="mt-4">
-          {activeTab === 'profile' ? (
-            <ProfileSettingsCard
-              title={t('profile')}
-              hint={t('profileHint')}
-              canEditEmail={canEditEmail}
-              draft={profileDraft}
-              errors={profileErrors}
-              notice={profileNotice}
-              dirty={profileDirty}
-              invalid={profileInvalid}
-              saving={profileSaving}
-              onChange={(patch) => setProfileDraft((d) => ({ ...d, ...patch }))}
-              onSave={saveProfile}
-            />
-          ) : null}
+          <div className="mt-5">
+            {activeTab === 'profile' ? (
+              <ProfileSettingsCard
+                title={t('profile')}
+                hint={t('profileHint')}
+                canEditEmail={canEditEmail}
+                draft={profileDraft}
+                errors={profileErrors}
+                notice={profileNotice}
+                dirty={profileDirty}
+                saving={profileSaving}
+                languageOptions={languageOptions}
+                onChange={(patch) => setProfileDraft((d) => ({ ...d, ...patch }))}
+                onSave={saveProfile}
+              />
+            ) : null}
 
-          {activeTab === 'system' ? (
-            <SystemSettingsCard
-              title={t('systemSettings')}
-              hint={t('systemSettingsHint')}
-              canEdit={canEditSystem}
-              draft={systemDraft}
-              errors={systemErrors}
-              notice={systemNotice}
-              dirty={systemDirty}
-              invalid={systemInvalid}
-              saving={systemSaving}
-              logoUploading={logoUploading}
-              logoUploadError={logoUploadError}
-              faviconUploading={faviconUploading}
-              faviconUploadError={faviconUploadError}
-              localeOptions={localeOptions}
-              timezoneOptions={timezoneOptions}
-              onChange={(patch) => setSystemDraft((d) => ({ ...d, ...patch }))}
-              onUploadLogo={uploadLogo}
-              onUploadFavicon={uploadFavicon}
-              onSave={saveSystem}
-            />
-          ) : null}
+            {activeTab === 'branding' ? (
+              <BrandingSettingsCard
+                title={t('brandingContent')}
+                hint={t('brandingContentHint')}
+                canEdit={canEditSystem}
+                draft={brandingDraft}
+                errors={brandingErrors}
+                notice={brandingNotice}
+                dirty={brandingDirty}
+                invalid={brandingInvalid}
+                saving={brandingSaving}
+                logoUploading={logoUploading}
+                logoUploadError={logoUploadError}
+                faviconUploading={faviconUploading}
+                faviconUploadError={faviconUploadError}
+                onChange={(patch) => setBrandingDraft((d) => ({ ...d, ...patch }))}
+                onUploadLogo={uploadLogo}
+                onUploadFavicon={uploadFavicon}
+                onSave={saveBranding}
+              />
+            ) : null}
 
-          {activeTab === 'email' ? (
-            <EmailSmtpSettingsCard
-              title={t('smtpSettings')}
-              hint={t('smtpSettingsHint')}
-              canEdit={canEditEmail}
-              notificationRoleOptions={notificationRoleOptions}
-              draft={smtpDraft}
-              errors={smtpErrors}
-              notice={smtpNotice}
-              dirty={smtpDirty}
-              invalid={smtpInvalid}
-              saving={smtpSaving}
-              testDraft={smtpTestDraft}
-              testErrors={smtpTestErrors}
-              testNotice={smtpTestNotice}
-              testSending={smtpTestSending}
-              onChange={(patch) => {
-                setSmtpDraft((d) => ({ ...d, ...patch }));
-                if (Object.prototype.hasOwnProperty.call(patch, 'smtpPass')) setSmtpClearPassword(false);
-              }}
-              onClearPassword={() => {
-                setSmtpDraft((d) => ({ ...d, smtpPass: '' }));
-                setSmtpClearPassword(true);
-              }}
-              onSave={saveSmtp}
-              onChangeTest={(patch) => setSmtpTestDraft((d) => ({ ...d, ...patch }))}
-              onSendTest={sendSmtpTest}
-            />
-          ) : null}
+            {activeTab === 'email' ? (
+              <EmailSmtpSettingsCard
+                title={t('smtpSettings')}
+                hint={t('smtpSettingsHint')}
+                canEdit={canEditEmail}
+                notificationRoleOptions={notificationRoleOptions}
+                draft={smtpDraft}
+                errors={smtpErrors}
+                notice={smtpNotice}
+                dirty={smtpDirty}
+                invalid={smtpInvalid}
+                saving={smtpSaving}
+                testDraft={smtpTestDraft}
+                testErrors={smtpTestErrors}
+                testNotice={smtpTestNotice}
+                testSending={smtpTestSending}
+                onChange={(patch) => {
+                  setSmtpDraft((d) => ({ ...d, ...patch }));
+                  if (Object.prototype.hasOwnProperty.call(patch, 'smtpPass')) setSmtpClearPassword(false);
+                }}
+                onClearPassword={() => {
+                  setSmtpDraft((d) => ({ ...d, smtpPass: '' }));
+                  setSmtpClearPassword(true);
+                }}
+                onSave={saveSmtp}
+                onChangeTest={(patch) => setSmtpTestDraft((d) => ({ ...d, ...patch }))}
+                onSendTest={sendSmtpTest}
+              />
+            ) : null}
+          </div>
         </div>
       </div>
     </div>

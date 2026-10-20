@@ -30,6 +30,13 @@ async function createOrganization({ name, code }) {
   return sanitize(org);
 }
 
+async function getById(id) {
+  const orgId = Number(id);
+  if (!Number.isInteger(orgId) || orgId <= 0) return null;
+  const org = await withTimeout(prisma.organization.findUnique({ where: { id: orgId } }), 800);
+  return sanitize(org);
+}
+
 async function getByCode(code) {
   const c = String(code || '').trim().toUpperCase();
   if (!c) return null;
@@ -44,15 +51,22 @@ async function getOrCreateDefault() {
   );
   if (existing) return sanitize(existing);
 
-  const code = String(process.env.SINGLE_ORG_CODE || 'DAMADINGJIYANWO').trim().toUpperCase();
-  const name = String(process.env.SINGLE_ORG_NAME || 'DAMADINGJIYANWO').trim();
-  const created = await withTimeout(prisma.organization.create({ data: { code, name } }), 1500);
-  return sanitize(created);
+  const code = String(process.env.SINGLE_ORG_CODE || 'CLB').trim().toUpperCase();
+  const name = String(process.env.SINGLE_ORG_NAME || 'CLB Holdings Berhad').trim();
+  try {
+    const created = await withTimeout(prisma.organization.create({ data: { code, name } }), 1500);
+    return sanitize(created);
+  } catch (error) {
+    if (error?.code !== 'P2002') throw error;
+    const fallback = await withTimeout(prisma.organization.findFirst({ orderBy: { createdAt: 'asc' } }), 1200);
+    return sanitize(fallback);
+  }
 }
 
 module.exports = {
   listOrganizations,
   createOrganization,
+  getById,
   getByCode,
   getOrCreateDefault
 };

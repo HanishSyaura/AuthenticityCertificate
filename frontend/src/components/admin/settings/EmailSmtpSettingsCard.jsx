@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Field, Input, Toggle } from './SettingsControls';
 import { useT } from '../../../i18n/useT';
 
@@ -12,53 +13,116 @@ function parseRoleCsv(v) {
 }
 
 function RoleMultiSelect({ id, value, options, disabled, placeholder, onChange }) {
-  const selected = new Set(parseRoleCsv(value));
-  const list = Array.isArray(options) ? options.map((x) => String(x || '').trim()).filter(Boolean) : [];
+  const selected = useMemo(() => new Set(parseRoleCsv(value)), [value]);
+  const list = useMemo(() => (Array.isArray(options) ? options.map((x) => String(x || '').trim()).filter(Boolean) : []), [options]);
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
+
+  const updatePosition = () => {
+    const trigger = triggerRef.current;
+    const menu = menuRef.current;
+    if (!trigger || !menu) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = Math.max(rect.width, menu.offsetWidth || rect.width);
+    const menuHeight = menu.offsetHeight || 0;
+    const margin = 8;
+    const maxLeft = window.innerWidth - margin - menuWidth;
+    const left = Math.max(margin, Math.min(rect.left, maxLeft));
+    const bottomTop = rect.bottom + 8;
+    const topTop = rect.top - 8 - menuHeight;
+    const canOpenBottom = bottomTop + menuHeight <= window.innerHeight - margin;
+    const maxTop = Math.max(margin, window.innerHeight - margin - menuHeight);
+    const top = Math.max(margin, Math.min(canOpenBottom ? bottomTop : topTop, maxTop));
+    setPos({ top, left, width: rect.width });
+  };
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    updatePosition();
+  }, [open, list.length, value]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointer = (event) => {
+      if (triggerRef.current?.contains(event.target)) return;
+      if (menuRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+
+    const handleWindow = () => updatePosition();
+
+    window.addEventListener('mousedown', handlePointer);
+    window.addEventListener('keydown', handleEscape);
+    window.addEventListener('resize', handleWindow);
+    window.addEventListener('scroll', handleWindow, true);
+    return () => {
+      window.removeEventListener('mousedown', handlePointer);
+      window.removeEventListener('keydown', handleEscape);
+      window.removeEventListener('resize', handleWindow);
+      window.removeEventListener('scroll', handleWindow, true);
+    };
+  }, [open]);
 
   return (
-    <details className="relative">
-      <summary
-        className={`ac-input-compact flex cursor-pointer list-none items-center justify-between ${
-          disabled ? 'opacity-60' : ''
-        }`}
-        onClick={(e) => {
-          if (disabled) {
-            e.preventDefault();
-            e.stopPropagation();
-          }
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`ac-input-compact flex items-center justify-between ${disabled ? 'opacity-60' : ''}`}
+        disabled={disabled}
+        onClick={() => {
+          if (disabled) return;
+          setOpen((value) => !value);
         }}
       >
         <span className={`truncate ${selected.size ? 'text-zinc-900' : 'text-zinc-400'}`}>
           {selected.size ? Array.from(selected).join(', ') : placeholder}
         </span>
         <span className="ml-3 text-xs text-zinc-500">▾</span>
-      </summary>
-      <div className="absolute z-20 mt-2 w-full rounded-xl border border-zinc-200 bg-white p-2 shadow-lg">
-        {list.length === 0 ? (
-          <div className="px-2 py-2 text-xs text-zinc-500">No roles available</div>
-        ) : (
-          <div className="max-h-52 overflow-auto">
-            {list.map((name) => (
-              <label key={name} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-zinc-50">
-                <input
-                  type="checkbox"
-                  checked={selected.has(name)}
-                  disabled={disabled}
-                  onChange={() => {
-                    const next = new Set(selected);
-                    if (next.has(name)) next.delete(name);
-                    else next.add(name);
-                    onChange(Array.from(next).join(', '));
-                  }}
-                />
-                <span className="text-zinc-800">{name}</span>
-              </label>
-            ))}
-          </div>
-        )}
-      </div>
+      </button>
+      {open && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              ref={menuRef}
+              style={{ position: 'fixed', top: pos.top, left: pos.left, width: Math.max(pos.width, 220) }}
+              className="z-40 rounded-xl border border-zinc-200 bg-white p-2 shadow-lg"
+            >
+              {list.length === 0 ? (
+                <div className="px-2 py-2 text-xs text-zinc-500">No roles available</div>
+              ) : (
+                <div className="max-h-52 overflow-auto">
+                  {list.map((name) => (
+                    <label key={name} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-zinc-50">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(name)}
+                        disabled={disabled}
+                        onChange={() => {
+                          const next = new Set(selected);
+                          if (next.has(name)) next.delete(name);
+                          else next.add(name);
+                          onChange(Array.from(next).join(', '));
+                        }}
+                      />
+                      <span className="text-zinc-800">{name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>,
+            document.body
+          )
+        : null}
       <input type="hidden" id={id} value={String(value || '')} readOnly />
-    </details>
+    </>
   );
 }
 

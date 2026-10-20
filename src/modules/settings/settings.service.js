@@ -3,6 +3,37 @@ const { encryptText } = require('../../utils/secretCrypto');
 
 const EPC_GENERATED_EMAIL_KEY = 'epc_generated_email';
 const EPC_PRODUCTION_ORDERS_EMAIL_KEY = 'epc_production_orders_email';
+const DEFAULT_THEME_PRIMARY_HEX = '#1a1939';
+const DEFAULT_LOGIN_HERO_BADGE = 'NFC-Powered Product Authentication';
+const DEFAULT_LOGIN_HERO_TITLE = 'Verify Authenticity. Trust Every Product.';
+const DEFAULT_LOGIN_HERO_SUBTITLE =
+  'Tap to verify. Discover the story behind every product. Simply scan your NFC-enabled product to access its authenticity certificate, product details, and verified information with confidence.';
+const DEFAULT_LOGIN_HERO_HIGHLIGHTS = [
+  'NFC Verification',
+  'Product Authenticity',
+  'Digital Certificate',
+  'Verified Product Details',
+  'Brand Transparency'
+];
+
+function normalizeStringArray(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 8);
+  }
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return normalizeStringArray(parsed);
+  } catch {
+    void 0;
+  }
+  return raw
+    .split(',')
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .slice(0, 8);
+}
 
 function normalizeRoleNames(roleNames) {
   const roles = Array.isArray(roleNames) ? roleNames : [];
@@ -94,6 +125,11 @@ async function getOrganizationSettingsRow(organizationId) {
       appTitle,
       faviconUrl,
       logoUrl,
+      themePrimaryHex,
+      loginHeroBadge,
+      loginHeroTitle,
+      loginHeroSubtitle,
+      loginHeroHighlightsJson,
       smtpHost,
       smtpPort,
       smtpSecure,
@@ -121,8 +157,32 @@ async function ensureOrganizationSettings(organizationId) {
   if (existing) return existing;
 
   await prisma.$executeRaw`
-    INSERT INTO OrganizationSettings (organizationId, defaultLocale, defaultTimezone, maintenanceMode, createdAt, updatedAt)
-    VALUES (${orgId}, 'en', 'Asia/Kuala_Lumpur', false, NOW(), NOW())
+    INSERT INTO OrganizationSettings (
+      organizationId,
+      defaultLocale,
+      defaultTimezone,
+      maintenanceMode,
+      themePrimaryHex,
+      loginHeroBadge,
+      loginHeroTitle,
+      loginHeroSubtitle,
+      loginHeroHighlightsJson,
+      createdAt,
+      updatedAt
+    )
+    VALUES (
+      ${orgId},
+      'en',
+      'Asia/Kuala_Lumpur',
+      false,
+      ${DEFAULT_THEME_PRIMARY_HEX},
+      ${DEFAULT_LOGIN_HERO_BADGE},
+      ${DEFAULT_LOGIN_HERO_TITLE},
+      ${DEFAULT_LOGIN_HERO_SUBTITLE},
+      ${JSON.stringify(DEFAULT_LOGIN_HERO_HIGHLIGHTS)},
+      NOW(),
+      NOW()
+    )
   `;
 
   return getOrganizationSettingsRow(orgId);
@@ -142,6 +202,39 @@ async function updateOrganizationSettings(organizationId, input) {
   const faviconUrl = typeof input.faviconUrl === 'string' ? input.faviconUrl.trim() : input.faviconUrl === null ? null : null;
   const hasLogoUrl = Object.prototype.hasOwnProperty.call(input, 'logoUrl');
   const logoUrl = typeof input.logoUrl === 'string' ? input.logoUrl.trim() : input.logoUrl === null ? null : null;
+  const hasThemePrimaryHex = Object.prototype.hasOwnProperty.call(input, 'themePrimaryHex');
+  const themePrimaryHex =
+    typeof input.themePrimaryHex === 'string'
+      ? input.themePrimaryHex.trim().toLowerCase()
+      : input.themePrimaryHex === null
+        ? DEFAULT_THEME_PRIMARY_HEX
+        : null;
+  const hasLoginHeroBadge = Object.prototype.hasOwnProperty.call(input, 'loginHeroBadge');
+  const loginHeroBadge =
+    typeof input.loginHeroBadge === 'string'
+      ? input.loginHeroBadge.trim() || DEFAULT_LOGIN_HERO_BADGE
+      : input.loginHeroBadge === null
+        ? DEFAULT_LOGIN_HERO_BADGE
+        : null;
+  const hasLoginHeroTitle = Object.prototype.hasOwnProperty.call(input, 'loginHeroTitle');
+  const loginHeroTitle =
+    typeof input.loginHeroTitle === 'string'
+      ? input.loginHeroTitle.trim() || DEFAULT_LOGIN_HERO_TITLE
+      : input.loginHeroTitle === null
+        ? DEFAULT_LOGIN_HERO_TITLE
+        : null;
+  const hasLoginHeroSubtitle = Object.prototype.hasOwnProperty.call(input, 'loginHeroSubtitle');
+  const loginHeroSubtitle =
+    typeof input.loginHeroSubtitle === 'string'
+      ? input.loginHeroSubtitle.trim() || DEFAULT_LOGIN_HERO_SUBTITLE
+      : input.loginHeroSubtitle === null
+        ? DEFAULT_LOGIN_HERO_SUBTITLE
+        : null;
+  const hasLoginHeroHighlights = Object.prototype.hasOwnProperty.call(input, 'loginHeroHighlights');
+  const loginHeroHighlights = hasLoginHeroHighlights ? normalizeStringArray(input.loginHeroHighlights) : null;
+  const loginHeroHighlightsJson = hasLoginHeroHighlights
+    ? JSON.stringify(loginHeroHighlights.length ? loginHeroHighlights : DEFAULT_LOGIN_HERO_HIGHLIGHTS)
+    : null;
 
   const hasSmtpHost = Object.prototype.hasOwnProperty.call(input, 'smtpHost');
   const smtpHost = typeof input.smtpHost === 'string' ? input.smtpHost.trim() : input.smtpHost === null ? null : null;
@@ -172,6 +265,11 @@ async function updateOrganizationSettings(organizationId, input) {
       appTitle = CASE WHEN ${hasAppTitle} THEN ${appTitle} ELSE appTitle END,
       faviconUrl = CASE WHEN ${hasFaviconUrl} THEN ${faviconUrl} ELSE faviconUrl END,
       logoUrl = CASE WHEN ${hasLogoUrl} THEN ${logoUrl} ELSE logoUrl END,
+      themePrimaryHex = CASE WHEN ${hasThemePrimaryHex} THEN ${themePrimaryHex} ELSE COALESCE(themePrimaryHex, ${DEFAULT_THEME_PRIMARY_HEX}) END,
+      loginHeroBadge = CASE WHEN ${hasLoginHeroBadge} THEN ${loginHeroBadge} ELSE loginHeroBadge END,
+      loginHeroTitle = CASE WHEN ${hasLoginHeroTitle} THEN ${loginHeroTitle} ELSE loginHeroTitle END,
+      loginHeroSubtitle = CASE WHEN ${hasLoginHeroSubtitle} THEN ${loginHeroSubtitle} ELSE loginHeroSubtitle END,
+      loginHeroHighlightsJson = CASE WHEN ${hasLoginHeroHighlights} THEN ${loginHeroHighlightsJson} ELSE loginHeroHighlightsJson END,
       smtpHost = CASE WHEN ${hasSmtpHost} THEN ${smtpHost} ELSE smtpHost END,
       smtpPort = CASE WHEN ${hasSmtpPort} THEN ${smtpPort} ELSE smtpPort END,
       smtpSecure = CASE WHEN ${hasSmtpSecure} THEN ${smtpSecure} ELSE smtpSecure END,
@@ -193,6 +291,10 @@ module.exports = {
   updateOrganizationSettings,
   EPC_GENERATED_EMAIL_KEY,
   EPC_PRODUCTION_ORDERS_EMAIL_KEY,
+  DEFAULT_LOGIN_HERO_BADGE,
+  DEFAULT_LOGIN_HERO_TITLE,
+  DEFAULT_LOGIN_HERO_SUBTITLE,
+  DEFAULT_LOGIN_HERO_HIGHLIGHTS,
   getNotificationConfig,
   upsertNotificationConfig,
   getEpcGeneratedEmailConfig: async (organizationId) => await getNotificationConfig(organizationId, EPC_GENERATED_EMAIL_KEY),

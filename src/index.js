@@ -276,29 +276,54 @@ app.use(
 );
 app.use(express.json());
 
-const dbInit = { ready: false, error: null, promise: null };
-dbInit.promise = applyDbPatches()
-  .then(() => {
-    dbInit.ready = true;
-  })
-  .catch((err) => {
-    dbInit.error = err;
-    console.error(err);
-  });
+const dbInit = { ready: false, error: null, promise: null, lastAttemptAt: 0 };
 
-app.use(async (req, res, next) => {
-  if (req.path === '/' || req.path === '/health') return next();
-  if (dbInit.ready) return next();
+function startDbInit(force = false) {
+  if (dbInit.ready) return Promise.resolve();
+  if (!force && dbInit.promise) return dbInit.promise;
+
+  dbInit.lastAttemptAt = Date.now();
+  dbInit.error = null;
+  dbInit.promise = applyDbPatches()
+    .then(() => {
+      dbInit.ready = true;
+      dbInit.error = null;
+    })
+    .catch((err) => {
+      dbInit.error = err;
+      console.error(err);
+    })
+    .finally(() => {
+      if (!dbInit.ready) dbInit.promise = null;
+    });
+
+  return dbInit.promise;
+}
+
+async function ensureDbReady() {
+  if (dbInit.ready) return true;
 
   const timeoutMs = Number(process.env.DB_PATCH_TIMEOUT_MS || 10000);
+  const retryCooldownMs = Number(process.env.DB_PATCH_RETRY_COOLDOWN_MS || 5000);
+  const shouldRetry = !dbInit.promise && Date.now() - dbInit.lastAttemptAt >= retryCooldownMs;
+
+  if (shouldRetry) startDbInit(true);
+
   try {
     await Promise.race([
-      dbInit.promise,
+      dbInit.promise || Promise.resolve(),
       new Promise((_, reject) => setTimeout(() => reject(new Error('db_patches_timeout')), timeoutMs))
     ]);
   } catch {}
 
-  if (dbInit.ready) return next();
+  return dbInit.ready;
+}
+
+startDbInit();
+
+app.use(async (req, res, next) => {
+  if (req.path === '/' || req.path === '/health') return next();
+  if (await ensureDbReady()) return next();
   if (dbInit.error) return res.error('Database belum siap (inisialisasi gagal). Sila semak log server.', 503);
   return res.error('Database sedang diinisialisasi. Sila cuba lagi.', 503);
 });

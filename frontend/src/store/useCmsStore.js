@@ -111,7 +111,7 @@ function sanitizeDesignsList(list) {
 const useCmsStore = create((set, get) => ({
   // =============================================================
   // STATE: CmsDesign (top-level landing page bundles / designs)
-  // selectedDesignId = null means: use "Default (legacy)" group (pages with designId IS NULL)
+  // selectedDesignId = null means: no landing page bundle selected yet
   // =============================================================
   designs: [],
   selectedDesignId: null,
@@ -246,10 +246,15 @@ const useCmsStore = create((set, get) => ({
     const designId =
       opts && Object.prototype.hasOwnProperty.call(opts, 'designId')
         ? opts.designId
-        : get().selectedDesignId; // null = default group, number = specific group, undefined = backend returns all
+        : get().selectedDesignId;
 
     if (!token) {
       set({ pages: [], loading: false, error: tRaw('notAuthenticated') });
+      return;
+    }
+
+    if (designId == null) {
+      set({ pages: [], loading: false, selectedPageId: null });
       return;
     }
 
@@ -257,8 +262,7 @@ const useCmsStore = create((set, get) => ({
       const api = createAdminApi({ token });
       const params = {};
       if (kind) params.kind = kind;
-      if (designId === null) params.designId = 'null'; // IS NULL (legacy default group)
-      else if (designId !== undefined) params.designId = Number(designId);
+      if (designId !== undefined) params.designId = Number(designId);
       const hasParams = Object.keys(params).length > 0;
       const res = await api.get('/cms/pages', hasParams ? { params } : undefined);
       const pages = sortPages(sanitizePagesList(res?.data?.data || []));
@@ -274,15 +278,14 @@ const useCmsStore = create((set, get) => ({
     const safeSlug = safeSlugify(slug || name);
     const pages = get().pages;
     const kind = 'landing';
-    const designId = get().selectedDesignId; // null => attach to default group; number => attach to that group
+    const designId = get().selectedDesignId;
 
     if (!token) throw new Error(tRaw('notAuthenticated'));
+    if (designId == null) throw new Error(tRaw('noLandingPages'));
 
     try {
       const api = createAdminApi({ token });
-      const payload = { name, slug: safeSlug, kind };
-      if (designId === null) payload.designId = null;
-      else if (designId != null) payload.designId = Number(designId);
+      const payload = { name, slug: safeSlug, kind, designId: Number(designId) };
       const res = await api.post('/cms/page', payload);
       const created = res?.data?.data;
       const updated = sortPages(sanitizePagesList([...(pages || []), created].filter(Boolean)));

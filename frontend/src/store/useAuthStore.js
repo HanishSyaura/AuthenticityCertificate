@@ -6,18 +6,25 @@ const useAuthStore = create((set) => ({
   certificate: null,
   loading: false,
   error: null,
+  errorDetails: null,
+
+  clearVerificationState: () => set({ certificate: null, error: null, errorDetails: null }),
 
   verifyCertificate: async (id, opts = {}) => {
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, errorDetails: null });
     try {
       const lang = opts?.lang ? String(opts.lang) : null;
       const response = await axios.get(`${getPublicApiBaseUrl()}/cert/${id}`, {
         params: lang ? { lang } : undefined
       });
-      set({ certificate: response.data.data, loading: false });
+      set({ certificate: response.data.data, loading: false, error: null, errorDetails: null });
     } catch (err) {
       set({ 
         error: err.response?.data?.message || 'Verification failed', 
+        errorDetails: {
+          status: Number(err?.response?.status || 0) || null,
+          message: err.response?.data?.message || 'Verification failed'
+        },
         loading: false,
         certificate: null 
       });
@@ -25,7 +32,7 @@ const useAuthStore = create((set) => ({
   },
 
   resolveCertificate: async (params, opts = {}) => {
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, errorDetails: null });
     try {
       const q = params || {};
       const epc = typeof q.epc === 'string' ? q.epc : null;
@@ -38,10 +45,14 @@ const useAuthStore = create((set) => ({
           ...(lang ? { lang } : {})
         }
       });
-      set({ certificate: response.data.data, loading: false });
+      set({ certificate: response.data.data, loading: false, error: null, errorDetails: null });
     } catch (err) {
       set({
         error: err.response?.data?.message || 'Verification failed',
+        errorDetails: {
+          status: Number(err?.response?.status || 0) || null,
+          message: err.response?.data?.message || 'Verification failed'
+        },
         loading: false,
         certificate: null
       });

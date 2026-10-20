@@ -153,6 +153,7 @@ export default function AdminCmsBuilder() {
     }
   });
   const [saveStatus, setSaveStatus] = useState('idle');
+  const [publishStatus, setPublishStatus] = useState('idle');
   const [saveError, setSaveError] = useState(null);
   const [, setLastSavedAt] = useState(null);
   const saveSeqRef = useRef(0);
@@ -164,6 +165,13 @@ export default function AdminCmsBuilder() {
         .filter((p) => p && typeof p === 'object' && p.id != null)
         .find((p) => String(p.id) === String(selectedPageId)) || null,
     [pages, selectedPageId]
+  );
+
+  const safeDesigns = useMemo(() => (Array.isArray(designs) ? designs.filter((d) => d && d.id != null) : []), [designs]);
+  const hasDesigns = safeDesigns.length > 0;
+  const hasSelectedDesign = useMemo(
+    () => safeDesigns.some((d) => String(d.id) === String(selectedDesignId)),
+    [safeDesigns, selectedDesignId]
   );
 
   const layoutLoaded = useMemo(() => {
@@ -193,6 +201,16 @@ export default function AdminCmsBuilder() {
   useEffect(() => {
     fetchPages({ kind: 'landing' });
   }, [fetchPages, selectedDesignId]);
+
+  useEffect(() => {
+    if (!hasDesigns) {
+      if (selectedDesignId != null) setSelectedDesignId(null);
+      return;
+    }
+    if (!hasSelectedDesign && safeDesigns[0]?.id != null) {
+      setSelectedDesignId(safeDesigns[0].id);
+    }
+  }, [hasDesigns, hasSelectedDesign, safeDesigns, selectedDesignId, setSelectedDesignId]);
 
   useEffect(() => {
     void fetchTemplates();
@@ -258,6 +276,38 @@ export default function AdminCmsBuilder() {
     }
   }, [inspectorOpen]);
 
+  const handleManualSave = async () => {
+    if (!selectedPageId) return;
+    const seq = (saveSeqRef.current += 1);
+    setSaveStatus('saving');
+    setSaveError(null);
+    try {
+      await saveLayout({ pageId: selectedPageId, layoutJson: layout, language });
+      if (saveSeqRef.current !== seq) return;
+      setSaveStatus('saved');
+      setLastSavedAt(Date.now());
+    } catch (e) {
+      if (saveSeqRef.current !== seq) return;
+      setSaveStatus('error');
+      setSaveError(e?.message || t('saveFailed'));
+      throw e;
+    }
+  };
+
+  const handleManualPublish = async () => {
+    if (!selectedPageId) return;
+    setPublishStatus('publishing');
+    setSaveError(null);
+    try {
+      await handleManualSave();
+      await publishPage({ pageId: selectedPageId });
+      setPublishStatus('published');
+    } catch (e) {
+      setPublishStatus('error');
+      setSaveError(e?.message || t('saveFailed'));
+    }
+  };
+
   const setLayout = (next) => {
     if (!selectedPageId) return;
     const seq = (saveSeqRef.current += 1);
@@ -276,30 +326,30 @@ export default function AdminCmsBuilder() {
       });
   };
 
+  const showInspectorPanel = hasSelectedDesign && inspectorOpen;
+
   const gridCols =
-    pagesOpen && inspectorOpen
+    pagesOpen && showInspectorPanel
       ? 'lg:grid-cols-[220px_1fr_260px]'
       : pagesOpen
         ? 'lg:grid-cols-[220px_1fr]'
-        : inspectorOpen
+        : showInspectorPanel
           ? 'lg:grid-cols-[1fr_260px]'
           : 'lg:grid-cols-1';
-
   return (
     <div className="p-3 sm:p-4 lg:p-4">
-      <div className="mb-4 flex items-start justify-between gap-4">
-        <div data-tour="cms-header">
-          <h2 className="text-base font-semibold text-zinc-900">{t('cmsHeading')}</h2>
-          <p className="mt-1 text-sm text-zinc-600">{t('cmsSubheading')}</p>
-          {error ? <div className="mt-2 text-xs text-amber-700">{error}</div> : null}
+      <div className="rounded-[28px] border border-zinc-200/80 bg-gradient-to-br from-white via-zinc-50 to-slate-100 p-4 shadow-sm sm:p-5">
+      <div className="mb-4 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div data-tour="cms-header" className="min-w-0">
+          <h2 className="text-xl font-semibold tracking-tight text-zinc-950">{t('cmsHeading')}</h2>
+          <p className="mt-1 max-w-3xl text-sm text-zinc-600">{t('cmsSubheading')}</p>
+          {error ? <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">{error}</div> : null}
         </div>
 
-        <div className="flex items-center gap-2">
-          {saveStatus === 'saving' ? <div className="text-xs font-semibold text-zinc-500">{t('saving')}</div> : null}
-          {saveStatus === 'saved' ? <div className="text-xs font-semibold text-emerald-700">{t('saved')}</div> : null}
-          {saveStatus === 'error' ? <div className="text-xs font-semibold text-rose-700">{t('saveFailed')}</div> : null}
+        <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto rounded-2xl border border-zinc-200 bg-white/90 p-3 shadow-sm xl:max-w-[760px]">
+          <div className="shrink-0 text-xs font-semibold text-zinc-600">Landing Page Language</div>
           <select
-            className="ac-input rounded-lg px-3 py-2 text-xs font-semibold"
+            className="ac-input w-[88px] min-w-[88px] rounded-lg border-zinc-200 bg-white px-2.5 py-2 text-xs font-semibold shadow-sm"
             value={language || 'en'}
             onChange={(e) => setLanguage(e.target.value)}
             data-tour="cms-language"
@@ -316,53 +366,35 @@ export default function AdminCmsBuilder() {
                 await fillEmptyFromEn({ pageId: selectedPageId, language });
                 await loadLayoutForPage({ page: selectedPage });
               }}
-              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-              disabled={!selectedPageId || saveStatus === 'saving'}
+              className="shrink-0 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
+              disabled={!selectedPageId || saveStatus === 'saving' || publishStatus === 'publishing'}
             >
               {t('copyEnFillEmpty')}
             </button>
           ) : null}
           <button
             type="button"
-            onClick={async () => {
-              if (!selectedPageId) return;
-              const seq = (saveSeqRef.current += 1);
-              setSaveStatus('saving');
-              setSaveError(null);
-              try {
-                await saveLayout({ pageId: selectedPageId, layoutJson: layout, language });
-                if (saveSeqRef.current !== seq) return;
-                setSaveStatus('saved');
-                setLastSavedAt(Date.now());
-              } catch (e) {
-                if (saveSeqRef.current !== seq) return;
-                setSaveStatus('error');
-                setSaveError(e?.message || t('saveFailed'));
-              }
-            }}
-            className="ac-btn rounded-lg px-3 py-2 text-xs"
-            disabled={!selectedPageId || saveStatus === 'saving'}
+            onClick={handleManualSave}
+            className="ac-btn shrink-0 rounded-lg px-3 py-2 text-xs shadow-sm"
+            disabled={!selectedPageId || saveStatus === 'saving' || publishStatus === 'publishing'}
             data-tour="cms-save"
           >
-            {t('save')}
+            {saveStatus === 'saving' ? `${t('save')}...` : t('save')}
           </button>
           <button
             type="button"
-            onClick={async () => {
-              if (!selectedPageId) return;
-              await publishPage({ pageId: selectedPageId });
-            }}
-            className="ac-btn rounded-lg px-3 py-2 text-xs"
-            disabled={!selectedPageId || layoutLocked}
+            onClick={handleManualPublish}
+            className="ac-btn shrink-0 rounded-lg px-3 py-2 text-xs shadow-sm"
+            disabled={!selectedPageId || layoutLocked || saveStatus === 'saving' || publishStatus === 'publishing'}
             data-tour="cms-publish"
           >
-            {t('publish')}
+            {publishStatus === 'publishing' ? `${t('publish')}...` : t('publish')}
           </button>
           {!pagesOpen ? (
             <button
               type="button"
               onClick={() => setPagesOpen(true)}
-              className="lg:hidden inline-flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+              className="lg:hidden inline-flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
               title={`${t('expand')} ${t('pages')}`}
             >
               <span className="hidden xl:inline">{t('pages')}</span>
@@ -379,7 +411,7 @@ export default function AdminCmsBuilder() {
             <button
               type="button"
               onClick={() => setInspectorOpen(true)}
-              className="lg:hidden inline-flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+              className="lg:hidden inline-flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
               title={`${t('expand')} ${t('inspector')}`}
             >
               <span className="hidden xl:inline">{t('inspector')}</span>
@@ -392,54 +424,25 @@ export default function AdminCmsBuilder() {
               </svg>
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={() => setViewMode('edit')}
-            className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
-              viewMode === 'edit' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200/80 bg-white text-zinc-900 hover:bg-zinc-50'
-            }`}
-          >
-            {t('edit')}
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('split')}
-            className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
-              viewMode === 'split' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200/80 bg-white text-zinc-900 hover:bg-zinc-50'
-            }`}
-          >
-            {t('split')}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setViewMode('preview');
-            }}
-            className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
-              viewMode === 'preview' ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-200' : 'border border-zinc-200/80 bg-white text-zinc-900 hover:bg-zinc-50'
-            }`}
-          >
-            {t('preview')}
-          </button>
         </div>
       </div>
 
-      <div className={`relative grid grid-cols-1 gap-3 ${gridCols}`}>
+      <div className={`relative grid grid-cols-1 gap-4 ${gridCols}`}>
         {!pagesOpen ? (
           <button
             type="button"
             onClick={() => setPagesOpen(true)}
-            className="hidden lg:inline-flex absolute left-0 top-1/2 z-10 -translate-y-1/2 items-center justify-center rounded-r-lg border border-zinc-200 bg-white px-2 py-3 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
+            className="hidden lg:inline-flex absolute left-0 top-1/2 z-10 -translate-y-1/2 items-center justify-center rounded-r-xl border border-zinc-200 bg-white px-2 py-3 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
             title={`${t('expand')} ${t('pages')}`}
           >
             <span aria-hidden="true">{'>'}</span>
           </button>
         ) : null}
-        {!inspectorOpen ? (
+        {!inspectorOpen && hasSelectedDesign ? (
           <button
             type="button"
             onClick={() => setInspectorOpen(true)}
-            className="hidden lg:inline-flex absolute right-0 top-1/2 z-10 -translate-y-1/2 items-center justify-center rounded-l-lg border border-zinc-200 bg-white px-2 py-3 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
+            className="hidden lg:inline-flex absolute right-0 top-1/2 z-10 -translate-y-1/2 items-center justify-center rounded-l-xl border border-zinc-200 bg-white px-2 py-3 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
             title={`${t('expand')} ${t('inspector')}`}
           >
             <span aria-hidden="true">{'<'}</span>
@@ -450,20 +453,15 @@ export default function AdminCmsBuilder() {
             {/* =======================================================
                 CmsDesignPanel — Top-level landing design bundle selector
                 ======================================================= */}
-            <div className="ac-card p-3">
-              <div className="mb-2 flex items-center justify-between">
+            <div className="rounded-[22px] border border-zinc-200 bg-white p-3 shadow-sm">
+              <div className="mb-3 flex items-center justify-between">
                   <div className="text-xs font-semibold text-zinc-900">
                     {t('landingDesigns')}
-                    <span className="ml-2 text-[10px] font-normal text-zinc-500">
-                      {selectedDesignId == null
-                        ? `(${t('defaultGroup')} — ${pages?.length || 0} ${t('pages')})`
-                        : `(${pages?.length || 0} ${t('pages')})`}
-                    </span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setDesignsOpen((v) => !v)}
-                    className="text-xs text-zinc-500 hover:text-zinc-800"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-xs text-zinc-500 shadow-sm hover:text-zinc-800"
                     aria-label="Toggle designs"
                   >
                     {designsOpen ? '▾' : '▸'}
@@ -472,6 +470,12 @@ export default function AdminCmsBuilder() {
 
                 {designsOpen ? (
                   <>
+                    {!hasDesigns ? (
+                      <div className="mb-2 rounded-xl border border-dashed border-zinc-300 bg-zinc-50/80 p-3">
+                        <div className="text-sm font-semibold text-zinc-900">{t('landingDesigns')}</div>
+                        <p className="mt-1 text-xs leading-5 text-zinc-600">{t('noLandingPages')}</p>
+                      </div>
+                    ) : null}
                     {/* Default (legacy) group option — pages with designId = NULL */}
                     {designDefaultRenameOpen ? (
                       <div className="mb-2 space-y-1 rounded-md border border-amber-200 bg-amber-50 p-2">
@@ -540,8 +544,9 @@ export default function AdminCmsBuilder() {
                       </div>
                     ) : (
                       <div
-                        className={`mb-1 group rounded-md transition ${
-                          selectedDesignId == null ? 'bg-brand-50 ring-1 ring-inset ring-brand-200' : 'hover:bg-zinc-50'
+                        hidden
+                        className={`mb-2 group rounded-xl border transition ${
+                          selectedDesignId == null ? 'border-brand-200 bg-brand-50/80 shadow-sm' : 'border-zinc-200 bg-zinc-50/60 hover:border-zinc-300 hover:bg-white'
                         }`}
                       >
                         <div className="flex items-center gap-1">
@@ -557,7 +562,7 @@ export default function AdminCmsBuilder() {
                           </button>
                           <button
                             type="button"
-                            className="mr-1 rounded px-2 py-0.5 text-[10px] text-zinc-500 opacity-0 group-hover:opacity-100 hover:bg-zinc-200 hover:text-zinc-900"
+                            className="mr-1 rounded-lg px-2 py-1 text-[10px] text-zinc-500 opacity-0 group-hover:opacity-100 hover:bg-zinc-200 hover:text-zinc-900"
                             title={t('renameDefaultDesign')}
                             onClick={() => {
                               setDesignDefaultRenameOpen(true);
@@ -573,12 +578,12 @@ export default function AdminCmsBuilder() {
                     )}
 
                     {/* Created CmsDesign bundles */}
-                    {(designs || []).map((d) => {
+                    {safeDesigns.map((d) => {
                       const active = String(d.id) === String(selectedDesignId);
                       const editing = String(designEditingId) === String(d.id);
                       if (editing) {
                         return (
-                          <div key={`edit-${d.id}`} className="mb-1 space-y-1 rounded-md border border-zinc-200 bg-white p-2">
+                          <div key={`edit-${d.id}`} className="mb-2 space-y-1 rounded-xl border border-zinc-200 bg-white p-3 shadow-sm">
                             <input
                               className="ac-input !py-1 text-[11px]"
                               placeholder={t('name')}
@@ -639,8 +644,8 @@ export default function AdminCmsBuilder() {
                       return (
                         <div
                           key={d.id}
-                          className={`mb-1 group rounded-md transition ${
-                            active ? 'bg-brand-50 ring-1 ring-inset ring-brand-200' : 'hover:bg-zinc-50'
+                          className={`mb-2 group rounded-xl border transition ${
+                            active ? 'border-brand-200 bg-brand-50/80 shadow-sm' : 'border-zinc-200 bg-zinc-50/60 hover:border-zinc-300 hover:bg-white'
                           }`}
                         >
                           <div className="flex items-center gap-1">
@@ -659,7 +664,7 @@ export default function AdminCmsBuilder() {
                             </button>
                             <button
                               type="button"
-                              className="rounded px-2 py-0.5 text-[10px] text-zinc-500 opacity-0 group-hover:opacity-100 hover:bg-zinc-200 hover:text-zinc-900"
+                              className="rounded-lg px-2 py-1 text-[10px] text-zinc-500 opacity-0 group-hover:opacity-100 hover:bg-zinc-200 hover:text-zinc-900"
                               title={t('edit')}
                               onClick={() => {
                                 setDesignEditingId(d.id);
@@ -672,17 +677,10 @@ export default function AdminCmsBuilder() {
                             </button>
                             <button
                               type="button"
-                              className="mr-1 rounded px-2 py-0.5 text-[10px] text-rose-500 opacity-0 group-hover:opacity-100 hover:bg-rose-100 hover:text-rose-800"
+                              className="mr-1 rounded-lg px-2 py-1 text-[10px] text-rose-500 opacity-0 group-hover:opacity-100 hover:bg-rose-100 hover:text-rose-800"
                               title={t('delete')}
                               onClick={async () => {
-                                const confirmMsg =
-                                  typeof window !== 'undefined'
-                                    ? window.confirm(
-                                        `${String(t('confirmDelete') || 'Delete this design bundle?')}\n${String(
-                                          t('pagesWillMoveToDefault') || 'Inner pages will be moved to Default group.'
-                                        )}`
-                                      )
-                                    : true;
+                                const confirmMsg = typeof window !== 'undefined' ? window.confirm(String(t('confirmDelete') || 'Delete this item?')) : true;
                                 if (!confirmMsg) return;
                                 try {
                                   await deleteDesign({ id: d.id });
@@ -700,7 +698,7 @@ export default function AdminCmsBuilder() {
 
                     {/* Create new design */}
                     {designShowCreate ? (
-                      <div className="mt-2 space-y-1 rounded-md border border-zinc-200 bg-white p-2">
+                      <div className="mt-2 space-y-1 rounded-xl border border-zinc-200 bg-white p-3 shadow-sm">
                         <input
                           className="ac-input !py-1 text-[11px]"
                           placeholder={`${t('name')} — e.g. Sarang Madu Landing`}
@@ -761,7 +759,7 @@ export default function AdminCmsBuilder() {
                     ) : (
                       <button
                         type="button"
-                        className="mt-2 w-full rounded-md border border-dashed border-zinc-300 px-2 py-1.5 text-[11px] text-zinc-500 hover:border-zinc-500 hover:text-zinc-800"
+                        className="mt-2 w-full rounded-xl border border-dashed border-zinc-300 px-2 py-2 text-[11px] text-zinc-500 hover:border-zinc-500 hover:text-zinc-800"
                         onClick={() => setDesignShowCreate(true)}
                       >
                         + {t('addDesign')}
@@ -775,27 +773,34 @@ export default function AdminCmsBuilder() {
                 CmsPagePanel — inner pages/sections WITHIN currently selected design bundle
                 ===================================================== */}
             <div data-tour="cms-pages-panel">
-              <CmsPagePanel
-                pages={pages}
-                selectedPageId={selectedPageId}
-                onSelectPage={(id) => {
-                  selectPage(id);
-                  setSelectedBlockId(null);
-                }}
-                onCollapse={() => setPagesOpen(false)}
-                onReorderPages={async (orderedIds) => {
-                  await reorderPages({ orderedIds });
-                }}
-                onCreatePage={async ({ name, slug }) => {
-                  const created = await createPage({ name, slug });
-                  selectPage(created.id);
-                  setSelectedBlockId(null);
-                }}
-                onDeletePage={async (id) => {
-                  await deletePage({ pageId: id });
-                  setSelectedBlockId(null);
-                }}
-              />
+              {hasSelectedDesign ? (
+                <CmsPagePanel
+                  pages={pages}
+                  selectedPageId={selectedPageId}
+                  onSelectPage={(id) => {
+                    selectPage(id);
+                    setSelectedBlockId(null);
+                  }}
+                  onCollapse={() => setPagesOpen(false)}
+                  onReorderPages={async (orderedIds) => {
+                    await reorderPages({ orderedIds });
+                  }}
+                  onCreatePage={async ({ name, slug }) => {
+                    const created = await createPage({ name, slug });
+                    selectPage(created.id);
+                    setSelectedBlockId(null);
+                  }}
+                  onDeletePage={async (id) => {
+                    await deletePage({ pageId: id });
+                    setSelectedBlockId(null);
+                  }}
+                />
+              ) : (
+                <div className="rounded-[22px] border border-zinc-200 bg-white p-4 shadow-sm">
+                  <div className="text-sm font-semibold text-zinc-900">{t('landingDesigns')}</div>
+                  <p className="mt-1 text-xs leading-5 text-zinc-600">{t('noLandingPages')}</p>
+                </div>
+              )}
             </div>
           </div>
         ) : null}
@@ -803,22 +808,39 @@ export default function AdminCmsBuilder() {
         {saveError ? <div className="col-span-full -mt-2 text-xs text-rose-700">{saveError}</div> : null}
 
         <div data-tour="cms-canvas-panel">
-          <CmsCanvasPanel
-            viewMode={viewMode}
-            kind="landing"
-            selectedDesignId={selectedDesignId}
-            selectedPage={selectedPage}
-            layout={layout}
-            previewLayout={previewLayout}
-            layoutLoaded={layoutLoaded}
-            setLayout={setLayout}
-            selectedBlockId={selectedBlockId}
-            setSelectedBlockId={setSelectedBlockId}
-            layoutLocked={layoutLocked}
-          />
+          {hasSelectedDesign ? (
+            <CmsCanvasPanel
+              viewMode={viewMode}
+              setViewMode={setViewMode}
+              kind="landing"
+              selectedDesignId={selectedDesignId}
+              selectedPage={selectedPage}
+              layout={layout}
+              previewLayout={previewLayout}
+              layoutLoaded={layoutLoaded}
+              setLayout={setLayout}
+              selectedBlockId={selectedBlockId}
+              setSelectedBlockId={setSelectedBlockId}
+              layoutLocked={layoutLocked}
+            />
+          ) : (
+            <div className="rounded-[24px] border border-zinc-200 bg-white p-6 shadow-sm">
+              <div className="mx-auto flex min-h-[520px] max-w-xl flex-col items-center justify-center rounded-[20px] border border-dashed border-zinc-300 bg-zinc-50/70 px-6 py-10 text-center">
+                <div className="text-lg font-semibold text-zinc-950">{t('landingDesigns')}</div>
+                <p className="mt-2 max-w-md text-sm leading-6 text-zinc-600">{t('noLandingPages')}</p>
+                <button
+                  type="button"
+                  className="ac-btn mt-5 rounded-lg px-4 py-2 text-sm shadow-sm"
+                  onClick={() => setDesignShowCreate(true)}
+                >
+                  {t('addDesign')}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
-        {inspectorOpen ? (
+        {showInspectorPanel ? (
           <div data-tour="cms-inspector-panel">
             <CmsInspectorPanel
               selectedBlock={selectedBlock}
@@ -834,6 +856,7 @@ export default function AdminCmsBuilder() {
             />
           </div>
         ) : null}
+      </div>
       </div>
     </div>
   );
