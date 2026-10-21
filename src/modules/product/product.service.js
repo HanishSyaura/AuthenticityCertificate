@@ -43,6 +43,8 @@ function normalizeRawProduct(row) {
     name: p.name ?? '',
     code: p.code ?? '',
     category: p.category ?? 'general',
+    customerId: p.customerId ?? null,
+    supplierId: p.supplierId ?? null,
     status: p.status ?? 'active',
     remark: p.remark ?? null,
     origin: p.origin ?? null,
@@ -55,6 +57,8 @@ function normalizeRawProduct(row) {
     cmsPageId: p.cmsPageId ?? null,
     cmsCertificatePageId: p.cmsCertificatePageId ?? null,
     certificateTemplateId: p.certificateTemplateId ?? null,
+    customer: p.customer ?? null,
+    supplier: p.supplier ?? null,
     versionNo: p.versionNo ?? 1,
     createdAt: p.createdAt ?? null,
     updatedAt: p.updatedAt ?? null
@@ -74,6 +78,8 @@ async function rawListProducts({ organizationId, status }) {
     'name',
     'code',
     'category',
+    'customerId',
+    'supplierId',
     'status',
     'remark',
     'origin',
@@ -116,6 +122,8 @@ const productSelectWithoutSku = {
   name: true,
   code: true,
   category: true,
+  customerId: true,
+  supplierId: true,
   status: true,
   remark: true,
   origin: true,
@@ -140,6 +148,8 @@ async function createProduct(data) {
         name: data.name,
         code: data.product_code,
         category: data.category,
+        customerId: data.customerId != null ? Number(data.customerId) : null,
+        supplierId: data.supplierId != null ? Number(data.supplierId) : null,
         status: data.status,
         remark: data.remark || null,
         origin: null,
@@ -151,6 +161,10 @@ async function createProduct(data) {
         cmsPageId: data.cmsPageId != null ? Number(data.cmsPageId) : null,
         cmsCertificatePageId: data.cmsCertificatePageId != null ? Number(data.cmsCertificatePageId) : null,
         certificateTemplateId: data.certificateTemplateId != null ? Number(data.certificateTemplateId) : null
+      },
+      include: {
+        customer: true,
+        supplier: true
       }
     }),
     10000
@@ -166,7 +180,11 @@ async function getAllProducts({ organizationId, status }) {
           organizationId: Number(organizationId),
           ...(statusFilter ? { status: statusFilter } : {})
         },
-        orderBy: { createdAt: 'desc' }
+        orderBy: { createdAt: 'desc' },
+        include: {
+          customer: true,
+          supplier: true
+        }
       }),
       10000
     );
@@ -181,7 +199,7 @@ async function getProductById(id) {
   try {
     const row = await prisma.product.findUnique({
       where: { id: parseInt(id) },
-      include: { batches: true }
+      include: { batches: true, customer: true, supplier: true }
     });
     return row ? withSkuFallback(row) : row;
   } catch (e) {
@@ -207,6 +225,8 @@ async function updateProduct({ organizationId, productId, patch }) {
   if (patch.name !== undefined) data.name = patch.name;
   if (patch.product_code !== undefined) data.code = patch.product_code;
   if (patch.category !== undefined) data.category = patch.category;
+  if (patch.customerId !== undefined) data.customerId = patch.customerId == null ? null : Number(patch.customerId);
+  if (patch.supplierId !== undefined) data.supplierId = patch.supplierId == null ? null : Number(patch.supplierId);
   if (patch.status !== undefined) data.status = patch.status;
   if (patch.remark !== undefined) data.remark = patch.remark;
 
@@ -229,7 +249,10 @@ async function updateProduct({ organizationId, productId, patch }) {
   );
   if (!res.count) throw new Error('Product not found');
   try {
-    const row = await withTimeout(prisma.product.findUnique({ where: { id: Number(productId) }, include: { batches: true } }), 5000);
+    const row = await withTimeout(
+      prisma.product.findUnique({ where: { id: Number(productId) }, include: { batches: true, customer: true, supplier: true } }),
+      5000
+    );
     return row ? withSkuFallback(row) : row;
   } catch (e) {
     if (e?.code === 'P2022' && String(e?.message || '').toLowerCase().includes('sku')) {
@@ -261,7 +284,10 @@ async function deactivateProduct({ organizationId, productId }) {
   );
   if (!res.count) throw new Error('Product not found');
   try {
-    const row = await withTimeout(prisma.product.findUnique({ where: { id: Number(productId) }, include: { batches: true } }), 5000);
+    const row = await withTimeout(
+      prisma.product.findUnique({ where: { id: Number(productId) }, include: { batches: true, customer: true, supplier: true } }),
+      5000
+    );
     return row ? withSkuFallback(row) : row;
   } catch (e) {
     if (e?.code === 'P2022' && String(e?.message || '').toLowerCase().includes('sku')) {
@@ -293,7 +319,10 @@ async function activateProduct({ organizationId, productId }) {
   );
   if (!res.count) throw new Error('Product not found');
   try {
-    const row = await withTimeout(prisma.product.findUnique({ where: { id: Number(productId) }, include: { batches: true } }), 5000);
+    const row = await withTimeout(
+      prisma.product.findUnique({ where: { id: Number(productId) }, include: { batches: true, customer: true, supplier: true } }),
+      5000
+    );
     return row ? withSkuFallback(row) : row;
   } catch (e) {
     if (e?.code === 'P2022' && String(e?.message || '').toLowerCase().includes('sku')) {

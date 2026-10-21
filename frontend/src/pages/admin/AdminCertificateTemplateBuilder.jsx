@@ -8,6 +8,7 @@ import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import useI18nStore from '../../store/useI18nStore';
 import useUploadsStore from '../../store/useUploadsStore';
 import useEpcStore from '../../store/useEpcStore';
+import useRecordsStore from '../../store/useRecordsStore';
 import { normalizePublicMediaPath } from '../../utils/apiBase';
 import { applyRichTextPresentation, extractRichTextPresentation, stripHtmlToText, toQuillHtml } from '../../utils/richText';
 import { sanitizeLimitedHtml } from '../../utils/sanitizeLimitedHtml';
@@ -166,6 +167,16 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     updateBatch: s.updateBatch,
     fetchDynamicFields: s.fetchDynamicFields
   }));
+  const { products, categories, customers, suppliers, fetchProducts, fetchCategories, fetchCustomers, fetchSuppliers } = useRecordsStore((s) => ({
+    products: s.products,
+    categories: s.categories,
+    customers: s.customers,
+    suppliers: s.suppliers,
+    fetchProducts: s.fetchProducts,
+    fetchCategories: s.fetchCategories,
+    fetchCustomers: s.fetchCustomers,
+    fetchSuppliers: s.fetchSuppliers
+  }));
 
   const isDesigner = String(uiMode || 'builder') === 'designer';
   const [selectedId, setSelectedId] = useState(() => normalizeTemplateId(initialSelectedId));
@@ -285,6 +296,49 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         })),
     [epcBatchFields]
   );
+  const bindEntityOptions = useMemo(
+    () => [
+      { value: 'products', label: t('productsTab') },
+      { value: 'categories', label: t('categoriesTab') },
+      { value: 'customers', label: t('customersTab') },
+      { value: 'suppliers', label: t('suppliersTab') }
+    ],
+    [t]
+  );
+  const bindPathOptionsByEntity = useMemo(
+    () => ({
+      products: [
+        { value: 'product.name', label: t('name') },
+        { value: 'product.sku', label: t('sku') },
+        { value: 'product.code', label: t('productCode') },
+        { value: 'product.category', label: t('category') },
+        { value: 'product.origin', label: t('origin') },
+        { value: 'product.description', label: t('description') }
+      ],
+      categories: [
+        { value: 'product.categoryRef.name', label: t('categoryName') },
+        { value: 'product.categoryRef.code', label: t('categoryCode') }
+      ],
+      customers: [
+        { value: 'product.customer.customerName', label: t('customerName') },
+        { value: 'product.customer.customerCode', label: t('customerCode') },
+        { value: 'product.customer.contactPerson', label: t('contactPerson') },
+        { value: 'product.customer.email', label: t('email') },
+        { value: 'product.customer.address', label: t('address') },
+        { value: 'product.customer.status', label: t('status') }
+      ],
+      suppliers: [
+        { value: 'product.supplier.supplierName', label: t('supplierName') },
+        { value: 'product.supplier.supplierCode', label: t('supplierCode') },
+        { value: 'product.supplier.contactPerson', label: t('contactPerson') },
+        { value: 'product.supplier.email', label: t('email') },
+        { value: 'product.supplier.phoneNumber', label: t('phoneNumber') },
+        { value: 'product.supplier.address', label: t('address') },
+        { value: 'product.supplier.status', label: t('status') }
+      ]
+    }),
+    [t]
+  );
   const fieldCount = placeholders.length;
   const placedFieldCount = Array.isArray(draftLayout) ? draftLayout.length : 0;
   const saveStateLabel =
@@ -300,6 +354,13 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   useEffect(() => {
     selectedPlaceholdersRef.current = Array.isArray(selected?.placeholders) ? selected.placeholders : [];
   }, [selected?.placeholders]);
+
+  useEffect(() => {
+    if (!Array.isArray(products) || products.length === 0) void fetchProducts({ status: 'all' });
+    if (!Array.isArray(categories) || categories.length === 0) void fetchCategories();
+    if (!Array.isArray(customers) || customers.length === 0) void fetchCustomers();
+    if (!Array.isArray(suppliers) || suppliers.length === 0) void fetchSuppliers();
+  }, [categories, customers, fetchCategories, fetchCustomers, fetchProducts, fetchSuppliers, products, suppliers]);
 
   const placeholderByKey = useMemo(() => {
     const map = new Map();
@@ -376,6 +437,27 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         sku: 'SKU-001',
         code: 'CODE-001',
         category: '',
+        categoryRef: {
+          name: 'Sample Category',
+          code: 'CAT-001'
+        },
+        customer: {
+          customerName: 'Sample Customer',
+          customerCode: 'CUS-001',
+          contactPerson: 'John Tan',
+          email: 'customer@example.com',
+          address: 'Kuala Lumpur',
+          status: 'Active'
+        },
+        supplier: {
+          supplierName: 'Sample Supplier',
+          supplierCode: 'SUP-001',
+          contactPerson: 'Jane Lee',
+          email: 'supplier@example.com',
+          phoneNumber: '+60 12-345 6789',
+          address: 'Selangor',
+          status: 'Active'
+        },
         origin: '',
         description: ''
       },
@@ -392,6 +474,9 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     const templateData = {};
     const evalRoot = {
       product: base.product || null,
+      category: base.product?.categoryRef || null,
+      customer: base.product?.customer || null,
+      supplier: base.product?.supplier || null,
       batch: { ...(base.batch || {}), templateData: batchTemplateData },
       certificate: { ...(base || {}), templateData: batchTemplateData },
       epcItem: base.epcItem || null,
@@ -1951,6 +2036,12 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                               String(p?.bindPath || '').replace(/^templateData\./, '')
                                           )}
                                         </div>
+                                      ) : uiSource === 'product' && String(p?.bindPath || '').trim() ? (
+                                        <div className="mt-1 truncate text-[11px] text-zinc-400">
+                                          {String(bindEntityOptions.find((opt) => opt.value === bindEntity)?.label || t('bindTo'))}: {String(
+                                            bindPathOptions.find((opt) => opt.value === String(p?.bindPath || '').trim())?.label || String(p?.bindPath || '').trim()
+                                          )}
+                                        </div>
                                       ) : null}
                                     </button>
                                     <button
@@ -2017,6 +2108,16 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                             const source = String(p?.source || 'static');
                             const uiSource = source === 'manual' ? 'static' : source;
                             const isTitle = uiSource === 'title';
+                            const bindEntity =
+                              String(p?.bindEntity || '').trim() ||
+                              (String(p?.bindPath || '').startsWith('product.customer.')
+                                ? 'customers'
+                                : String(p?.bindPath || '').startsWith('product.supplier.')
+                                  ? 'suppliers'
+                                  : String(p?.bindPath || '').startsWith('product.categoryRef.')
+                                    ? 'categories'
+                                    : 'products');
+                            const bindPathOptions = bindPathOptionsByEntity?.[bindEntity] || [];
                             const cardKey = String(p?.key || '').trim() || `idx-${idx}`;
                             const title = String(stripHtmlToText(p?.labelHtml ?? p?.label ?? '') || '').trim() || String(p?.key || '').trim() || `#${idx + 1}`;
                             return (
@@ -2069,7 +2170,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                           if (nextKey && String(expandedPlaceholderKey || '') === cardKey) setExpandedPlaceholderKey(nextKey);
                                         }}
                                         placeholder={t('fieldName')}
-                                        className="h-9 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 text-sm"
+                                        className="ac-select-native h-9 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900"
                                       />
                                       <input
                                         value={String((p?.separator ?? stripHtmlToText(p?.separatorHtml ?? '')) || ': ')}
@@ -2082,7 +2183,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                         }}
                                         placeholder={t('separator')}
                                         readOnly={isTitle}
-                                        className="h-9 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm"
+                                        className="ac-select-native h-9 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900"
                                       />
                                     </div>
                                   </div>
@@ -2090,7 +2191,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                   <div>
                                     <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('dataType')}</div>
                                     {uiSource === 'product' ? (
-                                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[260px_minmax(0,1fr)]">
+                                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[220px_180px_minmax(0,1fr)]">
                                         <select
                                           value={uiSource}
                                           onChange={(e) => {
@@ -2098,46 +2199,67 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                             const nextSource = e.target.value;
                                             const next = placeholders.slice();
                                             const cur = next[idx] || {};
-                                            next[idx] = { ...cur, source: nextSource };
+                                            next[idx] = {
+                                              ...cur,
+                                              source: nextSource,
+                                              bindEntity: nextSource === 'product' ? String(cur.bindEntity || 'products') : String(cur.bindEntity || ''),
+                                              bindPath:
+                                                nextSource === 'product'
+                                                  ? String(cur.bindPath || bindPathOptionsByEntity.products?.[0]?.value || '')
+                                                  : String(cur.bindPath || '')
+                                            };
                                             replacePlaceholders(next);
                                           }}
                                           disabled={layoutLocked}
-                                          className="h-9 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm"
+                                          className="ac-select-native h-9 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900"
                                         >
                                           <option value="title">{t('sourceTitle')}</option>
                                         <option value="static">{t('sourceManual')}</option>
                                         <option value="batch">{t('sourceBatch')}</option>
                                           <option value="product">{t('bindTo')}</option>
                                         </select>
+                                        <select
+                                          value={bindEntity}
+                                          onChange={(e) => {
+                                            if (layoutLocked) return;
+                                            const nextEntity = String(e.target.value || 'products');
+                                            const nextOptions = bindPathOptionsByEntity?.[nextEntity] || [];
+                                            const next = placeholders.slice();
+                                            next[idx] = {
+                                              ...(next[idx] || {}),
+                                              bindEntity: nextEntity,
+                                              bindPath: String(nextOptions?.[0]?.value || '')
+                                            };
+                                            replacePlaceholders(next);
+                                          }}
+                                          disabled={layoutLocked}
+                                          className="ac-select-native h-9 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900"
+                                        >
+                                          {bindEntityOptions.map((opt) => (
+                                            <option key={opt.value} value={opt.value}>
+                                              {opt.label}
+                                            </option>
+                                          ))}
+                                        </select>
                                         <div className="min-w-0">
-                                          <input
+                                          <select
                                             value={String(p?.bindPath || '')}
                                             onChange={(e) => {
                                               if (layoutLocked) return;
                                               const next = placeholders.slice();
-                                              next[idx] = { ...(next[idx] || {}), bindPath: e.target.value };
+                                              next[idx] = { ...(next[idx] || {}), bindEntity, bindPath: String(e.target.value || '') };
                                               replacePlaceholders(next);
                                             }}
                                             disabled={layoutLocked}
-                                            placeholder={t('bindTo')}
-                                            list="certTplBindPaths"
-                                            className="h-9 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 text-sm"
-                                          />
-                                          <datalist id="certTplBindPaths">
-                                            <option value="certificateId" />
-                                            <option value="status" />
-                                            <option value="issuedAt" />
-                                            <option value="product.name" />
-                                            <option value="product.sku" />
-                                            <option value="product.code" />
-                                            <option value="product.category" />
-                                            <option value="product.origin" />
-                                            <option value="product.description" />
-                                            <option value="batch.batchNo" />
-                                            <option value="epcItem.netWeight" />
-                                            <option value="epcItem.caiqNumber" />
-                                            <option value="epcItem.productionDate" />
-                                          </datalist>
+                                            className="ac-select-native h-9 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900"
+                                          >
+                                            <option value="">{t('bindTo')}</option>
+                                            {bindPathOptions.map((opt) => (
+                                              <option key={opt.value} value={opt.value}>
+                                                {opt.label}
+                                              </option>
+                                            ))}
+                                          </select>
                                         </div>
                                       </div>
                                     ) : uiSource === 'batch' ? (
@@ -2161,7 +2283,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                             replacePlaceholders(next);
                                           }}
                                           disabled={layoutLocked}
-                                          className="h-9 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm"
+                                          className="ac-select-native h-9 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900"
                                         >
                                           <option value="title">{t('sourceTitle')}</option>
                                           <option value="static">{t('sourceManual')}</option>
@@ -2178,7 +2300,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                               replacePlaceholders(next);
                                             }}
                                             disabled={layoutLocked || epcBatchFieldOptions.length === 0}
-                                            className="h-9 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 text-sm"
+                                            className="ac-select-native h-9 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900"
                                           >
                                             <option value="">{t('selectBatchField')}</option>
                                             {epcBatchFieldOptions.map((opt) => (
@@ -2215,7 +2337,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                             replacePlaceholders(next);
                                           }}
                                           disabled={layoutLocked}
-                                          className="h-9 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm"
+                                          className="ac-select-native h-9 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900"
                                         >
                                           <option value="title">{t('sourceTitle')}</option>
                                           <option value="static">{t('sourceManual')}</option>

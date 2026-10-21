@@ -63,6 +63,8 @@ model Organization {
   users           User[]
   products        Product[]
   categories      Category[]
+  customers       Customer[]
+  suppliers       Supplier[]
   batches         Batch[]
   corpSequences   CorpSequence[]
   corpMonthSequences CorpMonthSequence[]
@@ -177,6 +179,10 @@ model Product {
   name                    String
   code                    String
   category                String
+  customerId              Int?
+  customer                Customer?            @relation(fields: [customerId], references: [id])
+  supplierId              Int?
+  supplier                Supplier?            @relation(fields: [supplierId], references: [id])
   status                  String
   remark                  String?
   origin                  String?
@@ -212,6 +218,8 @@ model Product {
   @@unique([organizationId, code], map: "Product_organizationId_code_key")
   @@unique([organizationId, sku], map: "Product_organizationId_sku_key")
   @@index([organizationId, category], map: "Product_organizationId_category_idx")
+  @@index([organizationId, customerId], map: "Product_organizationId_customerId_idx")
+  @@index([organizationId, supplierId], map: "Product_organizationId_supplierId_idx")
   @@index([organizationId, status], map: "Product_organizationId_status_idx")
   @@index([organizationId, cmsDesignId], map: "Product_organizationId_cmsDesignId_idx")
   @@index([organizationId, cmsCertificateDesignId], map: "Product_organizationId_cmsCertDesignId_idx")
@@ -253,6 +261,45 @@ model Category {
 
   @@unique([organizationId, code], map: "Category_organizationId_code_key")
   @@index([organizationId, isActive], map: "Category_org_isActive_idx")
+}
+
+model Customer {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  customerCode   String
+  customerName   String
+  contactPerson  String?
+  address        String?
+  email          String?
+  status         String       @default("Active")
+  products       Product[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  @@unique([organizationId, customerCode], map: "Customer_organizationId_customerCode_key")
+  @@index([organizationId, status], map: "Customer_organizationId_status_idx")
+}
+
+model Supplier {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  supplierCode   String
+  supplierName   String
+  contactPerson  String?
+  address        String?
+  email          String?
+  phoneNumber    String?
+  status         String       @default("Active")
+  products       Product[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  @@unique([organizationId, supplierCode], map: "Supplier_organizationId_supplierCode_key")
+  @@index([organizationId, status], map: "Supplier_organizationId_status_idx")
 }
 
 model Batch {

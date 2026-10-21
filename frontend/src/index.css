@@ -188,6 +188,19 @@
     --tw-ring-color: rgba(var(--ac-brand-rgb), 0.12);
   }
 
+  .ac-select-native {
+    color: #18181b;
+    background-color: #ffffff;
+    -webkit-text-fill-color: #18181b;
+    appearance: auto;
+  }
+
+  .ac-select-native option,
+  .ac-select-native optgroup {
+    color: #18181b;
+    background-color: #ffffff;
+  }
+
   .ac-input-compact {
     @apply w-full rounded-xl border px-3 py-2 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 disabled:bg-zinc-50 disabled:text-zinc-500;
     @apply focus:ring-2;

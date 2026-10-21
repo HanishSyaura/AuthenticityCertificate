@@ -127,6 +127,8 @@ async function ensureProductSchemaCompat() {
   await ensureColumn(tableName, 'remark', `ALTER TABLE \`${tableName}\` ADD COLUMN \`remark\` VARCHAR(191) NULL`, null, null);
   await ensureColumn(tableName, 'origin', `ALTER TABLE \`${tableName}\` ADD COLUMN \`origin\` VARCHAR(191) NULL`, null, null);
   await ensureColumn(tableName, 'description', `ALTER TABLE \`${tableName}\` ADD COLUMN \`description\` TEXT NULL`, null, null);
+  await ensureColumn(tableName, 'customerId', `ALTER TABLE \`${tableName}\` ADD COLUMN \`customerId\` INT NULL`, null, null);
+  await ensureColumn(tableName, 'supplierId', `ALTER TABLE \`${tableName}\` ADD COLUMN \`supplierId\` INT NULL`, null, null);
   await ensureColumn(tableName, 'cmsPageId', `ALTER TABLE \`${tableName}\` ADD COLUMN \`cmsPageId\` INT NULL`, null, null);
   await ensureColumn(
     tableName,
@@ -181,6 +183,14 @@ async function ensureProductSchemaCompat() {
     const idxCategory = `${tableName}_organizationId_category_idx`;
     const hasIdxCategory = await indexExists(tableName, idxCategory);
     if (!hasIdxCategory) await prisma.$executeRawUnsafe(`CREATE INDEX \`${idxCategory}\` ON \`${tableName}\` (\`organizationId\`, \`category\`)`);
+
+    const idxCustomer = `${tableName}_organizationId_customerId_idx`;
+    const hasIdxCustomer = await indexExists(tableName, idxCustomer);
+    if (!hasIdxCustomer) await prisma.$executeRawUnsafe(`CREATE INDEX \`${idxCustomer}\` ON \`${tableName}\` (\`organizationId\`, \`customerId\`)`);
+
+    const idxSupplier = `${tableName}_organizationId_supplierId_idx`;
+    const hasIdxSupplier = await indexExists(tableName, idxSupplier);
+    if (!hasIdxSupplier) await prisma.$executeRawUnsafe(`CREATE INDEX \`${idxSupplier}\` ON \`${tableName}\` (\`organizationId\`, \`supplierId\`)`);
 
     const idxStatus = `${tableName}_organizationId_status_idx`;
     const hasIdxStatus = await indexExists(tableName, idxStatus);
@@ -931,6 +941,130 @@ async function ensureEpcDynamicFieldSchemaCompat() {
   }
 }
 
+async function ensureCustomerSchemaCompat() {
+  const tableName = 'Customer';
+  const exists = await tableExists(tableName);
+  if (!exists) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`${tableName}\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`organizationId\` INT NOT NULL,
+        \`customerCode\` VARCHAR(191) NOT NULL,
+        \`customerName\` VARCHAR(191) NOT NULL,
+        \`contactPerson\` VARCHAR(191) NULL,
+        \`address\` TEXT NULL,
+        \`email\` VARCHAR(191) NULL,
+        \`status\` VARCHAR(32) NOT NULL DEFAULT 'Active',
+        \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        \`deletedAt\` DATETIME NULL,
+        PRIMARY KEY (\`id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+
+  await ensureColumn(tableName, 'organizationId', `ALTER TABLE \`${tableName}\` ADD COLUMN \`organizationId\` INT NULL`, null, `ALTER TABLE \`${tableName}\` MODIFY \`organizationId\` INT NOT NULL`);
+  await ensureColumn(tableName, 'customerCode', `ALTER TABLE \`${tableName}\` ADD COLUMN \`customerCode\` VARCHAR(191) NULL`, null, `ALTER TABLE \`${tableName}\` MODIFY \`customerCode\` VARCHAR(191) NOT NULL`);
+  await ensureColumn(tableName, 'customerName', `ALTER TABLE \`${tableName}\` ADD COLUMN \`customerName\` VARCHAR(191) NULL`, null, `ALTER TABLE \`${tableName}\` MODIFY \`customerName\` VARCHAR(191) NOT NULL`);
+  await ensureColumn(tableName, 'contactPerson', `ALTER TABLE \`${tableName}\` ADD COLUMN \`contactPerson\` VARCHAR(191) NULL`, null, null);
+  await ensureColumn(tableName, 'address', `ALTER TABLE \`${tableName}\` ADD COLUMN \`address\` TEXT NULL`, null, null);
+  await ensureColumn(tableName, 'email', `ALTER TABLE \`${tableName}\` ADD COLUMN \`email\` VARCHAR(191) NULL`, null, null);
+  await ensureColumn(
+    tableName,
+    'status',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`status\` VARCHAR(32) NULL`,
+    `UPDATE \`${tableName}\` SET \`status\` = 'Active' WHERE \`status\` IS NULL OR \`status\` = ''`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`status\` VARCHAR(32) NOT NULL DEFAULT 'Active'`
+  );
+  await ensureColumn(
+    tableName,
+    'createdAt',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`createdAt\` DATETIME NULL`,
+    `UPDATE \`${tableName}\` SET \`createdAt\` = NOW() WHERE \`createdAt\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`
+  );
+  await ensureColumn(
+    tableName,
+    'updatedAt',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`updatedAt\` DATETIME NULL`,
+    `UPDATE \`${tableName}\` SET \`updatedAt\` = NOW() WHERE \`updatedAt\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`
+  );
+  await ensureColumn(tableName, 'deletedAt', `ALTER TABLE \`${tableName}\` ADD COLUMN \`deletedAt\` DATETIME NULL`, null, null);
+
+  const uniq = 'Customer_organizationId_customerCode_key';
+  if (!(await indexExists(tableName, uniq))) {
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX \`${uniq}\` ON \`${tableName}\` (\`organizationId\`, \`customerCode\`)`);
+  }
+  const idx = 'Customer_organizationId_status_idx';
+  if (!(await indexExists(tableName, idx))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${idx}\` ON \`${tableName}\` (\`organizationId\`, \`status\`)`);
+  }
+}
+
+async function ensureSupplierSchemaCompat() {
+  const tableName = 'Supplier';
+  const exists = await tableExists(tableName);
+  if (!exists) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS \`${tableName}\` (
+        \`id\` INT NOT NULL AUTO_INCREMENT,
+        \`organizationId\` INT NOT NULL,
+        \`supplierCode\` VARCHAR(191) NOT NULL,
+        \`supplierName\` VARCHAR(191) NOT NULL,
+        \`contactPerson\` VARCHAR(191) NULL,
+        \`address\` TEXT NULL,
+        \`email\` VARCHAR(191) NULL,
+        \`phoneNumber\` VARCHAR(191) NULL,
+        \`status\` VARCHAR(32) NOT NULL DEFAULT 'Active',
+        \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        \`deletedAt\` DATETIME NULL,
+        PRIMARY KEY (\`id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+
+  await ensureColumn(tableName, 'organizationId', `ALTER TABLE \`${tableName}\` ADD COLUMN \`organizationId\` INT NULL`, null, `ALTER TABLE \`${tableName}\` MODIFY \`organizationId\` INT NOT NULL`);
+  await ensureColumn(tableName, 'supplierCode', `ALTER TABLE \`${tableName}\` ADD COLUMN \`supplierCode\` VARCHAR(191) NULL`, null, `ALTER TABLE \`${tableName}\` MODIFY \`supplierCode\` VARCHAR(191) NOT NULL`);
+  await ensureColumn(tableName, 'supplierName', `ALTER TABLE \`${tableName}\` ADD COLUMN \`supplierName\` VARCHAR(191) NULL`, null, `ALTER TABLE \`${tableName}\` MODIFY \`supplierName\` VARCHAR(191) NOT NULL`);
+  await ensureColumn(tableName, 'contactPerson', `ALTER TABLE \`${tableName}\` ADD COLUMN \`contactPerson\` VARCHAR(191) NULL`, null, null);
+  await ensureColumn(tableName, 'address', `ALTER TABLE \`${tableName}\` ADD COLUMN \`address\` TEXT NULL`, null, null);
+  await ensureColumn(tableName, 'email', `ALTER TABLE \`${tableName}\` ADD COLUMN \`email\` VARCHAR(191) NULL`, null, null);
+  await ensureColumn(tableName, 'phoneNumber', `ALTER TABLE \`${tableName}\` ADD COLUMN \`phoneNumber\` VARCHAR(191) NULL`, null, null);
+  await ensureColumn(
+    tableName,
+    'status',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`status\` VARCHAR(32) NULL`,
+    `UPDATE \`${tableName}\` SET \`status\` = 'Active' WHERE \`status\` IS NULL OR \`status\` = ''`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`status\` VARCHAR(32) NOT NULL DEFAULT 'Active'`
+  );
+  await ensureColumn(
+    tableName,
+    'createdAt',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`createdAt\` DATETIME NULL`,
+    `UPDATE \`${tableName}\` SET \`createdAt\` = NOW() WHERE \`createdAt\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`
+  );
+  await ensureColumn(
+    tableName,
+    'updatedAt',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`updatedAt\` DATETIME NULL`,
+    `UPDATE \`${tableName}\` SET \`updatedAt\` = NOW() WHERE \`updatedAt\` IS NULL`,
+    `ALTER TABLE \`${tableName}\` MODIFY \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP`
+  );
+  await ensureColumn(tableName, 'deletedAt', `ALTER TABLE \`${tableName}\` ADD COLUMN \`deletedAt\` DATETIME NULL`, null, null);
+
+  const uniq = 'Supplier_organizationId_supplierCode_key';
+  if (!(await indexExists(tableName, uniq))) {
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX \`${uniq}\` ON \`${tableName}\` (\`organizationId\`, \`supplierCode\`)`);
+  }
+  const idx = 'Supplier_organizationId_status_idx';
+  if (!(await indexExists(tableName, idx))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${idx}\` ON \`${tableName}\` (\`organizationId\`, \`status\`)`);
+  }
+}
+
 async function ensureEpcDocumentSchemaCompat() {
   const batchTable = 'EpcBatchDocument';
   if (!(await tableExists(batchTable))) {
@@ -1656,6 +1790,8 @@ async function applyDbPatches() {
   await ensureProductSchemaCompat();
   await ensureProductSupportingCertificateSchemaCompat();
   await ensureCategorySchemaCompat();
+  await ensureCustomerSchemaCompat();
+  await ensureSupplierSchemaCompat();
   await ensureCmsPageSchemaCompat();
   await ensureCertificateTemplateSchemaCompat();
   await ensureCertificateTemplateTranslationSchemaCompat();

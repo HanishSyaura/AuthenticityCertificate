@@ -6,6 +6,8 @@ const productSchema = z.object({
   name: z.string().min(1),
   product_code: z.string().min(1),
   category: z.string().min(1),
+  customerId: z.number().int().nullable().optional(),
+  supplierId: z.number().int().nullable().optional(),
   status: z.string().min(1),
   remark: z.string().optional(),
   // NEW GROUP-LEVEL FK (what links to CmsDesign bundle = multiple inner pages)
@@ -44,6 +46,8 @@ const updateProductSchema = z.object({
   name: z.string().min(1).optional(),
   product_code: z.string().min(1).optional(),
   category: z.string().min(1).optional(),
+  customerId: z.number().int().nullable().optional(),
+  supplierId: z.number().int().nullable().optional(),
   status: z.string().min(1).optional(),
   remark: z.string().nullable().optional(),
   // NEW GROUP-LEVEL FK

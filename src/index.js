@@ -8,6 +8,8 @@ const sharp = require('sharp');
 const authRoutes = require('./modules/auth/auth.routes');
 const productRoutes = require('./modules/product/product.routes');
 const categoriesRoutes = require('./modules/categories/categories.routes');
+const customersRoutes = require('./modules/customers/customers.routes');
+const suppliersRoutes = require('./modules/suppliers/suppliers.routes');
 const epcRoutes = require('./modules/epc/epc.routes');
 const certificateRoutes = require('./modules/certificate/certificate.routes');
 const publicRoutes = require('./modules/public/public.routes');
@@ -337,6 +339,8 @@ app.use('/certificates', certificateRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoriesRoutes);
+app.use('/api/customers', customersRoutes);
+app.use('/api/suppliers', suppliersRoutes);
 app.use('/api/epc', epcRoutes);
 app.use('/api/certificates', certificateRoutes);
 app.use(

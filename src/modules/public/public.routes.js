@@ -446,6 +446,9 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
                     select: {
                       name: true,
                       code: true,
+                      category: true,
+                      customer: true,
+                      supplier: true,
                       cmsPage: { select: { id: true } },
                       cmsCertificatePage: { select: { id: true } },
                       certificateTemplate: true
@@ -506,6 +509,9 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
                 select: {
                   name: true,
                   code: true,
+                  category: true,
+                  customer: true,
+                  supplier: true,
                   cmsPage: { select: { id: true } },
                   cmsCertificatePage: { select: { id: true } },
                   certificateTemplate: true
@@ -528,6 +534,16 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     }
 
     const resolvedProduct = epcProduct || cert.batch?.product || null;
+    let resolvedCategory = null;
+    if (resolvedOrgId && String(resolvedProduct?.category || '').trim()) {
+      resolvedCategory = await prisma.category.findFirst({
+        where: {
+          organizationId: resolvedOrgId,
+          OR: [{ code: String(resolvedProduct.category).trim() }, { name: String(resolvedProduct.category).trim() }]
+        },
+        select: { id: true, code: true, name: true, isActive: true }
+      });
+    }
     let supportingTemplates = [];
     let batchDocuments = [];
     let layout = null;
@@ -781,7 +797,39 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         product: resolvedProduct
           ? {
               name: resolvedProduct.name,
-              code: resolvedProduct.code
+              code: resolvedProduct.code,
+              category: resolvedProduct.category || null,
+              categoryRef: resolvedCategory
+                ? {
+                    id: resolvedCategory.id,
+                    code: resolvedCategory.code,
+                    name: resolvedCategory.name,
+                    isActive: resolvedCategory.isActive
+                  }
+                : null,
+              customer: resolvedProduct.customer
+                ? {
+                    id: resolvedProduct.customer.id,
+                    customerCode: resolvedProduct.customer.customerCode,
+                    customerName: resolvedProduct.customer.customerName,
+                    contactPerson: resolvedProduct.customer.contactPerson || null,
+                    address: resolvedProduct.customer.address || null,
+                    email: resolvedProduct.customer.email || null,
+                    status: resolvedProduct.customer.status || null
+                  }
+                : null,
+              supplier: resolvedProduct.supplier
+                ? {
+                    id: resolvedProduct.supplier.id,
+                    supplierCode: resolvedProduct.supplier.supplierCode,
+                    supplierName: resolvedProduct.supplier.supplierName,
+                    contactPerson: resolvedProduct.supplier.contactPerson || null,
+                    address: resolvedProduct.supplier.address || null,
+                    email: resolvedProduct.supplier.email || null,
+                    phoneNumber: resolvedProduct.supplier.phoneNumber || null,
+                    status: resolvedProduct.supplier.status || null
+                  }
+                : null
             }
           : null,
         batch: epcBatchName ? { batchNo: epcBatchName } : cert.batch ? { batchNo: cert.batch.batchNo } : null,

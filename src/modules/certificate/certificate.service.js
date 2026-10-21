@@ -293,6 +293,8 @@ async function getCertificateDetails(certificateId) {
           product: {
             include: {
               certificateTemplate: true,
+              customer: true,
+              supplier: true,
               // LEGACY single-page includes
               cmsPage: {
                 include: {
@@ -418,7 +420,7 @@ async function getCertificateDetailsForAdmin({ organizationId, certificateId }) 
     prisma.certificate.findFirst({
       where: { certificateId: certId, organizationId: orgId },
       include: {
-        batch: { include: { product: true } },
+        batch: { include: { product: { include: { customer: true, supplier: true } } } },
         identities: { where: { unassignedAt: null }, orderBy: { assignedAt: 'desc' }, take: 5 }
       }
     }),
@@ -480,7 +482,7 @@ async function listCertificates({ organizationId, q, status, type, batchNo, prod
         skip: o,
         take: l,
         include: {
-          batch: { include: { product: true } },
+          batch: { include: { product: { include: { customer: true, supplier: true } } } },
           identities: { where: { unassignedAt: null }, orderBy: { assignedAt: 'desc' }, take: 5 }
         }
       })
@@ -521,7 +523,7 @@ async function patchCertificate({ organizationId, certificateId, patch }) {
     where: { organizationId, certificateId },
     data,
     include: {
-      batch: { include: { product: true } },
+      batch: { include: { product: { include: { customer: true, supplier: true } } } },
       identities: { where: { unassignedAt: null }, orderBy: { assignedAt: 'desc' }, take: 5 }
     }
   });

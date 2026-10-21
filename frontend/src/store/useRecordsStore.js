@@ -11,6 +11,8 @@ function getApi() {
 const useRecordsStore = create((set, get) => ({
   products: [],
   categories: [],
+  customers: [],
+  suppliers: [],
   batchesByProductId: {},
   loading: false,
   error: null,
@@ -49,6 +51,36 @@ const useRecordsStore = create((set, get) => ({
     }
   },
 
+  fetchCustomers: async () => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.get('/customers/');
+      const customers = Array.isArray(res?.data?.data) ? res.data.data : [];
+      set({ customers, loading: false, lastSyncAt: Date.now() });
+      return customers;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToLoadCustomers');
+      set({ loading: false, error: msg });
+      return [];
+    }
+  },
+
+  fetchSuppliers: async () => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.get('/suppliers/');
+      const suppliers = Array.isArray(res?.data?.data) ? res.data.data : [];
+      set({ suppliers, loading: false, lastSyncAt: Date.now() });
+      return suppliers;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToLoadSuppliers');
+      set({ loading: false, error: msg });
+      return [];
+    }
+  },
+
   createCategory: async ({ name, code, status }) => {
     set({ loading: true, error: null });
     try {
@@ -81,11 +113,13 @@ const useRecordsStore = create((set, get) => ({
     }
   },
 
-  createProduct: async ({ sku, name, product_code, category, status, remark, cmsDesignId, cmsCertificateDesignId, cmsPageId, cmsCertificatePageId, certificateTemplateId }) => {
+  createProduct: async ({ sku, name, product_code, category, customerId, supplierId, status, remark, cmsDesignId, cmsCertificateDesignId, cmsPageId, cmsCertificatePageId, certificateTemplateId }) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
       const body = { sku, name, product_code, category, status, remark };
+      if (customerId !== undefined) body.customerId = customerId;
+      if (supplierId !== undefined) body.supplierId = supplierId;
       // NEW: bundle-level FKs (multiple inner pages inside one bundle)
       if (cmsDesignId !== undefined) body.cmsDesignId = cmsDesignId;
       if (cmsCertificateDesignId !== undefined) body.cmsCertificateDesignId = cmsCertificateDesignId;
@@ -176,6 +210,70 @@ const useRecordsStore = create((set, get) => ({
       return updated;
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || tRaw('failedToUpdateProduct');
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
+  createCustomer: async (input) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.post('/customers/', input);
+      const created = res?.data?.data;
+      const customers = [created, ...get().customers].filter(Boolean);
+      set({ customers, loading: false, lastSyncAt: Date.now() });
+      return created;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToCreateCustomer');
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
+  updateCustomer: async ({ id, patch }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.patch(`/customers/${encodeURIComponent(id)}`, patch);
+      const updated = res?.data?.data;
+      const customers = get().customers.map((row) => (String(row.id) === String(id) ? updated : row));
+      set({ customers, loading: false, lastSyncAt: Date.now() });
+      return updated;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToUpdateCustomer');
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
+  createSupplier: async (input) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.post('/suppliers/', input);
+      const created = res?.data?.data;
+      const suppliers = [created, ...get().suppliers].filter(Boolean);
+      set({ suppliers, loading: false, lastSyncAt: Date.now() });
+      return created;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToCreateSupplier');
+      set({ loading: false, error: msg });
+      throw e;
+    }
+  },
+
+  updateSupplier: async ({ id, patch }) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.patch(`/suppliers/${encodeURIComponent(id)}`, patch);
+      const updated = res?.data?.data;
+      const suppliers = get().suppliers.map((row) => (String(row.id) === String(id) ? updated : row));
+      set({ suppliers, loading: false, lastSyncAt: Date.now() });
+      return updated;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || tRaw('failedToUpdateSupplier');
       set({ loading: false, error: msg });
       throw e;
     }

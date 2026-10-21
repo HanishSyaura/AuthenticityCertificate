@@ -410,6 +410,7 @@ export default function AdminEpc() {
   const [importDocUploading, setImportDocUploading] = useState(() => ({}));
   const [importLocalError, setImportLocalError] = useState('');
   const [importLastResult, setImportLastResult] = useState(null);
+  const productionImportInputRefs = useRef({});
   const [rangeOpen, setRangeOpen] = useState(false);
   const [rangeCorpCode, setRangeCorpCode] = useState('');
   const [rangeDate, setRangeDate] = useState(() => toIsoDateInputValue());
@@ -673,6 +674,12 @@ export default function AdminEpc() {
     },
     [cmsDesigns, cmsFetchDesigns, fetchProducts, fetchTemplates]
   );
+
+  const openProductionImportPicker = useCallback((batchId) => {
+    const key = String(batchId || '').trim();
+    if (!key) return;
+    productionImportInputRefs.current[key]?.click?.();
+  }, []);
 
   const openRange = useCallback(async () => {
     setRangeOpen(true);
@@ -1210,7 +1217,8 @@ export default function AdminEpc() {
   );
 
   const productionColumns = useMemo(
-    () => [
+    () =>
+      [
       {
         id: 'select',
         label: t('selectAll'),
@@ -1275,17 +1283,19 @@ export default function AdminEpc() {
         minWidth: 220,
         sortValue: (b) => String(b?.batchName || ''),
         cell: (b) => (
-          <button type="button" className="truncate text-left text-sm font-semibold text-slate-900 hover:text-brand-700" onClick={() => openViewBatch(b)}>
+          <button type="button" className="truncate text-center text-sm font-semibold text-slate-900 hover:text-brand-700" onClick={() => openViewBatch(b)}>
             {String(b?.batchName || '-')}
           </button>
-        )
+        ),
+        align: 'center'
       },
       {
         id: 'product',
         header: t('product'),
         minWidth: 180,
         sortValue: (b) => String(b?.product?.name || b?.sku || ''),
-        cell: (b) => <span className="text-sm text-slate-700">{String(b?.product?.name || b?.sku || '-')}</span>
+        cell: (b) => <span className="text-sm text-slate-700">{String(b?.product?.name || b?.sku || '-')}</span>,
+        align: 'center'
       },
       {
         id: 'uploadedAt',
@@ -1293,7 +1303,8 @@ export default function AdminEpc() {
         width: 170,
         minWidth: 152,
         sortValue: (b) => String(b?.productionUploadedAt || ''),
-        cell: (b) => <span className="whitespace-nowrap text-sm text-slate-600">{b?.productionUploadedAt ? formatDateTime(b.productionUploadedAt) : t('notUploaded')}</span>
+        cell: (b) => <span className="whitespace-nowrap text-sm text-slate-600">{b?.productionUploadedAt ? formatDateTime(b.productionUploadedAt) : t('notUploaded')}</span>,
+        align: 'center'
       },
       {
         id: 'uploadStatus',
@@ -1312,7 +1323,8 @@ export default function AdminEpc() {
               {uploaded ? 'Uploaded' : t('notUploaded')}
             </span>
           );
-        }
+        },
+        align: 'center'
       },
       {
         id: 'productionStatus',
@@ -1331,92 +1343,97 @@ export default function AdminEpc() {
               {done ? t('markDone') : t('notDone')}
             </span>
           );
-        }
+        },
+        align: 'center'
       },
       {
         id: 'actions',
         label: t('actions'),
         header: t('actions'),
-        align: 'right',
+        align: 'center',
         pinnable: false,
         hideable: false,
         sortable: false,
         resizable: false,
-        minWidth: 232,
-        width: 248,
-        maxWidth: 248,
+        minWidth: 164,
+        width: 164,
+        maxWidth: 164,
         cell: (b) => {
           const done = Boolean(b?.productionDoneAt);
+          const batchId = String(b?.id || '').trim();
           return (
-            <div className="flex flex-wrap items-center justify-end gap-1.5">
-              <ActionIconButton label={t('view')} onClick={() => openViewBatch(b)}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-              </ActionIconButton>
-              {canExportXlsx ? (
-                <ActionIconButton label={t('exportXlsx')} onClick={() => openExportCols(b)}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M12 3v11" />
-                    <path d="m7 10 5 5 5-5" />
-                    <path d="M5 21h14" />
-                  </svg>
-                </ActionIconButton>
-              ) : null}
-              {canEncoding ? (
-                <ActionIconButton label={t('exportVerifyUrlXlsx')} onClick={() => exportBatchVerifyUrlXlsx(b.id)}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07L10 4" />
-                    <path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 1 0 7.07 7.07L14 20" />
-                  </svg>
-                </ActionIconButton>
-              ) : null}
-              <ActionIconButton label={t('importXlsx')} asLabel>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M12 21V10" />
-                  <path d="m17 14-5-5-5 5" />
-                  <path d="M5 3h14" />
-                </svg>
-                <input
-                  type="file"
-                  accept=".xlsx"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const base64 = await toBase64(file);
-                    const res = await importProductionXlsx({ batchId: b.id, base64 });
-                    await fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
-                    const rows = Number(res?.rows || 0);
-                    setActivateCertConfirmMeta({
-                      source: 'productionImport',
-                      batchId: Number(b?.id) > 0 ? Number(b.id) : null,
-                      description: rows > 0 ? `Import completed - ${rows} EPC row(s) updated with the configured dynamic fields.` : 'Import completed.'
-                    });
-                    setActivateCertConfirmOpen(true);
-                    e.target.value = '';
-                  }}
-                />
-              </ActionIconButton>
-              <ActionIconButton
-                label={t('markDone')}
-                disabled={loading || done}
-                className="border-[rgba(var(--ac-brand-rgb),0.18)] bg-[var(--ac-brand)] text-white hover:border-[rgba(var(--ac-brand-rgb),0.3)] hover:bg-[var(--ac-brand-deep)] hover:text-white"
-                onClick={async () => {
-                  await markProductionDone({ batchId: b.id });
-                  await fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
+            <div className="flex items-center justify-center gap-2">
+              <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={() => openViewBatch(b)}>
+                {t('view')}
+              </button>
+              <RowActionsMenu
+                ariaLabel={t('actions')}
+                items={[
+                  canExportXlsx
+                    ? {
+                        key: 'export',
+                        label: t('exportXlsx'),
+                        onSelect: () => openExportCols(b)
+                      }
+                    : null,
+                  canEncoding
+                    ? {
+                        key: 'verify-url',
+                        label: t('exportVerifyUrlXlsx'),
+                        onSelect: () => exportBatchVerifyUrlXlsx(b.id)
+                      }
+                    : null,
+                  {
+                    key: 'import',
+                    label: t('importXlsx'),
+                    onSelect: () => openProductionImportPicker(batchId)
+                  },
+                  {
+                    key: 'done',
+                    label: t('markDone'),
+                    disabled: loading || done,
+                    onSelect: async () => {
+                      await markProductionDone({ batchId: b.id });
+                      await fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
+                    }
+                  }
+                ].filter(Boolean)}
+              />
+              <input
+                ref={(node) => {
+                  if (!batchId) return;
+                  if (node) productionImportInputRefs.current[batchId] = node;
+                  else delete productionImportInputRefs.current[batchId];
                 }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M20 6 9 17l-5-5" />
-                </svg>
-              </ActionIconButton>
+                type="file"
+                accept=".xlsx"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const base64 = await toBase64(file);
+                  const res = await importProductionXlsx({ batchId: b.id, base64 });
+                  await fetchBatches({ origin: 'generated', limit: 50, offset: 0 });
+                  const rows = Number(res?.rows || 0);
+                  setActivateCertConfirmMeta({
+                    source: 'productionImport',
+                    batchId: Number(b?.id) > 0 ? Number(b.id) : null,
+                    description: rows > 0 ? `Import completed - ${rows} EPC row(s) updated with the configured dynamic fields.` : 'Import completed.'
+                  });
+                  setActivateCertConfirmOpen(true);
+                  e.target.value = '';
+                }}
+              />
             </div>
           );
-        }
+        },
+        headerClassName: 'px-2 text-center',
+        className: 'px-2'
       }
-    ],
+    ].map((column) => ({
+      ...column,
+      headerClassName: `${column.headerClassName || ''} text-center`.trim()
+    })),
     [
       allProductionSelected,
       canEncoding,
@@ -1426,6 +1443,7 @@ export default function AdminEpc() {
       importProductionXlsx,
       loading,
       markProductionDone,
+      openProductionImportPicker,
       openExportCols,
       openViewBatch,
       productionRowIds,
@@ -3014,89 +3032,150 @@ export default function AdminEpc() {
             {rangeLocalError ? <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{rangeLocalError}</div> : null}
 
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-              <div className="rounded-[22px] border border-slate-200 bg-slate-50/70 p-4">
-                <div className="mb-3 text-xs text-slate-600">{t('activateEpcRangeHint')}</div>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[180px_180px_180px_180px_minmax(0,1fr)]">
+              <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+                <div className="mb-3 text-sm font-semibold text-slate-900">{t('batchInformation')}</div>
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
                   <div>
-                    <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('corpCode')}</div>
-                    {Array.isArray(corpCodes) && corpCodes.length > 0 ? (
-                      <select
-                        value={String(rangeCorpCode || corpCodes[0] || '')}
+                    <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('product')}</div>
+                    <select value={rangeProductId} onChange={(e) => setRangeProductId(e.target.value)} className="ac-input">
+                      <option value="">{t('select')}</option>
+                      {(Array.isArray(products) ? products : []).map((p) => (
+                        <option key={p.id} value={String(p.id)}>
+                          {String(p?.sku || p?.code || '').trim()
+                            ? `${String(p.sku || p.code).trim()} — ${String(p?.name || '').trim() || '-'}`
+                            : String(p?.name || '').trim() || '-'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('authCertificate')}</div>
+                    <select
+                      value={rangeAuthTemplateId}
+                      onChange={(e) => {
+                        setRangeAuthTemplateId(e.target.value);
+                        setRangePreview(null);
+                        setRangeSelectedEpcs(new Set());
+                      }}
+                      className="ac-input"
+                    >
+                      <option value="">{t('select')}</option>
+                      {authTemplates.map((tpl) => (
+                        <option key={tpl.id} value={String(tpl.id)}>
+                          {String(tpl?.certificateId || '').trim() ? `${tpl.certificateId} — ${tpl.name}` : tpl.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('landingPageDesign')}</div>
+                    <select
+                      value={rangeCmsDesignId}
+                      onChange={(e) => setRangeCmsDesignId(e.target.value)}
+                      className="ac-input"
+                      disabled={cmsDesignsLoading}
+                    >
+                      <option value="">{t('useProductLandingDesign')}</option>
+                      {(Array.isArray(cmsDesigns) ? cmsDesigns : []).map((d) => (
+                        <option key={String(d.id)} value={String(d.id)}>
+                          {String(d.name || `Design #${d.id}`)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+                <div className="rounded-[22px] border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="mb-3">
+                    <div className="text-sm font-semibold text-slate-900">{t('dataEntryTitle')}</div>
+                    <div className="mt-1 text-xs text-slate-600">{t('activateEpcRangeHint')}</div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div>
+                      <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('corpCode')}</div>
+                      {Array.isArray(corpCodes) && corpCodes.length > 0 ? (
+                        <select
+                          value={String(rangeCorpCode || corpCodes[0] || '')}
+                          onChange={(e) => {
+                            setRangeCorpCode(String(e.target.value || '').trim().toUpperCase());
+                            setRangePreview(null);
+                            setRangeSelectedEpcs(new Set());
+                            setRangeLocalError('');
+                          }}
+                          className="ac-input"
+                        >
+                          {corpCodes.map((code) => (
+                            <option key={String(code)} value={String(code)}>
+                              {String(code)}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          value={String(rangeCorpCode || '').toUpperCase()}
+                          onChange={(e) => {
+                            setRangeCorpCode(String(e.target.value || '').toUpperCase());
+                            setRangePreview(null);
+                            setRangeSelectedEpcs(new Set());
+                            setRangeLocalError('');
+                          }}
+                          className="ac-input font-mono uppercase"
+                          placeholder="DA01"
+                        />
+                      )}
+                    </div>
+                    <div>
+                      <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('date')}</div>
+                      <input
+                        type="date"
+                        value={rangeDate}
                         onChange={(e) => {
-                          setRangeCorpCode(String(e.target.value || '').trim().toUpperCase());
+                          setRangeDate(String(e.target.value || '').trim());
                           setRangePreview(null);
                           setRangeSelectedEpcs(new Set());
                           setRangeLocalError('');
                         }}
                         className="ac-input"
-                      >
-                        {corpCodes.map((code) => (
-                          <option key={String(code)} value={String(code)}>
-                            {String(code)}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
+                      />
+                    </div>
+                    <div>
+                      <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('startRunningNo')}</div>
                       <input
-                        value={String(rangeCorpCode || '').toUpperCase()}
+                        value={rangeStartRunningNo}
                         onChange={(e) => {
-                          setRangeCorpCode(String(e.target.value || '').toUpperCase());
+                          setRangeStartRunningNo(normalizeRangeRunningInput(e.target.value));
                           setRangePreview(null);
                           setRangeSelectedEpcs(new Set());
                           setRangeLocalError('');
                         }}
-                        className="ac-input font-mono uppercase"
-                        placeholder="DA01"
+                        className="ac-input font-mono"
+                        inputMode="numeric"
+                        placeholder="1"
                       />
-                    )}
+                      <div className="mt-1 text-[11px] text-slate-500">{rangeStartRunningNo ? t('runningNoPreview', { value: paddedRangeStartRunningNo }) : '\u00A0'}</div>
+                    </div>
+                    <div>
+                      <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('endRunningNo')}</div>
+                      <input
+                        value={rangeEndRunningNo}
+                        onChange={(e) => {
+                          setRangeEndRunningNo(normalizeRangeRunningInput(e.target.value));
+                          setRangePreview(null);
+                          setRangeSelectedEpcs(new Set());
+                          setRangeLocalError('');
+                        }}
+                        className="ac-input font-mono"
+                        inputMode="numeric"
+                        placeholder="100"
+                      />
+                      <div className="mt-1 text-[11px] text-slate-500">{rangeEndRunningNo ? t('runningNoPreview', { value: paddedRangeEndRunningNo }) : '\u00A0'}</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('date')}</div>
-                    <input
-                      type="date"
-                      value={rangeDate}
-                      onChange={(e) => {
-                        setRangeDate(String(e.target.value || '').trim());
-                        setRangePreview(null);
-                        setRangeSelectedEpcs(new Set());
-                        setRangeLocalError('');
-                      }}
-                      className="ac-input"
-                    />
-                  </div>
-                  <div>
-                    <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('startRunningNo')}</div>
-                    <input
-                      value={rangeStartRunningNo}
-                      onChange={(e) => {
-                        setRangeStartRunningNo(normalizeRangeRunningInput(e.target.value));
-                        setRangePreview(null);
-                        setRangeSelectedEpcs(new Set());
-                        setRangeLocalError('');
-                      }}
-                      className="ac-input font-mono"
-                      inputMode="numeric"
-                      placeholder="1"
-                    />
-                    <div className="mt-1 text-[11px] text-slate-500">{rangeStartRunningNo ? t('runningNoPreview', { value: paddedRangeStartRunningNo }) : '\u00A0'}</div>
-                  </div>
-                  <div>
-                    <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('endRunningNo')}</div>
-                    <input
-                      value={rangeEndRunningNo}
-                      onChange={(e) => {
-                        setRangeEndRunningNo(normalizeRangeRunningInput(e.target.value));
-                        setRangePreview(null);
-                        setRangeSelectedEpcs(new Set());
-                        setRangeLocalError('');
-                      }}
-                      className="ac-input font-mono"
-                      inputMode="numeric"
-                      placeholder="100"
-                    />
-                    <div className="mt-1 text-[11px] text-slate-500">{rangeEndRunningNo ? t('runningNoPreview', { value: paddedRangeEndRunningNo }) : '\u00A0'}</div>
-                  </div>
-                  <div className="flex flex-col justify-end">
+                  <div className="mt-3 flex justify-end">
                     <button
                       type="button"
                       className="ac-btn ac-btn-soft px-4 py-3 text-sm"
@@ -3133,69 +3212,90 @@ export default function AdminEpc() {
                     </button>
                   </div>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
                 <div className="space-y-4">
                   <div className="rounded-[22px] border border-slate-200 bg-white p-4">
-                    <div className="mb-3 text-sm font-semibold text-slate-900">{t('batchInformation')}</div>
-                    <div className="space-y-3">
+                    <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('product')}</div>
-                        <select value={rangeProductId} onChange={(e) => setRangeProductId(e.target.value)} className="ac-input">
-                          <option value="">{t('select')}</option>
-                          {(Array.isArray(products) ? products : []).map((p) => (
-                            <option key={p.id} value={String(p.id)}>
-                              {String(p?.sku || p?.code || '').trim()
-                                ? `${String(p.sku || p.code).trim()} — ${String(p?.name || '').trim() || '-'}`
-                                : String(p?.name || '').trim() || '-'}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="text-sm font-semibold text-slate-900">{t('previewResult')}</div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {rangePreview ? `${rangePreview.startEpc} - ${rangePreview.endEpc}` : rangePreviewLabel || t('activateEpcRangeHint')}
+                        </div>
                       </div>
-
-                      <div>
-                        <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('authCertificate')}</div>
-                        <select
-                          value={rangeAuthTemplateId}
-                          onChange={(e) => {
-                            setRangeAuthTemplateId(e.target.value);
-                            setRangePreview(null);
-                            setRangeSelectedEpcs(new Set());
-                          }}
-                          className="ac-input"
-                        >
-                          <option value="">{t('select')}</option>
-                          {authTemplates.map((tpl) => (
-                            <option key={tpl.id} value={String(tpl.id)}>
-                              {String(tpl?.certificateId || '').trim() ? `${tpl.certificateId} — ${tpl.name}` : tpl.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('landingPageDesign')}</div>
-                        <select
-                          value={rangeCmsDesignId}
-                          onChange={(e) => setRangeCmsDesignId(e.target.value)}
-                          className="ac-input"
-                          disabled={cmsDesignsLoading}
-                        >
-                          <option value="">{t('useProductLandingDesign')}</option>
-                          {(Array.isArray(cmsDesigns) ? cmsDesigns : []).map((d) => (
-                            <option key={String(d.id)} value={String(d.id)}>
-                              {String(d.name || `Design #${d.id}`)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      {rangePreview ? (
+                        <div className="text-right text-xs text-slate-600">
+                          <div>{t('selectedEpcsCount', { value: rangeSelectedEpcs.size })}</div>
+                          {rangePreview?.targetCertificateId ? <div className="mt-1 font-mono">{rangePreview.targetCertificateId}</div> : null}
+                        </div>
+                      ) : null}
                     </div>
-                  </div>
 
-                  <div className="rounded-[22px] border border-slate-200 bg-white p-4">
-                    <div className="mb-2 text-sm font-semibold text-slate-900">{t('supportingCertificates')}</div>
-                    <div className="space-y-2">
+                    {rangePreview ? (
+                      <>
+                        <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <div className="text-[11px] font-semibold text-slate-500">{t('rowsLabel')}</div>
+                            <div className="mt-1 text-sm font-semibold text-slate-900">{String(rangePreview?.summary?.total ?? 0)}</div>
+                          </div>
+                          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                            <div className="text-[11px] font-semibold text-emerald-700">{t('selectableEpcs')}</div>
+                            <div className="mt-1 text-sm font-semibold text-emerald-900">{String(rangePreview?.summary?.selectable ?? 0)}</div>
+                          </div>
+                          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                            <div className="text-[11px] font-semibold text-amber-700">{t('alreadyAssignedEpcs')}</div>
+                            <div className="mt-1 text-sm font-semibold text-amber-900">{String(rangePreview?.summary?.alreadyAssigned ?? 0)}</div>
+                          </div>
+                          <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+                            <div className="text-[11px] font-semibold text-rose-700">{t('conflictingEpcs')}</div>
+                            <div className="mt-1 text-sm font-semibold text-rose-900">{String(rangePreview?.summary?.conflicts ?? 0)}</div>
+                          </div>
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <div className="text-[11px] font-semibold text-slate-500">{t('missingEpcLabel')}</div>
+                            <div className="mt-1 text-sm font-semibold text-slate-900">{String(rangePreview?.summary?.missing ?? 0)}</div>
+                          </div>
+                          <div className="rounded-xl border border-brand-200 bg-brand-50 p-3">
+                            <div className="text-[11px] font-semibold text-brand-700">{t('selectAllReady')}</div>
+                            <button
+                              type="button"
+                              className="mt-2 ac-btn ac-btn-soft px-3 py-2 text-xs"
+                              disabled={selectableRangeRows.length === 0}
+                              onClick={handleRangeToggleAll}
+                            >
+                              {allSelectableRangeChecked ? t('clearSelection') : t('selectAll')}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-semibold text-slate-900">{t('dataEntryTitle')}</div>
+                              <div className="mt-1 text-xs text-slate-500">
+                                {t('dataEntryHint')}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                              onClick={() => setRangeEntryOpen(true)}
+                            >
+                              {t('openDataEntry')}
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-xs text-slate-500">
+                        {t('previewRange')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[22px] border border-slate-200 bg-white p-4">
+                <div className="mb-2 text-sm font-semibold text-slate-900">{t('supportingCertificates')}</div>
+                <div className="space-y-2">
                       {rangeDocRows.map((row, idx) => {
                         const rowKey = `range-doc-${idx}`;
                         const keyVal = String(row?.key || '').trim();
@@ -3296,110 +3396,28 @@ export default function AdminEpc() {
                           </div>
                         );
                       })}
-                    </div>
-
-                    <div className="mt-3 flex justify-start">
-                      <button
-                        type="button"
-                        className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                        onClick={() =>
-                          setRangeDocRows((prev) => {
-                            const next = Array.isArray(prev) ? [...prev] : [];
-                            const existingKeys = new Set(next.map((r) => String(r?.key || '').trim()).filter(Boolean));
-                            let i = 1;
-                            let autoKey = '';
-                            while (!autoKey || existingKeys.has(autoKey)) {
-                              autoKey = `supporting_${i}`;
-                              i += 1;
-                            }
-                            next.push({ key: autoKey, url: '' });
-                            return next;
-                          })
-                        }
-                      >
-                        + {t('add')} Custom
-                      </button>
-                    </div>
-                  </div>
                 </div>
-
-                <div className="space-y-4">
-                  <div className="rounded-[22px] border border-slate-200 bg-white p-4">
-                    <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold text-slate-900">{t('previewResult')}</div>
-                        <div className="mt-1 text-xs text-slate-500">
-                          {rangePreview ? `${rangePreview.startEpc} - ${rangePreview.endEpc}` : rangePreviewLabel || t('activateEpcRangeHint')}
-                        </div>
-                      </div>
-                      {rangePreview ? (
-                        <div className="text-right text-xs text-slate-600">
-                          <div>{t('selectedEpcsCount', { value: rangeSelectedEpcs.size })}</div>
-                          {rangePreview?.targetCertificateId ? <div className="mt-1 font-mono">{rangePreview.targetCertificateId}</div> : null}
-                        </div>
-                      ) : null}
-                    </div>
-
-                    {rangePreview ? (
-                      <>
-                        <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
-                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                            <div className="text-[11px] font-semibold text-slate-500">{t('rowsLabel')}</div>
-                            <div className="mt-1 text-sm font-semibold text-slate-900">{String(rangePreview?.summary?.total ?? 0)}</div>
-                          </div>
-                          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-                            <div className="text-[11px] font-semibold text-emerald-700">{t('selectableEpcs')}</div>
-                            <div className="mt-1 text-sm font-semibold text-emerald-900">{String(rangePreview?.summary?.selectable ?? 0)}</div>
-                          </div>
-                          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-                            <div className="text-[11px] font-semibold text-amber-700">{t('alreadyAssignedEpcs')}</div>
-                            <div className="mt-1 text-sm font-semibold text-amber-900">{String(rangePreview?.summary?.alreadyAssigned ?? 0)}</div>
-                          </div>
-                          <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
-                            <div className="text-[11px] font-semibold text-rose-700">{t('conflictingEpcs')}</div>
-                            <div className="mt-1 text-sm font-semibold text-rose-900">{String(rangePreview?.summary?.conflicts ?? 0)}</div>
-                          </div>
-                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                            <div className="text-[11px] font-semibold text-slate-500">{t('missingEpcLabel')}</div>
-                            <div className="mt-1 text-sm font-semibold text-slate-900">{String(rangePreview?.summary?.missing ?? 0)}</div>
-                          </div>
-                          <div className="rounded-xl border border-brand-200 bg-brand-50 p-3">
-                            <div className="text-[11px] font-semibold text-brand-700">{t('selectAllReady')}</div>
-                            <button
-                              type="button"
-                              className="mt-2 ac-btn ac-btn-soft px-3 py-2 text-xs"
-                              disabled={selectableRangeRows.length === 0}
-                              onClick={handleRangeToggleAll}
-                            >
-                              {allSelectableRangeChecked ? t('clearSelection') : t('selectAll')}
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                              <div className="text-sm font-semibold text-slate-900">{t('dataEntryTitle')}</div>
-                              <div className="mt-1 text-xs text-slate-500">
-                                {t('dataEntryHint')}
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                              onClick={() => setRangeEntryOpen(true)}
-                            >
-                              {t('openDataEntry')}
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-xs text-slate-500">
-                        {t('previewRange')}
-                      </div>
-                    )}
-                  </div>
+                <div className="mt-3 flex justify-start">
+                  <button
+                    type="button"
+                    className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                    onClick={() =>
+                      setRangeDocRows((prev) => {
+                        const next = Array.isArray(prev) ? [...prev] : [];
+                        const existingKeys = new Set(next.map((r) => String(r?.key || '').trim()).filter(Boolean));
+                        let i = 1;
+                        let autoKey = '';
+                        while (!autoKey || existingKeys.has(autoKey)) {
+                          autoKey = `supporting_${i}`;
+                          i += 1;
+                        }
+                        next.push({ key: autoKey, url: '' });
+                        return next;
+                      })
+                    }
+                  >
+                    + {t('add')} Custom
+                  </button>
                 </div>
               </div>
             </div>

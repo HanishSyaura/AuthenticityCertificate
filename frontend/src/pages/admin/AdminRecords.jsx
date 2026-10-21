@@ -78,15 +78,23 @@ export default function AdminRecords() {
   const {
     products,
     categories,
+    customers,
+    suppliers,
     loading,
     error,
     lastSyncAt,
     fetchProducts,
     fetchCategories,
+    fetchCustomers,
+    fetchSuppliers,
     createCategory,
     updateCategory,
     createProduct,
     updateProduct,
+    createCustomer,
+    updateCustomer,
+    createSupplier,
+    updateSupplier,
     deactivateProduct,
     activateProduct,
     deleteProduct,
@@ -94,15 +102,23 @@ export default function AdminRecords() {
   } = useRecordsStore((s) => ({
     products: s.products,
     categories: s.categories,
+    customers: s.customers,
+    suppliers: s.suppliers,
     loading: s.loading,
     error: s.error,
     lastSyncAt: s.lastSyncAt,
     fetchProducts: s.fetchProducts,
     fetchCategories: s.fetchCategories,
+    fetchCustomers: s.fetchCustomers,
+    fetchSuppliers: s.fetchSuppliers,
     createCategory: s.createCategory,
     updateCategory: s.updateCategory,
     createProduct: s.createProduct,
     updateProduct: s.updateProduct,
+    createCustomer: s.createCustomer,
+    updateCustomer: s.updateCustomer,
+    createSupplier: s.createSupplier,
+    updateSupplier: s.updateSupplier,
     deactivateProduct: s.deactivateProduct,
     activateProduct: s.activateProduct,
     deleteProduct: s.deleteProduct,
@@ -153,6 +169,8 @@ export default function AdminRecords() {
   const [name, setName] = useState('');
   const [productCode, setProductCode] = useState('');
   const [category, setCategory] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [selectedSupplierId, setSelectedSupplierId] = useState('');
   const [status, setStatus] = useState('active');
   const [remark, setRemark] = useState('');
   // NEW: design bundle FKs (each bundle = multiple inner pages/sections)
@@ -241,8 +259,10 @@ export default function AdminRecords() {
   useEffect(() => {
     void fetchProducts();
     void fetchCategories();
+    void fetchCustomers();
+    void fetchSuppliers();
     void cmsFetchDesigns({ kind: 'landing' });
-  }, [fetchProducts, fetchCategories, cmsFetchDesigns]);
+  }, [fetchProducts, fetchCategories, fetchCustomers, fetchSuppliers, cmsFetchDesigns]);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -258,6 +278,14 @@ export default function AdminRecords() {
   useEffect(() => {
     writeLocalRows('ac_master_data_suppliers_rows_v1', supplierRowsState);
   }, [supplierRowsState]);
+
+  useEffect(() => {
+    setCustomerRowsState(Array.isArray(customers) ? customers : []);
+  }, [customers]);
+
+  useEffect(() => {
+    setSupplierRowsState(Array.isArray(suppliers) ? suppliers : []);
+  }, [suppliers]);
 
   const categoryByCode = useMemo(() => {
     const map = new Map();
@@ -746,6 +774,8 @@ export default function AdminRecords() {
                   setName(p.name || '');
                   setProductCode(p.code || '');
                   setCategory(p.category || '');
+                  setSelectedCustomerId(p?.customerId != null ? String(p.customerId) : '');
+                  setSelectedSupplierId(p?.supplierId != null ? String(p.supplierId) : '');
                   setStatus(String(p.status || '').toLowerCase() === 'inactive' ? 'inactive' : 'active');
                   setRemark(stripHtmlToText(p.remark || ''));
                   const desId = p?.cmsDesignId != null ? p.cmsDesignId : p?.cmsPageId != null ? p.cmsPageId : null;
@@ -1709,6 +1739,28 @@ export default function AdminRecords() {
                 </select>
               </div>
               <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('customersTab')}</div>
+                <select value={selectedCustomerId} onChange={(e) => setSelectedCustomerId(e.target.value)} className="ac-input">
+                  <option value="">{t('selectCustomer')}</option>
+                  {(Array.isArray(customerRowsState) ? customerRowsState : []).map((row) => (
+                    <option key={row.id} value={String(row.id)}>
+                      {row.customerName} ({row.customerCode})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('suppliersTab')}</div>
+                <select value={selectedSupplierId} onChange={(e) => setSelectedSupplierId(e.target.value)} className="ac-input">
+                  <option value="">{t('selectSupplier')}</option>
+                  {(Array.isArray(supplierRowsState) ? supplierRowsState : []).map((row) => (
+                    <option key={row.id} value={String(row.id)}>
+                      {row.supplierName} ({row.supplierCode})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('status')}</div>
                 <div className="flex items-center gap-4" data-tour="records-product-status">
                   <label className="flex items-center gap-2 text-xs text-zinc-700">
@@ -1813,6 +1865,8 @@ export default function AdminRecords() {
                   setName('');
                   setProductCode('');
                   setCategory('');
+                  setSelectedCustomerId('');
+                  setSelectedSupplierId('');
                   setStatus('active');
                   setRemark('');
                   setSelectedCmsDesignId('');
@@ -1842,6 +1896,8 @@ export default function AdminRecords() {
                       name: trimmedName,
                       product_code: trimmedProductCode,
                       category: trimmedCategory,
+                      customerId: String(selectedCustomerId || '').trim() ? Number(selectedCustomerId) : undefined,
+                      supplierId: String(selectedSupplierId || '').trim() ? Number(selectedSupplierId) : undefined,
                       status: trimmedStatus,
                       remark: String(remark || '').trim() || undefined,
                       cmsDesignId: cmsDesignId ?? undefined,
@@ -1852,6 +1908,8 @@ export default function AdminRecords() {
                     setName('');
                     setProductCode('');
                     setCategory('');
+                    setSelectedCustomerId('');
+                    setSelectedSupplierId('');
                     setStatus('active');
                     setRemark('');
                     setSelectedCmsDesignId('');
@@ -1909,6 +1967,28 @@ export default function AdminRecords() {
                         {c.name} ({c.code})
                       </option>
                     ))}
+                </select>
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('customersTab')}</div>
+                <select value={selectedCustomerId} onChange={(e) => setSelectedCustomerId(e.target.value)} className="ac-input">
+                  <option value="">{t('selectCustomer')}</option>
+                  {(Array.isArray(customerRowsState) ? customerRowsState : []).map((row) => (
+                    <option key={row.id} value={String(row.id)}>
+                      {row.customerName} ({row.customerCode})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('suppliersTab')}</div>
+                <select value={selectedSupplierId} onChange={(e) => setSelectedSupplierId(e.target.value)} className="ac-input">
+                  <option value="">{t('selectSupplier')}</option>
+                  {(Array.isArray(supplierRowsState) ? supplierRowsState : []).map((row) => (
+                    <option key={row.id} value={String(row.id)}>
+                      {row.supplierName} ({row.supplierCode})
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -2012,6 +2092,8 @@ export default function AdminRecords() {
                 onClick={() => {
                   setShowEdit(false);
                   setEditing(null);
+                  setSelectedCustomerId('');
+                  setSelectedSupplierId('');
                   setSelectedCmsDesignId('');
                   setSelectedCmsCertificateDesignId('');
                 }}
@@ -2035,6 +2117,8 @@ export default function AdminRecords() {
                       name: String(name || '').trim(),
                       product_code: String(productCode || '').trim(),
                       category: String(category || '').trim(),
+                      customerId: String(selectedCustomerId || '').trim() ? Number(selectedCustomerId) : null,
+                      supplierId: String(selectedSupplierId || '').trim() ? Number(selectedSupplierId) : null,
                       status: String(status || '').trim() || 'active',
                       remark: String(remark || '').trim() || null,
                       cmsDesignId,
@@ -2043,6 +2127,8 @@ export default function AdminRecords() {
                   });
                   setShowEdit(false);
                   setEditing(null);
+                  setSelectedCustomerId('');
+                  setSelectedSupplierId('');
                   setSelectedCmsDesignId('');
                   setSelectedCmsCertificateDesignId('');
                 }}
@@ -2285,21 +2371,24 @@ export default function AdminRecords() {
               <button
                 type="button"
                 className="ac-btn ac-btn-primary px-3 py-2 text-xs"
-                onClick={() => {
+                onClick={async () => {
                   const payload = {
-                    id: makeLocalId('customer'),
                     customerCode: String(customerForm.customerCode || '').trim(),
                     customerName: String(customerForm.customerName || '').trim(),
                     contactPerson: String(customerForm.contactPerson || '').trim(),
                     address: String(customerForm.address || '').trim(),
                     email: String(customerForm.email || '').trim(),
-                    status: String(customerForm.status || 'Active').trim() || 'Active',
-                    updatedAt: new Date().toISOString()
+                    status: String(customerForm.status || 'Active').trim() || 'Active'
                   };
                   if (!payload.customerCode || !payload.customerName) return;
-                  setCustomerRowsState((prev) => [payload, ...prev]);
-                  setShowCreateCustomer(false);
-                  resetCustomerForm();
+                  try {
+                    await createCustomer(payload);
+                    void fetchCustomers();
+                    setShowCreateCustomer(false);
+                    resetCustomerForm();
+                  } catch {
+                    return;
+                  }
                 }}
               >
                 {t('create')}
@@ -2383,23 +2472,26 @@ export default function AdminRecords() {
                 type="button"
                 className="ac-btn ac-btn-primary px-3 py-2 text-xs"
                 disabled={!editingCustomer?.id}
-                onClick={() => {
+                onClick={async () => {
                   if (!editingCustomer?.id) return;
                   const payload = {
-                    ...editingCustomer,
                     customerCode: String(customerForm.customerCode || '').trim(),
                     customerName: String(customerForm.customerName || '').trim(),
                     contactPerson: String(customerForm.contactPerson || '').trim(),
                     address: String(customerForm.address || '').trim(),
                     email: String(customerForm.email || '').trim(),
-                    status: String(customerForm.status || 'Active').trim() || 'Active',
-                    updatedAt: new Date().toISOString()
+                    status: String(customerForm.status || 'Active').trim() || 'Active'
                   };
                   if (!payload.customerCode || !payload.customerName) return;
-                  setCustomerRowsState((prev) => prev.map((item) => (item.id === editingCustomer.id ? payload : item)));
-                  setShowEditCustomer(false);
-                  setEditingCustomer(null);
-                  resetCustomerForm();
+                  try {
+                    await updateCustomer({ id: editingCustomer.id, patch: payload });
+                    void fetchCustomers();
+                    setShowEditCustomer(false);
+                    setEditingCustomer(null);
+                    resetCustomerForm();
+                  } catch {
+                    return;
+                  }
                 }}
               >
                 {t('save')}
@@ -2489,22 +2581,25 @@ export default function AdminRecords() {
               <button
                 type="button"
                 className="ac-btn ac-btn-primary px-3 py-2 text-xs"
-                onClick={() => {
+                onClick={async () => {
                   const payload = {
-                    id: makeLocalId('supplier'),
                     supplierCode: String(supplierForm.supplierCode || '').trim(),
                     supplierName: String(supplierForm.supplierName || '').trim(),
                     contactPerson: String(supplierForm.contactPerson || '').trim(),
                     address: String(supplierForm.address || '').trim(),
                     email: String(supplierForm.email || '').trim(),
                     phoneNumber: String(supplierForm.phoneNumber || '').trim(),
-                    status: String(supplierForm.status || 'Active').trim() || 'Active',
-                    updatedAt: new Date().toISOString()
+                    status: String(supplierForm.status || 'Active').trim() || 'Active'
                   };
                   if (!payload.supplierCode || !payload.supplierName) return;
-                  setSupplierRowsState((prev) => [payload, ...prev]);
-                  setShowCreateSupplier(false);
-                  resetSupplierForm();
+                  try {
+                    await createSupplier(payload);
+                    void fetchSuppliers();
+                    setShowCreateSupplier(false);
+                    resetSupplierForm();
+                  } catch {
+                    return;
+                  }
                 }}
               >
                 {t('create')}
@@ -2596,24 +2691,27 @@ export default function AdminRecords() {
                 type="button"
                 className="ac-btn ac-btn-primary px-3 py-2 text-xs"
                 disabled={!editingSupplier?.id}
-                onClick={() => {
+                onClick={async () => {
                   if (!editingSupplier?.id) return;
                   const payload = {
-                    ...editingSupplier,
                     supplierCode: String(supplierForm.supplierCode || '').trim(),
                     supplierName: String(supplierForm.supplierName || '').trim(),
                     contactPerson: String(supplierForm.contactPerson || '').trim(),
                     address: String(supplierForm.address || '').trim(),
                     email: String(supplierForm.email || '').trim(),
                     phoneNumber: String(supplierForm.phoneNumber || '').trim(),
-                    status: String(supplierForm.status || 'Active').trim() || 'Active',
-                    updatedAt: new Date().toISOString()
+                    status: String(supplierForm.status || 'Active').trim() || 'Active'
                   };
                   if (!payload.supplierCode || !payload.supplierName) return;
-                  setSupplierRowsState((prev) => prev.map((item) => (item.id === editingSupplier.id ? payload : item)));
-                  setShowEditSupplier(false);
-                  setEditingSupplier(null);
-                  resetSupplierForm();
+                  try {
+                    await updateSupplier({ id: editingSupplier.id, patch: payload });
+                    void fetchSuppliers();
+                    setShowEditSupplier(false);
+                    setEditingSupplier(null);
+                    resetSupplierForm();
+                  } catch {
+                    return;
+                  }
                 }}
               >
                 {t('save')}
