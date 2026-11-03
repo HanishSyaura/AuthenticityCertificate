@@ -17,8 +17,10 @@ export default function EpcItemsPanel({
   return (
     <div>
       <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_240px_auto]">
-        <input value={itemQuery} onChange={(e) => setItemQuery(e.target.value)} placeholder={t('searchEpc')} className="ac-input" />
-        <select value={selectedBatchId} onChange={(e) => setSelectedBatchId(e.target.value)} className="ac-input">
+        <label htmlFor="epc-items-search" className="sr-only">{t('searchEpc')}</label>
+        <input id="epc-items-search" name="itemQuery" value={itemQuery} onChange={(e) => setItemQuery(e.target.value)} placeholder={t('searchEpc')} className="ac-input" />
+        <label htmlFor="epc-items-batch" className="sr-only">{t('allBatches')}</label>
+        <select id="epc-items-batch" name="selectedBatchId" value={selectedBatchId} onChange={(e) => setSelectedBatchId(e.target.value)} className="ac-input">
           <option value="">{t('allBatches')}</option>
           {batches.slice(0, 50).map((b) => (
             <option key={b.id} value={String(b.id)}>

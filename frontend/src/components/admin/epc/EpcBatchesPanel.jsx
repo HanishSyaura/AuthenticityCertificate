@@ -18,7 +18,15 @@ export default function EpcBatchesPanel({
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <input value={batchQuery} onChange={(e) => setBatchQuery(e.target.value)} placeholder={t('searchBatches')} className="ac-input" />
+        <label htmlFor="epc-batches-search" className="sr-only">{t('searchBatches')}</label>
+        <input
+          id="epc-batches-search"
+          name="batchSearch"
+          value={batchQuery}
+          onChange={(e) => setBatchQuery(e.target.value)}
+          placeholder={t('searchBatches')}
+          className="ac-input"
+        />
         <button type="button" className="ac-btn ac-btn-soft px-3 py-2 text-xs" onClick={onSearch}>
           {t('inquire')}
         </button>

@@ -37,7 +37,12 @@ async function writeAudit({ req, action, targetType, targetId, metadata }) {
     targetId: targetId || null,
     userId: typeof req.user?.id === 'number' ? req.user.id : null,
     actorEmail: req.user?.email || null,
-    organizationId: typeof req.organization?.id === 'number' ? req.organization.id : null,
+    organizationId:
+      typeof req.organization?.id === 'number'
+        ? req.organization.id
+        : typeof req.user?.organizationId === 'number'
+          ? req.user.organizationId
+          : null,
     ip: normalizeIp(req),
     userAgent: req.get('user-agent') || null,
     metadata: metadata || null,

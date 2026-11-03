@@ -78,6 +78,8 @@ const submitBatchImportRangeSchema = z.object({
   epcCodes: z.array(z.string().trim().min(1)).min(1).max(500),
   rowValues: z.record(z.string(), z.record(z.string(), z.union([z.string(), z.number(), z.null()]))).optional(),
   productId: z.union([z.number().int().positive(), z.null()]).optional(),
+  customerId: z.union([z.number().int().positive(), z.null()]).optional(),
+  supplierId: z.union([z.number().int().positive(), z.null()]).optional(),
   certificateTemplateId: z.union([z.number().int().positive(), z.null()]).optional(),
   documents: z.record(z.string(), z.string()).optional()
 });
@@ -153,6 +155,47 @@ function parseLimitOffset(q) {
   const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 200);
   const offset = Math.max(Number(q.offset) || 0, 0);
   return { limit, offset };
+}
+
+
+async function listSupportingDocumentTypes(req, res) {
+  try {
+    const organizationId = req.organization.id;
+
+    const [itemRows, batchRows] = await Promise.all([
+      prisma.epcItemDocument.findMany({
+        where: { organizationId },
+        select: { docType: true },
+        distinct: ['docType']
+      }),
+      prisma.epcBatchDocument.findMany({
+        where: { organizationId },
+        select: { docType: true },
+        distinct: ['docType']
+      })
+    ]);
+
+    const uniqueTypes = new Map();
+
+    for (const row of [...itemRows, ...batchRows]) {
+      const docType = String(row?.docType || '')
+        .trim()
+        .replace(/\s+/g, ' ');
+
+      if (!docType) continue;
+
+      const key = docType.toLocaleLowerCase();
+      if (!uniqueTypes.has(key)) uniqueTypes.set(key, docType);
+    }
+
+    const docTypes = [...uniqueTypes.values()].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' })
+    );
+
+    return res.success({ docTypes });
+  } catch (e) {
+    return res.error(resolveMessage(e), resolveStatus(e, 400));
+  }
 }
 
 async function getCorpCodes(req, res) {
@@ -277,6 +320,28 @@ async function getItemByEpc(req, res) {
   } catch (e) {
     const status = Number(e.status) || 400;
     res.error(e.message, status);
+  }
+}
+
+async function unassignItemAssignment(req, res) {
+  try {
+    const rawItemId = req.params?.id;
+    const itemId = rawItemId == null || rawItemId === '' ? null : Number(rawItemId);
+    const epcCode = String(req.body?.epcCode || '').trim();
+
+    if (!(Number.isInteger(itemId) && itemId > 0) && !epcCode) {
+      return res.error('EPC item id or EPC code is required', 400);
+    }
+
+    const result = await epcService.unassignItemAssignment({
+      organizationId: req.organization.id,
+      itemId,
+      epcCode
+    });
+
+    return res.success(result, 'EPC assignment cleared');
+  } catch (e) {
+    return res.error(e.message, Number(e.status) || 400);
   }
 }
 
@@ -687,6 +752,8 @@ async function submitBatchImportRange(req, res) {
       epcCodes: data.epcCodes,
       rowValues: Object.prototype.hasOwnProperty.call(data, 'rowValues') ? data.rowValues : {},
       productId: Object.prototype.hasOwnProperty.call(data, 'productId') ? data.productId : undefined,
+      customerId: Object.prototype.hasOwnProperty.call(data, 'customerId') ? data.customerId : undefined,
+      supplierId: Object.prototype.hasOwnProperty.call(data, 'supplierId') ? data.supplierId : undefined,
       certificateTemplateId: Object.prototype.hasOwnProperty.call(data, 'certificateTemplateId') ? data.certificateTemplateId : undefined,
       documents: Object.prototype.hasOwnProperty.call(data, 'documents') ? data.documents : {},
       actor: req.user
@@ -725,12 +792,6 @@ async function listBatchImportHistory(req, res) {
   try {
     const { limit, offset } = parseLimitOffset(req.query);
     const orgId = req.organization.id;
-    const epcCount = await prisma.epcItem.count({ where: { organizationId: orgId } });
-    if (!Number(epcCount)) {
-      await prisma.auditLog.deleteMany({ where: { organizationId: orgId, action: EPC_BATCH_IMPORT_AUDIT_ACTION } });
-      return res.success({ total: 0, items: [] });
-    }
-
     const where = { organizationId: orgId, action: EPC_BATCH_IMPORT_AUDIT_ACTION };
     const [total, rows] = await Promise.all([
       prisma.auditLog.count({ where }),
@@ -807,11 +868,6 @@ async function getBatchImportHistory(req, res) {
     const orgId = req.organization.id;
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.error('Invalid id', 400);
-    const epcCount = await prisma.epcItem.count({ where: { organizationId: orgId } });
-    if (!Number(epcCount)) {
-      await prisma.auditLog.deleteMany({ where: { organizationId: orgId, action: EPC_BATCH_IMPORT_AUDIT_ACTION } });
-      return res.error('Not found', 404);
-    }
     const row = await prisma.auditLog.findFirst({
       where: { id, organizationId: orgId, action: EPC_BATCH_IMPORT_AUDIT_ACTION },
       select: { id: true, actorEmail: true, userId: true, createdAt: true, metadata: true }
@@ -820,6 +876,24 @@ async function getBatchImportHistory(req, res) {
     res.success(row);
   } catch (e) {
     res.error(e.message, 400);
+  }
+}
+
+async function bulkUnassignImportHistory(req, res) {
+  try {
+    const historyIds = req.body?.historyIds;
+    if (!Array.isArray(historyIds) || !historyIds.length) {
+      return res.error('Select at least one history record.', 400);
+    }
+
+    const result = await epcService.bulkUnassignImportHistory({
+      organizationId: req.organization.id,
+      historyIds
+    });
+
+    res.success(result, 'EPC assignments cleared successfully');
+  } catch (e) {
+    res.error(e.message, e.status || 400);
   }
 }
 
@@ -835,6 +909,8 @@ async function markProductionDone(req, res) {
 
 async function deleteBatch(req, res) {
   try {
+    const owned = req.user?.permissions || [];
+    if (!matchPermission(owned, "epc.delete")) return res.error("Insufficient permissions", 403);
     const batchId = Number(req.params.id);
     const result = await epcService.deleteBatch({ organizationId: req.organization.id, batchId });
     res.success(result, 'Batch deleted');
@@ -895,6 +971,8 @@ async function recalculateSequence(req, res) {
 
 async function deleteAll(req, res) {
   try {
+    const roles = Array.isArray(req.user?.roles) ? req.user.roles : [];
+    if (req.user?.role !== "super_admin" && !roles.includes("super_admin")) return res.error("Super admin access required", 403);
     const data = deleteAllSchema.parse(req.body || {});
     const result = await epcService.deleteAllBatches({ organizationId: req.organization.id, corpPrefix: data.corpPrefix });
     res.success(result, 'All EPC batches deleted');
@@ -919,6 +997,7 @@ async function deleteAllGenerated(req, res) {
 }
 
 module.exports = {
+  listSupportingDocumentTypes,
   getCorpCodes,
   listDynamicFields,
   createDynamicField,
@@ -931,6 +1010,7 @@ module.exports = {
   getEpcStats,
   listItems,
   getItemByEpc,
+  unassignItemAssignment,
   resetItemsProduction,
   updateItemProduction,
   createScanGroup,
@@ -953,6 +1033,7 @@ module.exports = {
   submitBatchImportRange,
   listBatchImportHistory,
   getBatchImportHistory,
+  bulkUnassignImportHistory,
   markProductionDone,
   updateBatch,
   updateBatchDocuments,

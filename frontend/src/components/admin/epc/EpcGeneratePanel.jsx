@@ -35,8 +35,10 @@ export default function EpcGeneratePanel({
 
       <div className="space-y-3">
         <div>
-          <div className="mb-1 text-xs font-semibold text-zinc-600">{t('corpCode')}</div>
+          <label htmlFor="epc-generate-corp-code" className="mb-1 block text-xs font-semibold text-zinc-600">{t('corpCode')}</label>
           <input
+            id="epc-generate-corp-code"
+            name="corpPrefix"
             value={corpPrefix}
             onChange={(e) => setCorpPrefix(e.target.value)}
             className="ac-input"
@@ -45,8 +47,8 @@ export default function EpcGeneratePanel({
         </div>
 
         <div>
-          <div className="mb-1 text-xs font-semibold text-zinc-600">{t('product')}</div>
-          <select value={productId} onChange={(e) => setProductId(e.target.value)} className="ac-input">
+          <label htmlFor="epc-generate-product" className="mb-1 block text-xs font-semibold text-zinc-600">{t('product')}</label>
+          <select id="epc-generate-product" name="productId" value={productId} onChange={(e) => setProductId(e.target.value)} className="ac-input">
             <option value="">{t('selectProduct')}</option>
             {productOptions.map((p) => (
               <option key={p.id} value={String(p.id)}>
@@ -57,13 +59,15 @@ export default function EpcGeneratePanel({
         </div>
 
         <div>
-          <div className="mb-1 text-xs font-semibold text-zinc-600">{t('batchName')}</div>
-          <input value={batchName} onChange={(e) => setBatchName(e.target.value)} className="ac-input" />
+          <label htmlFor="epc-generate-batch-name" className="mb-1 block text-xs font-semibold text-zinc-600">{t('batchName')}</label>
+          <input id="epc-generate-batch-name" name="batchName" value={batchName} onChange={(e) => setBatchName(e.target.value)} className="ac-input" />
         </div>
 
         <div>
-          <div className="mb-1 text-xs font-semibold text-zinc-600">{t('batchQty')}</div>
+          <label htmlFor="epc-generate-batch-qty" className="mb-1 block text-xs font-semibold text-zinc-600">{t('batchQty')}</label>
           <input
+            id="epc-generate-batch-qty"
+            name="batchQty"
             type="number"
             min={1}
             max={5000}
@@ -75,8 +79,10 @@ export default function EpcGeneratePanel({
         </div>
 
         <div>
-          <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
+          <label htmlFor="epc-generate-remark" className="mb-1 block text-xs font-semibold text-zinc-600">{t('remark')}</label>
           <textarea
+            id="epc-generate-remark"
+            name="remark"
             value={remark}
             onChange={(e) => setRemark(e.target.value)}
             className="h-24 w-full resize-none rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none focus:border-zinc-400"

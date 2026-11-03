@@ -401,12 +401,203 @@
 
   .ac-richtext ul,
   .ac-richtext ol {
-    padding-left: 1.25rem;
+    padding-left: 0;
   }
 
   .ac-richtext.ql-editor {
     padding: 0;
   }
+  /* Keep the standard Quill toolbar separate from list-style controls. */
+  .ac-rt .ql-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 8px;
+  }
+
+  .ac-rt .ql-toolbar .ql-formats {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: 8px;
+    margin-bottom: 4px;
+  }
+
+  .ac-list-style-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+    padding: 12px;
+    border-top: 1px solid #e5e7eb;
+    background: #f8fafc;
+  }
+
+  .ac-list-style-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    width: 220px;
+    max-width: 100%;
+  }
+
+  .ac-list-style-field label {
+    color: #475569;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .ac-list-style-field select {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    height: 40px;
+    box-sizing: border-box;
+    padding: 0 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background-color: #fff;
+    color: #18181b;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .ac-list-style-field select:focus {
+    outline: 2px solid #a5b4fc;
+    outline-offset: 1px;
+  }
+
+  /* Consistent Quill list markers across editor, canvas, preview and published content. */
+  .ac-richtext li[data-list] {
+    list-style: none;
+    position: relative;
+    padding-left: 1.25em;
+  }
+
+  .ac-richtext li[data-list] > .ql-ui {
+    position: absolute;
+    left: 0;
+  }
+
+  .ac-richtext li[data-list] > .ql-ui::before {
+    display: inline-block;
+    margin-left: 0;
+    margin-right: 0;
+    text-align: right;
+    white-space: nowrap;
+    width: 1em;
+  }
+
+  /* Align first-level bullet symbols with the normal text start. */
+  .ac-richtext li[data-list="bullet"] {
+    padding-left: 1.2em;
+  }
+
+  .ac-richtext li[data-list="bullet"] > .ql-ui::before {
+    text-align: left;
+  }
+
+  /* Default bullet and ordered-list markers. */
+  .ac-richtext li[data-list="bullet"] > .ql-ui::before {
+    content: "\2022";
+  }
+
+  .ac-richtext li[data-list="ordered"] > .ql-ui::before {
+    content: counter(list-0, decimal) ". ";
+  }
+
+  /* User-selectable bullet styles. */
+  .ac-richtext li[data-list="bullet"].ql-bullet-style-disc > .ql-ui::before {
+    content: "\2022";
+  }
+
+  .ac-richtext li[data-list="bullet"].ql-bullet-style-circle > .ql-ui::before {
+    content: "\25CB";
+  }
+
+  .ac-richtext li[data-list="bullet"].ql-bullet-style-square > .ql-ui::before {
+    content: "\25AA";
+  }
+
+  .ac-richtext li[data-list="bullet"].ql-bullet-style-dash > .ql-ui::before {
+    content: "\2013";
+  }
+
+  .ac-richtext li[data-list="bullet"].ql-bullet-style-arrow > .ql-ui::before {
+    content: "\2192";
+  }
+
+  .ac-richtext li[data-list="bullet"].ql-bullet-style-check > .ql-ui::before {
+    content: "\2713";
+  }
+
+  /* User-selectable numbering styles at the top level. */
+  .ac-richtext li[data-list="ordered"].ql-number-style-decimal > .ql-ui::before {
+    content: counter(list-0, decimal) ". ";
+  }
+
+  .ac-richtext li[data-list="ordered"].ql-number-style-lower-alpha > .ql-ui::before {
+    content: counter(list-0, lower-alpha) ". ";
+  }
+
+  .ac-richtext li[data-list="ordered"].ql-number-style-upper-alpha > .ql-ui::before {
+    content: counter(list-0, upper-alpha) ". ";
+  }
+
+  .ac-richtext li[data-list="ordered"].ql-number-style-lower-roman > .ql-ui::before {
+    content: counter(list-0, lower-roman) ". ";
+  }
+
+  .ac-richtext li[data-list="ordered"].ql-number-style-upper-roman > .ql-ui::before {
+    content: counter(list-0, upper-roman) ". ";
+  }
+
+  /* Preserve Quill's nested-list counter levels when numbering style is customized. */
+  .ac-richtext li[data-list="ordered"].ql-indent-1.ql-number-style-lower-alpha > .ql-ui::before {
+    content: counter(list-1, lower-alpha) ". ";
+  }
+  .ac-richtext li[data-list="ordered"].ql-indent-1.ql-number-style-upper-alpha > .ql-ui::before {
+    content: counter(list-1, upper-alpha) ". ";
+  }
+  .ac-richtext li[data-list="ordered"].ql-indent-1.ql-number-style-lower-roman > .ql-ui::before {
+    content: counter(list-1, lower-roman) ". ";
+  }
+  .ac-richtext li[data-list="ordered"].ql-indent-1.ql-number-style-upper-roman > .ql-ui::before {
+    content: counter(list-1, upper-roman) ". ";
+  }
+
+  .ac-richtext li[data-list="ordered"].ql-indent-2.ql-number-style-lower-alpha > .ql-ui::before {
+    content: counter(list-2, lower-alpha) ". ";
+  }
+  .ac-richtext li[data-list="ordered"].ql-indent-2.ql-number-style-upper-alpha > .ql-ui::before {
+    content: counter(list-2, upper-alpha) ". ";
+  }
+  .ac-richtext li[data-list="ordered"].ql-indent-2.ql-number-style-lower-roman > .ql-ui::before {
+    content: counter(list-2, lower-roman) ". ";
+  }
+  .ac-richtext li[data-list="ordered"].ql-indent-2.ql-number-style-upper-roman > .ql-ui::before {
+    content: counter(list-2, upper-roman) ". ";
+  }
+
+  /* Reduce Quill's default 3em-per-level indentation to 1.25em per level. */
+  .ac-richtext li.ql-indent-1:not(.ql-direction-rtl) { padding-left: 2.75em; }
+  .ac-richtext li.ql-indent-2:not(.ql-direction-rtl) { padding-left: 4em; }
+  .ac-richtext li.ql-indent-3:not(.ql-direction-rtl) { padding-left: 5.25em; }
+  .ac-richtext li.ql-indent-4:not(.ql-direction-rtl) { padding-left: 6.5em; }
+  .ac-richtext li.ql-indent-5:not(.ql-direction-rtl) { padding-left: 7.75em; }
+  .ac-richtext li.ql-indent-6:not(.ql-direction-rtl) { padding-left: 9em; }
+  .ac-richtext li.ql-indent-7:not(.ql-direction-rtl) { padding-left: 10.25em; }
+  .ac-richtext li.ql-indent-8:not(.ql-direction-rtl) { padding-left: 11.5em; }
+
+  .ac-richtext li.ql-indent-1.ql-direction-rtl { padding-right: 2.75em; }
+  .ac-richtext li.ql-indent-2.ql-direction-rtl { padding-right: 4em; }
+  .ac-richtext li.ql-indent-3.ql-direction-rtl { padding-right: 5.25em; }
+  .ac-richtext li.ql-indent-4.ql-direction-rtl { padding-right: 6.5em; }
+  .ac-richtext li.ql-indent-5.ql-direction-rtl { padding-right: 7.75em; }
+  .ac-richtext li.ql-indent-6.ql-direction-rtl { padding-right: 9em; }
+  .ac-richtext li.ql-indent-7.ql-direction-rtl { padding-right: 10.25em; }
+  .ac-richtext li.ql-indent-8.ql-direction-rtl { padding-right: 11.5em; }
 
   .ac-richtext a {
     color: rgb(67 56 202);
@@ -909,6 +1100,9 @@
   }
 
   .ac-verify-brand-logo {
+    position: relative;
+    z-index: 1;
+    display: block;
     width: 100%;
     height: 100%;
     object-fit: contain;
@@ -925,6 +1119,7 @@
 
   .ac-verify-scan {
     position: absolute;
+    z-index: 0;
     inset: -40%;
     background: linear-gradient(45deg, transparent 35%, rgba(var(--ac-accent-rgb), 0.22) 50%, transparent 65%);
     animation: ac-verify-scan 2.2s ease-in-out infinite;
@@ -969,5 +1164,32 @@
     .ac-verify-progress {
       animation: none !important;
     }
+  }
+}
+
+/* Fix: align list markers with the normal text start */
+.ac-richtext ol {
+  padding-left: 0 !important;
+}
+
+/* Spacing between list items; preserve line spacing within each item */
+.ac-richtext li[data-list] {
+  margin-top: 6px;
+  margin-bottom: 6px;
+}
+
+/* First item: spacing below only */
+.ac-richtext ol > li[data-list]:first-child {
+  margin-top: 0;
+}
+
+/* Last item: spacing above only */
+.ac-richtext ol > li[data-list]:last-child {
+  margin-bottom: 0;
+}
+
+@keyframes acVerifySpin {
+  to {
+    transform: rotate(360deg);
   }
 }

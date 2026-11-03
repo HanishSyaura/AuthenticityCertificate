@@ -134,28 +134,33 @@ export default function AdminLogin() {
               className="mt-8 space-y-4"
             >
               <div>
-                <label className="block text-[12px] font-semibold text-[#5d687a]">
+                <label htmlFor="admin-login-email" className="block text-[12px] font-semibold text-[#5d687a]">
                   {t('email')}
                   <span className="ml-1 text-[#e56e6e]">*</span>
                 </label>
                 <input
+                  id="admin-login-email"
+                  name="email"
+                  type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="ac-input mt-2 rounded-xl border-[#d7dfeb] bg-[#eef3fb] px-4 py-[9px] text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-[#53a6c5] focus:ring-[#c7e5f0]"
-                  placeholder="hanishsyaura@gmail.com"
+                  placeholder="Enter your email address"
                   autoComplete="email"
                 />
               </div>
               <div>
-                <label className="block text-[12px] font-semibold text-[#5d687a]">
+                <label htmlFor="admin-login-password" className="block text-[12px] font-semibold text-[#5d687a]">
                   {t('password')}
                   <span className="ml-1 text-[#e56e6e]">*</span>
                 </label>
                 <input
+                  id="admin-login-password"
+                  name="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="ac-input mt-2 rounded-xl border-[#d7dfeb] bg-[#eef3fb] px-4 py-[9px] text-[13px] text-slate-900 placeholder:text-slate-400 focus:border-[#53a6c5] focus:ring-[#c7e5f0]"
-                  placeholder="••••••••••••"
+                  placeholder="Enter your password"
                   type="password"
                   autoComplete="current-password"
                 />

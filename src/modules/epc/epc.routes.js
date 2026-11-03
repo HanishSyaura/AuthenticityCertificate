@@ -12,6 +12,12 @@ router.use(attachOrganization);
 router.use(requireOrganization);
 
 router.get(
+  '/supporting-document-types',
+  requirePermission(['cms.read', 'epc.read', 'epc.write', 'epc.batch.view', 'epc.batch.create', 'epc.production.access', 'epc.batch_import.access']),
+  epcController.listSupportingDocumentTypes
+);
+
+router.get(
   '/corp-codes',
   requirePermission(['epc.read', 'epc.write', 'epc.batch.view', 'epc.batch.create', 'epc.scan.access', 'epc.production.access', 'epc.batch_import.access']),
   epcController.getCorpCodes
@@ -89,21 +95,21 @@ router.put(
 
 router.delete(
   '/batches/:id',
-  requirePermission(['epc.write', 'epc.delete']),
+  requirePermission('epc.delete'),
   auditAction('DELETE_EPC_BATCH', { targetType: 'epc_batch', getTargetId: (req) => String(req.params?.id || '') }),
   epcController.deleteBatch
 );
 
 router.post(
   '/batches/delete-all',
-  requirePermission(['epc.write', 'epc.delete']),
+  requirePermission('access.manage'),
   auditAction('DELETE_EPC_BATCH_ALL', { targetType: 'epc_batch' }),
   epcController.deleteAll
 );
 
 router.post(
   '/batches/delete-generated-all',
-  requirePermission(['epc.write', 'epc.delete']),
+  requirePermission('epc.delete'),
   auditAction('DELETE_EPC_BATCH_GENERATED_ALL', { targetType: 'epc_batch' }),
   epcController.deleteAllGenerated
 );
@@ -128,8 +134,28 @@ router.post(
 );
 
 router.post(
+  '/items/unassign-assignment',
+  requirePermission(['epc.write']),
+  auditAction('UNASSIGN_EPC_ASSIGNMENT', {
+    targetType: 'epc_item',
+    getTargetId: (req) => String(req.body?.epcCode || '')
+  }),
+  epcController.unassignItemAssignment
+);
+
+router.post(
+  '/items/:id/unassign-assignment',
+  requirePermission(['epc.write']),
+  auditAction('UNASSIGN_EPC_ASSIGNMENT', {
+    targetType: 'epc_item',
+    getTargetId: (req) => String(req.params?.id || '')
+  }),
+  epcController.unassignItemAssignment
+);
+
+router.post(
   '/items/delete',
-  requirePermission(['epc.write', 'epc.delete']),
+  requirePermission('epc.delete'),
   auditAction('DELETE_EPC_ITEMS', {
     targetType: 'epc_item',
     getMetadata: (req) => ({ cleanup: Boolean(req.body?.cleanup) })
@@ -239,6 +265,12 @@ router.get(
   '/batch-import/history',
   requirePermission(['epc.write', 'epc.batch_import.access']),
   epcController.listBatchImportHistory
+);
+
+router.post(
+  '/batch-import/history/unassign-assignment',
+  requirePermission(['epc.write', 'epc.batch_import.access']),
+  epcController.bulkUnassignImportHistory
 );
 
 router.get(

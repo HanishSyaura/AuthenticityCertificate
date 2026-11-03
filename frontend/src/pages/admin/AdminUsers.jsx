@@ -4,17 +4,13 @@ import useAdminAuthStore from '../../store/useAdminAuthStore';
 import useAccessStore from '../../store/useAccessStore';
 import { useT } from '../../i18n/useT';
 import { hasPermission } from '../../utils/permissions';
-import { PERMISSION_GROUPS, VISIBLE_PERMISSION_KEYS } from '../../utils/permissionCatalog';
+import { PERMISSION_GROUPS } from '../../utils/permissionCatalog';
 import DataTable from '../../components/ui/DataTable';
 import TablePager from '../../components/ui/TablePager';
 import RowActionsMenu from '../../components/ui/RowActionsMenu';
+import { formatDateTimeMY } from '../../utils/dateTime';
 
-function formatDate(input) {
-  if (!input) return '';
-  const d = new Date(input);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toISOString().slice(0, 19).replace('T', ' ');
-}
+const formatDate = formatDateTimeMY;
 
 function RefreshIcon({ className = 'h-4 w-4' }) {
   return (
@@ -125,6 +121,10 @@ export default function AdminUsers() {
   const [resetUser, setResetUser] = useState(null);
   const [resetPassword, setResetPassword] = useState('');
   const [showAccess, setShowAccess] = useState(false);
+  const [showManageRoles, setShowManageRoles] = useState(false);
+  const [pageTab, setPageTab] = useState('users');
+  const [auditOffset, setAuditOffset] = useState(0);
+
   const [showUserRoles, setShowUserRoles] = useState(false);
   const [rolesUser, setRolesUser] = useState(null);
   const [selectedUserRoleIds, setSelectedUserRoleIds] = useState([]);
@@ -137,10 +137,13 @@ export default function AdminUsers() {
     if (canManageUsers) void fetchUsers();
   }, [canManageUsers, fetchUsers]);
 
-  const { roles, permissions, fetchRoles, fetchPermissions, setRolePermissions, createRole: createAccessRole, deleteRole: deleteAccessRole, setUserRoles } =
+  const { roles, permissions, auditLogs, auditLogTotal, fetchRoles, fetchPermissions, fetchAccessAuditLogs, setRolePermissions, createRole: createAccessRole, deleteRole: deleteAccessRole, setUserRoles } =
     useAccessStore((s) => ({
     roles: s.roles,
     permissions: s.permissions,
+    auditLogs: s.auditLogs,
+    auditLogTotal: s.auditLogTotal,
+    fetchAccessAuditLogs: s.fetchAccessAuditLogs,
     fetchRoles: s.fetchRoles,
     fetchPermissions: s.fetchPermissions,
     setRolePermissions: s.setRolePermissions,
@@ -154,6 +157,7 @@ export default function AdminUsers() {
   const [newRoleName, setNewRoleName] = useState('');
   const [newRoleDesc, setNewRoleDesc] = useState('');
   const [permQuery, setPermQuery] = useState('');
+  const [expandedPermissionGroups, setExpandedPermissionGroups] = useState({});
 
   const filtered = useMemo(() => {
     const q = String(query || '').trim().toLowerCase();
@@ -184,14 +188,6 @@ export default function AdminUsers() {
     if (canManageAccess) void fetchRoles();
   }, [canManageAccess, fetchRoles]);
 
-  useEffect(() => {
-    if (!showCreate) return;
-    if (!canManageAccess) return;
-    if (selectedCreateRoleIds.length > 0) return;
-    const adminRole = roles.find((r) => r?.isSystem && String(r?.name) === 'admin');
-    if (adminRole?.id) setSelectedCreateRoleIds([adminRole.id]);
-  }, [canManageAccess, roles, selectedCreateRoleIds.length, showCreate]);
-
   const permissionsByKey = useMemo(() => {
     const m = new Map();
     for (const p of Array.isArray(permissions) ? permissions : []) {
@@ -200,40 +196,132 @@ export default function AdminUsers() {
     return m;
   }, [permissions]);
 
-  const visibleKeys = useMemo(() => {
-    const set = new Set();
-    for (const k of VISIBLE_PERMISSION_KEYS) {
-      if (permissionsByKey.has(k)) set.add(k);
-    }
-    return set;
-  }, [permissionsByKey]);
+  const visibleKeys = useMemo(
+    () => new Set(permissionsByKey.keys()),
+    [permissionsByKey]
+  );
 
   const permissionGroups = useMemo(() => {
     const q = String(permQuery || '').trim().toLowerCase();
-    const groups = PERMISSION_GROUPS.map((g) => {
-      const items = (Array.isArray(g.keys) ? g.keys : [])
-        .filter((k) => visibleKeys.has(k))
-        .map((k) => permissionsByKey.get(k))
-        .filter(Boolean);
-      const filteredItems =
-        !q
+
+    const assignedKeys = new Set(
+      PERMISSION_GROUPS.flatMap((page) =>
+        page.subpages.flatMap((subpage) => subpage.keys || [])
+      )
+    );
+
+    const definitions = [
+      ...PERMISSION_GROUPS,
+      {
+        id: 'other',
+        title: 'Other Permissions',
+        subpages: [
+          {
+            id: 'other-permissions',
+            title: 'Uncategorized Permissions',
+            keys: Array.from(permissionsByKey.keys()).filter(
+              (key) => !assignedKeys.has(key)
+            ),
+          },
+        ],
+      },
+    ];
+
+    return definitions.map((page) => {
+      const subpages = page.subpages.map((subpage) => {
+        const items = (subpage.keys || [])
+          .filter((key) => visibleKeys.has(key))
+          .map((key) => permissionsByKey.get(key))
+          .filter(Boolean);
+
+        const filteredItems = !q
           ? items
-          : items.filter((p) => {
-              const key = String(p?.key || '').toLowerCase();
-              const desc = String(p?.description || '').toLowerCase();
-              return key.includes(q) || desc.includes(q);
+          : items.filter((permission) => {
+              const key = String(permission?.key || '').toLowerCase();
+              const description = String(permission?.description || '').toLowerCase();
+              return key.includes(q) || description.includes(q);
             });
-      return { id: g.id, titleKey: g.titleKey, items: filteredItems, allKeys: items.map((p) => p.key), totalItems: items.length };
-    });
-    return groups.filter((g) => g.totalItems > 0 && g.items.length > 0);
+
+        return {
+          ...subpage,
+          items: filteredItems,
+          allKeys: items.map((permission) => permission.key),
+          totalItems: items.length,
+        };
+      }).filter((subpage) => subpage.totalItems > 0 && subpage.items.length > 0);
+
+      const allKeys = page.subpages.flatMap((subpage) => subpage.keys || [])
+        .filter((key) => visibleKeys.has(key));
+
+      return {
+        ...page,
+        subpages,
+        allKeys,
+        totalItems: allKeys.length,
+      };
+    }).filter((page) => page.subpages.length > 0);
   }, [permQuery, permissionsByKey, visibleKeys]);
+
+  const hasFullAccess = selectedPermissionKeys.includes('*');
+
+  const isPermissionSelected = (key) =>
+    hasFullAccess || selectedPermissionKeys.includes(key);
+
+  const selectPermissionKeys = (keys) => {
+    if (keys.includes('*')) {
+      setSelectedPermissionKeys(['*']);
+      return;
+    }
+
+    if (hasFullAccess) return;
+
+    const next = new Set(selectedPermissionKeys);
+    keys.forEach((key) => next.add(key));
+    setSelectedPermissionKeys(Array.from(next));
+  };
+
+  const clearPermissionKeys = (keys) => {
+    if (hasFullAccess && keys.includes('*')) {
+      setSelectedPermissionKeys([]);
+      return;
+    }
+
+    const next = hasFullAccess
+      ? new Set(Array.from(visibleKeys).filter((key) => key !== '*'))
+      : new Set(selectedPermissionKeys);
+
+    keys.forEach((key) => next.delete(key));
+    setSelectedPermissionKeys(Array.from(next));
+  };
+
+  const togglePermission = (key, checked) => {
+    if (key === '*') {
+      if (checked) {
+        setSelectedPermissionKeys(['*']);
+      } else {
+        const next = new Set(selectedPermissionKeys);
+        next.delete('*');
+        setSelectedPermissionKeys(Array.from(next));
+      }
+      return;
+    }
+
+    const next = hasFullAccess
+      ? new Set(Array.from(visibleKeys).filter((item) => item !== '*'))
+      : new Set(selectedPermissionKeys);
+
+    if (checked) next.add(key);
+    else next.delete(key);
+
+    setSelectedPermissionKeys(Array.from(next));
+  };
 
   const totalUsers = users.length;
   const filteredUsers = filtered.length;
   const rolesCount = Array.isArray(roles) ? roles.length : 0;
   const refreshedAt = formatDate(lastSyncAt);
 
-  if (!canManageUsers) {
+  if (!canManageUsers && !canManageAccess) {
     return (
       <div className="p-4 sm:p-6 lg:p-8">
         <h2 className="text-base font-semibold text-zinc-900">{t('usersRoles')}</h2>
@@ -253,7 +341,7 @@ export default function AdminUsers() {
         <button
           type="button"
           className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-[0_10px_24px_rgba(15,23,42,0.05)] transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
-          onClick={() => void fetchUsers()}
+          onClick={() => canManageUsers && void fetchUsers()}
           aria-label={t('refresh')}
           title={t('refresh')}
         >
@@ -267,6 +355,28 @@ export default function AdminUsers() {
         <SummaryCard icon={<ClockIcon />} label={t('refresh')} value={refreshedAt || '-'} muted={!refreshedAt} />
       </div>
 
+      <div className="flex gap-2 border-b border-slate-200">
+        <button
+          type="button"
+          className={`border-b-2 px-4 py-3 text-sm font-semibold ${pageTab === 'users' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+          onClick={() => setPageTab('users')}
+        >
+          Users
+        </button>
+        <button
+          type="button"
+          className={`border-b-2 px-4 py-3 text-sm font-semibold ${pageTab === 'audit' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+          onClick={() => {
+            setPageTab('audit');
+            setAuditOffset(0);
+            void fetchAccessAuditLogs({ limit: 25, offset: 0 });
+          }}
+        >
+          Access Audit Log
+        </button>
+      </div>
+
+      {pageTab === 'users' ? (
       <SectionShell
         title={t('usersRoles')}
         hint={t('usersSubtitle')}
@@ -282,7 +392,7 @@ export default function AdminUsers() {
                   const first = Array.isArray(fetchedRoles) && fetchedRoles.length > 0 ? fetchedRoles[0] : null;
                   if (first?.id) {
                     setSelectedRoleId(first.id);
-                    const next = (Array.isArray(first.permissions) ? first.permissions : []).filter((k) => VISIBLE_PERMISSION_KEYS.has(k) && fetchedKeys.has(k));
+                    const next = (Array.isArray(first.permissions) ? first.permissions : []).filter((k) => fetchedKeys.has(k));
                     setSelectedPermissionKeys(Array.from(new Set(next)));
                   }
                   setPermQuery('');
@@ -292,7 +402,16 @@ export default function AdminUsers() {
                 {t('manageAccess')}
               </button>
             ) : null}
-            <button
+            {canManageAccess ? (
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                onClick={() => setShowManageRoles(true)}
+              >
+                Manage Roles
+              </button>
+            ) : null}
+            {canManageUsers ? <button
               type="button"
               className="ac-btn px-3 py-2 text-xs"
               onClick={() => {
@@ -305,10 +424,11 @@ export default function AdminUsers() {
               }}
             >
               {t('createUser')}
-            </button>
+            </button> : null}
           </>
         }
       >
+        {canManageUsers ? (
         <div className="space-y-4">
           <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -473,7 +593,81 @@ export default function AdminUsers() {
             ]}
           />
         </div>
+        ) : (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-600">
+            You have access to manage roles and permissions. Select <strong>Manage Access</strong> to continue.
+          </div>
+        )}
       </SectionShell>
+      ) : null}
+
+      {pageTab === 'audit' && canManageAccess ? (
+        <div className="rounded-xl border border-zinc-200 bg-white p-3">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold text-zinc-900">Access Audit Log</div>
+              <div className="text-xs text-zinc-500">{auditLogTotal} recorded events</div>
+            </div>
+            <button
+              type="button"
+              className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+              onClick={() => void fetchAccessAuditLogs({ limit: 25, offset: auditOffset })}
+            >
+              Refresh
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="p-3">Date / Time</th>
+                  <th className="p-3">Actor</th>
+                  <th className="p-3">Action</th>
+                  <th className="p-3">Target</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {auditLogs.map((log) => (
+                  <tr key={log.id}>
+                    <td className="whitespace-nowrap p-3">{formatDate(log.createdAt)}</td>
+                    <td className="p-3">{log.actorEmail || log.userId || 'System'}</td>
+                    <td className="p-3 font-medium">{log.action}</td>
+                    <td className="p-3">{[log.targetType, log.targetId].filter(Boolean).join(' / ') || '—'}</td>
+                  </tr>
+                ))}
+                {!auditLogs.length ? (
+                  <tr><td colSpan={4} className="p-6 text-center text-slate-500">No access audit records found.</td></tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+            <span>Showing {auditLogs.length} of {auditLogTotal}</span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                disabled={auditOffset <= 0}
+                onClick={() => {
+                  const next = Math.max(0, auditOffset - 25);
+                  setAuditOffset(next);
+                  void fetchAccessAuditLogs({ limit: 25, offset: next });
+                }}
+              >Previous</button>
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                disabled={auditOffset + auditLogs.length >= auditLogTotal}
+                onClick={() => {
+                  const next = auditOffset + 25;
+                  setAuditOffset(next);
+                  void fetchAccessAuditLogs({ limit: 25, offset: next });
+                }}
+              >Next</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {showCreate ? (
         <div className="ac-overlay-center">
@@ -693,7 +887,7 @@ export default function AdminUsers() {
 
       {showAccess ? (
         <div className="ac-overlay-center">
-          <div className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-3xl overflow-y-auto rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_30px_80px_rgba(15,23,42,0.18)]">
+          <div className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-6xl overflow-y-auto rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_30px_80px_rgba(15,23,42,0.18)]">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-zinc-900">{t('accessManagement')}</div>
@@ -710,49 +904,279 @@ export default function AdminUsers() {
               </button>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-[260px_1fr]">
+            <div className="space-y-3">
               <div className="rounded-xl border border-zinc-200 p-3">
                 <div className="mb-2 text-xs font-semibold text-zinc-600">{t('roles')}</div>
-                <select
-                  value={selectedRoleId || ''}
-                  onChange={(e) => {
-                    const id = Number(e.target.value);
-                    setSelectedRoleId(id);
-                    const nextRole = roles.find((r) => String(r.id) === String(id));
-                    const next = (Array.isArray(nextRole?.permissions) ? nextRole.permissions : []).filter((k) => visibleKeys.has(k));
-                    setSelectedPermissionKeys(Array.from(new Set(next)));
-                  }}
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400"
-                >
-                  <option value="" disabled>
-                    {t('selectRole')}
-                  </option>
-                  {roles.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-
-                {selectedRole && !selectedRole.isSystem ? (
-                  <button
-                    type="button"
-                    className="mt-2 w-full rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700"
-                    onClick={async () => {
-                      if (!window.confirm(t('confirmDeleteRole'))) return;
-                      await deleteAccessRole({ roleId: selectedRole.id });
-                      const nextRoles = await fetchRoles();
-                      const first = Array.isArray(nextRoles) && nextRoles.length > 0 ? nextRoles[0] : null;
-                      setSelectedRoleId(first?.id || null);
-                      const next = (Array.isArray(first?.permissions) ? first.permissions : []).filter((k) => visibleKeys.has(k));
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={selectedRoleId || ''}
+                    onChange={(e) => {
+                      const id = Number(e.target.value);
+                      setSelectedRoleId(id || null);
+                      const nextRole = roles.find((r) => String(r.id) === String(id));
+                      const next = (Array.isArray(nextRole?.permissions) ? nextRole.permissions : []).filter((k) => visibleKeys.has(k));
                       setSelectedPermissionKeys(Array.from(new Set(next)));
                     }}
+                    className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400"
                   >
-                    {t('deleteRole')}
-                  </button>
+                    <option value="" disabled>{t('selectRole')}</option>
+                    {roles.map((r) => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                  {selectedRole && !selectedRole.isSystem ? (
+                    <button
+                      type="button"
+                      className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700"
+                      onClick={async () => {
+                        if (!window.confirm(t('confirmDeleteRole'))) return;
+                        await deleteAccessRole({ roleId: selectedRole.id });
+                        const nextRoles = await fetchRoles();
+                        const first = Array.isArray(nextRoles) ? nextRoles.find((r) => r.name !== 'super_admin') || nextRoles[0] : null;
+                        setSelectedRoleId(first?.id || null);
+                        const next = (Array.isArray(first?.permissions) ? first.permissions : []).filter((k) => visibleKeys.has(k));
+                        setSelectedPermissionKeys(Array.from(new Set(next)));
+                      }}
+                    >
+                      {t('deleteRole')}
+                    </button>
+                  ) : null}
+                </div>
+                <div className="mt-1 text-[11px] text-zinc-500">
+                  Select a role to configure its permissions below.
+                </div>
+              </div>
+              <div className="rounded-xl border border-zinc-200 p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-semibold text-zinc-600">{t('permissions')}</div>
+                    <div className="mt-0.5 text-[11px] text-zinc-500">
+                      {selectedRole?.name ? t('selectedRole', { value: selectedRole.name }) : t('selectRole')}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                      disabled={!selectedRole?.id || selectedRole.isSystem}
+                      onClick={() => setSelectedPermissionKeys([])}
+                    >
+                      {t('clearSelection')}
+                    </button>
+                    <button
+                      type="button"
+                      className="ac-btn px-3 py-2 text-xs"
+                      disabled={!selectedRole?.id || selectedRole.isSystem}
+                      onClick={async () => {
+                        const next = selectedPermissionKeys.filter((k) => visibleKeys.has(k));
+                        await setRolePermissions({ roleId: selectedRole.id, permissionKeys: Array.from(new Set(next)) });
+                        await fetchRoles();
+                      }}
+                    >
+                      {t('save')}
+                    </button>
+                  </div>
+                </div>
+
+                {selectedRole?.isSystem ? (
+                  <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    System role permissions are protected and cannot be modified.
+                  </div>
                 ) : null}
 
-                <div className="mt-4 border-t border-zinc-200 pt-3">
+                <input
+                  value={permQuery}
+                  onChange={(e) => setPermQuery(e.target.value)}
+                  placeholder={t('searchPermissions')}
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+                />
+
+                <div className="mt-3 max-h-[55vh] overflow-auto rounded-xl border border-zinc-200 bg-white">
+                  {permissions.length === 0 ? (
+                    <div className="p-4 text-sm text-zinc-600">{t('loading')}</div>
+                  ) : permissionGroups.length === 0 ? (
+                    <div className="p-4 text-sm text-zinc-600">{t('noPermissionsFound')}</div>
+                  ) : (
+                    permissionGroups.map((page) => {
+                      const pageKeys = page.allKeys;
+                      const pageSelectedCount = pageKeys.filter(
+                        (key) => isPermissionSelected(key)
+                      ).length;
+                      const pageExpanded = Boolean(permQuery.trim()) ||
+                        Boolean(expandedPermissionGroups[page.id]);
+
+                      return (
+                        <div key={page.id} className="border-b border-zinc-200 last:border-b-0">
+                          <div className="flex flex-wrap items-center justify-between gap-3 bg-zinc-100 px-4 py-3">
+                            <button
+                              type="button"
+                              className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                              onClick={() => setExpandedPermissionGroups((prev) => ({
+                                ...prev,
+                                [page.id]: !prev[page.id],
+                              }))}
+                            >
+                              <span className="text-xs text-zinc-500">
+                                {pageExpanded ? '▾' : '▸'}
+                              </span>
+                              <span className="text-sm font-bold text-zinc-900">
+                                {page.title}
+                              </span>
+                              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-zinc-600 ring-1 ring-zinc-200">
+                                {pageSelectedCount}/{page.totalItems}
+                              </span>
+                            </button>
+
+                            <div className="flex items-center gap-3 text-[11px]">
+                              <button
+                                type="button"
+                                className="font-medium text-zinc-700 underline disabled:text-zinc-400"
+                                disabled={!selectedRole?.id || selectedRole.isSystem}
+                                onClick={() => {
+                                  selectPermissionKeys(pageKeys);
+                                }}
+                              >
+                                {t('selectAll')}
+                              </button>
+                              <button
+                                type="button"
+                                className="font-medium text-zinc-700 underline disabled:text-zinc-400"
+                                disabled={!selectedRole?.id || selectedRole.isSystem}
+                                onClick={() => {
+                                  clearPermissionKeys(pageKeys);
+                                }}
+                              >
+                                {t('clearSelection')}
+                              </button>
+                            </div>
+                          </div>
+
+                          {pageExpanded ? (
+                            <div className="space-y-2 p-3">
+                              {page.subpages.map((subpage) => {
+                                const subpageKeys = subpage.allKeys;
+                                const selectedCount = subpageKeys.filter(
+                                  (key) => isPermissionSelected(key)
+                                ).length;
+                                const subpageId = `${page.id}:${subpage.id}`;
+                                const subpageExpanded = Boolean(permQuery.trim()) ||
+                                  Boolean(expandedPermissionGroups[subpageId]);
+
+                                return (
+                                  <div
+                                    key={subpage.id}
+                                    className="overflow-hidden rounded-lg border border-zinc-200"
+                                  >
+                                    <div className="flex flex-wrap items-center justify-between gap-3 bg-white px-3 py-2">
+                                      <button
+                                        type="button"
+                                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                                        onClick={() => setExpandedPermissionGroups((prev) => ({
+                                          ...prev,
+                                          [subpageId]: !prev[subpageId],
+                                        }))}
+                                      >
+                                        <span className="text-xs text-zinc-500">
+                                          {subpageExpanded ? '▾' : '▸'}
+                                        </span>
+                                        <span className="text-sm font-semibold text-zinc-800">
+                                          {subpage.title}
+                                        </span>
+                                        <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600">
+                                          {selectedCount}/{subpage.totalItems}
+                                        </span>
+                                      </button>
+
+                                      {subpageKeys.length > 0 ? (
+                                        <div className="flex items-center gap-3 text-[11px]">
+                                          <button
+                                            type="button"
+                                            className="font-medium text-zinc-700 underline disabled:text-zinc-400"
+                                            disabled={!selectedRole?.id || selectedRole.isSystem}
+                                            onClick={() => {
+                                              selectPermissionKeys(subpageKeys);
+                                            }}
+                                          >
+                                            {t('selectAll')}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="font-medium text-zinc-700 underline disabled:text-zinc-400"
+                                            disabled={!selectedRole?.id || selectedRole.isSystem}
+                                            onClick={() => {
+                                              clearPermissionKeys(subpageKeys);
+                                            }}
+                                          >
+                                            {t('clearSelection')}
+                                          </button>
+                                        </div>
+                                      ) : null}
+                                    </div>
+
+                                    {subpageExpanded && subpage.items.length > 0 ? (
+                                      <div className="grid grid-cols-1 gap-2 border-t border-zinc-100 bg-zinc-50 p-3 sm:grid-cols-2 xl:grid-cols-3">
+                                        {subpage.items.map((permission) => (
+                                          <label
+                                            key={permission.id}
+                                            className="flex min-w-0 items-start gap-2 rounded-lg border border-zinc-200 bg-white p-3 hover:bg-zinc-50"
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              className="mt-0.5"
+                                              disabled={!selectedRole?.id || selectedRole.isSystem}
+                                              checked={isPermissionSelected(permission.key)}
+                                              onChange={(e) => {
+                                                togglePermission(permission.key, e.target.checked);
+                                              }}
+                                            />
+                                            <div className="min-w-0 flex-1">
+                                              <div className="text-sm font-medium text-zinc-900">
+                                                {permission.description || permission.key}
+                                              </div>
+                                              <div className="mt-0.5 break-all text-[11px] text-zinc-500">
+                                                {permission.key}
+                                              </div>
+                                            </div>
+                                          </label>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+
+
+          </div>
+        </div>
+      ) : null}
+
+      {showManageRoles ? (
+        <div className="ac-overlay-center">
+          <div className="my-auto max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_30px_80px_rgba(15,23,42,0.18)]">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-zinc-900">Manage Roles</div>
+                <div className="mt-1 text-xs text-zinc-500">Create custom roles for assigning permissions to users.</div>
+              </div>
+              <button
+                type="button"
+                className="ac-btn ac-btn-soft px-3 py-2 text-xs"
+                onClick={() => setShowManageRoles(false)}
+              >
+                {t('close')}
+              </button>
+            </div>
+              <div className="rounded-xl border border-zinc-200 p-3">
+                <div>
                   <div className="mb-2 text-xs font-semibold text-zinc-600">{t('createRole')}</div>
                   <input
                     value={newRoleName}
@@ -786,117 +1210,6 @@ export default function AdminUsers() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-zinc-200 p-3">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-xs font-semibold text-zinc-600">{t('permissions')}</div>
-                    <div className="mt-0.5 text-[11px] text-zinc-500">
-                      {selectedRole?.name ? t('selectedRole', { value: selectedRole.name }) : t('selectRole')}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      className="ac-btn ac-btn-soft px-3 py-2 text-xs"
-                      disabled={!selectedRole?.id}
-                      onClick={() => setSelectedPermissionKeys([])}
-                    >
-                      {t('clearSelection')}
-                    </button>
-                    <button
-                      type="button"
-                      className="ac-btn px-3 py-2 text-xs"
-                      disabled={!selectedRole?.id}
-                      onClick={async () => {
-                        const next = selectedPermissionKeys.filter((k) => visibleKeys.has(k));
-                        await setRolePermissions({ roleId: selectedRole.id, permissionKeys: Array.from(new Set(next)) });
-                        await fetchRoles();
-                      }}
-                    >
-                      {t('save')}
-                    </button>
-                  </div>
-                </div>
-
-                <input
-                  value={permQuery}
-                  onChange={(e) => setPermQuery(e.target.value)}
-                  placeholder={t('searchPermissions')}
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400"
-                />
-
-                <div className="mt-3 max-h-[55vh] overflow-auto rounded-xl border border-zinc-200 bg-white">
-                  {permissions.length === 0 ? (
-                    <div className="p-4 text-sm text-zinc-600">{t('loading')}</div>
-                  ) : permissionGroups.length === 0 ? (
-                    <div className="p-4 text-sm text-zinc-600">{t('noPermissionsFound')}</div>
-                  ) : (
-                    permissionGroups.map((g) => {
-                      const selectedCount = (Array.isArray(g.allKeys) ? g.allKeys : []).filter((k) => selectedPermissionKeys.includes(k)).length;
-                      return (
-                        <div key={g.id} className="border-b border-zinc-100 last:border-b-0">
-                          <div className="flex items-center justify-between gap-3 bg-zinc-50 px-4 py-3">
-                            <div className="text-xs font-semibold text-zinc-800">
-                              {t(g.titleKey)}
-                              <span className="ml-2 text-[11px] font-normal text-zinc-500">
-                                {selectedCount}/{g.totalItems}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 text-[11px]">
-                              <button
-                                type="button"
-                                className="underline text-zinc-700 disabled:text-zinc-400"
-                                disabled={!selectedRole?.id}
-                                onClick={() => {
-                                  const next = new Set(selectedPermissionKeys);
-                                  for (const k of Array.isArray(g.allKeys) ? g.allKeys : []) next.add(k);
-                                  setSelectedPermissionKeys(Array.from(next));
-                                }}
-                              >
-                                {t('selectAll')}
-                              </button>
-                              <button
-                                type="button"
-                                className="underline text-zinc-700 disabled:text-zinc-400"
-                                disabled={!selectedRole?.id}
-                                onClick={() => {
-                                  const next = new Set(selectedPermissionKeys);
-                                  for (const k of Array.isArray(g.allKeys) ? g.allKeys : []) next.delete(k);
-                                  setSelectedPermissionKeys(Array.from(next));
-                                }}
-                              >
-                                {t('clearSelection')}
-                              </button>
-                            </div>
-                          </div>
-                          <div className="divide-y divide-zinc-100">
-                            {g.items.map((p) => (
-                              <label key={p.id} className="flex items-start gap-2 px-4 py-3">
-                                <input
-                                  type="checkbox"
-                                  disabled={!selectedRole?.id}
-                                  checked={selectedPermissionKeys.includes(p.key)}
-                                  onChange={(e) => {
-                                    const next = new Set(selectedPermissionKeys);
-                                    if (e.target.checked) next.add(p.key);
-                                    else next.delete(p.key);
-                                    setSelectedPermissionKeys(Array.from(next));
-                                  }}
-                                />
-                                <div className="min-w-0">
-                                  <div className="text-sm font-medium text-zinc-900">{p.description || p.key}</div>
-                                  <div className="mt-0.5 text-[11px] text-zinc-500">{p.key}</div>
-                                </div>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       ) : null}

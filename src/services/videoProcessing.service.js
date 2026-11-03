@@ -80,6 +80,64 @@ function posterRelUrlForAsset(asset) {
   return `/uploads/media/${orgId}/${base}-poster.jpg`;
 }
 
+
+async function generatePosterForAsset({ mediaAssetId }) {
+  const id = Number(mediaAssetId);
+  if (!Number.isFinite(id) || id <= 0) throw new Error('invalid_media_asset_id');
+
+  const asset = await prisma.mediaAsset.findFirst({ where: { id } });
+  if (!asset) throw new Error('media_asset_not_found');
+
+  if (!String(asset.mimeType || '').toLowerCase().startsWith('video/')) {
+    return asset;
+  }
+
+  const root = pickWritableUploadRoot();
+  const posterRel = posterRelUrlForAsset(asset);
+  if (!posterRel) throw new Error('invalid_video_poster_path');
+
+  const videoAbs = path.join(
+    root,
+    'media',
+    String(asset.organizationId),
+    String(asset.fileName || '')
+  );
+  const videoStat = await fileStatSafe(videoAbs);
+  if (!videoStat) throw new Error('source_missing');
+
+  const posterAbs = path.join(root, posterRel.replace(/^\/uploads\//, ''));
+  const posterTmp = `${posterAbs}.tmp-${process.pid}-${randHex(8)}.jpg`;
+
+  try {
+    await fs.mkdir(path.dirname(posterAbs), { recursive: true });
+    await run(ffmpegBin(), [
+      '-y',
+      '-i', videoAbs,
+      '-ss', '00:00:00.500',
+      '-frames:v', '1',
+      '-q:v', '3',
+      posterTmp
+    ], { timeoutMs: 120000 });
+
+    const posterStat = await fileStatSafe(posterTmp);
+    if (!posterStat || posterStat.size <= 0) {
+      throw new Error('video_poster_empty');
+    }
+
+    await replaceFile(posterTmp, posterAbs);
+
+    return await prisma.mediaAsset.update({
+      where: { id },
+      data: { posterUrl: posterRel }
+    });
+  } catch (e) {
+    try {
+      await fs.unlink(posterTmp);
+    } catch {}
+    throw e;
+  }
+}
+
 async function transcodeOne({ mediaAssetId }) {
   const id = Number(mediaAssetId);
   if (!Number.isFinite(id) || id <= 0) throw new Error('invalid_media_asset_id');
@@ -202,5 +260,6 @@ jobQueue.registerHandler('transcode_video', async ({ mediaAssetId }) => {
 });
 
 module.exports = {
-  transcodeOne
+  transcodeOne,
+  generatePosterForAsset
 };

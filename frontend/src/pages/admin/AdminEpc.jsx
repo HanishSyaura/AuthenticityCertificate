@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useEpcStore from '../../store/useEpcStore';
 import useAdminAuthStore from '../../store/useAdminAuthStore';
 import useRecordsStore from '../../store/useRecordsStore';
@@ -16,13 +16,9 @@ import EpcDynamicEntryGrid from '../../components/admin/epc/EpcDynamicEntryGrid'
 import { hasPermission } from '../../utils/permissions';
 import { resolvePublicMediaUrl } from '../../utils/apiBase';
 import { sortRows } from '../../utils/tableSort';
+import { formatDateTimeMY } from '../../utils/dateTime';
 
-function formatDateTime(input) {
-  if (!input) return '';
-  const d = new Date(input);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toISOString().slice(0, 19).replace('T', ' ');
-}
+const formatDateTime = formatDateTimeMY;
 
 function formatNetWeight(value) {
   if (value === null || value === undefined) return '-';
@@ -251,6 +247,7 @@ export default function AdminEpc() {
   const canBatchView = allow('epc.read', 'epc.write', 'epc.batch.view', 'epc.production.access', 'epc.batch_import.access');
   const canExportXlsx = allow('epc.write', 'epc.export.xlsx', 'epc.production.access', 'epc.batch_import.access');
   const canEncoding = allow('epc.write', 'epc.encoding');
+  const canDeleteBatch = allow('epc.delete');
   const canDelete = useMemo(() => {
     if (role === 'super_admin' || hasPermission(perms, '*')) return true;
     return hasPermission(perms, 'epc.delete') && hasPermission(perms, 'epc.cleanup.delete');
@@ -288,6 +285,9 @@ export default function AdminEpc() {
     exportBatchXlsxCustom,
     exportItemsXlsx,
     deleteItems,
+    deleteBatch,
+    unassignAssignment,
+    bulkUnassignImportHistory,
     deleteAllGeneratedBatches,
     fetchDynamicFields,
     createDynamicField,
@@ -319,6 +319,9 @@ export default function AdminEpc() {
     markProductionDone: s.markProductionDone,
     exportItemsXlsx: s.exportItemsXlsx,
     deleteItems: s.deleteItems,
+    deleteBatch: s.deleteBatch,
+    unassignAssignment: s.unassignAssignment,
+    bulkUnassignImportHistory: s.bulkUnassignImportHistory,
     deleteAllGeneratedBatches: s.deleteAllGeneratedBatches,
     fetchDynamicFields: s.fetchDynamicFields,
     createDynamicField: s.createDynamicField,
@@ -328,7 +331,7 @@ export default function AdminEpc() {
     updateBatch: s.updateBatch
   }));
 
-  const { products, fetchProducts } = useRecordsStore((s) => ({ products: s.products, fetchProducts: s.fetchProducts }));
+  const { products, customers, suppliers, fetchProducts, fetchCustomers, fetchSuppliers } = useRecordsStore((s) => ({ products: s.products, customers: s.customers, suppliers: s.suppliers, fetchProducts: s.fetchProducts, fetchCustomers: s.fetchCustomers, fetchSuppliers: s.fetchSuppliers }));
   const { templates, fetchTemplates } = useCertTemplatesStore((s) => ({ templates: s.templates, fetchTemplates: s.fetchTemplates }));
   const { uploadMedia } = useUploadsStore((s) => ({ uploadMedia: s.uploadMedia }));
   const { updateCertificate, bulkAssignLandingDesign, assignIdentity } = useCertificatesStore((s) => ({
@@ -419,6 +422,8 @@ export default function AdminEpc() {
   const [rangePreview, setRangePreview] = useState(null);
   const [rangeSelectedEpcs, setRangeSelectedEpcs] = useState(() => new Set());
   const [rangeProductId, setRangeProductId] = useState('');
+  const [rangeCustomerId, setRangeCustomerId] = useState('');
+  const [rangeSupplierId, setRangeSupplierId] = useState('');
   const [rangeAuthTemplateId, setRangeAuthTemplateId] = useState('');
   const [rangeCmsDesignId, setRangeCmsDesignId] = useState('');
   const [rangeDocRows, setRangeDocRows] = useState(() => []);
@@ -432,6 +437,7 @@ export default function AdminEpc() {
   const [importHistoryOffset, setImportHistoryOffset] = useState(0);
   const [importHistoryLimit, setImportHistoryLimit] = useState(20);
   const [selectedImportHistoryIds, setSelectedImportHistoryIds] = useState(() => new Set());
+  const [bulkUnassigning, setBulkUnassigning] = useState(false);
   const [importHistorySort, setImportHistorySort] = useState(null);
   const [importHistoryDetailSort, setImportHistoryDetailSort] = useState(null);
   const [importHistoryOpen, setImportHistoryOpen] = useState(false);
@@ -558,6 +564,121 @@ export default function AdminEpc() {
     setDetailItem(null);
   }, []);
 
+  const handleUnassignAssignment = useCallback(async (item) => {
+    if (!item?.id) return;
+
+    const epcCode = String(item.epcCode || '');
+    if (!window.confirm(`Delete the assignment for EPC ${epcCode}? The EPC item and certificate will remain.`)) {
+      return;
+    }
+
+    const result = await unassignAssignment(item.id);
+    if (!result) {
+      window.alert('Unable to clear EPC assignment. Please check the error message.');
+      return;
+    }
+
+    setDetailItem((current) =>
+      current?.id === item.id
+        ? { ...current, assignmentClearedAt: result.assignmentClearedAt, identities: [], status: 'INACTIVE' }
+        : current
+    );
+
+    await fetchItems({
+      q: listQuery,
+      status: listStatus || undefined,
+      createdFrom: createdFrom || undefined,
+      createdTo: createdTo || undefined,
+      batchId: String(listBatchId || '').trim() || undefined,
+      limit: listLimit,
+      offset: listOffset
+    });
+
+    window.alert('EPC assignment cleared successfully.');
+  }, [unassignAssignment, fetchItems, listQuery, listStatus, createdFrom, createdTo, listBatchId, listLimit, listOffset]);
+
+  const handleBulkUnassignImportHistory = useCallback(async () => {
+    const historyIds = Array.from(selectedImportHistoryIds)
+      .map(Number)
+      .filter((id) => Number.isInteger(id) && id > 0);
+
+    if (!historyIds.length || bulkUnassigning) return;
+
+    const confirmed = window.confirm(
+      `Clear EPC assignments from ${historyIds.length} selected history record(s)? EPC master records, certificates, batches and assignment history records will remain.`
+    );
+    if (!confirmed) return;
+
+    setBulkUnassigning(true);
+    try {
+      const result = await bulkUnassignImportHistory(historyIds);
+      if (!result) {
+        window.alert('Unable to clear the selected EPC assignments. Please check the error message.');
+        return;
+      }
+
+      setSelectedImportHistoryIds(new Set());
+
+      const data = await fetchBatchImportHistory({
+        limit: importHistoryLimit,
+        offset: importHistoryOffset
+      });
+      setImportHistory(Array.isArray(data?.items) ? data.items : []);
+      setImportHistoryTotal(Number(data?.total) || 0);
+
+      window.alert(
+        `EPC assignment clearing completed.\n` +
+        `Selected history records: ${result.selectedHistoryCount ?? historyIds.length}\n` +
+        `EPCs found: ${result.totalEpcs ?? 0}\n` +
+        `Assignments cleared: ${result.cleared ?? 0}\n` +
+        `Already cleared: ${result.alreadyCleared ?? 0}\n` +
+        `EPCs not found: ${result.missing ?? 0}`
+      );
+    } finally {
+      setBulkUnassigning(false);
+    }
+  }, [
+    selectedImportHistoryIds,
+    bulkUnassigning,
+    bulkUnassignImportHistory,
+    fetchBatchImportHistory,
+    importHistoryLimit,
+    importHistoryOffset
+  ]);
+
+  const handleUnassignImportEpc = useCallback(async (row) => {
+    const epcCode = String(row?.epcCode || '').trim();
+    if (!epcCode || row?.assignmentClearedAt) return;
+
+    if (!window.confirm(`Delete the assignment for EPC ${epcCode}? The EPC item and certificate will remain.`)) {
+      return;
+    }
+
+    const result = await unassignAssignment(epcCode);
+    if (!result) {
+      window.alert('Unable to clear EPC assignment. Please check the error message.');
+      return;
+    }
+
+    setImportHistoryDetail((current) => {
+      if (!current || !Array.isArray(current.metadata?.items)) return current;
+
+      return {
+        ...current,
+        metadata: {
+          ...current.metadata,
+          items: current.metadata.items.map((item) =>
+            String(item?.epcCode || '').trim() === epcCode
+              ? { ...item, assignmentClearedAt: result.assignmentClearedAt || new Date().toISOString() }
+              : item
+          )
+        }
+      };
+    });
+
+    window.alert(`Assignment cleared for EPC ${epcCode}.`);
+  }, [unassignAssignment]);
+
   const openExportCols = useCallback(
     (b) => {
       const batch = b || null;
@@ -612,6 +733,8 @@ export default function AdminEpc() {
     setRangePreview(null);
     setRangeSelectedEpcs(new Set());
     setRangeProductId('');
+    setRangeCustomerId('');
+    setRangeSupplierId('');
     setRangeAuthTemplateId('');
     setRangeCmsDesignId('');
     setRangeDocRows([]);
@@ -692,10 +815,16 @@ export default function AdminEpc() {
     setRangeSelectedEpcs(new Set());
     setRangeDocRows([]);
     setRangeDocUploading({});
+    setRangeCustomerId('');
+    setRangeSupplierId('');
     setRangeAuthTemplateId('');
     setRangeCmsDesignId('');
     await fetchTemplates({ lang: 'en' });
-    await fetchProducts({ status: 'all' });
+    await Promise.all([
+      fetchProducts({ status: 'all' }),
+      fetchCustomers(),
+      fetchSuppliers()
+    ]);
     if (!Array.isArray(cmsDesigns) || cmsDesigns.length === 0) {
       try {
         await cmsFetchDesigns();
@@ -703,7 +832,7 @@ export default function AdminEpc() {
         /* ignore */
       }
     }
-  }, [cmsDesigns, cmsFetchDesigns, corpCodes, fetchProducts, fetchTemplates, rangeCorpCode]);
+  }, [cmsDesigns, cmsFetchDesigns, corpCodes, fetchCustomers, fetchProducts, fetchSuppliers, fetchTemplates, rangeCorpCode]);
 
   const resolveBatchAuthCertificate = useCallback(
     (batch) => {
@@ -810,6 +939,7 @@ export default function AdminEpc() {
   }, [cmsFetchDesigns]);
 
   function resolveEpcCertificateId(it) {
+    if (it?.assignmentClearedAt) return '';
     const idents = Array.isArray(it?.identities) ? it.identities : [];
     if (idents.length > 0 && idents[0].certificateId) return String(idents[0].certificateId);
     if (it?.batch?.certificateId) return String(it.batch.certificateId);
@@ -992,7 +1122,7 @@ export default function AdminEpc() {
                 key: 'landing',
                 label: 'Reassign Landing Page',
                 onSelect: () => openLandingFromItem(it)
-              }
+              },
             ]}
           />
         ),
@@ -1195,9 +1325,26 @@ export default function AdminEpc() {
           const values = r?.dynamicFields && typeof r.dynamicFields === 'object' && !Array.isArray(r.dynamicFields) ? r.dynamicFields : {};
           return <span className="text-sm text-slate-700">{formatDynamicFieldDisplay(values?.[field.fieldKey])}</span>;
         }
-      }))
+      })),
+      {
+        id: 'assignment_action',
+        header: 'Assignment Action',
+        minWidth: 170,
+        cell: (r) =>
+          r?.assignmentClearedAt ? (
+            <span className="text-xs font-medium text-slate-500">Assignment Cleared</span>
+          ) : (
+            <button
+              type="button"
+              className="ac-btn ac-btn-danger px-3 py-2 text-xs"
+              onClick={() => handleUnassignImportEpc(r)}
+            >
+              Delete Assignment
+            </button>
+          )
+      }
     ],
-    [importHistoryDetailFieldSchema, t]
+    [handleUnassignImportEpc, importHistoryDetailFieldSchema, t]
   );
   const sortedImportHistoryDetailRows = useMemo(
     () => sortRows(importHistoryDetailRows, importHistoryDetailSort, importHistoryDetailColumns),
@@ -1215,6 +1362,36 @@ export default function AdminEpc() {
     () => productionRowIds.length > 0 && productionRowIds.every((id) => selectedProductionIds.has(id)),
     [productionRowIds, selectedProductionIds]
   );
+
+  const handleDeleteSelectedProductionBatches = useCallback(async () => {
+    const ids = Array.from(selectedProductionIds)
+      .map(Number)
+      .filter((id) => Number.isInteger(id) && id > 0);
+
+    if (!ids.length) return;
+
+    if (!window.confirm(
+      `Delete ${ids.length} selected batch(es)? All EPC items and related batch data will be permanently deleted. This action cannot be undone.`
+    )) return;
+
+    let deleted = 0;
+    const failed = [];
+
+    for (const batchId of ids) {
+      const success = await deleteBatch({ batchId });
+      if (success) deleted++;
+      else failed.push(batchId);
+    }
+
+    setSelectedProductionIds(new Set());
+
+    await fetchBatches({ q: '', origin: undefined, limit: 50, offset: 0 });
+
+    window.alert(
+      `Batch deletion completed.\\nDeleted: ${deleted}\\nFailed: ${failed.length}` +
+      (failed.length ? `\\nFailed batch IDs: ${failed.join(', ')}` : '')
+    );
+  }, [selectedProductionIds, deleteBatch, fetchBatches]);
 
   const productionColumns = useMemo(
     () =>
@@ -1603,14 +1780,14 @@ export default function AdminEpc() {
             {t('epcAssignment')}
           </TabButton>
         ) : null}
-        {canProduction ? (
-          <TabButton active={tab === 'production'} onClick={() => setTab('production')}>
-            {t('labelProductionRecord')}
-          </TabButton>
-        ) : null}
         {canManageDynamicFields ? (
           <TabButton active={tab === 'fields'} onClick={() => setTab('fields')}>
             {t('batchFields')}
+          </TabButton>
+        ) : null}
+        {canProduction ? (
+          <TabButton active={tab === 'production'} onClick={() => setTab('production')}>
+            {t('labelProductionRecord')}
           </TabButton>
         ) : null}
       </div>
@@ -1969,15 +2146,17 @@ export default function AdminEpc() {
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
-              <button
-                type="button"
-                className="ac-btn px-4 py-2 text-sm"
-                onClick={() => openLandingFromItem(detailItem)}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="ac-btn px-4 py-2 text-sm"
+                  onClick={() => openLandingFromItem(detailItem)}
                 disabled={!resolveEpcCertificateId(detailItem)}
                 title={!resolveEpcCertificateId(detailItem) ? 'EPC belum dikaitkan dengan Certificate Identity' : ''}
-              >
-                Reassign Landing Page
-              </button>
+                >
+                  Reassign Landing Page
+                </button>
+              </div>
               <button type="button" className="ac-btn ac-btn-soft px-4 py-2 text-sm" onClick={closeDetail}>
                 {t('close')}
               </button>
@@ -2298,6 +2477,14 @@ export default function AdminEpc() {
               <button type="button" className="ac-btn ac-btn-primary px-3 py-2 text-xs" disabled={loading} onClick={() => openImport(null)}>
                 {t('importBatchFile')}
               </button>
+              <button
+                type="button"
+                className="ac-btn ac-btn-danger px-3 py-2 text-xs"
+                onClick={handleBulkUnassignImportHistory}
+                disabled={selectedImportHistoryIds.size === 0 || bulkUnassigning}
+              >
+                {bulkUnassigning ? 'Clearing...' : `Delete Assignment (${selectedImportHistoryIds.size})`}
+              </button>
             </>
           }
         >
@@ -2339,8 +2526,9 @@ export default function AdminEpc() {
                   </div>
                 }
                 top={
-                  <div>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="text-sm font-semibold text-slate-900">{t('importHistory')}</div>
+
                   </div>
                 }
                 bottom={
@@ -2988,6 +3176,18 @@ export default function AdminEpc() {
           badge={t('labelProductionRecord')}
           title={t('labelProductionRecord')}
           hint={`${t('exportXlsx')} • ${t('importXlsx')} • ${t('markDone')}`}
+          action={
+            canDeleteBatch ? (
+              <button
+                type="button"
+                className="ac-btn ac-btn-danger px-3 py-2 text-xs"
+                onClick={handleDeleteSelectedProductionBatches}
+                disabled={selectedProductionIds.size === 0 || loading}
+              >
+                {`Delete Batch (${selectedProductionIds.size})`}
+              </button>
+            ) : null
+          }
         >
           <DataTable
             sortState={productionSort}
@@ -3036,8 +3236,8 @@ export default function AdminEpc() {
                 <div className="mb-3 text-sm font-semibold text-slate-900">{t('batchInformation')}</div>
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
                   <div>
-                    <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('product')}</div>
-                    <select value={rangeProductId} onChange={(e) => setRangeProductId(e.target.value)} className="ac-input">
+                    <label htmlFor="range-product-id" className="mb-1 block text-[11px] font-semibold text-zinc-600">{t('product')}</label>
+                    <select id="range-product-id" name="rangeProductId" value={rangeProductId} onChange={(e) => setRangeProductId(e.target.value)} className="ac-input">
                       <option value="">{t('select')}</option>
                       {(Array.isArray(products) ? products : []).map((p) => (
                         <option key={p.id} value={String(p.id)}>
@@ -3050,8 +3250,10 @@ export default function AdminEpc() {
                   </div>
 
                   <div>
-                    <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('authCertificate')}</div>
+                    <label htmlFor="range-auth-template-id" className="mb-1 block text-[11px] font-semibold text-zinc-600">{t('authCertificate')}</label>
                     <select
+                      id="range-auth-template-id"
+                      name="rangeAuthTemplateId"
                       value={rangeAuthTemplateId}
                       onChange={(e) => {
                         setRangeAuthTemplateId(e.target.value);
@@ -3070,8 +3272,10 @@ export default function AdminEpc() {
                   </div>
 
                   <div>
-                    <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('landingPageDesign')}</div>
+                    <label htmlFor="range-cms-design-id" className="mb-1 block text-[11px] font-semibold text-zinc-600">{t('landingPageDesign')}</label>
                     <select
+                      id="range-cms-design-id"
+                      name="rangeCmsDesignId"
                       value={rangeCmsDesignId}
                       onChange={(e) => setRangeCmsDesignId(e.target.value)}
                       className="ac-input"
@@ -3083,6 +3287,37 @@ export default function AdminEpc() {
                           {String(d.name || `Design #${d.id}`)}
                         </option>
                       ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="range-customer-id" className="mb-1 block text-[11px] font-semibold text-zinc-600">Customer (optional)</label>
+                    <select id="range-customer-id" name="rangeCustomerId" value={rangeCustomerId} onChange={(e) => setRangeCustomerId(e.target.value)} className="ac-input">
+                      <option value="">{t('selectCustomer')}</option>
+                      {(Array.isArray(customers) ? customers : [])
+                        .filter((c) => String(c?.status || 'Active').toLowerCase() === 'active' && !c?.deletedAt)
+                        .map((c) => (
+                          <option key={c.id} value={String(c.id)}>
+                            {String(c?.customerCode || '').trim()
+                              ? `${String(c.customerCode).trim()} — ${String(c?.customerName || '').trim() || '-'}`
+                              : String(c?.customerName || '').trim() || '-'}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="range-supplier-id" className="mb-1 block text-[11px] font-semibold text-zinc-600">Supplier (optional)</label>
+                    <select id="range-supplier-id" name="rangeSupplierId" value={rangeSupplierId} onChange={(e) => setRangeSupplierId(e.target.value)} className="ac-input">
+                      <option value="">{t('selectSupplier')}</option>
+                      {(Array.isArray(suppliers) ? suppliers : [])
+                        .filter((s) => String(s?.status || 'Active').toLowerCase() === 'active' && !s?.deletedAt)
+                        .map((s) => (
+                          <option key={s.id} value={String(s.id)}>
+                            {String(s?.supplierCode || '').trim()
+                              ? `${String(s.supplierCode).trim()} — ${String(s?.supplierName || '').trim() || '-'}`
+                              : String(s?.supplierName || '').trim() || '-'}
+                          </option>
+                        ))}
                     </select>
                   </div>
                 </div>
@@ -3449,6 +3684,8 @@ export default function AdminEpc() {
                         return acc;
                       }, {}),
                       productId: String(rangeProductId || '').trim(),
+                      customerId: String(rangeCustomerId || '').trim() || undefined,
+                      supplierId: String(rangeSupplierId || '').trim() || undefined,
                       certificateTemplateId: String(rangeAuthTemplateId || '').trim() || undefined,
                       documents
                     });
@@ -3629,8 +3866,8 @@ export default function AdminEpc() {
               </div>
 
               <div>
-                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('product')}</div>
-                <select value={importProductId} onChange={(e) => setImportProductId(e.target.value)} className="ac-input">
+                <label htmlFor="import-product-id" className="mb-1 block text-[11px] font-semibold text-zinc-600">{t('product')}</label>
+                <select id="import-product-id" name="importProductId" value={importProductId} onChange={(e) => setImportProductId(e.target.value)} className="ac-input">
                   <option value="">{t('select')}</option>
                   {(Array.isArray(products) ? products : []).map((p) => (
                     <option key={p.id} value={String(p.id)}>
@@ -3643,8 +3880,8 @@ export default function AdminEpc() {
               </div>
 
               <div>
-                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('authCertificate')}</div>
-                <select value={importAuthTemplateId} onChange={(e) => setImportAuthTemplateId(e.target.value)} className="ac-input">
+                <label htmlFor="import-auth-template-id" className="mb-1 block text-[11px] font-semibold text-zinc-600">{t('authCertificate')}</label>
+                <select id="import-auth-template-id" name="importAuthTemplateId" value={importAuthTemplateId} onChange={(e) => setImportAuthTemplateId(e.target.value)} className="ac-input">
                   <option value="">{t('select')}</option>
                   {authTemplates.map((tpl) => (
                     <option key={tpl.id} value={String(tpl.id)}>
@@ -3655,8 +3892,10 @@ export default function AdminEpc() {
               </div>
 
               <div>
-                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('landingPageDesign')}</div>
+                <label htmlFor="import-cms-design-id" className="mb-1 block text-[11px] font-semibold text-zinc-600">{t('landingPageDesign')}</label>
                 <select
+                  id="import-cms-design-id"
+                  name="importCmsDesignId"
                   value={importCmsDesignId}
                   onChange={(e) => setImportCmsDesignId(e.target.value)}
                   className="ac-input"

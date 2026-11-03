@@ -21,6 +21,7 @@ function resolveMessage(error) {
 const pageSchema = z.object({
   name: z.string().min(1),
   slug: z.string().min(1),
+  description: z.string().optional().nullable(),
   kind: z.string().optional(),
   metaTitle: z.string().optional(),
   metaDescription: z.string().optional(),
@@ -40,6 +41,10 @@ const fillEmptySchema = z.object({
 
 const publishSchema = z.object({
   pageId: z.number().int()
+});
+
+const renamePageSchema = z.object({
+  name: z.string().trim().min(1).max(120)
 });
 
 const metaSchema = z.object({
@@ -66,7 +71,8 @@ const designPatchSchema = z.object({
   name: z.string().min(1).optional(),
   slug: z.string().min(1).optional(),
   kind: z.string().optional(),
-  description: z.string().optional().nullable()
+  description: z.string().optional().nullable(),
+  logoUrl: z.string().max(512).optional().nullable()
 });
 
 async function listDesigns(req, res) {
@@ -173,6 +179,21 @@ async function publish(req, res) {
   }
 }
 
+async function renamePage(req, res) {
+  try {
+    const { id } = req.params;
+    const { name } = renamePageSchema.parse(req.body || {});
+    const updated = await cmsService.renamePage({
+      organizationId: req.organization.id,
+      pageId: id,
+      name
+    });
+    res.success(updated, 'CMS Page renamed successfully');
+  } catch (error) {
+    res.error(resolveMessage(error), resolveStatus(error, 400));
+  }
+}
+
 async function updateMeta(req, res) {
   try {
     const { id } = req.params;
@@ -254,11 +275,78 @@ async function reorderPages(req, res) {
   }
 }
 
+
+async function exportDesign(req, res) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      return res.error('Invalid design ID', 400);
+    }
+
+    const payload = await cmsService.exportDesign({
+      organizationId: req.organization.id,
+      id
+    });
+    return res.success(payload, 'Design exported successfully');
+  } catch (error) {
+    return res.error(resolveMessage(error), resolveStatus(error, 400));
+  }
+}
+
+async function duplicateDesign(req, res) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      return res.error('Invalid design ID', 400);
+    }
+
+    const name = req.body?.name;
+    if (name !== undefined && (typeof name !== 'string' || !name.trim() || name.length > 160)) {
+      return res.error('Design name must be 1–160 characters', 400);
+    }
+
+    const design = await cmsService.duplicateDesign({
+      organizationId: req.organization.id,
+      id,
+      name: typeof name === 'string' ? name.trim() : undefined
+    });
+    return res.success(design, 'Design duplicated as draft successfully');
+  } catch (error) {
+    return res.error(resolveMessage(error), resolveStatus(error, 400));
+  }
+}
+
+async function importDesign(req, res) {
+  try {
+    const payload = req.body?.payload;
+    const name = req.body?.name;
+    const slug = req.body?.slug;
+
+    if (name !== undefined && (typeof name !== 'string' || !name.trim() || name.length > 160)) {
+      return res.error('Design name must be 1–160 characters', 400);
+    }
+    if (slug !== undefined && (typeof slug !== 'string' || !slug.trim() || slug.length > 160)) {
+      return res.error('Design slug must be 1–160 characters', 400);
+    }
+
+    const design = await cmsService.importDesign({
+      organizationId: req.organization.id,
+      payload,
+      name: typeof name === 'string' ? name.trim() : undefined,
+      slug: typeof slug === 'string' ? slug.trim() : undefined
+    });
+    return res.success(design, 'Design imported as draft successfully');
+  } catch (error) {
+    return res.error(resolveMessage(error), resolveStatus(error, 400));
+  }
+}
+
 module.exports = {
   createPage,
   saveLayout,
   publish,
   updateMeta,
+  renamePage,
   getPage,
   fillEmptyTranslation,
   listPages,
@@ -269,4 +357,7 @@ module.exports = {
   patchDesign,
   removeDesign,
   materializeDefaultDesign,
+  exportDesign,
+  duplicateDesign,
+  importDesign,
 };

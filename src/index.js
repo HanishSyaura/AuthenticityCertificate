@@ -276,7 +276,15 @@ app.use(
     }
   })
 );
-app.use(express.json());
+app.use((req, res, next) => {
+  const isCmsDesignImport =
+    req.method === 'POST' &&
+    ['/cms/design/import', '/api/cms/design/import'].includes(req.path);
+
+  return express.json({
+    limit: isCmsDesignImport ? '6mb' : '100kb'
+  })(req, res, next);
+});
 
 const dbInit = { ready: false, error: null, promise: null, lastAttemptAt: 0 };
 

@@ -1,10 +1,13 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {useEffect, useMemo, useRef, useState, useCallback} from 'react';
 import useCmsStore from '../../store/useCmsStore';
+import useUploadsStore from '../../store/useUploadsStore';
 import useCertTemplatesStore from '../../store/useCertTemplatesStore';
 import CmsPagePanel from '../../components/admin/cms/CmsPagePanel';
 import CmsCanvasPanel from '../../components/admin/cms/CmsCanvasPanel';
 import CmsInspectorPanel from '../../components/admin/cms/CmsInspectorPanel';
 import { useT } from '../../i18n/useT';
+import useAdminAuthStore from '../../store/useAdminAuthStore';
+import { createAdminApi } from '../../utils/adminApi';
 
 function getRect(block, mode) {
   const src = mode && block && typeof block === 'object' ? block[mode] || block : block;
@@ -63,6 +66,48 @@ function composeLayouts({ pages, layoutsByPageKey, language }) {
 
 export default function AdminCmsBuilder() {
   const { t } = useT();
+  const adminToken = useAdminAuthStore((s) => s.token);
+  const uploadMedia = useUploadsStore((s) => s.uploadMedia);
+  const [supportingDocumentTypes, setSupportingDocumentTypes] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!adminToken) {
+      setSupportingDocumentTypes([]);
+      return () => {
+        active = false;
+      };
+    }
+
+    const api = createAdminApi({ token: adminToken });
+
+    api.get('/epc/supporting-document-types')
+      .then((response) => {
+        const payload = response?.data?.data;
+        const types = Array.isArray(payload?.docTypes)
+          ? payload.docTypes
+          : Array.isArray(payload)
+            ? payload
+            : [];
+
+        if (active) {
+          setSupportingDocumentTypes(
+            types
+              .map((item) => String(item?.docType ?? item ?? '').trim().replace(/\s+/g, ' '))
+              .filter(Boolean)
+          );
+        }
+      })
+      .catch(() => {
+        // Keep the legacy CMS choices available if the request fails.
+        if (active) setSupportingDocumentTypes([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [adminToken]);
   const {
     designs,
     selectedDesignId,
@@ -78,6 +123,7 @@ export default function AdminCmsBuilder() {
     selectPage,
     fetchPages,
     createPage,
+    renamePage,
     loadLayoutForPage,
     saveLayout,
     publishPage,
@@ -102,6 +148,7 @@ export default function AdminCmsBuilder() {
     selectPage: s.selectPage,
     fetchPages: s.fetchPages,
     createPage: s.createPage,
+    renamePage: s.renamePage,
     loadLayoutForPage: s.loadLayoutForPage,
     saveLayout: s.saveLayout,
     publishPage: s.publishPage,
@@ -125,6 +172,8 @@ export default function AdminCmsBuilder() {
 
   // Design panel UI state
   const [designsOpen, setDesignsOpen] = useState(true);
+  const [designListPage, setDesignListPage] = useState(1);
+  const designsPerPage = 5;
   const [designNewName, setDesignNewName] = useState('');
   const [designNewSlug, setDesignNewSlug] = useState('');
   const [designNewDesc, setDesignNewDesc] = useState('');
@@ -137,6 +186,102 @@ export default function AdminCmsBuilder() {
   const [designDefaultRenameName, setDesignDefaultRenameName] = useState('');
   const [designDefaultRenameSlug, setDesignDefaultRenameSlug] = useState('');
   const [designDefaultRenameDesc, setDesignDefaultRenameDesc] = useState('');
+
+  const designFileInputRef = useRef(null);
+  const designLogoInputRef = useRef(null);
+  const [designLogoUploading, setDesignLogoUploading] = useState(false);
+  const [designActionId, setDesignActionId] = useState(null);
+  const [designImporting, setDesignImporting] = useState(false);
+
+  async function handleDuplicateDesign(design) {
+    if (!adminToken || !design?.id || designActionId !== null) return;
+    setDesignActionId(design.id);
+    try {
+      const api = createAdminApi({ token: adminToken });
+      const response = await api.post(
+        `/cms/design/${encodeURIComponent(design.id)}/duplicate`,
+        {}
+      );
+      const created = response?.data?.data;
+      if (!created?.id) throw new Error('Server did not return the duplicated design ID.');
+      await fetchDesigns({ kind: 'landing' });
+      setSelectedDesignId(created.id);
+    } catch (error) {
+      window.alert(error?.response?.data?.message || error?.message || 'Unable to duplicate design.');
+    } finally {
+      setDesignActionId(null);
+    }
+  }
+
+  async function handleExportDesign(design) {
+    if (!adminToken || !design?.id || designActionId !== null) return;
+    setDesignActionId(design.id);
+    try {
+      const api = createAdminApi({ token: adminToken });
+      const response = await api.get(`/cms/design/${encodeURIComponent(design.id)}/export`);
+      const payload = response?.data?.data;
+      if (payload?.format !== 'cms-design-export') {
+        throw new Error('Invalid design export returned by the server.');
+      }
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: 'application/json;charset=utf-8'
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${String(design.slug || design.name || 'cms-design')
+        .replace(/[^a-zA-Z0-9_-]+/g, '-')}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      window.alert(error?.response?.data?.message || error?.message || 'Unable to export design.');
+    } finally {
+      setDesignActionId(null);
+    }
+  }
+
+  async function handleImportDesignFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !adminToken || designImporting) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      window.alert('JSON file exceeds 5 MB. Please choose a smaller file.');
+      return;
+    }
+
+    setDesignImporting(true);
+    try {
+      const payload = JSON.parse(await file.text());
+      if (
+        payload?.format !== 'cms-design-export' ||
+        payload?.version !== 1 ||
+        !payload?.design ||
+        !Array.isArray(payload?.pages)
+      ) {
+        throw new Error('This is not a supported CMS design JSON export.');
+      }
+
+      const api = createAdminApi({ token: adminToken });
+      const response = await api.post('/cms/design/import', { payload });
+      const created = response?.data?.data;
+      if (!created?.id) throw new Error('Server did not return the imported design ID.');
+      await fetchDesigns({ kind: 'landing' });
+      setSelectedDesignId(created.id);
+    } catch (error) {
+      const status = error?.response?.status;
+      const message = status === 413
+        ? 'The server rejected this file because the request is too large. The server JSON body limit may need adjustment.'
+        : (error?.response?.data?.message || error?.message || 'Unable to import design JSON.');
+      window.alert(message);
+    } finally {
+      setDesignImporting(false);
+    }
+  }
+
 
   const [pagesOpen, setPagesOpen] = useState(() => {
     try {
@@ -168,6 +313,12 @@ export default function AdminCmsBuilder() {
   );
 
   const safeDesigns = useMemo(() => (Array.isArray(designs) ? designs.filter((d) => d && d.id != null) : []), [designs]);
+  const totalDesignPages = Math.max(1, Math.ceil(safeDesigns.length / designsPerPage));
+  const safeDesignListPage = Math.min(designListPage, totalDesignPages);
+  const visibleDesigns = safeDesigns.slice(
+    (safeDesignListPage - 1) * designsPerPage,
+    safeDesignListPage * designsPerPage
+  );
   const hasDesigns = safeDesigns.length > 0;
   const hasSelectedDesign = useMemo(
     () => safeDesigns.some((d) => String(d.id) === String(selectedDesignId)),
@@ -308,7 +459,7 @@ export default function AdminCmsBuilder() {
     }
   };
 
-  const setLayout = (next) => {
+  const setLayout = useCallback((next) => {
     if (!selectedPageId) return;
     const seq = (saveSeqRef.current += 1);
     setSaveStatus('saving');
@@ -324,7 +475,7 @@ export default function AdminCmsBuilder() {
         setSaveStatus('error');
         setSaveError(e?.message || t('saveFailed'));
       });
-  };
+  }, [language, saveLayout, selectedPageId, t]);
 
   const showInspectorPanel = hasSelectedDesign && inspectorOpen;
 
@@ -487,12 +638,6 @@ export default function AdminCmsBuilder() {
                           value={designDefaultRenameName}
                           onChange={(e) => setDesignDefaultRenameName(e.target.value)}
                         />
-                        <input
-                          className="ac-input !py-1 text-[11px]"
-                          placeholder={`slug (${t('optional')}) — e.g. old-default`}
-                          value={designDefaultRenameSlug}
-                          onChange={(e) => setDesignDefaultRenameSlug(e.target.value)}
-                        />
                         <textarea
                           className="ac-input !py-1 text-[11px] h-12"
                           placeholder={`${t('description')} (${t('optional')})`}
@@ -521,7 +666,6 @@ export default function AdminCmsBuilder() {
                               try {
                                 const row = await materializeDefaultDesign({
                                   name,
-                                  slug: designDefaultRenameSlug || undefined,
                                   kind: 'landing',
                                   description: designDefaultRenameDesc ? String(designDefaultRenameDesc).trim() : undefined
                                 });
@@ -578,7 +722,7 @@ export default function AdminCmsBuilder() {
                     )}
 
                     {/* Created CmsDesign bundles */}
-                    {safeDesigns.map((d) => {
+                    {visibleDesigns.map((d) => {
                       const active = String(d.id) === String(selectedDesignId);
                       const editing = String(designEditingId) === String(d.id);
                       if (editing) {
@@ -589,12 +733,6 @@ export default function AdminCmsBuilder() {
                               placeholder={t('name')}
                               value={designEditName}
                               onChange={(e) => setDesignEditName(e.target.value)}
-                            />
-                            <input
-                              className="ac-input !py-1 text-[11px]"
-                              placeholder="slug"
-                              value={designEditSlug}
-                              onChange={(e) => setDesignEditSlug(e.target.value)}
                             />
                             <textarea
                               className="ac-input !py-1 text-[11px] h-12"
@@ -623,7 +761,6 @@ export default function AdminCmsBuilder() {
                                     await patchDesign({
                                       id: d.id,
                                       name: designEditName || undefined,
-                                      slug: designEditSlug || undefined,
                                       description: designEditDesc === '' ? null : designEditDesc
                                     });
                                     setDesignEditingId(null);
@@ -648,53 +785,170 @@ export default function AdminCmsBuilder() {
                             active ? 'border-brand-200 bg-brand-50/80 shadow-sm' : 'border-zinc-200 bg-zinc-50/60 hover:border-zinc-300 hover:bg-white'
                           }`}
                         >
-                          <div className="flex items-center gap-1">
+                          <div className="px-2.5 py-2">
                             <button
                               type="button"
                               onClick={() => setSelectedDesignId(d.id)}
-                              className={`flex-1 min-w-0 px-2 py-1.5 text-left text-xs ${
+                              className={`block w-full min-w-0 text-left ${
                                 active ? 'font-semibold text-brand-900' : 'text-zinc-800'
                               }`}
                             >
-                              <div className="truncate">{d.name}</div>
+                              <div className="truncate text-xs">{d.name}</div>
                               <div className="truncate text-[10px] text-zinc-500">
-                                {d.slug}
-                                {d.published ? ' · published' : ' · draft'}
+                                {d.description || (d.published ? 'Published' : 'Draft')}
                               </div>
                             </button>
-                            <button
-                              type="button"
-                              className="rounded-lg px-2 py-1 text-[10px] text-zinc-500 opacity-0 group-hover:opacity-100 hover:bg-zinc-200 hover:text-zinc-900"
-                              title={t('edit')}
-                              onClick={() => {
-                                setDesignEditingId(d.id);
-                                setDesignEditName(d.name || '');
-                                setDesignEditSlug(d.slug || '');
-                                setDesignEditDesc(d.description || '');
-                              }}
-                            >
-                              {t('edit')}
-                            </button>
-                            <button
-                              type="button"
-                              className="mr-1 rounded-lg px-2 py-1 text-[10px] text-rose-500 opacity-0 group-hover:opacity-100 hover:bg-rose-100 hover:text-rose-800"
-                              title={t('delete')}
-                              onClick={async () => {
-                                const confirmMsg = typeof window !== 'undefined' ? window.confirm(String(t('confirmDelete') || 'Delete this item?')) : true;
-                                if (!confirmMsg) return;
-                                try {
-                                  await deleteDesign({ id: d.id });
-                                } catch {
-                                  /* ignore */
-                                }
-                              }}
-                            >
-                              {t('delete')}
-                            </button>
+
+                            <div className="mt-1.5 flex items-center gap-1 border-t border-zinc-200/80 pt-1.5">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                id={`design-logo-upload-${d.id}`}
+                                onChange={async (event) => {
+                                  const file = event.target.files?.[0];
+                                  event.target.value = '';
+                                  if (!file || designLogoUploading) return;
+                                  setDesignLogoUploading(true);
+                                  try {
+                                    const uploaded = await uploadMedia({ file });
+                                    if (!uploaded?.url) throw new Error('Upload did not return a logo URL.');
+                                    await patchDesign({ id: d.id, logoUrl: uploaded.url });
+                                  } catch (error) {
+                                    window.alert(error?.response?.data?.message || error?.message || 'Unable to upload logo.');
+                                  } finally {
+                                    setDesignLogoUploading(false);
+                                  }
+                                }}
+                              />
+                              <button
+                                type="button"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-zinc-600 hover:bg-zinc-200 hover:text-zinc-950 focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-40"
+                                title={d.logoUrl ? "Change verification loading logo" : "Upload verification loading logo"}
+                                aria-label={`Upload verification loading logo for ${d.name}`}
+                                disabled={designLogoUploading}
+                                onClick={() => document.getElementById(`design-logo-upload-${d.id}`)?.click()}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                                  <rect x="3" y="3" width="18" height="18" rx="3" />
+                                  <circle cx="8.5" cy="8.5" r="1.5" />
+                                  <path d="m21 15-5-5L5 21" />
+                                </svg>
+                              </button>
+                              <button
+                                type="button"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-zinc-600 hover:bg-zinc-200 hover:text-zinc-950 focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-40"
+                                title={t('edit')}
+                                aria-label={`Edit design ${d.name}`}
+                                onClick={() => {
+                                  setDesignEditingId(d.id);
+                                  setDesignEditName(d.name || '');
+                                  setDesignEditSlug(d.slug || '');
+                                  setDesignEditDesc(d.description || '');
+                                }}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                                  <path d="M12 20h9" />
+                                  <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" />
+                                </svg>
+                              </button>
+
+                              <button
+                                type="button"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-zinc-600 hover:bg-zinc-200 hover:text-zinc-950 focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-40"
+                                title="Duplicate design"
+                                aria-label={`Duplicate design ${d.name}`}
+                                disabled={designActionId !== null}
+                                onClick={() => handleDuplicateDesign(d)}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                                  <rect x="8" y="8" width="12" height="12" rx="2" />
+                                  <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
+                                </svg>
+                              </button>
+
+                              <button
+                                type="button"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-zinc-600 hover:bg-zinc-200 hover:text-zinc-950 focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-40"
+                                title="Export design JSON"
+                                aria-label={`Export design ${d.name} as JSON`}
+                                disabled={designActionId !== null}
+                                onClick={() => handleExportDesign(d)}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                                  <path d="M12 3v12" />
+                                  <path d="m7 10 5 5 5-5" />
+                                  <path d="M5 17v3h14v-3" />
+                                </svg>
+                              </button>
+
+                              <button
+                                type="button"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-rose-600 hover:bg-rose-100 hover:text-rose-800 focus:outline-none focus:ring-2 focus:ring-rose-300"
+                                title={t('delete')}
+                                aria-label={`Delete design ${d.name}`}
+                                onClick={async () => {
+                                  const confirmMsg = typeof window !== 'undefined' ? window.confirm(String(t('confirmDelete') || 'Delete this item?')) : true;
+                                  if (!confirmMsg) return;
+                                  try {
+                                    await deleteDesign({ id: d.id });
+                                  } catch {
+                                    /* ignore */
+                                  }
+                                }}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                                  <path d="M3 6h18" />
+                                  <path d="M8 6V4h8v2" />
+                                  <path d="m19 6-1 14H6L5 6" />
+                                  <path d="M10 11v5M14 11v5" />
+                                </svg>
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );
                     })}
+
+                    {totalDesignPages > 1 && (
+                      <div className="mb-2 flex items-center justify-between gap-1 border-t border-zinc-100 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setDesignListPage((current) => Math.max(1, current - 1))}
+                          disabled={safeDesignListPage === 1}
+                          className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[10px] font-medium text-zinc-600 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Previous
+                        </button>
+
+                        <div className="flex items-center gap-1" aria-label="Landing design pagination">
+                          {Array.from({ length: totalDesignPages }, (_, index) => index + 1).map((number) => (
+                            <button
+                              key={number}
+                              type="button"
+                              onClick={() => setDesignListPage(number)}
+                              aria-current={safeDesignListPage === number ? 'page' : undefined}
+                              className={`inline-flex h-6 min-w-6 items-center justify-center rounded-md px-1.5 text-[10px] font-semibold ${
+                                safeDesignListPage === number
+                                  ? 'bg-zinc-900 text-white'
+                                  : 'border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
+                              }`}
+                            >
+                              {number}
+                            </button>
+                          ))}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setDesignListPage((current) => Math.min(totalDesignPages, current + 1))}
+                          disabled={safeDesignListPage === totalDesignPages}
+                          className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[10px] font-medium text-zinc-600 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    )}
 
                     {/* Create new design */}
                     {designShowCreate ? (
@@ -704,12 +958,6 @@ export default function AdminCmsBuilder() {
                           placeholder={`${t('name')} — e.g. Sarang Madu Landing`}
                           value={designNewName}
                           onChange={(e) => setDesignNewName(e.target.value)}
-                        />
-                        <input
-                          className="ac-input !py-1 text-[11px]"
-                          placeholder="slug — e.g. sarang-madu"
-                          value={designNewSlug}
-                          onChange={(e) => setDesignNewSlug(e.target.value)}
                         />
                         <textarea
                           className="ac-input !py-1 text-[11px] h-12"
@@ -739,7 +987,6 @@ export default function AdminCmsBuilder() {
                               try {
                                 await createDesign({
                                   name,
-                                  slug: designNewSlug || undefined,
                                   kind: 'landing',
                                   description: designNewDesc ? String(designNewDesc).trim() : undefined
                                 });
@@ -757,13 +1004,32 @@ export default function AdminCmsBuilder() {
                         </div>
                       </div>
                     ) : (
-                      <button
-                        type="button"
-                        className="mt-2 w-full rounded-xl border border-dashed border-zinc-300 px-2 py-2 text-[11px] text-zinc-500 hover:border-zinc-500 hover:text-zinc-800"
-                        onClick={() => setDesignShowCreate(true)}
-                      >
-                        + {t('addDesign')}
-                      </button>
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          type="button"
+                          className="flex-1 rounded-xl border border-dashed border-zinc-300 px-2 py-2 text-[11px] text-zinc-500 hover:border-zinc-500 hover:text-zinc-800"
+                          onClick={() => setDesignShowCreate(true)}
+                        >
+                          + {t('addDesign')}
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600 hover:bg-zinc-100 disabled:opacity-50"
+                          title="Import design JSON"
+                          aria-label="Import design JSON"
+                          disabled={designImporting}
+                          onClick={() => designFileInputRef.current?.click()}
+                        >
+                          {designImporting ? '…' : '↑'}
+                        </button>
+                        <input
+                          ref={designFileInputRef}
+                          type="file"
+                          accept=".json,application/json"
+                          className="hidden"
+                          onChange={handleImportDesignFile}
+                        />
+                      </div>
                     )}
                   </>
                 ) : null}
@@ -785,10 +1051,13 @@ export default function AdminCmsBuilder() {
                   onReorderPages={async (orderedIds) => {
                     await reorderPages({ orderedIds });
                   }}
-                  onCreatePage={async ({ name, slug }) => {
-                    const created = await createPage({ name, slug });
+                  onCreatePage={async ({ name, slug, description }) => {
+                    const created = await createPage({ name, slug, description });
                     selectPage(created.id);
                     setSelectedBlockId(null);
+                  }}
+                  onRenamePage={async (id, name) => {
+                    await renamePage({ pageId: id, name });
                   }}
                   onDeletePage={async (id) => {
                     await deletePage({ pageId: id });
@@ -848,6 +1117,7 @@ export default function AdminCmsBuilder() {
               setLayout={setLayout}
               clearSelection={() => setSelectedBlockId(null)}
               templates={templates}
+              supportingDocumentTypes={supportingDocumentTypes}
               layoutLocked={layoutLocked}
               canvasWidth={canvasWidth}
               canvasHeight={canvasHeight}

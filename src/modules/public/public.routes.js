@@ -79,7 +79,8 @@ router.get('/settings', async (req, res) => {
       ]),
       Promise.race([
         prisma.$queryRaw`
-          SELECT logoUrl, defaultLocale, defaultTimezone, maintenanceMode, appTitle, faviconUrl, themePrimaryHex
+          SELECT logoUrl, defaultLocale, defaultTimezone, maintenanceMode, appTitle, faviconUrl, themePrimaryHex,
+                 loginHeroBadge, loginHeroTitle, loginHeroSubtitle, loginHeroHighlightsJson
           FROM OrganizationSettings
           WHERE organizationId = ${orgId}
           LIMIT 1
@@ -107,7 +108,19 @@ router.get('/settings', async (req, res) => {
           logoUrl: row?.logoUrl ? String(row.logoUrl) : null,
           appTitle: row?.appTitle ? String(row.appTitle) : null,
           faviconUrl: row?.faviconUrl ? String(row.faviconUrl) : null,
-          themePrimaryHex: row?.themePrimaryHex ? String(row.themePrimaryHex).toLowerCase() : DEFAULT_THEME_PRIMARY_HEX
+          themePrimaryHex: row?.themePrimaryHex ? String(row.themePrimaryHex).toLowerCase() : DEFAULT_THEME_PRIMARY_HEX,
+          loginHeroBadge: row?.loginHeroBadge ? String(row.loginHeroBadge) : 'NFC-Powered Product Authentication',
+          loginHeroTitle: row?.loginHeroTitle ? String(row.loginHeroTitle) : 'Verify Authenticity. Trust Every Product.',
+          loginHeroSubtitle: row?.loginHeroSubtitle ? String(row.loginHeroSubtitle) : 'Authenticate products with confidence.',
+          loginHeroHighlights: (() => {
+            const raw = String(row?.loginHeroHighlightsJson || '').trim();
+            if (!raw) return [];
+            try {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) return parsed.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 8);
+            } catch {}
+            return raw.split(',').map((item) => item.trim()).filter(Boolean).slice(0, 8);
+          })()
         }
       },
       'OK'
@@ -229,7 +242,7 @@ function composeLayouts(pages) {
     const arr = Array.isArray(p?.effectiveLayout) ? p.effectiveLayout : [];
     const prefix = `p${String(p.id)}-`;
     for (const b of arr) out.push(shiftBlock(b, { yOffset, idPrefix: prefix }));
-    yOffset += getLayoutHeight(arr);
+    yOffset += Math.max(0, getLayoutHeight(arr) - 2);
   }
   return out;
 }
@@ -415,6 +428,72 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
       }
     }
 
+    // Resolve only an active EPC assignment belonging to this certificate.
+    // NFC verification must match the scanned identity; QR verification uses
+    // the latest active assignment for the certificate.
+    let assignedIdentity = null;
+    if (resolvedOrgId) {
+      try {
+        const identityWhere = {
+          organizationId: resolvedOrgId,
+          certificateId: String(certificateId),
+          unassignedAt: null
+        };
+
+        if (identityFromReq?.nfcUid) {
+          identityWhere.nfcUid = String(identityFromReq.nfcUid);
+        }
+        if (identityFromReq?.epc) {
+          identityWhere.epc = String(identityFromReq.epc);
+        }
+
+        assignedIdentity = await prisma.tagIdentity.findFirst({
+          where: identityWhere,
+          orderBy: { assignedAt: 'desc' },
+          select: {
+            id: true,
+            epc: true,
+            nfcUid: true,
+            assignedAt: true
+          }
+        });
+      } catch (e) {
+        if (shouldTriggerDbGate(e)) {
+          dbGate.markDbFailure({
+            cooldownMs: 10_000,
+            error: e,
+            context: 'respondByCertificateId:assignedIdentity'
+          });
+        }
+      }
+    }
+
+    let assignedEpcItem = null;
+    if (resolvedOrgId && assignedIdentity?.epc) {
+      try {
+        assignedEpcItem = await prisma.epcItem.findUnique({
+          where: {
+            organizationId_epcCode: {
+              organizationId: resolvedOrgId,
+              epcCode: String(assignedIdentity.epc)
+            }
+          },
+          select: {
+            id: true,
+            batchNumber: true
+          }
+        });
+      } catch (e) {
+        if (shouldTriggerDbGate(e)) {
+          dbGate.markDbFailure({
+            cooldownMs: 10_000,
+            error: e,
+            context: 'respondByCertificateId:assignedEpcItem'
+          });
+        }
+      }
+    }
+
     let epcItem = null;
     let epcItemId = null;
     let epcBatchTemplate = null;
@@ -422,6 +501,8 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     let epcBatchName = null;
     let epcBatchId = null;
     let epcProduct = null;
+    let epcBatchCustomer = null;
+    let epcBatchSupplier = null;
     if (resolvedOrgId && resolvedEpc) {
       try {
         const row = await Promise.race([
@@ -442,6 +523,8 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
                   batchName: true,
                   templateData: true,
                   certificateTemplate: true,
+                  customer: true,
+                  supplier: true,
                   product: {
                     select: {
                       name: true,
@@ -474,6 +557,8 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
             }
           : null;
         epcBatchTemplate = row?.batch?.certificateTemplate || null;
+        epcBatchCustomer = row?.batch?.customer || null;
+        epcBatchSupplier = row?.batch?.supplier || null;
         templateData = mergeTemplateMetaAliases({
           ...(row?.batch?.templateData && typeof row.batch.templateData === 'object' && !Array.isArray(row.batch.templateData) ? row.batch.templateData : {}),
           ...(row?.dynamicFields && typeof row.dynamicFields === 'object' && !Array.isArray(row.dynamicFields) ? row.dynamicFields : {}),
@@ -505,6 +590,8 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
               batchName: true,
               templateData: true,
               certificateTemplate: true,
+              customer: true,
+              supplier: true,
               product: {
                 select: {
                   name: true,
@@ -526,6 +613,8 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
           templateData = templateData || mergeTemplateMetaAliases(row.templateData || null);
           epcBatchName = epcBatchName || (row.batchName ? String(row.batchName) : null);
           epcBatchId = epcBatchId || (row.id != null ? Number(row.id) : null);
+          epcBatchCustomer = epcBatchCustomer || row.customer || null;
+          epcBatchSupplier = epcBatchSupplier || row.supplier || null;
           epcProduct = epcProduct || row.product || null;
         }
       } catch (e) {
@@ -534,6 +623,8 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     }
 
     const resolvedProduct = epcProduct || cert.batch?.product || null;
+    const resolvedCustomer = epcBatchCustomer || resolvedProduct?.customer || null;
+    const resolvedSupplier = epcBatchSupplier || resolvedProduct?.supplier || null;
     let resolvedCategory = null;
     if (resolvedOrgId && String(resolvedProduct?.category || '').trim()) {
       resolvedCategory = await prisma.category.findFirst({
@@ -790,6 +881,14 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         statusStored: cert.status,
         verifiedVia,
         identity: identityFromReq || null,
+        assignedEpc: {
+          epc: assignedIdentity?.epc || null,
+          nfcUid: assignedIdentity?.nfcUid || null,
+          epcItemId: assignedEpcItem?.id != null
+            ? Number(assignedEpcItem.id)
+            : null,
+          batchNumber: assignedEpcItem?.batchNumber || null
+        },
         issuedAt: cert.issuedAt || cert.createdAt,
         expiresAt: cert.expiresAt || null,
         revokedAt: cert.revokedAt || null,
@@ -807,27 +906,28 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
                     isActive: resolvedCategory.isActive
                   }
                 : null,
-              customer: resolvedProduct.customer
+              customer: resolvedCustomer
                 ? {
-                    id: resolvedProduct.customer.id,
-                    customerCode: resolvedProduct.customer.customerCode,
-                    customerName: resolvedProduct.customer.customerName,
-                    contactPerson: resolvedProduct.customer.contactPerson || null,
-                    address: resolvedProduct.customer.address || null,
-                    email: resolvedProduct.customer.email || null,
-                    status: resolvedProduct.customer.status || null
+                    id: resolvedCustomer.id,
+                    customerCode: resolvedCustomer.customerCode,
+                    customerName: resolvedCustomer.customerName,
+                    contactPerson: resolvedCustomer.contactPerson || null,
+                    contactNo: resolvedCustomer.contactNo || null,
+                    address: resolvedCustomer.address || null,
+                    email: resolvedCustomer.email || null,
+                    status: resolvedCustomer.status || null
                   }
                 : null,
-              supplier: resolvedProduct.supplier
+              supplier: resolvedSupplier
                 ? {
-                    id: resolvedProduct.supplier.id,
-                    supplierCode: resolvedProduct.supplier.supplierCode,
-                    supplierName: resolvedProduct.supplier.supplierName,
-                    contactPerson: resolvedProduct.supplier.contactPerson || null,
-                    address: resolvedProduct.supplier.address || null,
-                    email: resolvedProduct.supplier.email || null,
-                    phoneNumber: resolvedProduct.supplier.phoneNumber || null,
-                    status: resolvedProduct.supplier.status || null
+                    id: resolvedSupplier.id,
+                    supplierCode: resolvedSupplier.supplierCode,
+                    supplierName: resolvedSupplier.supplierName,
+                    contactPerson: resolvedSupplier.contactPerson || null,
+                    address: resolvedSupplier.address || null,
+                    email: resolvedSupplier.email || null,
+                    phoneNumber: resolvedSupplier.phoneNumber || null,
+                    status: resolvedSupplier.status || null
                   }
                 : null
             }
@@ -900,6 +1000,90 @@ router.get('/resolve', async (req, res) => {
   } catch (e) {
     const msg = e?.message === 'db_timeout' ? 'Service temporarily unavailable' : 'Service unavailable';
     return res.error(msg, 503);
+  }
+});
+
+
+router.get('/loading-brand', async (req, res) => {
+  try {
+    const certificateId = String(req.query.certificateId || '').trim();
+    const epc = String(req.query.epc || '').trim();
+    const nfcUid = String(req.query.nfcUid || '').trim();
+
+    // Resolve the scanned EPC/NFC first so a stale URL certificateId
+    // cannot override the identity currently being verified.
+    let resolvedId = null;
+
+    if (epc || nfcUid) {
+      const orgId = req.organization?.id;
+      if (orgId) {
+        resolvedId = await identityService.resolveCertificateId({
+          organizationId: orgId,
+          nfcUid: nfcUid || null,
+          epc: epc || null,
+        });
+      }
+
+      if (!resolvedId && !req.apiKey) {
+        const found = await identityService.resolveCertificateIdGlobal({
+          nfcUid: nfcUid || null,
+          epc: epc || null,
+        });
+        if (found?.certificateId) resolvedId = found.certificateId;
+      }
+    }
+
+    // Only use certificateId fallback for certificate-only QR links.
+    // A supplied EPC/NFC must resolve successfully and cannot fall back
+    // to a stale certificateId after its assignment has been cleared.
+    if (!epc && !nfcUid && !resolvedId) resolvedId = certificateId;
+
+    if (!resolvedId) return res.success({ logoUrl: null }, 'OK');
+
+    const cert = await prisma.certificate.findFirst({
+      where: { certificateId: resolvedId },
+      select: {
+        organizationId: true,
+        cmsDesignId: true,
+        batch: {
+          select: {
+            product: {
+              select: {
+                cmsCertificateDesignId: true,
+                cmsDesignId: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!cert) return res.success({ logoUrl: null }, 'OK');
+
+    const product = cert.batch?.product;
+    const designId = resolveEffectiveCmsDesignId({
+      certCmsDesignId: cert.cmsDesignId,
+      productCmsCertificateDesignId: product?.cmsCertificateDesignId,
+      productCmsDesignId: product?.cmsDesignId,
+    });
+
+    if (!designId) return res.success({ logoUrl: null }, 'OK');
+
+    const design = await prisma.cmsDesign.findFirst({
+      where: {
+        id: Number(designId),
+        organizationId: cert.organizationId,
+      },
+      select: { logoUrl: true },
+    });
+
+    return res.success(
+      { logoUrl: design?.logoUrl || null },
+      'OK'
+    );
+  } catch (err) {
+    console.error('[loading-brand] Failed to resolve design logo:', err?.message || err);
+    return res.success({ logoUrl: null }, 'OK');
   }
 });
 

@@ -185,6 +185,7 @@ function ColumnVisibilityManager({ open, onClose, triggerRef, columns, hiddenIds
             >
               <input
                 type="checkbox"
+                name={`columnVisibility-${String(column.id)}`}
                 checked={checked}
                 disabled={column.hideable === false}
                 onChange={() => onToggleVisibility?.(column.id)}

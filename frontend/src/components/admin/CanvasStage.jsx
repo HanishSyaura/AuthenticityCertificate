@@ -21,6 +21,9 @@ export default function CanvasStage({
   setItems,
   selectedId,
   setSelectedId,
+  selectedIds = [],
+  setSelectedIds,
+  enableMultiSelect = false,
   backgroundUrl,
   grid = 4,
   containerClassName = '',
@@ -59,10 +62,12 @@ export default function CanvasStage({
       let changed = false;
       const next = prev.map((it) => {
         if (!it) return it;
-        const nx = clamp(snap(Number(it.x) || 0, grid), 0, Math.max(0, width - minW));
-        const ny = clamp(snap(Number(it.y) || 0, grid), 0, Math.max(0, height - minH));
-        const nw = clamp(snap(Number(it.w) || minW, grid), minW, Math.max(minW, width - nx));
-        const nh = clamp(snap(Number(it.h) || minH, grid), minH, Math.max(minH, height - ny));
+        // Clamp only; preserve 1px keyboard movement.
+        // Pointer drag/resize handlers still apply grid snapping.
+        const nx = clamp(Number(it.x) || 0, 0, Math.max(0, width - minW));
+        const ny = clamp(Number(it.y) || 0, 0, Math.max(0, height - minH));
+        const nw = clamp(Number(it.w) || minW, minW, Math.max(minW, width - nx));
+        const nh = clamp(Number(it.h) || minH, minH, Math.max(minH, height - ny));
         if (nx !== it.x || ny !== it.y || nw !== it.w || nh !== it.h) changed = true;
         return nx === it.x && ny === it.y && nw === it.w && nh === it.h ? it : { ...it, x: nx, y: ny, w: nw, h: nh };
       });
@@ -74,24 +79,71 @@ export default function CanvasStage({
     if (!canTransform) return undefined;
     if (!setItems) return undefined;
     const onKeyDown = (e) => {
-      if (!selectedId) return;
+      const activeIds = enableMultiSelect && Array.isArray(selectedIds) && selectedIds.length
+        ? selectedIds
+        : (selectedId ? [selectedId] : []);
+      if (!activeIds.length) return;
       const t = e.target;
       const tag = String(t?.tagName || '').toLowerCase();
-      const editable = tag === 'input' || tag === 'textarea' || Boolean(t?.isContentEditable);
+      const insideStage = Boolean(stageRef.current?.contains(t));
+      const editable =
+        tag === 'input' ||
+        tag === 'textarea' ||
+        tag === 'select' ||
+        Boolean(t?.isContentEditable) ||
+        Boolean(t?.closest?.('input, textarea, select, [contenteditable="true"]')) ||
+        (Boolean(t?.closest?.('button')) && !insideStage);
       if (editable) return;
+
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        e.preventDefault();
+        const step = e.shiftKey ? 10 : 1;
+
+        applyUpdate((prev) => {
+          if (!Array.isArray(prev)) return prev;
+
+          let changed = false;
+          const next = prev.map((it) => {
+            if (!activeIds.includes(it?.id)) return it;
+
+            const itemW = Number(it.w) || 24;
+            const itemH = Number(it.h) || 20;
+            let x = Number(it.x) || 0;
+            let y = Number(it.y) || 0;
+
+            if (e.key === 'ArrowLeft') x -= step;
+            if (e.key === 'ArrowRight') x += step;
+            if (e.key === 'ArrowUp') y -= step;
+            if (e.key === 'ArrowDown') y += step;
+
+            x = clamp(x, 0, Math.max(0, width - itemW));
+            y = clamp(y, 0, Math.max(0, height - itemH));
+
+            if (x === it.x && y === it.y) return it;
+            changed = true;
+            return { ...it, x, y };
+          });
+
+          return changed ? next : prev;
+        });
+        return;
+      }
+
       if (e.key === 'Escape') {
+        if (setSelectedIds) setSelectedIds([]);
         if (setSelectedId) setSelectedId(null);
         return;
       }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
-        applyUpdate((prev) => (Array.isArray(prev) ? prev.filter((it) => it.id !== selectedId) : prev));
+        applyUpdate((prev) => (Array.isArray(prev) ? prev.filter((it) => !activeIds.includes(it.id)) : prev));
+        if (setSelectedIds) setSelectedIds([]);
         if (setSelectedId) setSelectedId(null);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [applyUpdate, canTransform, selectedId, setItems, setSelectedId]);
+  }, [applyUpdate, canTransform, selectedId, selectedIds, enableMultiSelect, setItems, setSelectedId, setSelectedIds]);
 
   useEffect(() => {
     if (!canTransform) return undefined;
@@ -108,12 +160,23 @@ export default function CanvasStage({
 
       applyUpdate((prev) =>
         prev.map((it) => {
-          if (it.id !== d.id) return it;
+          if (d.kind === 'drag' ? !d.ids?.includes(it.id) : it.id !== d.id) return it;
 
           if (d.kind === 'drag') {
-            const nx = clamp(snap(x - d.offsetX, grid), 0, width - it.w);
-            const ny = clamp(snap(y - d.offsetY, grid), 0, height - it.h);
-            return { ...it, x: nx, y: ny };
+            if (!d.ids?.includes(it.id)) return it;
+            const origin = d.origins?.[it.id];
+            if (!origin) return it;
+            const dx = clamp(
+              snap(x - d.startX, grid),
+              -d.minX,
+              width - d.maxRight
+            );
+            const dy = clamp(
+              snap(y - d.startY, grid),
+              -d.minY,
+              height - d.maxBottom
+            );
+            return { ...it, x: origin.x + dx, y: origin.y + dy };
           }
 
           const minW = 24;
@@ -147,6 +210,28 @@ export default function CanvasStage({
       e.preventDefault();
       e.stopPropagation();
     }
+    if (canTransform) stageRef.current?.focus({ preventScroll: true });
+    const multiKey = enableMultiSelect && (e.ctrlKey || e.metaKey);
+    const currentIds = Array.isArray(selectedIds) ? selectedIds : [];
+
+    if (multiKey && kind === 'drag' && setSelectedIds) {
+      const nextIds = currentIds.includes(item.id)
+        ? currentIds.filter((id) => id !== item.id)
+        : [...currentIds, item.id];
+      setSelectedIds(nextIds);
+      setSelectedId(nextIds.length ? nextIds[nextIds.length - 1] : null);
+      return;
+    }
+
+    const preserveMulti = enableMultiSelect && kind === 'drag' && currentIds.includes(item.id);
+    const itemGroupId = item.groupId;
+    const groupMemberIds = enableMultiSelect && itemGroupId
+      ? (itemsRef.current || [])
+          .filter((it) => it?.groupId === itemGroupId)
+          .map((it) => it.id)
+      : [item.id];
+
+    if (!preserveMulti && setSelectedIds) setSelectedIds(groupMemberIds);
     if (setSelectedId) setSelectedId(item.id);
 
     if (!canTransform) return;
@@ -166,11 +251,27 @@ export default function CanvasStage({
         startH: item.h
       };
     } else {
+      const movingIds = preserveMulti ? currentIds : [item.id];
+      const movingItems = (itemsRef.current || []).filter((it) => movingIds.includes(it?.id));
+      const origins = Object.fromEntries(movingItems.map((it) => [
+        it.id,
+        { x: Number(it.x) || 0, y: Number(it.y) || 0 }
+      ]));
+      const minX = Math.min(...movingItems.map((it) => origins[it.id].x));
+      const minY = Math.min(...movingItems.map((it) => origins[it.id].y));
+      const maxRight = Math.max(...movingItems.map((it) => origins[it.id].x + (Number(it.w) || 24)));
+      const maxBottom = Math.max(...movingItems.map((it) => origins[it.id].y + (Number(it.h) || 20)));
       dragRef.current = {
         kind: 'drag',
         id: item.id,
-        offsetX: x - item.x,
-        offsetY: y - item.y
+        ids: movingIds,
+        origins,
+        startX: x,
+        startY: y,
+        minX,
+        minY,
+        maxRight,
+        maxBottom
       };
     }
 
@@ -185,10 +286,12 @@ export default function CanvasStage({
       <div className="mx-auto" style={{ width: width * scale, height: height * scale }}>
         <div
           ref={stageRef}
-          className="relative rounded-xl border border-zinc-200 shadow-sm"
+          tabIndex={canTransform ? 0 : undefined}
+          className="relative rounded-xl border border-zinc-200 shadow-sm focus:outline-none"
           style={{ width, height, transform: `scale(${scale})`, transformOrigin: 'top left', backgroundColor: String(backgroundColor || '#ffffff') }}
           onPointerDown={() => {
             if (!canSelect) return;
+            if (setSelectedIds) setSelectedIds([]);
             if (setSelectedId) setSelectedId(null);
           }}
         >
@@ -230,7 +333,10 @@ export default function CanvasStage({
           {(Array.isArray(items) ? items : []).map((raw, idx) => {
             const it = raw && typeof raw === 'object' ? raw : {};
             const key = it.id != null ? it.id : `item-${idx}`;
-            const selected = canSelect && it.id === selectedId;
+            const selected = canSelect && (
+              it.id === selectedId ||
+              (enableMultiSelect && Array.isArray(selectedIds) && selectedIds.includes(it.id))
+            );
             const resizeHandleClass = largeUi
               ? 'absolute -bottom-3 -right-3 h-6 w-6 rounded bg-brand-600 cursor-nwse-resize'
               : 'absolute -bottom-1 -right-1 h-3 w-3 rounded bg-brand-600 cursor-nwse-resize';

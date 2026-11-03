@@ -1,4 +1,5 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, {useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback} from 'react';
+import CmsIcon from '../../CmsIcon';
 import CanvasStage from '../CanvasStage';
 import PublicRenderer from '../../PublicRenderer';
 import { useT } from '../../../i18n/useT';
@@ -6,6 +7,8 @@ import axios from 'axios';
 import { getPublicApiBaseUrl, resolvePublicMediaUrl } from '../../../utils/apiBase';
 import useAdminAuthStore from '../../../store/useAdminAuthStore';
 import { createAdminApi } from '../../../utils/adminApi';
+import { toQuillHtml } from '../../../utils/richText';
+import { sanitizeLimitedHtml } from '../../../utils/sanitizeLimitedHtml';
 
 function makeId(prefix) {
   return `${prefix}-${Math.random().toString(16).slice(2)}-${Date.now()}`;
@@ -166,6 +169,9 @@ export default function CmsCanvasPanel({
   const layoutRef = useRef(safeLayout);
   const supportingTplCacheRef = useRef(new Map());
 
+  const [selectedBlockIds, setSelectedBlockIds] = useState(
+    selectedBlockId ? [selectedBlockId] : []
+  );
   const [previewEpc, setPreviewEpc] = useState('');
   const [previewEpcInput, setPreviewEpcInput] = useState('');
   const [previewData, setPreviewData] = useState(null);
@@ -352,11 +358,17 @@ export default function CmsCanvasPanel({
     layoutRef.current = safeLayout;
   }, [safeLayout]);
 
-  const setCanvasItems = (updaterOrNext) => {
+  useEffect(() => {
+    const validIds = new Set(safeLayout.map((block) => block.id));
+    setSelectedBlockIds((current) => current.filter((id) => validIds.has(id)));
+  }, [safeLayout]);
+
+
+  const setCanvasItems = useCallback((updaterOrNext) => {
     const current = layoutRef.current || [];
     const next = typeof updaterOrNext === 'function' ? updaterOrNext(current) : updaterOrNext;
     setLayout(next);
-  };
+  }, [setLayout]);
 
   const hasAuthCertificateBlock = useMemo(() => {
     return safeLayout.some((b) => {
@@ -401,17 +413,25 @@ export default function CmsCanvasPanel({
           );
         }
         if (it.type === 'text') {
-          const preview = stripHtmlToText(it.content?.text || '');
+          const rawHtml = toQuillHtml(it.content?.text || '');
+          const html = sanitizeLimitedHtml(rawHtml);
           const fs = Number(it.content?.fontSize) > 0 ? Number(it.content.fontSize) : 14;
           const color = String(it.content?.fontColor || '').trim() || '#18181b';
           const lhRaw = Number(it.content?.lineHeight);
           const lh = Number.isFinite(lhRaw) && lhRaw > 0 ? lhRaw : 1.2;
           return (
             <div className="h-full w-full p-2">
-              <div className="whitespace-pre-wrap" style={{ fontSize: `${fs}px`, lineHeight: lh, color }}>
-                {preview || ''}
-              </div>
+              <div
+                className="ql-editor ac-richtext"
+                style={{ fontSize: `${fs}px`, lineHeight: lh, color }}
+                dangerouslySetInnerHTML={{ __html: html }}
+              />
             </div>
+          );
+        }
+        if (it.type === 'icon') {
+          return (
+            <CmsIcon content={it.content || {}} />
           );
         }
         if (it.type === 'image') {
@@ -519,7 +539,8 @@ export default function CmsCanvasPanel({
 
         <div className="flex flex-col gap-3 rounded-[20px] border border-zinc-200 bg-zinc-50/80 p-3">
           <div className="flex flex-wrap items-center gap-2">
-            <select value={devicePresetId} onChange={(e) => setDevicePresetId(e.target.value)} className="ac-input w-36 rounded-lg border-zinc-200 bg-white px-3 py-2 text-xs font-semibold shadow-sm">
+            <label htmlFor="cms-device-preset" className="sr-only">{t('devicePreset')}</label>
+            <select id="cms-device-preset" name="devicePreset" value={devicePresetId} onChange={(e) => setDevicePresetId(e.target.value)} className="ac-input w-36 rounded-lg border-zinc-200 bg-white px-3 py-2 text-xs font-semibold shadow-sm">
             <optgroup label={t('scaleGroup')}>
               {DEVICE_PRESETS.filter((d) => d.kind === 'scale').map((d) => (
                 <option key={d.id} value={d.id}>
@@ -536,7 +557,10 @@ export default function CmsCanvasPanel({
             </optgroup>
           </select>
           <div className="flex flex-1 flex-wrap items-center gap-2">
+            <label htmlFor="cms-preview-epc" className="sr-only">Preview EPC</label>
             <input
+              id="cms-preview-epc"
+              name="previewEpc"
               value={previewEpcInput}
               onChange={(e) => setPreviewEpcInput(e.target.value)}
               placeholder="Preview EPC"
@@ -554,6 +578,66 @@ export default function CmsCanvasPanel({
           </div>
           {!layoutLocked ? (
             <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-3">
+              <button
+                type="button"
+                disabled={!selectedBlockIds.some((id) => safeLayout.some((b) => b.id === id))}
+                onClick={() => {
+                  const chosen = safeLayout.filter((b) => selectedBlockIds.includes(b.id));
+                  if (!chosen.length) return;
+                  const newGroupIds = new Map();
+                  const copies = chosen.map((block) => {
+                    const copy = JSON.parse(JSON.stringify(block));
+                    copy.id = makeId(String(block.type || 'element'));
+                    copy.x = Math.min(baseW - (Number(block.w) || 24), (Number(block.x) || 0) + 16);
+                    copy.y = Math.min(baseH - (Number(block.h) || 20), (Number(block.y) || 0) + 16);
+                    if (block.groupId) {
+                      if (!newGroupIds.has(block.groupId)) newGroupIds.set(block.groupId, makeId('group'));
+                      copy.groupId = newGroupIds.get(block.groupId);
+                    }
+                    return copy;
+                  });
+                  setLayout([...safeLayout, ...copies]);
+                  const ids = copies.map((copy) => copy.id);
+                  setSelectedBlockIds(ids);
+                  setSelectedBlockId(ids[ids.length - 1] || null);
+                }}
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Duplicate selected
+              </button>
+              <button
+                type="button"
+                disabled={selectedBlockIds.filter((id) => safeLayout.some((b) => b.id === id)).length < 2}
+                onClick={() => {
+                  const ids = selectedBlockIds.filter((id) => safeLayout.some((b) => b.id === id));
+                  if (ids.length < 2) return;
+                  const groupId = makeId('group');
+                  setLayout(safeLayout.map((block) => ids.includes(block.id) ? { ...block, groupId } : block));
+                }}
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Group selected
+              </button>
+              <button
+                type="button"
+                disabled={!safeLayout.some((block) => selectedBlockIds.includes(block.id) && block.groupId)}
+                onClick={() => {
+                  const groupIds = new Set(
+                    safeLayout
+                      .filter((block) => selectedBlockIds.includes(block.id) && block.groupId)
+                      .map((block) => block.groupId)
+                  );
+                  if (!groupIds.size) return;
+                  setLayout(safeLayout.map((block) => {
+                    if (!groupIds.has(block.groupId)) return block;
+                    const { groupId, ...ungrouped } = block;
+                    return ungrouped;
+                  }));
+                }}
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Ungroup
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -587,6 +671,37 @@ export default function CmsCanvasPanel({
                 className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
               >
                 {t('addText')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = [
+                    ...safeLayout,
+                    {
+                      id: makeId('icon'),
+                      type: 'icon',
+                      x: 20,
+                      y: 20,
+                      w: 80,
+                      h: 80,
+                      content: {
+                        iconLibrary: 'lucide',
+                        iconName: 'star',
+                        iconColor: '#18181b',
+                        iconSize: 40,
+                        backgroundEnabled: false,
+                        backgroundColor: '#ffffff',
+                        borderColor: '#e4e4e7',
+                        borderWidth: 0,
+                        borderRadius: 12
+                      }
+                    }
+                  ];
+                  setLayout(next);
+                }}
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50"
+              >
+                + Icon
               </button>
               <button
                 type="button"
@@ -751,6 +866,10 @@ export default function CmsCanvasPanel({
               setItems={setCanvasItems}
               selectedId={selectedBlockId}
               setSelectedId={setSelectedBlockId}
+              selectedIds={selectedBlockIds}
+              setSelectedIds={setSelectedBlockIds}
+              enableMultiSelect
+
               containerClassName="max-h-[68vh]"
             />
           </div>

@@ -45,6 +45,17 @@ async function resolveCertificateId({ organizationId, nfcUid, epc, requireEpcBat
   const dbTimeoutMs = getDbTimeoutMs();
 
   try {
+    if (e) {
+      const epcState = await withTimeout(
+        prisma.epcItem.findUnique({
+          where: { organizationId_epcCode: { organizationId: orgId, epcCode: e } },
+          select: { assignmentClearedAt: true }
+        }),
+        dbTimeoutMs
+      );
+      if (epcState?.assignmentClearedAt) return null;
+    }
+
     const found = await withTimeout(
       prisma.tagIdentity.findFirst({
         where: {
@@ -76,7 +87,8 @@ async function resolveCertificateId({ organizationId, nfcUid, epc, requireEpcBat
     return null;
   } catch (err) {
     if (err?.message === 'epc_inactive_missing_batch_meta') throw err;
-    if (requireEpcBatchMeta && e) return null;
+    if (e) return null;
+    if (requireEpcBatchMeta) return null;
     const mem = findActiveIdentityMem({ organizationId: orgId, nfcUid: uid, epc: e });
     return mem?.certificateId || null;
   }
@@ -94,6 +106,17 @@ async function resolveCertificateIdGlobal({ nfcUid, epc, requireEpcBatchMeta = f
   void requireEpcBatchMeta;
 
   try {
+    if (e) {
+      const epcState = await withTimeout(
+        prisma.epcItem.findFirst({
+          where: { epcCode: e },
+          select: { assignmentClearedAt: true }
+        }),
+        dbTimeoutMs
+      );
+      if (epcState?.assignmentClearedAt) return null;
+    }
+
     const rows = await withTimeout(
       prisma.tagIdentity.findMany({
         where: {
@@ -232,7 +255,7 @@ async function assignIdentity({ organizationId, certificateId, nfcUid, epc }) {
         prisma.$transaction(async (tx) => {
           const item = await tx.epcItem.findFirst({
             where: { organizationId: orgId, epcCode: e },
-            select: { batchId: true, batch: { select: { certificateId: true } } }
+            select: { id: true, batchId: true, batch: { select: { certificateId: true } } }
           });
 
           const batchCert = item?.batch?.certificateId || null;
@@ -269,7 +292,7 @@ async function assignIdentity({ organizationId, certificateId, nfcUid, epc }) {
           });
 
           if (!existingRow) {
-            return await tx.tagIdentity.create({
+            const created = await tx.tagIdentity.create({
               data: {
                 organizationId: orgId,
                 certificateId: certId,
@@ -278,13 +301,22 @@ async function assignIdentity({ organizationId, certificateId, nfcUid, epc }) {
                 assignedAt: now
               }
             });
+
+            if (item?.id) {
+              await tx.epcItem.update({
+                where: { id: item.id },
+                data: { assignmentClearedAt: null }
+              });
+            }
+
+            return created;
           }
 
           if (existingRow.unassignedAt == null && existingRow.certificateId !== certId) {
             throw new Error('Identity is already assigned to another certificate');
           }
 
-          return await tx.tagIdentity.update({
+          const updated = await tx.tagIdentity.update({
             where: { id: existingRow.id },
             data: {
               certificateId: certId,
@@ -294,6 +326,15 @@ async function assignIdentity({ organizationId, certificateId, nfcUid, epc }) {
               unassignedAt: null
             }
           });
+
+          if (item?.id) {
+            await tx.epcItem.update({
+              where: { id: item.id },
+              data: { assignmentClearedAt: null }
+            });
+          }
+
+          return updated;
         }),
         2500
       );

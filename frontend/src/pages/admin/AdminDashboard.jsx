@@ -104,6 +104,7 @@ export default function AdminDashboard() {
   const [latestEpc, setLatestEpc] = useState('');
   const [epcStats, setEpcStats] = useState(null);
   const [dashboardCounts, setDashboardCounts] = useState({ products: null, pages: null, templates: null });
+  const [copyUrlStatus, setCopyUrlStatus] = useState('');
   const { openTour, hasSeen } = useTourStore((s) => ({ openTour: s.openTour, hasSeen: s.hasSeen }));
   const { token, user } = useAdminAuthStore((s) => ({ token: s.token, user: s.user }));
 
@@ -350,13 +351,27 @@ export default function AdminDashboard() {
               className="border border-[#c8d4e1] bg-white text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.06)] hover:bg-slate-50"
               onClick={async () => {
                 try {
-                  await navigator.clipboard.writeText(verifyUrl);
+                  if (navigator.clipboard?.writeText && window.isSecureContext) {
+                    await navigator.clipboard.writeText(verifyUrl);
+                  } else {
+                    const textarea = document.createElement('textarea');
+                    textarea.value = verifyUrl;
+                    textarea.setAttribute('readonly', '');
+                    textarea.style.position = 'fixed';
+                    textarea.style.opacity = '0';
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    const copied = document.execCommand('copy');
+                    textarea.remove();
+                    if (!copied) throw new Error('Copy command failed');
+                  }
+                  setCopyUrlStatus('Copied!');
                 } catch {
-                  void 0;
+                  setCopyUrlStatus('Copy failed — please copy the URL manually.');
                 }
               }}
             >
-              {t('copyUrl')}
+              {copyUrlStatus || t('copyUrl')}
             </ActionButton>
           </div>
         </DashboardSection>

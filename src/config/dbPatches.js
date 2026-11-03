@@ -353,6 +353,13 @@ async function ensureCmsPageSchemaCompat() {
   if (!tableName) return;
   await ensureColumn(
     tableName,
+    'description',
+    `ALTER TABLE \`${tableName}\` ADD COLUMN \`description\` TEXT NULL`,
+    null,
+    null
+  );
+  await ensureColumn(
+    tableName,
     'kind',
     `ALTER TABLE \`${tableName}\` ADD COLUMN \`kind\` VARCHAR(32) NULL`,
     `UPDATE \`${tableName}\` SET \`kind\` = 'landing' WHERE \`kind\` IS NULL OR \`kind\` = ''`,
@@ -782,6 +789,19 @@ async function ensureEpcSchemaCompat() {
     null
   );
 
+  await ensureColumn('EpcBatch', 'customerId', `ALTER TABLE \`EpcBatch\` ADD COLUMN \`customerId\` INT NULL`, null, null);
+  await ensureColumn('EpcBatch', 'supplierId', `ALTER TABLE \`EpcBatch\` ADD COLUMN \`supplierId\` INT NULL`, null, null);
+
+  const idxCustomer = `EpcBatch_organizationId_customerId_idx`;
+  if (!(await indexExists('EpcBatch', idxCustomer))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${idxCustomer}\` ON \`EpcBatch\` (\`organizationId\`, \`customerId\`)`);
+  }
+
+  const idxSupplier = `EpcBatch_organizationId_supplierId_idx`;
+  if (!(await indexExists('EpcBatch', idxSupplier))) {
+    await prisma.$executeRawUnsafe(`CREATE INDEX \`${idxSupplier}\` ON \`EpcBatch\` (\`organizationId\`, \`supplierId\`)`);
+  }
+
   const idxCert = `EpcBatch_organizationId_certificateId_idx`;
   if (!(await indexExists('EpcBatch', idxCert)))
     await prisma.$executeRawUnsafe(`CREATE INDEX \`${idxCert}\` ON \`EpcBatch\` (\`organizationId\`, \`certificateId\`)`);
@@ -952,6 +972,7 @@ async function ensureCustomerSchemaCompat() {
         \`customerCode\` VARCHAR(191) NOT NULL,
         \`customerName\` VARCHAR(191) NOT NULL,
         \`contactPerson\` VARCHAR(191) NULL,
+        \`contactNo\` VARCHAR(100) NULL,
         \`address\` TEXT NULL,
         \`email\` VARCHAR(191) NULL,
         \`status\` VARCHAR(32) NOT NULL DEFAULT 'Active',
@@ -967,6 +988,7 @@ async function ensureCustomerSchemaCompat() {
   await ensureColumn(tableName, 'customerCode', `ALTER TABLE \`${tableName}\` ADD COLUMN \`customerCode\` VARCHAR(191) NULL`, null, `ALTER TABLE \`${tableName}\` MODIFY \`customerCode\` VARCHAR(191) NOT NULL`);
   await ensureColumn(tableName, 'customerName', `ALTER TABLE \`${tableName}\` ADD COLUMN \`customerName\` VARCHAR(191) NULL`, null, `ALTER TABLE \`${tableName}\` MODIFY \`customerName\` VARCHAR(191) NOT NULL`);
   await ensureColumn(tableName, 'contactPerson', `ALTER TABLE \`${tableName}\` ADD COLUMN \`contactPerson\` VARCHAR(191) NULL`, null, null);
+  await ensureColumn(tableName, 'contactNo', `ALTER TABLE \`${tableName}\` ADD COLUMN \`contactNo\` VARCHAR(100) NULL`, null, null);
   await ensureColumn(tableName, 'address', `ALTER TABLE \`${tableName}\` ADD COLUMN \`address\` TEXT NULL`, null, null);
   await ensureColumn(tableName, 'email', `ALTER TABLE \`${tableName}\` ADD COLUMN \`email\` VARCHAR(191) NULL`, null, null);
   await ensureColumn(
@@ -1415,6 +1437,52 @@ async function ensureAccessControlSchemaCompat() {
   const permissions = [
     ['*', 'Full access'],
     ['users.manage', 'Manage users'],
+    ['users.read', 'View users'],
+    ['users.create', 'Create users'],
+    ['users.update', 'Update users'],
+    ['users.delete', 'Delete users'],
+    ['users.password.reset', 'Reset user passwords'],
+    ['users.roles.assign', 'Assign user roles'],
+    ['products.create', 'Create products'],
+    ['products.update', 'Update products'],
+    ['products.delete', 'Delete products'],
+    ['products.status.update', 'Activate or deactivate products'],
+    ['categories.create', 'Create categories'],
+    ['categories.update', 'Update categories'],
+    ['customers.read', 'View customers'],
+    ['customers.create', 'Create customers'],
+    ['customers.update', 'Update customers'],
+    ['suppliers.read', 'View suppliers'],
+    ['suppliers.create', 'Create suppliers'],
+    ['suppliers.update', 'Update suppliers'],
+    ['certificates.create', 'Create certificates'],
+    ['certificates.update', 'Update certificates'],
+    ['certificates.assign', 'Assign certificates'],
+    ['certificates.reissue', 'Reissue certificates'],
+    ['certificates.revoke', 'Revoke certificates'],
+    ['templates.create', 'Create templates'],
+    ['templates.update', 'Update templates'],
+    ['templates.delete', 'Delete templates'],
+    ['templates.duplicate', 'Duplicate templates'],
+    ['uploads.read', 'View uploaded files'],
+    ['uploads.upload', 'Upload files'],
+    ['uploads.delete', 'Delete uploaded files'],
+    ['epc.assignment.clear', 'Clear EPC assignments'],
+    ['cms.pages.create', 'Create CMS pages'],
+    ['cms.pages.update', 'Update CMS pages'],
+    ['cms.pages.delete', 'Delete CMS pages'],
+    ['cms.design.create', 'Create CMS designs'],
+    ['cms.design.update', 'Update CMS designs'],
+    ['cms.design.delete', 'Delete CMS designs'],
+    ['cms.design.duplicate', 'Duplicate CMS designs'],
+    ['cms.design.import', 'Import CMS designs'],
+    ['cms.design.export', 'Export CMS designs'],
+    ['cms.layout.write', 'Edit CMS layouts'],
+    ['settings.branding.write', 'Update branding settings'],
+    ['settings.email.write', 'Update email settings'],
+    ['settings.email.test', 'Send SMTP test email'],
+    ['organizations.create', 'Create organizations'],
+    ['dashboard.view', 'View dashboard'],
     ['access.manage', 'Manage roles & permissions'],
     ['products.read', 'Read products & batches'],
     ['products.write', 'Write products & batches'],
@@ -1467,9 +1535,7 @@ async function ensureAccessControlSchemaCompat() {
   }
 
   const roles = [
-    { name: 'super_admin', description: 'System Super Admin', isSystem: 1 },
-    { name: 'admin', description: 'System Admin', isSystem: 1 },
-    { name: 'operator', description: 'System Operator', isSystem: 1 }
+    { name: 'super_admin', description: 'System Super Admin', isSystem: 1 }
   ];
 
   for (const r of roles) {
@@ -1480,27 +1546,7 @@ async function ensureAccessControlSchemaCompat() {
   }
 
   const rolePerms = {
-    super_admin: ['*'],
-    admin: [
-      'products.read',
-      'products.write',
-      'categories.read',
-      'categories.write',
-      'epc.read',
-      'epc.write',
-      'certificates.read',
-      'certificates.write',
-      'templates.read',
-      'templates.write',
-      'uploads.write',
-      'organizations.read',
-      'settings.read',
-      'cms.read',
-      'cms.write',
-      'cms.publish',
-      'cms.meta.write'
-    ],
-    operator: ['cms.read', 'cms.write']
+    super_admin: ['*']
   };
 
   let totalRolePerms = 0;
@@ -1786,12 +1832,24 @@ async function ensureSingleOrganizationMeta() {
   }
 }
 
+async function ensureCmsDesignLogoSchemaCompat() {
+  if (!(await tableExists('CmsDesign'))) return;
+  await ensureColumn(
+    'CmsDesign',
+    'logoUrl',
+    'ALTER TABLE `CmsDesign` ADD COLUMN `logoUrl` VARCHAR(512) NULL',
+    null,
+    null
+  );
+}
+
 async function applyDbPatches() {
   await ensureProductSchemaCompat();
   await ensureProductSupportingCertificateSchemaCompat();
   await ensureCategorySchemaCompat();
   await ensureCustomerSchemaCompat();
   await ensureSupplierSchemaCompat();
+  await ensureCmsDesignLogoSchemaCompat();
   await ensureCmsPageSchemaCompat();
   await ensureCertificateTemplateSchemaCompat();
   await ensureCertificateTemplateTranslationSchemaCompat();

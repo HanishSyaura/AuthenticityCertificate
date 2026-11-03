@@ -3,13 +3,9 @@ import { Link, useParams } from 'react-router-dom';
 import useRecordsStore from '../../store/useRecordsStore';
 import { useT } from '../../i18n/useT';
 import { stripHtmlToText } from '../../utils/richText';
+import { formatDateTimeMY } from '../../utils/dateTime';
 
-function formatDate(input) {
-  if (!input) return '';
-  const d = new Date(input);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toISOString().slice(0, 19).replace('T', ' ');
-}
+const formatDate = formatDateTimeMY;
 
 export default function AdminRecordDetail() {
   const { t } = useT();

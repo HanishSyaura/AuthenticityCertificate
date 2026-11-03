@@ -40,6 +40,7 @@ async function login(email, password) {
   try {
     if (!dbGate.shouldUseDb()) throw new Error('db_unavailable');
     user = await withTimeout(prisma.user.findUnique({ where: { email } }), dbTimeoutMs);
+    if (user?.deletedAt) throw new Error('Invalid email or password');
     if (user) role = user.role;
     dbGate.markDbSuccess();
   } catch (e) {
@@ -97,6 +98,7 @@ async function resolveCurrentUser(tokenUser) {
   try {
     const u = await withTimeout(prisma.user.findUnique({ where: { id } }), dbTimeoutMs);
     if (u && String(u.email || '').trim().toLowerCase() === email) {
+      if (u.deletedAt) return null;
       return { kind: 'user', row: u };
     }
   } catch {
