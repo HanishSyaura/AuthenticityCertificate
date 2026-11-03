@@ -162,16 +162,9 @@ const VerifyPage = () => {
   }, [id, lang, location.search, resolveCertificate, t, verifyCertificate]);
 
   useEffect(() => {
-    const epc = String(loadingMeta?.epc || '').trim().toUpperCase();
-
-    const localBrandLogos = {
-      'BA0127102600000001': '/brand-logos/biolab.jpeg',
-      'BA0129102600000003': '/brand-logos/ubody.jpeg',
-    };
-
-    setLoadingBrandLogoUrl(localBrandLogos[epc] || '');
+    setLoadingBrandLogoUrl(certificate?.cmsLandingLogoUrl || '');
     setLoadingBrandLookupDone(true);
-  }, [loadingMeta?.epc]);
+  }, [certificate?.cmsLandingLogoUrl]);
 
   useEffect(() => {
     const minDurationMs = 2000;
