@@ -8,13 +8,9 @@ import { sortRows } from '../../utils/tableSort';
 import DataTable from '../../components/ui/DataTable';
 import TablePager from '../../components/ui/TablePager';
 import RowActionsMenu from '../../components/ui/RowActionsMenu';
+import { formatDateTimeMY } from '../../utils/dateTime';
 
-function formatDate(input) {
-  if (!input) return '';
-  const d = new Date(input);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toISOString().slice(0, 19).replace('T', ' ');
-}
+const formatDate = formatDateTimeMY;
 
 function readLocalRows(key) {
   if (typeof window === 'undefined') return [];
@@ -189,6 +185,7 @@ export default function AdminRecords() {
     customerCode: '',
     customerName: '',
     contactPerson: '',
+    contactNo: '',
     address: '',
     email: '',
     status: 'Active'
@@ -563,6 +560,7 @@ export default function AdminRecords() {
       customerCode: '',
       customerName: '',
       contactPerson: '',
+      contactNo: '',
       address: '',
       email: '',
       status: 'Active'
@@ -1019,6 +1017,7 @@ export default function AdminRecords() {
     { id: 'customerCode', label: t('customerCode'), width: 118, minWidth: 104, pinnable: true, header: t('customerCode'), sortValue: (row) => row.customerCode, cell: (row) => <span className="font-mono text-sm text-slate-700">{row.customerCode}</span> },
     { id: 'customerName', label: t('customerName'), width: 190, minWidth: 160, header: t('customerName'), sortValue: (row) => row.customerName, cell: (row) => <span className="font-semibold text-slate-900">{row.customerName}</span> },
     { id: 'contactPerson', label: t('contactPerson'), width: 164, minWidth: 144, header: t('contactPerson'), sortValue: (row) => row.contactPerson, cell: (row) => <span className="text-sm text-slate-700">{row.contactPerson}</span> },
+    { id: 'contactNo', label: 'Contact No', width: 150, minWidth: 130, header: 'Contact No', sortValue: (row) => row.contactNo, cell: (row) => <span className="text-sm text-slate-700">{row.contactNo || '-'}</span> },
     { id: 'address', label: t('address'), width: 240, minWidth: 180, header: t('address'), sortValue: (row) => row.address, cell: (row) => <span className="text-sm text-slate-700">{row.address || '-'}</span> },
     { id: 'email', label: t('email'), width: 206, minWidth: 176, header: t('email'), sortValue: (row) => row.email, cell: (row) => <span className="text-sm text-slate-700">{row.email}</span> },
     {
@@ -1066,6 +1065,7 @@ export default function AdminRecords() {
                   customerCode: row.customerCode || '',
                   customerName: row.customerName || '',
                   contactPerson: row.contactPerson || '',
+                  contactNo: row.contactNo || '',
                   address: row.address || '',
                   email: row.email || '',
                   status: row.status || 'Active'
@@ -1303,7 +1303,10 @@ export default function AdminRecords() {
           >
             <div className="flex flex-wrap items-center gap-2">
               <div className="min-w-[240px] flex-1">
+                <label htmlFor="records-search-products" className="sr-only">{t('searchProducts')}</label>
                 <input
+                  id="records-search-products"
+                  name="productSearch"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder={t('searchProducts')}
@@ -1311,12 +1314,14 @@ export default function AdminRecords() {
                   data-tour="records-search-products"
                 />
               </div>
-              <select value={productStatusFilter} onChange={(e) => setProductStatusFilter(e.target.value)} className="ac-input w-[170px] bg-white text-slate-800">
+              <label htmlFor="records-product-status-filter" className="sr-only">{t('allStatuses')}</label>
+              <select id="records-product-status-filter" name="productStatusFilter" value={productStatusFilter} onChange={(e) => setProductStatusFilter(e.target.value)} className="ac-input w-[170px] bg-white text-slate-800">
                 <option value="all">{t('allStatuses')}</option>
                 <option value="active">{t('active')}</option>
                 <option value="inactive">{t('inactive')}</option>
               </select>
-              <select value={productCategoryFilter} onChange={(e) => setProductCategoryFilter(e.target.value)} className="ac-input w-[260px] bg-white text-slate-800">
+              <label htmlFor="records-product-category-filter" className="sr-only">{t('allCategories')}</label>
+              <select id="records-product-category-filter" name="productCategoryFilter" value={productCategoryFilter} onChange={(e) => setProductCategoryFilter(e.target.value)} className="ac-input w-[260px] bg-white text-slate-800">
                 <option value="all">{t('allCategories')}</option>
                 {categoryOptions.map((c) => (
                   <option key={c.id} value={String(c.code)}>
@@ -1350,7 +1355,10 @@ export default function AdminRecords() {
           >
             <div className="flex flex-wrap items-center gap-2">
               <div className="min-w-[240px] flex-1">
+                <label htmlFor="records-search-categories" className="sr-only">{t('searchCategories')}</label>
                 <input
+                  id="records-search-categories"
+                  name="categorySearch"
                   value={categoryQuery}
                   onChange={(e) => setCategoryQuery(e.target.value)}
                   placeholder={t('searchCategories')}
@@ -1358,7 +1366,8 @@ export default function AdminRecords() {
                   data-tour="records-search-categories"
                 />
               </div>
-              <select value={categoryStatusFilter} onChange={(e) => setCategoryStatusFilter(e.target.value)} className="ac-input w-[170px] bg-white text-slate-800">
+              <label htmlFor="records-category-status-filter" className="sr-only">{t('allStatuses')}</label>
+              <select id="records-category-status-filter" name="categoryStatusFilter" value={categoryStatusFilter} onChange={(e) => setCategoryStatusFilter(e.target.value)} className="ac-input w-[170px] bg-white text-slate-800">
                 <option value="all">{t('allStatuses')}</option>
                 <option value="active">{t('active')}</option>
                 <option value="inactive">{t('inactive')}</option>
@@ -1699,8 +1708,10 @@ export default function AdminRecords() {
             <div className="mb-4 text-sm font-semibold text-zinc-900">{t('createProduct')}</div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('sku')}</div>
+                <label htmlFor="records-product-sku-create" className="mb-1 block text-xs font-semibold text-zinc-600">{t('sku')}</label>
                 <input
+                  id="records-product-sku-create"
+                  name="productSkuCreate"
                   value={sku}
                   onChange={(e) => setSku(e.target.value)}
                   className="ac-input font-mono"
@@ -1708,8 +1719,10 @@ export default function AdminRecords() {
                 />
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('name')}</div>
+                <label htmlFor="records-product-name-create" className="mb-1 block text-xs font-semibold text-zinc-600">{t('name')}</label>
                 <input
+                  id="records-product-name-create"
+                  name="productNameCreate"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="ac-input"
@@ -1717,8 +1730,10 @@ export default function AdminRecords() {
                 />
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('productCode')}</div>
+                <label htmlFor="records-product-code-create" className="mb-1 block text-xs font-semibold text-zinc-600">{t('productCode')}</label>
                 <input
+                  id="records-product-code-create"
+                  name="productCodeCreate"
                   value={productCode}
                   onChange={(e) => setProductCode(e.target.value)}
                   className="ac-input font-mono"
@@ -1726,8 +1741,8 @@ export default function AdminRecords() {
                 />
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('category')}</div>
-                <select value={category} onChange={(e) => setCategory(e.target.value)} className="ac-input" data-tour="records-product-category">
+                <label htmlFor="records-product-category-create" className="mb-1 block text-xs font-semibold text-zinc-600">{t('category')}</label>
+                <select id="records-product-category-create" name="productCategoryCreate" value={category} onChange={(e) => setCategory(e.target.value)} className="ac-input" data-tour="records-product-category">
                   <option value="">{t('selectCategory')}</option>
                   {(Array.isArray(categories) ? categories : [])
                     .filter((c) => Boolean(c?.code) && (c?.isActive !== false || String(c.code) === String(category)))
@@ -1739,8 +1754,8 @@ export default function AdminRecords() {
                 </select>
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('customersTab')}</div>
-                <select value={selectedCustomerId} onChange={(e) => setSelectedCustomerId(e.target.value)} className="ac-input">
+                <label htmlFor="records-product-customer-create" className="mb-1 block text-xs font-semibold text-zinc-600">{t('customersTab')}</label>
+                <select id="records-product-customer-create" name="customerId" value={selectedCustomerId} onChange={(e) => setSelectedCustomerId(e.target.value)} className="ac-input">
                   <option value="">{t('selectCustomer')}</option>
                   {(Array.isArray(customerRowsState) ? customerRowsState : []).map((row) => (
                     <option key={row.id} value={String(row.id)}>
@@ -1750,8 +1765,8 @@ export default function AdminRecords() {
                 </select>
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('suppliersTab')}</div>
-                <select value={selectedSupplierId} onChange={(e) => setSelectedSupplierId(e.target.value)} className="ac-input">
+                <label htmlFor="records-product-supplier-create" className="mb-1 block text-xs font-semibold text-zinc-600">{t('suppliersTab')}</label>
+                <select id="records-product-supplier-create" name="supplierId" value={selectedSupplierId} onChange={(e) => setSelectedSupplierId(e.target.value)} className="ac-input">
                   <option value="">{t('selectSupplier')}</option>
                   {(Array.isArray(supplierRowsState) ? supplierRowsState : []).map((row) => (
                     <option key={row.id} value={String(row.id)}>
@@ -1780,17 +1795,19 @@ export default function AdminRecords() {
                 </div>
               </div>
               <div className="md:col-span-2">
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
-                <textarea value={remark} onChange={(e) => setRemark(e.target.value)} className="ac-input h-24 resize-none" data-tour="records-product-remark" />
+                <label htmlFor="records-product-remark-create" className="mb-1 block text-xs font-semibold text-zinc-600">{t('remark')}</label>
+                <textarea id="records-product-remark-create" name="productRemarkCreate" value={remark} onChange={(e) => setRemark(e.target.value)} className="ac-input h-24 resize-none" data-tour="records-product-remark" />
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('landingPageDesign')}</div>
+                <label htmlFor="records-product-cms-page-create" className="mb-1 block text-xs font-semibold text-zinc-600">{t('landingPageDesign')}</label>
                 {cmsDesignsLoading ? (
                   <div className="ac-input text-xs text-zinc-400">Loading…</div>
                 ) : (cmsDesigns?.length || 0) === 0 ? (
                   <div className="ac-input text-xs text-zinc-400">{t('noLandingPages')}</div>
                 ) : (
                   <select
+                    id="records-product-cms-page-create"
+                    name="productCmsDesignCreate"
                     value={selectedCmsDesignId}
                     onChange={(e) => setSelectedCmsDesignId(e.target.value)}
                     className="ac-input"
@@ -1820,13 +1837,15 @@ export default function AdminRecords() {
                 <div className="mt-1 text-[11px] text-zinc-500">{t('selectLandingPage')}</div>
               </div>
               <div className="md:col-span-2">
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('certificatePageDesign')}</div>
+                <label htmlFor="records-product-certificate-page-create" className="mb-1 block text-xs font-semibold text-zinc-600">{t('certificatePageDesign')}</label>
                 {cmsDesignsLoading ? (
                   <div className="ac-input text-xs text-zinc-400">Loading…</div>
                 ) : (cmsDesigns?.length || 0) === 0 ? (
                   <div className="ac-input text-xs text-zinc-400">{t('noLandingPages')}</div>
                 ) : (
                   <select
+                    id="records-product-certificate-page-create"
+                    name="productCertificateDesignCreate"
                     value={selectedCmsCertificateDesignId}
                     onChange={(e) => setSelectedCmsCertificateDesignId(e.target.value)}
                     className="ac-input"
@@ -1933,32 +1952,38 @@ export default function AdminRecords() {
             <div className="mb-4 text-sm font-semibold text-zinc-900">{t('editProduct')}</div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('sku')}</div>
+                <label htmlFor="records-product-sku-edit" className="mb-1 block text-xs font-semibold text-zinc-600">{t('sku')}</label>
                 <input
+                  id="records-product-sku-edit"
+                  name="productSkuEdit"
                   value={sku}
                   onChange={(e) => setSku(e.target.value)}
                   className="ac-input font-mono"
                 />
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('name')}</div>
+                <label htmlFor="records-product-name-edit" className="mb-1 block text-xs font-semibold text-zinc-600">{t('name')}</label>
                 <input
+                  id="records-product-name-edit"
+                  name="productNameEdit"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="ac-input"
                 />
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('productCode')}</div>
+                <label htmlFor="records-product-code-edit" className="mb-1 block text-xs font-semibold text-zinc-600">{t('productCode')}</label>
                 <input
+                  id="records-product-code-edit"
+                  name="productCodeEdit"
                   value={productCode}
                   onChange={(e) => setProductCode(e.target.value)}
                   className="ac-input font-mono"
                 />
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('category')}</div>
-                <select value={category} onChange={(e) => setCategory(e.target.value)} className="ac-input">
+                <label htmlFor="records-product-category-edit" className="mb-1 block text-xs font-semibold text-zinc-600">{t('category')}</label>
+                <select id="records-product-category-edit" name="productCategoryEdit" value={category} onChange={(e) => setCategory(e.target.value)} className="ac-input">
                   <option value="">{t('selectCategory')}</option>
                   {(Array.isArray(categories) ? categories : [])
                     .filter((c) => Boolean(c?.code) && (c?.isActive !== false || String(c.code) === String(category)))
@@ -1970,8 +1995,8 @@ export default function AdminRecords() {
                 </select>
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('customersTab')}</div>
-                <select value={selectedCustomerId} onChange={(e) => setSelectedCustomerId(e.target.value)} className="ac-input">
+                <label htmlFor="records-product-customer-edit" className="mb-1 block text-xs font-semibold text-zinc-600">{t('customersTab')}</label>
+                <select id="records-product-customer-edit" name="customerIdEdit" value={selectedCustomerId} onChange={(e) => setSelectedCustomerId(e.target.value)} className="ac-input">
                   <option value="">{t('selectCustomer')}</option>
                   {(Array.isArray(customerRowsState) ? customerRowsState : []).map((row) => (
                     <option key={row.id} value={String(row.id)}>
@@ -1981,8 +2006,8 @@ export default function AdminRecords() {
                 </select>
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('suppliersTab')}</div>
-                <select value={selectedSupplierId} onChange={(e) => setSelectedSupplierId(e.target.value)} className="ac-input">
+                <label htmlFor="records-product-supplier-edit" className="mb-1 block text-xs font-semibold text-zinc-600">{t('suppliersTab')}</label>
+                <select id="records-product-supplier-edit" name="supplierIdEdit" value={selectedSupplierId} onChange={(e) => setSelectedSupplierId(e.target.value)} className="ac-input">
                   <option value="">{t('selectSupplier')}</option>
                   {(Array.isArray(supplierRowsState) ? supplierRowsState : []).map((row) => (
                     <option key={row.id} value={String(row.id)}>
@@ -2011,17 +2036,19 @@ export default function AdminRecords() {
                 </div>
               </div>
               <div className="md:col-span-2">
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('remark')}</div>
-                <textarea value={remark} onChange={(e) => setRemark(e.target.value)} className="ac-input h-24 resize-none" />
+                <label htmlFor="records-product-remark-edit" className="mb-1 block text-xs font-semibold text-zinc-600">{t('remark')}</label>
+                <textarea id="records-product-remark-edit" name="productRemarkEdit" value={remark} onChange={(e) => setRemark(e.target.value)} className="ac-input h-24 resize-none" />
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('landingPageDesign')}</div>
+                <label htmlFor="records-product-cms-page-edit" className="mb-1 block text-xs font-semibold text-zinc-600">{t('landingPageDesign')}</label>
                 {cmsDesignsLoading ? (
                   <div className="ac-input text-xs text-zinc-400">Loading…</div>
                 ) : (cmsDesigns?.length || 0) === 0 ? (
                   <div className="ac-input text-xs text-zinc-400">{t('noLandingPages')}</div>
                 ) : (
                   <select
+                    id="records-product-cms-page-edit"
+                    name="productCmsDesignEdit"
                     value={selectedCmsDesignId}
                     onChange={(e) => setSelectedCmsDesignId(e.target.value)}
                     className="ac-input"
@@ -2050,13 +2077,15 @@ export default function AdminRecords() {
                 <div className="mt-1 text-[11px] text-zinc-500">{t('selectLandingPage')}</div>
               </div>
               <div className="md:col-span-2">
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('certificatePageDesign')}</div>
+                <label htmlFor="records-product-certificate-page-edit" className="mb-1 block text-xs font-semibold text-zinc-600">{t('certificatePageDesign')}</label>
                 {cmsDesignsLoading ? (
                   <div className="ac-input text-xs text-zinc-400">Loading…</div>
                 ) : (cmsDesigns?.length || 0) === 0 ? (
                   <div className="ac-input text-xs text-zinc-400">{t('noLandingPages')}</div>
                 ) : (
                   <select
+                    id="records-product-certificate-page-edit"
+                    name="productCertificateDesignEdit"
                     value={selectedCmsCertificateDesignId}
                     onChange={(e) => setSelectedCmsCertificateDesignId(e.target.value)}
                     className="ac-input"
@@ -2146,12 +2175,12 @@ export default function AdminRecords() {
             <div className="mb-4 text-sm font-semibold text-zinc-900">{t('createCategory')}</div>
             <div className="space-y-3">
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('categoryName')}</div>
-                <input value={categoryName} onChange={(e) => setCategoryName(e.target.value)} className="ac-input" data-tour="records-category-name" />
+                <label htmlFor="records-category-name-create" className="mb-1 block text-xs font-semibold text-zinc-600">{t('categoryName')}</label>
+                <input id="records-category-name-create" name="categoryNameCreate" value={categoryName} onChange={(e) => setCategoryName(e.target.value)} className="ac-input" data-tour="records-category-name" />
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('categoryCode')}</div>
-                <input value={categoryCode} onChange={(e) => setCategoryCode(e.target.value)} className="ac-input font-mono" data-tour="records-category-code" />
+                <label htmlFor="records-category-code-create" className="mb-1 block text-xs font-semibold text-zinc-600">{t('categoryCode')}</label>
+                <input id="records-category-code-create" name="categoryCodeCreate" value={categoryCode} onChange={(e) => setCategoryCode(e.target.value)} className="ac-input font-mono" data-tour="records-category-code" />
               </div>
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('status')}</div>
@@ -2226,12 +2255,12 @@ export default function AdminRecords() {
             <div className="mb-4 text-sm font-semibold text-zinc-900">{t('editCategory')}</div>
             <div className="space-y-3">
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('categoryName')}</div>
-                <input value={categoryNameEdit} onChange={(e) => setCategoryNameEdit(e.target.value)} className="ac-input" />
+                <label htmlFor="records-category-name-edit" className="mb-1 block text-xs font-semibold text-zinc-600">{t('categoryName')}</label>
+                <input id="records-category-name-edit" name="categoryNameEdit" value={categoryNameEdit} onChange={(e) => setCategoryNameEdit(e.target.value)} className="ac-input" />
               </div>
               <div>
-                <div className="mb-1 text-xs font-semibold text-zinc-600">{t('categoryCode')}</div>
-                <input value={categoryCodeEdit} onChange={(e) => setCategoryCodeEdit(e.target.value)} className="ac-input font-mono" />
+                <label htmlFor="records-category-code-edit" className="mb-1 block text-xs font-semibold text-zinc-600">{t('categoryCode')}</label>
+                <input id="records-category-code-edit" name="categoryCodeEdit" value={categoryCodeEdit} onChange={(e) => setCategoryCodeEdit(e.target.value)} className="ac-input font-mono" />
               </div>
               <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('status')}</div>
@@ -2329,6 +2358,16 @@ export default function AdminRecords() {
                 />
               </div>
               <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">Contact No</div>
+                <input
+                  type="tel"
+                  maxLength={100}
+                  value={customerForm.contactNo}
+                  onChange={(e) => setCustomerForm((prev) => ({ ...prev, contactNo: e.target.value }))}
+                  className="ac-input"
+                />
+              </div>
+              <div>
                 <div className="mb-1 text-xs font-semibold text-zinc-600">{t('email')}</div>
                 <input
                   value={customerForm.email}
@@ -2376,6 +2415,7 @@ export default function AdminRecords() {
                     customerCode: String(customerForm.customerCode || '').trim(),
                     customerName: String(customerForm.customerName || '').trim(),
                     contactPerson: String(customerForm.contactPerson || '').trim(),
+                    contactNo: String(customerForm.contactNo || '').trim(),
                     address: String(customerForm.address || '').trim(),
                     email: String(customerForm.email || '').trim(),
                     status: String(customerForm.status || 'Active').trim() || 'Active'
@@ -2424,6 +2464,16 @@ export default function AdminRecords() {
                 <input
                   value={customerForm.contactPerson}
                   onChange={(e) => setCustomerForm((prev) => ({ ...prev, contactPerson: e.target.value }))}
+                  className="ac-input"
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-semibold text-zinc-600">Contact No</div>
+                <input
+                  type="tel"
+                  maxLength={100}
+                  value={customerForm.contactNo}
+                  onChange={(e) => setCustomerForm((prev) => ({ ...prev, contactNo: e.target.value }))}
                   className="ac-input"
                 />
               </div>
@@ -2478,6 +2528,7 @@ export default function AdminRecords() {
                     customerCode: String(customerForm.customerCode || '').trim(),
                     customerName: String(customerForm.customerName || '').trim(),
                     contactPerson: String(customerForm.contactPerson || '').trim(),
+                    contactNo: String(customerForm.contactNo || '').trim(),
                     address: String(customerForm.address || '').trim(),
                     email: String(customerForm.email || '').trim(),
                     status: String(customerForm.status || 'Active').trim() || 'Active'

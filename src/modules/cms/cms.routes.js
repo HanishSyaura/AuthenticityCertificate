@@ -10,6 +10,36 @@ router.use(attachOrganization);
 
 // ===== CmsDesign (top-level Landing Design bundles) =====
 router.get('/designs', verifyToken, attachAccessContext, requirePermission('cms.read'), requireOrganization, cmsController.listDesigns);
+
+router.get(
+  '/design/:id/export',
+  verifyToken,
+  attachAccessContext,
+  requirePermission('cms.read'),
+  requireOrganization,
+  cmsController.exportDesign
+);
+router.post(
+  '/design/:id/duplicate',
+  verifyToken,
+  attachAccessContext,
+  requirePermission('cms.write'),
+  requireOrganization,
+  auditAction('DUPLICATE_CMS_DESIGN', {
+    targetType: 'cms_design',
+    getTargetId: (req) => String(req.params?.id || '')
+  }),
+  cmsController.duplicateDesign
+);
+router.post(
+  '/design/import',
+  verifyToken,
+  attachAccessContext,
+  requirePermission('cms.write'),
+  requireOrganization,
+  auditAction('IMPORT_CMS_DESIGN', { targetType: 'cms_design' }),
+  cmsController.importDesign
+);
 router.post(
   '/design',
   verifyToken,
@@ -67,6 +97,15 @@ router.patch(
   requireOrganization,
   auditAction('REORDER_CMS_PAGES', { targetType: 'cms_page' }),
   cmsController.reorderPages
+);
+router.patch(
+  '/page/:id/name',
+  verifyToken,
+  attachAccessContext,
+  requirePermission('cms.write'),
+  requireOrganization,
+  auditAction('RENAME_CMS_PAGE', { targetType: 'cms_page', getTargetId: (req) => String(req.params?.id || '') }),
+  cmsController.renamePage
 );
 router.delete(
   '/page/:id',

@@ -113,11 +113,16 @@ function clamp(n, min, max) {
 }
 
 function sampleBatchValueByKey(key) {
-  const k = String(key || '').trim().toLowerCase();
+  const k = String(key || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
   if (!k) return '';
+
+  if (k.includes('importpermit')) return 'AB123456';
+  if (k.includes('bestbefore') || k.includes('expirydate') || k.includes('expirationdate')) return '2030-10-30';
+  if (k.includes('dateofproduction') || k.includes('productiondate') || k.includes('manufacturedate')) return '2026-10-30';
+  if (k.includes('batchno') || k === 'batch' || k.includes('batchnumber')) return 'Sample Batch No. 001';
   if (k.includes('swiftlet') || k.includes('house')) return '160212';
-  if (k.includes('manufacture') || k.includes('production') || k.includes('date')) return '2025-07-11';
-  if (k.includes('batch')) return 'MSAL 24LT';
+  if (k.includes('production') || k.includes('manufacture') || k.includes('date')) return '2026-10-30';
+  if (k.includes('batch')) return 'Sample Batch No. 001';
   return 'SAMPLE';
 }
 
@@ -130,13 +135,18 @@ function useElementSize(ref) {
 
     const update = () => {
       const r = el.getBoundingClientRect();
-      setSize({ w: r.width || 0, h: r.height || 0 });
+      setSize((previous) => {
+        const w = r.width || 0;
+        const h = r.height || 0;
+        if (previous.w === w && previous.h === h) return previous;
+        return { w, h };
+      });
     };
 
     update();
 
     if (typeof window !== 'undefined' && typeof window.ResizeObserver === 'function') {
-      const ro = new window.ResizeObserver(() => update());
+      const ro = new window.ResizeObserver(update);
       ro.observe(el);
       return () => ro.disconnect();
     }
@@ -197,6 +207,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const [assignedBatchIds, setAssignedBatchIds] = useState(() => new Set());
   const [draftPlaceholders, setDraftPlaceholders] = useState([]);
   const [draftLayout, setDraftLayout] = useState([]);
+  const draftLayoutRef = useRef(draftLayout);
+
+  useEffect(() => {
+    draftLayoutRef.current = draftLayout;
+  }, [draftLayout]);
   const [epcBatchFields, setEpcBatchFields] = useState([]);
   const [saveStatus, setSaveStatus] = useState('idle');
   const [designerRightTab, setDesignerRightTab] = useState('preview');
@@ -205,7 +220,15 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
   const [largeUi, setLargeUi] = useState(true);
   const designerCanvasViewportRef = useRef(null);
   const builderCanvasViewportRef = useRef(null);
-  const previewCanvasViewportRef = useRef(null);
+  const [previewCanvasViewportNode, setPreviewCanvasViewportNode] = useState(null);
+  const previewCanvasViewportRef = useCallback((node) => {
+    setPreviewCanvasViewportNode(node);
+  }, []);
+
+  const previewCanvasViewportSizeRef = useMemo(
+    () => (previewCanvasViewportNode ? { current: previewCanvasViewportNode } : null),
+    [previewCanvasViewportNode]
+  );
   const persistTimerRef = useRef(null);
   const pendingPatchRef = useRef(null);
   const basePersistTimerRef = useRef(null);
@@ -271,16 +294,23 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     if (String(designerZoomMode || '') === 'fit') return fitDesignerScale;
     return clamp((Number(designerZoomPct) || 100) / 100, 0.1, 6);
   }, [designerZoomMode, designerZoomPct, fitDesignerScale]);
-  const previewViewportSize = useElementSize(previewCanvasViewportRef);
+  const previewViewportSize = useElementSize(previewCanvasViewportSizeRef);
   const fitPreviewScale = useMemo(() => {
     const w = Number(previewViewportSize?.w) || 0;
     const h = Number(previewViewportSize?.h) || 0;
-    if (!w || !h) return 1;
+    const sourceW = Math.max(1, Number(canvasW) || 1);
+    const sourceH = Math.max(1, Number(canvasH) || 1);
+
+    // Keep a safe initial size until the preview viewport has been measured.
+    if (w <= 0 || h <= 0) return 0.5;
+
+    // Account for the preview stage's 12px padding on each side.
     const pad = 24;
     const availW = Math.max(1, w - pad);
     const availH = Math.max(1, h - pad);
-    const s = Math.min(availW / Math.max(1, canvasW), availH / Math.max(1, canvasH));
-    return clamp(s, 0.1, 2);
+
+    // Fit the entire certificate while preserving its aspect ratio.
+    return Math.max(0.01, Math.min(availW / sourceW, availH / sourceH, 2));
   }, [canvasH, canvasW, previewViewportSize?.h, previewViewportSize?.w]);
   const canvasScale = isDesigner ? designerScale : fitBuilderScale;
 
@@ -295,6 +325,15 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
           label: String(field.label || field.fieldKey || '').trim()
         })),
     [epcBatchFields]
+  );
+  const assignedEpcFieldOptions = useMemo(
+    () => [
+      { value: 'assignedEpc.epc', label: 'EPC Code' },
+      { value: 'assignedEpc.nfcUid', label: 'NFC UID' },
+      { value: 'assignedEpc.epcItemId', label: 'EPC Item ID' },
+      { value: 'assignedEpc.batchNumber', label: 'Batch Number' }
+    ],
+    []
   );
   const bindEntityOptions = useMemo(
     () => [
@@ -323,6 +362,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         { value: 'product.customer.customerName', label: t('customerName') },
         { value: 'product.customer.customerCode', label: t('customerCode') },
         { value: 'product.customer.contactPerson', label: t('contactPerson') },
+        { value: 'product.customer.contactNo', label: 'Contact No' },
         { value: 'product.customer.email', label: t('email') },
         { value: 'product.customer.address', label: t('address') },
         { value: 'product.customer.status', label: t('status') }
@@ -355,11 +395,30 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     selectedPlaceholdersRef.current = Array.isArray(selected?.placeholders) ? selected.placeholders : [];
   }, [selected?.placeholders]);
 
+  const customerSupplierFetchAttemptedRef = useRef({
+    customers: false,
+    suppliers: false,
+  });
+
   useEffect(() => {
     if (!Array.isArray(products) || products.length === 0) void fetchProducts({ status: 'all' });
     if (!Array.isArray(categories) || categories.length === 0) void fetchCategories();
-    if (!Array.isArray(customers) || customers.length === 0) void fetchCustomers();
-    if (!Array.isArray(suppliers) || suppliers.length === 0) void fetchSuppliers();
+
+    if (
+      (!Array.isArray(customers) || customers.length === 0) &&
+      !customerSupplierFetchAttemptedRef.current.customers
+    ) {
+      customerSupplierFetchAttemptedRef.current.customers = true;
+      void fetchCustomers();
+    }
+
+    if (
+      (!Array.isArray(suppliers) || suppliers.length === 0) &&
+      !customerSupplierFetchAttemptedRef.current.suppliers
+    ) {
+      customerSupplierFetchAttemptedRef.current.suppliers = true;
+      void fetchSuppliers();
+    }
   }, [categories, customers, fetchCategories, fetchCustomers, fetchProducts, fetchSuppliers, products, suppliers]);
 
   const placeholderByKey = useMemo(() => {
@@ -442,11 +501,12 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
           code: 'CAT-001'
         },
         customer: {
-          customerName: 'Sample Customer',
+          customerName: 'Sample Customer/Distributor',
           customerCode: 'CUS-001',
-          contactPerson: 'John Tan',
-          email: 'customer@example.com',
-          address: 'Kuala Lumpur',
+          contactPerson: 'Sample Customer/Distributor',
+          contactNo: '+60123456789',
+          email: 'test@email.com',
+          address: 'No. 123, Jalan Bahagia 123, Bandar Aman Damai, 81100 Johor Bahru, Malaysia',
           status: 'Active'
         },
         supplier: {
@@ -468,6 +528,12 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         netWeight: '3g',
         caiqNumber: 'CAIQ-000000',
         productionDate: '2026-01-01'
+      },
+      assignedEpc: {
+        epc: 'EPC-SAMPLE-001',
+        nfcUid: '04AABBCCDD',
+        epcItemId: '1001',
+        batchNumber: 'BATCH-SAMPLE-001'
       }
     };
     const base = fallback;
@@ -480,6 +546,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       batch: { ...(base.batch || {}), templateData: batchTemplateData },
       certificate: { ...(base || {}), templateData: batchTemplateData },
       epcItem: base.epcItem || null,
+      assignedEpc: base.assignedEpc || null,
       templateData: batchTemplateData
     };
     for (const p of list) {
@@ -506,6 +573,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         templateData[key] = getBatchTemplateValue(resolvedKey) || sampleBatchValueByKey(resolvedKey || key);
         continue;
       }
+      if (source === 'assignedEpc') {
+        const value = bindPath ? getValue(bindPath, evalRoot) : '';
+        templateData[key] = value == null ? '' : String(value);
+        continue;
+      }
       templateData[key] = '';
     }
     return { ...base, templateData: { ...(base.templateData || {}), ...templateData } };
@@ -528,7 +600,8 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             const prefixRaw = buildPrefixHtml({ showPrefix, key, placeholder: ph, item: it });
             const valueHtmlRaw = source === 'static' || source === 'manual' || source === 'batch' || source === 'title' ? val : escapeTextToHtml(val);
             const valueHtml = inlineizeHtml(String(valueHtmlRaw || ''));
-            const html = inlineizeHtml(sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`));
+            const html = inlineizeHtml(sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`))
+              .replace(/font-size\s*:\s*[^;"]+;?/gi, '');
             const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
             const align = textAlignClass(it.align);
             const wrap = typeof it.wrap === 'boolean' ? it.wrap : true;
@@ -538,6 +611,8 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                 style={{
                   fontSize: fs,
                   lineHeight: 1.2,
+                  overflowY: 'hidden',
+                  overflowX: 'hidden',
                   textAlign: String(it.align || 'left'),
                   whiteSpace: wrap ? 'pre-wrap' : 'nowrap',
                   overflowWrap: wrap ? 'anywhere' : undefined,
@@ -567,7 +642,8 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
         const prefixRaw = buildPrefixHtml({ showPrefix, key, placeholder: ph, item: it });
         const valueHtmlRaw = source === 'static' || source === 'manual' || source === 'batch' || source === 'title' ? val : escapeTextToHtml(val);
         const valueHtml = inlineizeHtml(String(valueHtmlRaw || ''));
-        const html = inlineizeHtml(sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`));
+        const html = inlineizeHtml(sanitizeLimitedHtml(`${prefixRaw}${valueHtml || ''}`))
+              .replace(/font-size\s*:\s*[^;"]+;?/gi, '');
         const fs = Number(it.fontSize) > 0 ? Number(it.fontSize) : 14;
         const align = textAlignClass(it.align);
         const wrap = typeof it.wrap === 'boolean' ? it.wrap : true;
@@ -577,6 +653,8 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
             style={{
               fontSize: fs,
               lineHeight: 1.2,
+              overflowY: 'hidden',
+              overflowX: 'hidden',
               textAlign: String(it.align || 'left'),
               whiteSpace: wrap ? 'pre-wrap' : 'nowrap',
               overflowWrap: wrap ? 'anywhere' : undefined,
@@ -827,15 +905,22 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       return next;
     });
 
-  const setCanvasItems = (updaterOrNext) => {
+  const setCanvasItems = useCallback((updaterOrNext) => {
     if (layoutLocked) return;
-    const current = Array.isArray(draftLayout) ? draftLayout : [];
-    const next = typeof updaterOrNext === 'function' ? updaterOrNext(current) : updaterOrNext;
+    const current = Array.isArray(draftLayoutRef.current)
+      ? draftLayoutRef.current
+      : [];
+    const next = typeof updaterOrNext === 'function'
+      ? updaterOrNext(current)
+      : updaterOrNext;
+    if (Object.is(next, current)) return;
+
     const sanitized = sanitizeLayout(next);
+    draftLayoutRef.current = sanitized;
     markLocalEdit();
     setDraftLayout(sanitized);
     queueTemplatePatch({ layoutJson: sanitized });
-  };
+  }, [layoutLocked, markLocalEdit, queueTemplatePatch]);
 
   const updateField = (patch) => {
     if (layoutLocked) return;
@@ -919,17 +1004,17 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
     return { key, placeholder, isStaticLike, value };
   }, [placeholderByKey, selectedField]);
 
-  const syncSelectedFieldPresentation = useCallback(
+  const getSelectedFieldPresentationPatch = useCallback(
     (html) => {
-      if (!selectedField || layoutLocked) return;
+      if (!selectedField || layoutLocked) return {};
       const { fontSize, align } = extractRichTextPresentation(html);
       const patch = {};
       if (fontSize != null && Number.isFinite(Number(fontSize))) patch.fontSize = Number(fontSize);
       if (align === 'left' || align === 'center' || align === 'right') patch.align = align;
       else if (!/ql-align-|text-align\s*:/i.test(String(html || ''))) patch.align = 'left';
-      if (Object.keys(patch).length > 0) updateField(patch);
+      return patch;
     },
-    [layoutLocked, selectedField, updateField]
+    [layoutLocked, selectedField]
   );
 
   const updateSelectedFieldRichText = useCallback(
@@ -938,15 +1023,27 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       const nextHtml = String(html || '');
       const nextText = String(stripHtmlToText(nextHtml) || '').trim();
       const { key, placeholder, isStaticLike } = selectedFieldContentMeta;
+      const fieldPatch = {};
+
       if (placeholder && isStaticLike) {
         updatePlaceholder(key, { staticValue: nextHtml });
       } else {
         if (placeholder && key) updatePlaceholder(key, { label: nextText, labelHtml: nextHtml });
-        if (!layoutLocked) updateField({ label: nextText, labelHtml: nextHtml });
+        if (!layoutLocked) {
+          fieldPatch.label = nextText;
+          fieldPatch.labelHtml = nextHtml;
+        }
       }
-      if (syncPresentation) syncSelectedFieldPresentation(nextHtml);
+
+      if (syncPresentation) {
+        Object.assign(fieldPatch, getSelectedFieldPresentationPatch(nextHtml));
+      }
+
+      if (!layoutLocked && Object.keys(fieldPatch).length > 0) {
+        updateField(fieldPatch);
+      }
     },
-    [layoutLocked, selectedFieldContentMeta, syncSelectedFieldPresentation, updateField, updatePlaceholder]
+    [getSelectedFieldPresentationPatch, layoutLocked, selectedFieldContentMeta, updateField, updatePlaceholder]
   );
 
   useEffect(() => {
@@ -996,7 +1093,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       if (key && seen.has(norm)) errors.push(`${t('key')} "${key}": duplicate`);
       if (key) seen.add(norm);
       if (!label) errors.push(`${t('fieldLabel')} #${i + 1}: required`);
-      if ((source === 'product' || source === 'batch') && !bindPath) errors.push(`${t('bindTo')} #${i + 1}: required`);
+      if ((source === 'product' || source === 'batch' || source === 'assignedEpc') && !bindPath) errors.push(`${t('bindTo')} #${i + 1}: required`);
     }
     return { ok: errors.length === 0, errors };
   }, [placeholders, t]);
@@ -1018,7 +1115,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
       if (duplicateCount > 0) errors.push(`${t('key')} "${key}": duplicate`);
     }
     if (!label) errors.push(`${t('fieldLabel')} #${idx + 1}: required`);
-    if ((source === 'product' || source === 'batch') && !bindPath) errors.push(`${t('bindTo')} #${idx + 1}: required`);
+    if ((source === 'product' || source === 'batch' || source === 'assignedEpc') && !bindPath) errors.push(`${t('bindTo')} #${idx + 1}: required`);
     return errors;
   }, [placeholders, selectedPlaceholder, selectedPlaceholderIndex, t]);
 
@@ -1164,7 +1261,8 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                         {t('copyEnFillEmpty')}
                       </button>
                     ) : null}
-                    <select value={addOverlayKey} onChange={(e) => setAddOverlayKey(e.target.value)} className="ac-input w-60 rounded-lg px-3 py-2 text-xs">
+                    <label htmlFor="certificate-overlay-key-main" className="sr-only">{t('selectDataField')}</label>
+                    <select id="certificate-overlay-key-main" name="addOverlayKeyMain" value={addOverlayKey} onChange={(e) => setAddOverlayKey(e.target.value)} className="ac-input w-60 rounded-lg px-3 py-2 text-xs">
                       <option value="">{t('selectDataField')}</option>
                       {placeholders
                         .map((p) => ({ key: String(p?.key || '').trim(), label: String(stripHtmlToText(p?.labelHtml ?? p?.label ?? '') || '').trim() }))
@@ -1310,7 +1408,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                 </button>
               </div>
               <label className="flex items-center gap-2 text-xs font-semibold text-zinc-700">
-                <input type="checkbox" checked={largeUi} onChange={(e) => setLargeUi(Boolean(e.target.checked))} />
+                <input id="certificate-large-ui" name="largeUi" type="checkbox" checked={largeUi} onChange={(e) => setLargeUi(Boolean(e.target.checked))} />
                 {t('largeUi')}
               </label>
             </div>
@@ -1456,50 +1554,6 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                               </div>
                             </div>
 
-                            <div className="mt-3 grid grid-cols-2 gap-2">
-                              <div>
-                                <label className="block text-xs font-medium text-zinc-700">{t('fontSize')}</label>
-                                <input
-                                  type="number"
-                                  min={8}
-                                  max={96}
-                                  value={Number(selectedField.fontSize) > 0 ? Number(selectedField.fontSize) : 14}
-                                  onChange={(e) => {
-                                    const nextFontSize = Number(e.target.value) || 14;
-                                    updateField({ fontSize: nextFontSize });
-                                    if (selectedFieldContentMeta?.value != null) {
-                                      updateSelectedFieldRichText(
-                                        applyRichTextPresentation(selectedFieldContentMeta.value, { fontSize: nextFontSize, align: selectedField.align || 'left' })
-                                      );
-                                    }
-                                  }}
-                                  disabled={layoutLocked}
-                                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs font-medium text-zinc-700">{t('align')}</label>
-                                <select
-                                  value={String(selectedField.align || 'left')}
-                                  onChange={(e) => {
-                                    const nextAlign = e.target.value;
-                                    updateField({ align: nextAlign });
-                                    if (selectedFieldContentMeta?.value != null) {
-                                      updateSelectedFieldRichText(
-                                        applyRichTextPresentation(selectedFieldContentMeta.value, { fontSize: Number(selectedField.fontSize) || 14, align: nextAlign })
-                                      );
-                                    }
-                                  }}
-                                  disabled={layoutLocked}
-                                  className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                                >
-                                  <option value="left">{t('alignLeft')}</option>
-                                  <option value="center">{t('alignCenter')}</option>
-                                  <option value="right">{t('alignRight')}</option>
-                                </select>
-                              </div>
-                            </div>
-
                             <label className="mt-3 flex items-center gap-2 text-sm">
                               <input
                                 type="checkbox"
@@ -1510,22 +1564,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                               <span className="text-xs font-medium text-zinc-700">{t('wrapText')}</span>
                             </label>
 
-                            <div className="mt-3 flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const next = (Array.isArray(draftLayout) ? draftLayout : []).filter((f) => f.id !== selectedField.id);
-                                  setSelectedFieldId(null);
-                                  markLocalEdit();
-                                  setDraftLayout(next);
-                                  queueTemplatePatch({ layoutJson: next });
-                                }}
-                                disabled={layoutLocked}
-                                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-                              >
-                                {t('delete')}
-                              </button>
-                            </div>
+
                           </>
                         )}
                       </div>
@@ -1864,7 +1903,8 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
 
                       <div className="flex w-full flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
-                          <select value={addOverlayKey} onChange={(e) => setAddOverlayKey(e.target.value)} className="ac-input w-full min-w-0 rounded-xl px-3 py-2 text-xs sm:max-w-sm">
+                          <label htmlFor="certificate-overlay-key-wizard" className="sr-only">{t('selectDataField')}</label>
+                          <select id="certificate-overlay-key-wizard" name="addOverlayKeyWizard" value={addOverlayKey} onChange={(e) => setAddOverlayKey(e.target.value)} className="ac-input w-full min-w-0 rounded-xl px-3 py-2 text-xs sm:max-w-sm">
                             <option value="">{t('selectDataField')}</option>
                             {placeholders
                               .map((p) => ({ key: String(p?.key || '').trim(), label: String(stripHtmlToText(p?.labelHtml ?? p?.label ?? '') || '').trim() }))
@@ -1884,9 +1924,26 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                             {t('addToCanvas')}
                           </button>
                         </div>
-                        <button type="button" onClick={() => setWizardStep('fields')} className="ac-btn ac-btn-soft rounded-xl px-3 py-2 text-xs lg:shrink-0">
-                          {t('editFields')}
-                        </button>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button type="button" onClick={() => setWizardStep('fields')} className="ac-btn ac-btn-soft rounded-xl px-3 py-2 text-xs">
+                            {t('editFields')}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (layoutLocked || !selectedField) return;
+                              const next = (Array.isArray(draftLayout) ? draftLayout : []).filter((f) => f.id !== selectedField.id);
+                              setSelectedFieldId(null);
+                              markLocalEdit();
+                              setDraftLayout(next);
+                              queueTemplatePatch({ layoutJson: next });
+                            }}
+                            disabled={layoutLocked || !selectedField}
+                            className="rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                          >
+                            {t('delete')}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -1931,7 +1988,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                 {layoutLocked ? <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{t('translateOnlyHint')}</div> : null}
 
                 {wizardStep === 'canvas' ? (
-                  <div className={`grid min-h-0 gap-4 ${workspaceViewportClass} xl:grid-cols-[minmax(0,1.45fr)_minmax(19rem,0.92fr)]`}>
+                  <div className={`grid min-h-0 gap-4 ${workspaceViewportClass} xl:grid-cols-[minmax(0,1fr)_minmax(19rem,1.15fr)]`}>
                     <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50">
                       <div className="border-b border-zinc-200 bg-white/80 px-4 py-3">
                         <div className="text-sm font-semibold text-zinc-900">{t('canvas')}</div>
@@ -1956,11 +2013,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                       </div>
                     </div>
 
-                    <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50/70">
+                    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50/70">
                       <div className="border-b border-zinc-200 bg-white/80 px-4 py-3">
                         <div className="text-sm font-semibold text-zinc-900">{t('preview')}</div>
                       </div>
-                      <div ref={previewCanvasViewportRef} className="min-h-0 flex-1 overflow-hidden">
+                      <div ref={previewCanvasViewportRef} className="relative min-h-0 flex-1 overflow-hidden">
                         {!selected ? null : (
                           <CanvasStage
                             mode="preview"
@@ -2005,6 +2062,16 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                             pagedFields.map(({ p, idx }) => {
                               const source = String(p?.source || 'static');
                               const uiSource = source === 'manual' ? 'static' : source;
+                              const cardBindEntity =
+                                String(p?.bindEntity || '').trim() ||
+                                (String(p?.bindPath || '').startsWith('product.customer.')
+                                  ? 'customers'
+                                  : String(p?.bindPath || '').startsWith('product.supplier.')
+                                    ? 'suppliers'
+                                    : String(p?.bindPath || '').startsWith('product.categoryRef.')
+                                      ? 'categories'
+                                      : 'products');
+                              const cardBindPathOptions = bindPathOptionsByEntity?.[cardBindEntity] || [];
                               const cardKey = String(p?.key || '').trim() || `idx-${idx}`;
                               const isActive = idx === selectedPlaceholderIndex;
                               const title = String(stripHtmlToText(p?.labelHtml ?? p?.label ?? '') || '').trim() || String(p?.key || '').trim() || `#${idx + 1}`;
@@ -2027,9 +2094,18 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                             ? t('sourceTitle')
                                             : uiSource === 'batch'
                                               ? t('sourceBatch')
-                                              : t('sourceManual')}
+                                              : uiSource === 'assignedEpc'
+                                                ? t('sourceAssignedEpc')
+                                                : t('sourceManual')}
                                       </div>
-                                      {uiSource === 'batch' && String(p?.bindPath || '').trim() ? (
+                                      {uiSource === 'assignedEpc' && String(p?.bindPath || '').trim() ? (
+                                        <div className="mt-1 truncate text-[11px] text-zinc-400">
+                                          {t('sourceAssignedEpc')}: {String(
+                                            assignedEpcFieldOptions.find((opt) => opt.value === String(p?.bindPath || '').trim())?.label ||
+                                              String(p?.bindPath || '').trim()
+                                          )}
+                                        </div>
+                                      ) : uiSource === 'batch' && String(p?.bindPath || '').trim() ? (
                                         <div className="mt-1 truncate text-[11px] text-zinc-400">
                                           {t('bindTo')}: {String(
                                             epcBatchFieldOptions.find((opt) => opt.value === String(p?.bindPath || '').trim())?.label ||
@@ -2038,8 +2114,8 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                         </div>
                                       ) : uiSource === 'product' && String(p?.bindPath || '').trim() ? (
                                         <div className="mt-1 truncate text-[11px] text-zinc-400">
-                                          {String(bindEntityOptions.find((opt) => opt.value === bindEntity)?.label || t('bindTo'))}: {String(
-                                            bindPathOptions.find((opt) => opt.value === String(p?.bindPath || '').trim())?.label || String(p?.bindPath || '').trim()
+                                          {String(bindEntityOptions.find((opt) => opt.value === cardBindEntity)?.label || t('bindTo'))}: {String(
+                                            cardBindPathOptions.find((opt) => opt.value === String(p?.bindPath || '').trim())?.label || String(p?.bindPath || '').trim()
                                           )}
                                         </div>
                                       ) : null}
@@ -2132,7 +2208,9 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                           ? t('sourceTitle')
                                           : uiSource === 'batch'
                                             ? t('sourceBatch')
-                                            : t('sourceManual')}
+                                            : uiSource === 'assignedEpc'
+                                              ? t('sourceAssignedEpc')
+                                              : t('sourceManual')}
                                     </div>
                                   </div>
                                 </div>
@@ -2205,8 +2283,12 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                               bindEntity: nextSource === 'product' ? String(cur.bindEntity || 'products') : String(cur.bindEntity || ''),
                                               bindPath:
                                                 nextSource === 'product'
-                                                  ? String(cur.bindPath || bindPathOptionsByEntity.products?.[0]?.value || '')
-                                                  : String(cur.bindPath || '')
+                                                  ? (bindPathOptionsByEntity.products?.some((opt) => opt.value === cur.bindPath) ? String(cur.bindPath) : String(bindPathOptionsByEntity.products?.[0]?.value || ''))
+                                                  : nextSource === 'assignedEpc'
+                                                    ? (assignedEpcFieldOptions.some((opt) => opt.value === cur.bindPath) ? String(cur.bindPath) : String(assignedEpcFieldOptions[0]?.value || ''))
+                                                    : nextSource === 'batch'
+                                                      ? (String(cur.bindPath || '').startsWith('templateData.') ? String(cur.bindPath) : String(epcBatchFieldOptions?.[0]?.value || ''))
+                                                      : ''
                                             };
                                             replacePlaceholders(next);
                                           }}
@@ -2216,6 +2298,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                           <option value="title">{t('sourceTitle')}</option>
                                         <option value="static">{t('sourceManual')}</option>
                                         <option value="batch">{t('sourceBatch')}</option>
+                                          <option value="assignedEpc">{t('sourceAssignedEpc')}</option>
                                           <option value="product">{t('bindTo')}</option>
                                         </select>
                                         <select
@@ -2278,7 +2361,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                               bindPath:
                                                 nextSource === 'batch'
                                                   ? (currentBindPath.startsWith('templateData.') ? currentBindPath : String(epcBatchFieldOptions?.[0]?.value || ''))
-                                                  : String(cur.bindPath || '')
+                                                  : nextSource === 'assignedEpc'
+                                                    ? (assignedEpcFieldOptions.some((opt) => opt.value === currentBindPath) ? currentBindPath : String(assignedEpcFieldOptions[0]?.value || ''))
+                                                    : nextSource === 'product'
+                                                      ? (bindPathOptionsByEntity.products?.some((opt) => opt.value === currentBindPath) ? currentBindPath : String(bindPathOptionsByEntity.products?.[0]?.value || ''))
+                                                      : ''
                                             };
                                             replacePlaceholders(next);
                                           }}
@@ -2288,6 +2375,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                           <option value="title">{t('sourceTitle')}</option>
                                           <option value="static">{t('sourceManual')}</option>
                                           <option value="batch">{t('sourceBatch')}</option>
+                                          <option value="assignedEpc">{t('sourceAssignedEpc')}</option>
                                           <option value="product">{t('bindTo')}</option>
                                         </select>
                                         <div className="min-w-0">
@@ -2314,6 +2402,56 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                           </div>
                                         </div>
                                       </div>
+                                    ) : uiSource === 'assignedEpc' ? (
+                                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[260px_minmax(0,1fr)]">
+                                        <select
+                                          value={uiSource}
+                                          onChange={(e) => {
+                                            if (layoutLocked) return;
+                                            const nextSource = e.target.value;
+                                            const next = placeholders.slice();
+                                            const cur = next[idx] || {};
+                                            const current = String(cur.bindPath || '').trim();
+                                            next[idx] = {
+                                              ...cur,
+                                              source: nextSource,
+                                              bindPath: nextSource === 'assignedEpc'
+                                                ? (assignedEpcFieldOptions.some((opt) => opt.value === current) ? current : String(assignedEpcFieldOptions[0]?.value || ''))
+                                                : nextSource === 'batch'
+                                                  ? (current.startsWith('templateData.') ? current : String(epcBatchFieldOptions?.[0]?.value || ''))
+                                                  : nextSource === 'product'
+                                                    ? (bindPathOptionsByEntity.products?.some((opt) => opt.value === current) ? current : String(bindPathOptionsByEntity.products?.[0]?.value || ''))
+                                                    : ''
+                                            };
+                                            replacePlaceholders(next);
+                                          }}
+                                          disabled={layoutLocked}
+                                          className="ac-select-native h-9 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900"
+                                        >
+                                          <option value="title">{t('sourceTitle')}</option>
+                                          <option value="static">{t('sourceManual')}</option>
+                                          <option value="batch">{t('sourceBatch')}</option>
+                                          <option value="assignedEpc">{t('sourceAssignedEpc')}</option>
+                                          <option value="product">{t('bindTo')}</option>
+                                        </select>
+                                        <div className="min-w-0">
+                                          <select
+                                            value={String(p?.bindPath || '')}
+                                            onChange={(e) => {
+                                              if (layoutLocked) return;
+                                              const next = placeholders.slice();
+                                              next[idx] = { ...(next[idx] || {}), bindPath: String(e.target.value || '') };
+                                              replacePlaceholders(next);
+                                            }}
+                                            disabled={layoutLocked || assignedEpcFieldOptions.length === 0}
+                                            className="ac-select-native h-9 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900"
+                                          >
+                                            {assignedEpcFieldOptions.map((opt) => (
+                                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                      </div>
                                     ) : (
                                       <div className="max-w-[260px]">
                                         <select
@@ -2330,9 +2468,11 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                               bindPath:
                                                 nextSource === 'batch'
                                                   ? (currentBindPath.startsWith('templateData.') ? currentBindPath : String(epcBatchFieldOptions?.[0]?.value || ''))
-                                                  : nextSource === 'product'
-                                                    ? currentBindPath
-                                                    : ''
+                                                  : nextSource === 'assignedEpc'
+                                                    ? (assignedEpcFieldOptions.some((opt) => opt.value === currentBindPath) ? currentBindPath : String(assignedEpcFieldOptions[0]?.value || ''))
+                                                    : nextSource === 'product'
+                                                      ? currentBindPath
+                                                      : ''
                                             };
                                             replacePlaceholders(next);
                                           }}
@@ -2342,6 +2482,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                                           <option value="title">{t('sourceTitle')}</option>
                                           <option value="static">{t('sourceManual')}</option>
                                           <option value="batch">{t('sourceBatch')}</option>
+                                          <option value="assignedEpc">{t('sourceAssignedEpc')}</option>
                                           <option value="product">{t('bindTo')}</option>
                                         </select>
                                       </div>
@@ -2531,66 +2672,7 @@ export default function AdminCertificateTemplateBuilder({ initialSelectedId = nu
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 rounded-xl border border-zinc-200 bg-white p-3">
-                      <div>
-                        <label className="block text-xs font-medium text-zinc-700">{t('fontSize')}</label>
-                        <input
-                          type="number"
-                          min={8}
-                          max={96}
-                          value={Number(selectedField.fontSize) > 0 ? Number(selectedField.fontSize) : 14}
-                          onChange={(e) => {
-                            const nextFontSize = Number(e.target.value) || 14;
-                            updateField({ fontSize: nextFontSize });
-                            if (selectedFieldContentMeta?.value != null) {
-                              updateSelectedFieldRichText(
-                                applyRichTextPresentation(selectedFieldContentMeta.value, { fontSize: nextFontSize, align: selectedField.align || 'left' })
-                              );
-                            }
-                          }}
-                          disabled={layoutLocked}
-                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-zinc-700">{t('align')}</label>
-                        <select
-                          value={String(selectedField.align || 'left')}
-                          onChange={(e) => {
-                            const nextAlign = e.target.value;
-                            updateField({ align: nextAlign });
-                            if (selectedFieldContentMeta?.value != null) {
-                              updateSelectedFieldRichText(
-                                applyRichTextPresentation(selectedFieldContentMeta.value, { fontSize: Number(selectedField.fontSize) || 14, align: nextAlign })
-                              );
-                            }
-                          }}
-                          disabled={layoutLocked}
-                          className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm"
-                        >
-                          <option value="left">{t('alignLeft')}</option>
-                          <option value="center">{t('alignCenter')}</option>
-                          <option value="right">{t('alignRight')}</option>
-                        </select>
-                      </div>
-                      <div className="flex items-end">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (layoutLocked) return;
-                            const next = (Array.isArray(draftLayout) ? draftLayout : []).filter((f) => f.id !== selectedField.id);
-                            setSelectedFieldId(null);
-                            markLocalEdit();
-                            setDraftLayout(next);
-                            queueTemplatePatch({ layoutJson: next });
-                          }}
-                          disabled={layoutLocked}
-                          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-                        >
-                          {t('delete')}
-                        </button>
-                      </div>
-                    </div>
+
                   </div>
                 )}
               </div>

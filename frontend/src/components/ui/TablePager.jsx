@@ -29,9 +29,11 @@ export default function TablePager({ offset, limit, total, loading, onOffsetChan
       </div>
       <div className="flex items-center gap-2">
         {showLimitSelector ? (
-          <label className="flex items-center gap-2">
+          <label htmlFor="table-pager-rows-per-page" className="flex items-center gap-2">
             <span className="text-xs text-zinc-600">{t('rowsPerPage')}</span>
             <select
+              id="table-pager-rows-per-page"
+              name="rowsPerPage"
               value={String(safeLimit)}
               disabled={loading}
               onChange={(e) => {

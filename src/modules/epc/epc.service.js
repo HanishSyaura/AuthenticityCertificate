@@ -12,12 +12,10 @@ async function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), ms))]);
 }
 
+// Import audit history is permanent and must never be auto-deleted.
+// Keep this compatibility helper so existing callers remain unchanged.
 async function pruneBatchImportHistoryIfNoEpcsTx(tx, organizationId) {
-  const orgId = Number(organizationId);
-  const remaining = await tx.epcItem.count({ where: { organizationId: orgId } });
-  if (Number(remaining) > 0) return { pruned: 0, remainingEpcs: Number(remaining) || 0 };
-  const res = await tx.auditLog.deleteMany({ where: { organizationId: orgId, action: EPC_BATCH_IMPORT_AUDIT_ACTION } });
-  return { pruned: Number(res.count) || 0, remainingEpcs: 0 };
+  return { pruned: 0, remainingEpcs: null };
 }
 
 function getAllowedCorpPrefixes() {
@@ -1634,30 +1632,67 @@ async function listItems({ organizationId, q, batchId, cmsDesignId, pendingOnly,
   if (statusNorm === 'ACTIVE' || statusNorm === 'INACTIVE') {
     const statusFilter =
       statusNorm === 'ACTIVE'
-        ? Prisma.sql`AND EXISTS (
+        ? Prisma.sql`AND i.assignmentClearedAt IS NULL
+          AND EXISTS (
             SELECT 1
             FROM \`TagIdentity\` t
             WHERE t.organizationId = i.organizationId
               AND t.epc = i.epcCode
               AND t.unassignedAt IS NULL
           )`
-        : Prisma.sql`AND NOT EXISTS (
-            SELECT 1
-            FROM \`TagIdentity\` t
-            WHERE t.organizationId = i.organizationId
-              AND t.epc = i.epcCode
-              AND t.unassignedAt IS NULL
+        : Prisma.sql`AND (
+            i.assignmentClearedAt IS NOT NULL
+            OR NOT EXISTS (
+              SELECT 1
+              FROM \`TagIdentity\` t
+              WHERE t.organizationId = i.organizationId
+                AND t.epc = i.epcCode
+                AND t.unassignedAt IS NULL
+            )
           )`;
     const designFilter = designId
-      ? Prisma.sql`AND EXISTS (
-          SELECT 1
-          FROM \`EpcBatch\` b
-          INNER JOIN \`Product\` p
-            ON p.id = b.productId
-          WHERE b.id = i.batchId
-            AND b.organizationId = i.organizationId
-            AND p.organizationId = i.organizationId
-            AND p.cmsDesignId = ${designId}
+      ? Prisma.sql`AND (
+          EXISTS (
+            SELECT 1
+            FROM \`TagIdentity\` ti
+            INNER JOIN \`Certificate\` c
+              ON c.certificateId = ti.certificateId
+             AND c.organizationId = ti.organizationId
+            WHERE ti.organizationId = i.organizationId
+              AND ti.epc = i.epcCode
+              AND ti.unassignedAt IS NULL
+              AND c.cmsDesignId = ${designId}
+          )
+          OR (
+            NOT EXISTS (
+              SELECT 1
+              FROM \`TagIdentity\` ti
+              INNER JOIN \`Certificate\` c
+                ON c.certificateId = ti.certificateId
+               AND c.organizationId = ti.organizationId
+              WHERE ti.organizationId = i.organizationId
+                AND ti.epc = i.epcCode
+                AND ti.unassignedAt IS NULL
+                AND c.cmsDesignId IS NOT NULL
+            )
+            AND i.assignmentClearedAt IS NULL
+            AND EXISTS (
+              SELECT 1
+              FROM \`EpcBatch\` b
+              INNER JOIN \`Product\` p
+                ON p.id = b.productId
+              WHERE b.id = i.batchId
+                AND b.organizationId = i.organizationId
+                AND p.organizationId = i.organizationId
+                AND (
+                  p.cmsCertificateDesignId = ${designId}
+                  OR (
+                    p.cmsCertificateDesignId IS NULL
+                    AND p.cmsDesignId = ${designId}
+                  )
+                )
+            )
+          )
         )`
       : Prisma.sql``;
 
@@ -1738,18 +1773,70 @@ async function listItems({ organizationId, q, batchId, cmsDesignId, pendingOnly,
     return { items: itemsWithStatus, total, limit, offset };
   }
 
+  let designItemIds = null;
+  if (designId) {
+    const designRows = await withTimeout(
+      prisma.$queryRaw(
+        Prisma.sql`
+          SELECT i.id
+          FROM \`EpcItem\` i
+          WHERE i.organizationId = ${orgId}
+            AND (
+              EXISTS (
+                SELECT 1
+                FROM \`TagIdentity\` ti
+                INNER JOIN \`Certificate\` c
+                  ON c.certificateId = ti.certificateId
+                 AND c.organizationId = ti.organizationId
+                WHERE ti.organizationId = i.organizationId
+                  AND ti.epc = i.epcCode
+                  AND ti.unassignedAt IS NULL
+                  AND c.cmsDesignId = ${designId}
+              )
+              OR (
+                NOT EXISTS (
+                  SELECT 1
+                  FROM \`TagIdentity\` ti
+                  INNER JOIN \`Certificate\` c
+                    ON c.certificateId = ti.certificateId
+                   AND c.organizationId = ti.organizationId
+                  WHERE ti.organizationId = i.organizationId
+                    AND ti.epc = i.epcCode
+                    AND ti.unassignedAt IS NULL
+                    AND c.cmsDesignId IS NOT NULL
+                )
+                AND i.assignmentClearedAt IS NULL
+                AND EXISTS (
+                  SELECT 1
+                  FROM \`EpcBatch\` b
+                  INNER JOIN \`Product\` p
+                    ON p.id = b.productId
+                  WHERE b.id = i.batchId
+                    AND b.organizationId = i.organizationId
+                    AND p.organizationId = i.organizationId
+                    AND (
+                      p.cmsCertificateDesignId = ${designId}
+                      OR (
+                        p.cmsCertificateDesignId IS NULL
+                        AND p.cmsDesignId = ${designId}
+                      )
+                    )
+                )
+              )
+            )
+        `
+      ),
+      2500
+    );
+    designItemIds = (Array.isArray(designRows) ? designRows : [])
+      .map((row) => Number(row.id))
+      .filter((id) => Number.isFinite(id) && id > 0);
+  }
+
   const where = {
     organizationId: orgId,
     ...(batchId ? { batchId: Number(batchId) } : {}),
-    ...(designId
-      ? {
-          batch: {
-            product: {
-              cmsDesignId: designId
-            }
-          }
-        }
-      : {}),
+    ...(designId ? { id: { in: designItemIds } } : {}),
     ...((createdFrom || createdTo)
       ? {
           createdAt: {
@@ -1821,6 +1908,167 @@ async function listItems({ organizationId, q, batchId, cmsDesignId, pendingOnly,
   return { items: itemsWithStatus, total, limit, offset };
 }
 
+async function unassignItemAssignment({ organizationId, itemId, epcCode }) {
+  const orgId = Number(organizationId);
+  const id = itemId == null || itemId === '' ? null : Number(itemId);
+  const code = String(epcCode || '').trim();
+
+  if (!Number.isInteger(orgId) || orgId <= 0) {
+    const err = new Error('Invalid organization');
+    err.status = 400;
+    throw err;
+  }
+  if (!(Number.isInteger(id) && id > 0) && !code) {
+    const err = new Error('EPC item id or EPC code is required');
+    err.status = 400;
+    throw err;
+  }
+
+  const now = new Date();
+
+  return await prisma.$transaction(async (tx) => {
+    const item = await tx.epcItem.findFirst({
+      where: {
+        organizationId: orgId,
+        ...(id ? { id } : { epcCode: code })
+      },
+      select: { id: true, epcCode: true, assignmentClearedAt: true }
+    });
+
+    if (!item) {
+      const err = new Error('EPC item not found');
+      err.status = 404;
+      throw err;
+    }
+
+    if (item.assignmentClearedAt) {
+      return {
+        id: item.id,
+        epcCode: item.epcCode,
+        assignmentClearedAt: item.assignmentClearedAt,
+        identitiesUnassigned: 0
+      };
+    }
+
+    const updated = await tx.epcItem.update({
+      where: { id: item.id },
+      data: { assignmentClearedAt: now },
+      select: { id: true, epcCode: true, assignmentClearedAt: true }
+    });
+
+    const identities = await tx.tagIdentity.updateMany({
+      where: {
+        organizationId: orgId,
+        epc: item.epcCode,
+        unassignedAt: null
+      },
+      data: { unassignedAt: now }
+    });
+
+    return {
+      ...updated,
+      identitiesUnassigned: identities.count
+    };
+  });
+}
+
+
+async function bulkUnassignImportHistory({ organizationId, historyIds }) {
+  const orgId = Number(organizationId);
+  const ids = Array.from(new Set(
+    (Array.isArray(historyIds) ? historyIds : [])
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && value > 0)
+  ));
+
+  if (!Number.isInteger(orgId) || orgId <= 0) {
+    const err = new Error('Invalid organization');
+    err.status = 400;
+    throw err;
+  }
+  if (!ids.length) {
+    const err = new Error('Select at least one EPC assignment history record.');
+    err.status = 400;
+    throw err;
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const histories = await tx.auditLog.findMany({
+      where: {
+        id: { in: ids },
+        organizationId: orgId,
+        action: EPC_BATCH_IMPORT_AUDIT_ACTION
+      },
+      select: { id: true, metadata: true }
+    });
+
+    if (histories.length !== ids.length) {
+      const err = new Error('One or more selected history records were not found.');
+      err.status = 404;
+      throw err;
+    }
+
+    const epcCodes = Array.from(new Set(
+      histories.flatMap((history) => {
+        const metadata = history?.metadata && typeof history.metadata === 'object'
+          ? history.metadata
+          : {};
+        return (Array.isArray(metadata.items) ? metadata.items : [])
+          .map((item) => String(item?.epcCode || '').trim())
+          .filter(Boolean);
+      })
+    ));
+
+    if (!epcCodes.length) {
+      return {
+        selectedHistoryCount: histories.length,
+        totalEpcs: 0,
+        cleared: 0,
+        alreadyCleared: 0,
+        missing: 0
+      };
+    }
+
+    const epcItems = await tx.epcItem.findMany({
+      where: { organizationId: orgId, epcCode: { in: epcCodes } },
+      select: { id: true, epcCode: true, assignmentClearedAt: true }
+    });
+
+    const now = new Date();
+    const activeCodes = epcItems
+      .filter((item) => !item.assignmentClearedAt)
+      .map((item) => item.epcCode);
+
+    if (activeCodes.length) {
+      await tx.epcItem.updateMany({
+        where: {
+          organizationId: orgId,
+          epcCode: { in: activeCodes },
+          assignmentClearedAt: null
+        },
+        data: { assignmentClearedAt: now }
+      });
+
+      await tx.tagIdentity.updateMany({
+        where: {
+          organizationId: orgId,
+          epc: { in: activeCodes },
+          unassignedAt: null
+        },
+        data: { unassignedAt: now }
+      });
+    }
+
+    return {
+      selectedHistoryCount: histories.length,
+      totalEpcs: epcCodes.length,
+      cleared: activeCodes.length,
+      alreadyCleared: epcItems.length - activeCodes.length,
+      missing: epcCodes.length - epcItems.length
+    };
+  }, { timeout: 20000, maxWait: 5000 });
+}
+
 const EPC_ITEM_SELECT = {
   id: true,
   organizationId: true,
@@ -1834,6 +2082,7 @@ const EPC_ITEM_SELECT = {
   productionDate: true,
   caiqNumber: true,
   dynamicFields: true,
+  assignmentClearedAt: true,
   createdAt: true,
   batch: {
     select: {
@@ -2835,6 +3084,8 @@ async function submitBatchImportRange({
   epcCodes,
   rowValues,
   productId,
+  customerId,
+  supplierId,
   certificateTemplateId,
   documents,
   actor
@@ -2876,6 +3127,32 @@ async function submitBatchImportRange({
       if (!product) throw new Error('Product not found.');
       const assignedProductId = Number(product.id);
       const assignedProductSku = String(product.sku || product.code || '').trim() || null;
+
+      let assignedCustomerId = null;
+      if (customerId != null && String(customerId).trim() !== '') {
+        assignedCustomerId = Number(customerId);
+        if (!Number.isInteger(assignedCustomerId) || assignedCustomerId <= 0) {
+          throw new Error('Invalid customer selection.');
+        }
+        const customer = await tx.customer.findFirst({
+          where: { id: assignedCustomerId, organizationId: orgId, deletedAt: null, status: 'Active' },
+          select: { id: true }
+        });
+        if (!customer) throw new Error('Customer not found or inactive.');
+      }
+
+      let assignedSupplierId = null;
+      if (supplierId != null && String(supplierId).trim() !== '') {
+        assignedSupplierId = Number(supplierId);
+        if (!Number.isInteger(assignedSupplierId) || assignedSupplierId <= 0) {
+          throw new Error('Invalid supplier selection.');
+        }
+        const supplier = await tx.supplier.findFirst({
+          where: { id: assignedSupplierId, organizationId: orgId, deletedAt: null, status: 'Active' },
+          select: { id: true }
+        });
+        if (!supplier) throw new Error('Supplier not found or inactive.');
+      }
 
       let tplId = null;
       let tplCertId = null;
@@ -2938,6 +3215,37 @@ async function submitBatchImportRange({
         }
       }
 
+      // Ensure the referenced Certificate exists before assigning it to EpcBatch.
+      if (tplCertId) {
+        const existingCert = await tx.certificate.findUnique({
+          where: { certificateId: tplCertId },
+          select: { certificateId: true, organizationId: true, status: true, issuedAt: true }
+        });
+        if (existingCert) {
+          if (Number(existingCert.organizationId) !== orgId) {
+            throw new Error('Certificate ID belongs to a different organization');
+          }
+          const s = String(existingCert.status || '').toUpperCase();
+          if (s === 'PENDING') {
+            await tx.certificate.update({
+              where: { certificateId: tplCertId },
+              data: { status: 'VALID', issuedAt: existingCert.issuedAt || new Date() }
+            });
+          }
+        } else {
+          await tx.certificate.create({
+            data: {
+              certificateId: tplCertId,
+              organizationId: orgId,
+              type: 'shared',
+              batchId: null,
+              status: 'VALID',
+              issuedAt: new Date()
+            }
+          });
+        }
+      }
+
       const batchIdSet = new Set();
       for (const meta of epcItemByEpc.values()) {
         const batchId = meta?.batchId != null ? Number(meta.batchId) : null;
@@ -2976,6 +3284,8 @@ async function submitBatchImportRange({
           };
           const existingSku = String(b.sku || '').trim() || null;
           if (!existingSku && assignedProductSku) data.sku = assignedProductSku;
+          if (assignedCustomerId != null) data.customerId = assignedCustomerId;
+          if (assignedSupplierId != null) data.supplierId = assignedSupplierId;
           if (tplId != null) {
             data.certificateTemplateId = tplId;
             data.certificateId = tplCertId;
@@ -3029,25 +3339,6 @@ async function submitBatchImportRange({
 
       let activation = { activated: 0, created: 0 };
       if (tplCertId) {
-        const existingCert = await tx.certificate.findUnique({
-          where: { certificateId: tplCertId },
-          select: { certificateId: true, organizationId: true, status: true, issuedAt: true }
-        });
-        if (existingCert) {
-          if (Number(existingCert.organizationId) !== orgId) throw new Error('Certificate ID belongs to a different organization');
-          const s = String(existingCert.status || '').toUpperCase();
-          if (s === 'PENDING') {
-            await tx.certificate.update({
-              where: { certificateId: tplCertId },
-              data: { status: 'VALID', issuedAt: existingCert.issuedAt || new Date() }
-            });
-          }
-        } else {
-          await tx.certificate.create({
-            data: { certificateId: tplCertId, organizationId: orgId, type: 'shared', batchId: null, status: 'VALID', issuedAt: new Date() }
-          });
-        }
-
         activation = await activateEpcIdentities({ tx, orgId, certificateId: tplCertId, epcCodes: selectedCodes });
       }
 
@@ -3796,6 +4087,8 @@ module.exports = {
   listItems,
   deleteItems,
   getItemByEpc,
+  unassignItemAssignment,
+  bulkUnassignImportHistory,
   resetItemsProduction,
   updateItemProduction,
   importProductionXlsx,

@@ -6,7 +6,7 @@ import VerifyLoadingScreen from '../components/VerifyLoadingScreen';
 import { useT } from '../i18n/useT';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import useResolvedBranding from '../hooks/useResolvedBranding';
-import { resolvePublicMediaUrl } from '../utils/apiBase';
+import { getPublicApiBaseUrl, resolvePublicMediaUrl } from '../utils/apiBase';
 
 function IconShieldCheck(props) {
   return (
@@ -118,6 +118,8 @@ const VerifyPage = () => {
   const [loadingMeta, setLoadingMeta] = useState(null);
   const [loadingMode, setLoadingMode] = useState('auto');
   const [showLoader, setShowLoader] = useState(false);
+  const [loadingBrandLogoUrl, setLoadingBrandLogoUrl] = useState('');
+  const [loadingBrandLookupDone, setLoadingBrandLookupDone] = useState(true);
   const loaderStartAtRef = useRef(0);
   const loaderHideTimerRef = useRef(null);
   const { t, lang, locale } = useT();
@@ -143,7 +145,7 @@ const VerifyPage = () => {
   useEffect(() => {
     if (id) {
       setLoadingMode('verify');
-      setLoadingMeta({ label: t('certificateId'), value: id });
+      setLoadingMeta({ label: t('certificateId'), value: id, certificateId: id });
       verifyCertificate(id, { lang });
       setCertId(id);
       return;
@@ -153,11 +155,23 @@ const VerifyPage = () => {
     const nfcUid = sp.get('nfcUid');
     if (epc || nfcUid) {
       setLoadingMode('resolve');
-      if (epc) setLoadingMeta({ label: t('epc'), value: epc });
-      else setLoadingMeta({ label: t('nfcUid'), value: nfcUid });
+      if (epc) setLoadingMeta({ label: t('epc'), value: epc, epc, nfcUid: nfcUid || null });
+      else setLoadingMeta({ label: t('nfcUid'), value: nfcUid, epc: null, nfcUid });
       resolveCertificate({ epc: epc || null, nfcUid: nfcUid || null }, { lang });
     }
   }, [id, lang, location.search, resolveCertificate, t, verifyCertificate]);
+
+  useEffect(() => {
+    const epc = String(loadingMeta?.epc || '').trim().toUpperCase();
+
+    const localBrandLogos = {
+      'BA0127102600000001': '/brand-logos/biolab.jpeg',
+      'BA0129102600000003': '/brand-logos/ubody.jpeg',
+    };
+
+    setLoadingBrandLogoUrl(localBrandLogos[epc] || '');
+    setLoadingBrandLookupDone(true);
+  }, [loadingMeta?.epc]);
 
   useEffect(() => {
     const minDurationMs = 2000;
@@ -171,6 +185,10 @@ const VerifyPage = () => {
       setShowLoader(true);
       return;
     }
+
+    // Keep the loading screen visible until the optional brand lookup settles.
+    if (!loadingBrandLookupDone) return;
+
     const now = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
     const elapsed = Math.max(0, now - (loaderStartAtRef.current || now));
     const remaining = Math.max(minHideDelayMs, minDurationMs - elapsed);
@@ -184,7 +202,7 @@ const VerifyPage = () => {
         loaderHideTimerRef.current = null;
       }
     };
-  }, [loading]);
+  }, [loading, loadingBrandLookupDone]);
 
   const runCurrentLookup = (value) => {
     const raw = String(value || '').trim();
@@ -195,7 +213,7 @@ const VerifyPage = () => {
     const looksLikeCertId = /^(BN-[A-Z0-9]+|CERT\d{9,})$/.test(nextValue);
     if (looksLikeCertId) {
       setLoadingMode('verify');
-      setLoadingMeta({ label: t('certificateId'), value: nextValue });
+      setLoadingMeta({ label: t('certificateId'), value: nextValue, certificateId: nextValue });
       verifyCertificate(nextValue, { lang });
       return;
     }
@@ -205,13 +223,13 @@ const VerifyPage = () => {
       setLoadingMode('resolve');
       // Hex-like values can be either EPC or NFC UID. Resolve both to keep
       // manual input behavior consistent with direct ?epc=... deep links.
-      setLoadingMeta({ label: t('epc'), value: nextValue });
+      setLoadingMeta({ label: t('epc'), value: nextValue, epc: nextValue, nfcUid: nextValue });
       resolveCertificate({ epc: nextValue, nfcUid: nextValue }, { lang });
       return;
     }
 
     setLoadingMode('resolve');
-    setLoadingMeta({ label: t('epc'), value: nextValue });
+    setLoadingMeta({ label: t('epc'), value: nextValue, epc: nextValue, nfcUid: null });
     resolveCertificate({ epc: nextValue, nfcUid: null }, { lang });
   };
 
@@ -224,7 +242,11 @@ const VerifyPage = () => {
     return (
       <VerifyViewport>
         <VerifyLanguageSwitcher />
-        <VerifyLoadingScreen meta={loadingMeta} mode={loadingMode} />
+        <VerifyLoadingScreen
+          meta={loadingMeta}
+          mode={loadingMode}
+          brandLogoUrl={loadingBrandLogoUrl}
+        />
       </VerifyViewport>
     );
   }

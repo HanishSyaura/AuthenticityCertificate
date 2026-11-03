@@ -10,7 +10,7 @@ const createSchema = z.object({
 });
 
 const roleSchema = z.object({
-  role: z.enum(['super_admin', 'admin', 'operator'])
+  role: z.literal('super_admin')
 });
 
 const resetPasswordSchema = z.object({
@@ -42,7 +42,7 @@ async function create(req, res) {
       name: data.name,
       email: data.email,
       password,
-      role: 'admin',
+      role: 'operator',
       mustResetPassword: usedDefaultPassword
     });
     res.success(
@@ -63,7 +63,12 @@ async function updateRole(req, res) {
     const { id } = req.params;
     if (!parseId(id)) return res.error('Invalid user id', 400);
     const data = roleSchema.parse(req.body);
-    const user = await usersService.updateUserRole({ id, role: data.role });
+    const user = await usersService.updateUserRole({
+      id,
+      role: data.role,
+      actorRole: req.user?.role,
+      actorRoles: req.user?.roles
+    });
     res.success(user, 'Role updated');
   } catch (e) {
     if (e instanceof z.ZodError) return res.error(e.issues?.[0]?.message || e.errors?.[0]?.message || 'Invalid input', 400);
@@ -75,7 +80,11 @@ async function remove(req, res) {
   try {
     const { id } = req.params;
     if (!parseId(id)) return res.error('Invalid user id', 400);
-    const result = await usersService.deleteUser({ id });
+    const result = await usersService.deleteUser({
+      id,
+      actorRole: req.user?.role,
+      actorRoles: req.user?.roles
+    });
     res.success(result, 'User deleted');
   } catch (e) {
     res.error(e.message, 400);

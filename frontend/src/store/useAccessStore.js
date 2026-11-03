@@ -16,6 +16,8 @@ function getApi() {
 const useAccessStore = create((set, get) => ({
   permissions: [],
   roles: [],
+  auditLogs: [],
+  auditLogTotal: 0,
   loading: false,
   error: null,
   lastSyncAt: null,
@@ -30,6 +32,27 @@ const useAccessStore = create((set, get) => ({
       return permissions;
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || tRaw('failedToLoadPermissions');
+      set({ loading: false, error: msg });
+      return [];
+    }
+  },
+
+  fetchAccessAuditLogs: async ({ limit = 25, offset = 0 } = {}) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.get('/access/audit-logs', { params: { limit, offset } });
+      const payload = res?.data?.data || {};
+      const auditLogs = Array.isArray(payload.items) ? payload.items : [];
+      set({
+        auditLogs,
+        auditLogTotal: Number(payload.total) || 0,
+        loading: false,
+        lastSyncAt: Date.now()
+      });
+      return auditLogs;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Failed to load access audit logs';
       set({ loading: false, error: msg });
       return [];
     }

@@ -167,6 +167,53 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
+  bulkUnassignImportHistory: async (historyIds) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const res = await api.post(
+        '/epc/batch-import/history/unassign-assignment',
+        { historyIds }
+      );
+      set({ loading: false });
+      return res?.data?.data || null;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || tRaw('operationFailed');
+      set({ loading: false, error: msg });
+      return null;
+    }
+  },
+
+  unassignAssignment: async (itemIdOrEpcCode) => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const isNumericId =
+        typeof itemIdOrEpcCode === 'number' ||
+        (typeof itemIdOrEpcCode === 'string' && /^\d+$/.test(itemIdOrEpcCode.trim()));
+
+      let res;
+      if (isNumericId) {
+        const id = Number(itemIdOrEpcCode);
+        if (!Number.isInteger(id) || id <= 0) {
+          throw new Error('Invalid EPC item id');
+        }
+        res = await api.post(`/epc/items/${id}/unassign-assignment`);
+      } else {
+        const epcCode = String(itemIdOrEpcCode || '').trim();
+        if (!epcCode) throw new Error('Invalid EPC code');
+        res = await api.post('/epc/items/unassign-assignment', { epcCode });
+      }
+
+      set({ loading: false });
+      return res?.data?.data || null;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || tRaw('operationFailed');
+      set({ loading: false, error: msg });
+      return null;
+    }
+  },
+
   deleteItems: async ({ itemIds, cleanup } = {}) => {
     set({ loading: true, error: null });
     try {
@@ -403,7 +450,7 @@ const useEpcStore = create((set, get) => ({
     }
   },
 
-  submitBatchImportRange: async ({ corpCode, date, startRunningNo, endRunningNo, epcCodes, rowValues, productId, certificateTemplateId, documents } = {}) => {
+  submitBatchImportRange: async ({ corpCode, date, startRunningNo, endRunningNo, epcCodes, rowValues, productId, customerId, supplierId, certificateTemplateId, documents } = {}) => {
     set({ loading: true, error: null });
     try {
       const api = getApi();
@@ -415,6 +462,8 @@ const useEpcStore = create((set, get) => ({
         epcCodes: Array.isArray(epcCodes) ? epcCodes.map((code) => String(code || '').trim()).filter(Boolean) : [],
         ...(rowValues && typeof rowValues === 'object' ? { rowValues } : {}),
         ...(productId != null && String(productId).trim() !== '' ? { productId: Number(productId) } : {}),
+        ...(customerId != null && String(customerId).trim() !== '' ? { customerId: Number(customerId) } : {}),
+        ...(supplierId != null && String(supplierId).trim() !== '' ? { supplierId: Number(supplierId) } : {}),
         ...(certificateTemplateId != null && String(certificateTemplateId).trim() !== '' ? { certificateTemplateId: Number(certificateTemplateId) } : {}),
         ...(documents && typeof documents === 'object' ? { documents } : {})
       };

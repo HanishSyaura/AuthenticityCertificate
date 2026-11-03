@@ -6,6 +6,7 @@ import { resolvePublicMediaUrl } from '../utils/apiBase';
 import { resolveCmsVideoSource } from '../utils/videoEmbed';
 import PdfLightbox from './PdfLightbox';
 import PdfFirstPageThumb from './PdfFirstPageThumb';
+import CmsIcon from './CmsIcon';
 
 const ImageLightbox = ({ src, onClose }) => {
   useEffect(() => {
@@ -143,7 +144,14 @@ function sanitizeClass(input) {
     .split(/\s+/)
     .map((s) => s.trim())
     .filter(Boolean)
-    .filter((c) => allowed.has(c) || /^ql-indent-[1-8]$/.test(c) || /^ql-font-[a-z0-9-]{1,30}$/i.test(c));
+    .filter((c) =>
+      allowed.has(c) ||
+      c === 'ql-ui' ||
+      /^ql-indent-[1-8]$/.test(c) ||
+      /^ql-font-[a-z0-9-]{1,30}$/i.test(c) ||
+      /^ql-bullet-style-(disc|circle|square|dash|arrow|check)$/.test(c) ||
+      /^ql-number-style-(decimal|lower-alpha|upper-alpha|lower-roman|upper-roman)$/.test(c)
+    );
   return kept.join(' ');
 }
 
@@ -192,18 +200,18 @@ function sanitizeLimitedHtml(input) {
   const allowedAttrs = {
     DIV: new Set(['style', 'class']),
     P: new Set(['style', 'class']),
-    SPAN: new Set(['style', 'class']),
+    SPAN: new Set(['style', 'class', 'contenteditable']),
     UL: new Set(['style', 'class']),
     OL: new Set(['style', 'class']),
-    LI: new Set(['style', 'class']),
-    B: new Set(['style']),
-    STRONG: new Set(['style']),
-    I: new Set(['style']),
-    EM: new Set(['style']),
-    U: new Set(['style']),
-    S: new Set(['style']),
-    STRIKE: new Set(['style']),
-    SUP: new Set(['style']),
+    LI: new Set(['style', 'class', 'data-list']),
+    B: new Set(['style', 'class']),
+    STRONG: new Set(['style', 'class']),
+    I: new Set(['style', 'class']),
+    EM: new Set(['style', 'class']),
+    U: new Set(['style', 'class']),
+    S: new Set(['style', 'class']),
+    STRIKE: new Set(['style', 'class']),
+    SUP: new Set(['style', 'class']),
     BR: new Set([])
   };
   const walk = (node) => {
@@ -227,6 +235,22 @@ function sanitizeLimitedHtml(input) {
           const name = String(a.name || '').toLowerCase();
           if (!keep.has(name)) {
             child.removeAttribute(a.name);
+            continue;
+          }
+          if (name === 'data-list') {
+            const safe = ['bullet', 'ordered', 'checked', 'unchecked'].includes(String(a.value || '').trim())
+              ? String(a.value).trim()
+              : '';
+            if (safe) child.setAttribute('data-list', safe);
+            else child.removeAttribute('data-list');
+            continue;
+          }
+          if (name === 'contenteditable') {
+            if (String(a.value || '').trim().toLowerCase() === 'false') {
+              child.setAttribute('contenteditable', 'false');
+            } else {
+              child.removeAttribute('contenteditable');
+            }
             continue;
           }
           if (name === 'class') {
@@ -650,6 +674,31 @@ const PublicRenderer = ({
             </div>
           );
         }
+      case 'icon': {
+        const iconContent = block.content || {};
+        const linkUrl = iconContent.linkEnabled
+          ? sanitizeLinkUrl(iconContent.linkUrl)
+          : '';
+        const openInNewTab = iconContent.openInNewTab !== false;
+
+        return (
+          <div key={block.id} style={style}>
+            {linkUrl ? (
+              <a
+                href={linkUrl}
+                target={openInNewTab ? '_blank' : undefined}
+                rel={openInNewTab ? 'noopener noreferrer' : undefined}
+                className="block h-full w-full"
+                aria-label="Open linked destination"
+              >
+                <CmsIcon content={iconContent} />
+              </a>
+            ) : (
+              <CmsIcon content={iconContent} />
+            )}
+          </div>
+        );
+      }
       case 'image':
         {
           const mode = String(block.content?.mode || 'fit');
@@ -949,20 +998,19 @@ const PublicRenderer = ({
                           : '';
                       if (ph && (source === 'static' || source === 'title')) {
                         val = String(ph?.staticValue || '');
-                      } else if (!String(val || '').trim() && ph) {
-                        if (source === 'product' || source === 'batch') {
-                          const bindPath = String(ph?.bindPath || '').trim();
-                          if (bindPath) {
-                            const normalizedBindPath = bindPath.startsWith('templateData.') ? `certificate.${bindPath}` : bindPath;
-                            effectivePath = normalizedBindPath;
-                            const v = getValue(normalizedBindPath, {
-                              product: dataForTemplate?.product || null,
-                              batch: dataForTemplate?.batch || null,
-                              certificate: dataForTemplate || null,
-                              epcItem: dataForTemplate?.epcItem || null
-                            });
-                            val = v == null ? '' : String(v);
-                          }
+                      } else if (ph && (source === 'product' || source === 'batch' || source === 'assignedEpc')) {
+                        const bindPath = String(ph?.bindPath || '').trim();
+                        if (bindPath) {
+                          const normalizedBindPath = bindPath.startsWith('templateData.') ? `certificate.${bindPath}` : bindPath;
+                          effectivePath = normalizedBindPath;
+                          const v = getValue(normalizedBindPath, {
+                            product: dataForTemplate?.product || null,
+                            batch: dataForTemplate?.batch || null,
+                            certificate: dataForTemplate || null,
+                            epcItem: dataForTemplate?.epcItem || null,
+                            assignedEpc: dataForTemplate?.assignedEpc || null
+                          });
+                          val = v == null ? '' : String(v);
                         }
                       }
                       const effectivePathLower = String(effectivePath || '').trim().toLowerCase();
@@ -988,7 +1036,8 @@ const PublicRenderer = ({
                         source === 'static' || source === 'manual' || source === 'batch' || source === 'title' ? sanitizeLimitedHtml(val) : escapeTextToHtml(val);
                       const valueHtml = inlineizeHtml(valueHtmlRaw);
                       const prefixBoldHtml = prefixHtml ? `<span style="font-weight: 700">${prefixHtml}</span>` : '';
-                      const html = `${prefixBoldHtml}${valueHtml || ''}`;
+                      const html = `${prefixBoldHtml}${valueHtml || ''}`
+                        .replace(/font-size\s*:\s*[^;"]+;?/gi, '');
                       if (!String(html || '').trim()) return null;
                       const wrap = typeof it.wrap === 'boolean' ? it.wrap : true;
                       return (
@@ -1001,7 +1050,9 @@ const PublicRenderer = ({
                             width: `${it.w}px`,
                             height: `${it.h}px`,
                             fontSize: `${it.fontSize}px`,
-                            lineHeight: 1.2
+                            lineHeight: 1.2,
+                            overflowY: 'hidden',
+                            overflowX: 'hidden'
                           }}
                         >
                           <div

@@ -163,7 +163,7 @@ const useCmsStore = create((set, get) => ({
     }
   },
 
-  patchDesign: async ({ id, name, slug, kind, description }) => {
+  patchDesign: async ({ id, name, slug, kind, description, logoUrl }) => {
     const { token } = useAdminAuthStore.getState();
     if (!token) throw new Error(tRaw('notAuthenticated'));
     const body = {};
@@ -171,6 +171,7 @@ const useCmsStore = create((set, get) => ({
     if (slug !== undefined) body.slug = safeSlugify(slug);
     if (kind !== undefined) body.kind = kind;
     if (description !== undefined) body.description = description;
+    if (logoUrl !== undefined) body.logoUrl = logoUrl;
     try {
       const api = createAdminApi({ token });
       const res = await api.patch(`/cms/design/${encodeURIComponent(id)}`, body);
@@ -273,7 +274,40 @@ const useCmsStore = create((set, get) => ({
     }
   },
 
-  createPage: async ({ name, slug }) => {
+  renamePage: async ({ pageId, name }) => {
+    const { token } = useAdminAuthStore.getState();
+    const nextName = String(name ?? '').trim();
+    if (!token) throw new Error(tRaw('notAuthenticated'));
+    if (!nextName || nextName.length > 120) {
+      throw new Error('Page name must be between 1 and 120 characters');
+    }
+
+    try {
+      const api = createAdminApi({ token });
+      const res = await api.patch(
+        `/cms/page/${encodeURIComponent(pageId)}/name`,
+        { name: nextName }
+      );
+      const saved = res?.data?.data;
+      const savedName = String(saved?.name || nextName);
+      set({
+        pages: sortPages(
+          sanitizePagesList((get().pages || []).map((page) =>
+            String(page.id) === String(pageId)
+              ? { ...page, name: savedName }
+              : page
+          ))
+        ),
+        error: null
+      });
+      return saved;
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || tRaw('operationFailed');
+      throw new Error(msg);
+    }
+  },
+
+  createPage: async ({ name, slug, description }) => {
     const { token } = useAdminAuthStore.getState();
     const safeSlug = safeSlugify(slug || name);
     const pages = get().pages;
@@ -285,7 +319,7 @@ const useCmsStore = create((set, get) => ({
 
     try {
       const api = createAdminApi({ token });
-      const payload = { name, slug: safeSlug, kind, designId: Number(designId) };
+      const payload = { name, slug: safeSlug, kind, designId: Number(designId), description };
       const res = await api.post('/cms/page', payload);
       const created = res?.data?.data;
       const updated = sortPages(sanitizePagesList([...(pages || []), created].filter(Boolean)));

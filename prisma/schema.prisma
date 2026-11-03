@@ -270,10 +270,12 @@ model Customer {
   customerCode   String
   customerName   String
   contactPerson  String?
+  contactNo      String?       @db.VarChar(100)
   address        String?
   email          String?
   status         String       @default("Active")
   products       Product[]
+  epcBatches     EpcBatch[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   deletedAt      DateTime?
@@ -294,6 +296,7 @@ model Supplier {
   phoneNumber    String?
   status         String       @default("Active")
   products       Product[]
+  epcBatches     EpcBatch[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   deletedAt      DateTime?
@@ -374,6 +377,10 @@ model EpcBatch {
 
   productId Int?
   product   Product? @relation(fields: [productId], references: [id])
+  customerId Int?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  supplierId Int?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
   sku       String?
 
   batchName             String
@@ -397,6 +404,8 @@ model EpcBatch {
   @@index([organizationId, corpPrefix])
   @@index([organizationId, origin])
   @@index([organizationId, productId])
+  @@index([organizationId, customerId])
+  @@index([organizationId, supplierId])
   @@index([organizationId, certificateId])
 }
 
@@ -416,8 +425,9 @@ model EpcItem {
   netWeight      String?
   productionDate DateTime?
   caiqNumber     String?
-  dynamicFields  Json?
-  createdAt      DateTime  @default(now())
+  dynamicFields       Json?
+  assignmentClearedAt DateTime?
+  createdAt           DateTime  @default(now())
 
   documents EpcItemDocument[]
   scanGroupItems EpcScanGroupItem[]
@@ -644,7 +654,8 @@ model CmsDesign {
   name                String                            // Display name: "Sarang Madu Lama Landing"
   slug                String                            // URL slug: "sarang-madu-lama"
   kind                String       @default("landing")  // "landing" for public product page; "certificate" for verify/cert page
-  description         String?                           // Optional admin memo
+  description         String?
+  logoUrl             String?       @db.VarChar(512)                           // Optional admin memo
 
   // ===== INNER CHILDREN (1:many bundle → inner pages) =====
   pages               CmsPage[]
@@ -679,6 +690,7 @@ model CmsPage {
 
   name                String
   slug                String
+  description         String?       @db.Text
   kind                String       @default("landing")   // "landing" default (use parent design.kind for top-level)
   sortOrder           Int          @default(0)
   layout              CmsLayout?

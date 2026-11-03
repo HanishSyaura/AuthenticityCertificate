@@ -5,13 +5,9 @@ import { useT } from '../../i18n/useT';
 import DataTable from '../../components/ui/DataTable';
 import TablePager from '../../components/ui/TablePager';
 import RowActionsMenu from '../../components/ui/RowActionsMenu';
+import { formatDateTimeMY } from '../../utils/dateTime';
 
-function formatDate(input) {
-  if (!input) return '';
-  const d = new Date(input);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toISOString().slice(0, 19).replace('T', ' ');
-}
+const formatDate = formatDateTimeMY;
 
 function Tag({ children }) {
   return <span className="ac-badge ac-badge-neutral">{children}</span>;
@@ -308,20 +304,20 @@ export default function AdminCertificates() {
             <div className="mb-3 text-sm font-semibold text-zinc-900">{t('assignIdentity')}</div>
             <div className="space-y-3">
               <div>
-                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('certificateId')}</div>
-                <input value={assignCertId} readOnly className="ac-input bg-zinc-50 px-3 py-2 text-xs" />
+                <label htmlFor="assign-certificate-id" className="mb-1 block text-[11px] font-semibold text-zinc-600">{t('certificateId')}</label>
+                <input id="assign-certificate-id" name="assignCertId" value={assignCertId} readOnly className="ac-input bg-zinc-50 px-3 py-2 text-xs" />
               </div>
               <div>
-                <div className="mb-1 text-[11px] font-semibold text-zinc-600">NFC UID</div>
-                <input value={assignNfc} onChange={(e) => setAssignNfc(e.target.value)} className="ac-input px-3 py-2 text-xs" />
+                <label htmlFor="assign-nfc-uid" className="mb-1 block text-[11px] font-semibold text-zinc-600">NFC UID</label>
+                <input id="assign-nfc-uid" name="assignNfc" value={assignNfc} onChange={(e) => setAssignNfc(e.target.value)} className="ac-input px-3 py-2 text-xs" />
               </div>
               <div>
-                <div className="mb-1 text-[11px] font-semibold text-zinc-600">EPC</div>
-                <input value={assignEpc} onChange={(e) => setAssignEpc(e.target.value)} className="ac-input px-3 py-2 text-xs" />
+                <label htmlFor="assign-epc" className="mb-1 block text-[11px] font-semibold text-zinc-600">EPC</label>
+                <input id="assign-epc" name="assignEpc" value={assignEpc} onChange={(e) => setAssignEpc(e.target.value)} className="ac-input px-3 py-2 text-xs" />
               </div>
               <div>
-                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('expiresAtOptional')}</div>
-                <input value={assignExp} onChange={(e) => setAssignExp(e.target.value)} placeholder="2026-12-31" className="ac-input px-3 py-2 text-xs" />
+                <label htmlFor="assign-expires-at" className="mb-1 block text-[11px] font-semibold text-zinc-600">{t('expiresAtOptional')}</label>
+                <input id="assign-expires-at" name="assignExp" value={assignExp} onChange={(e) => setAssignExp(e.target.value)} placeholder="2026-12-31" className="ac-input px-3 py-2 text-xs" />
               </div>
             </div>
             <div className="mt-4 flex justify-end gap-2">
@@ -354,15 +350,17 @@ export default function AdminCertificates() {
 
             <div className="space-y-3">
               <div>
-                <div className="mb-1 text-[11px] font-semibold text-zinc-600">{t('certificateId')}</div>
-                <input value={lpCertId} readOnly className="ac-input bg-zinc-50 px-3 py-2 text-xs" />
+                <label htmlFor="lp-certificate-id" className="mb-1 block text-[11px] font-semibold text-zinc-600">{t('certificateId')}</label>
+                <input id="lp-certificate-id" name="lpCertId" value={lpCertId} readOnly className="ac-input bg-zinc-50 px-3 py-2 text-xs" />
               </div>
 
               <div>
-                <div className="mb-1 text-[11px] font-semibold text-zinc-600">
+                <label htmlFor="lp-certificate-landing-page" className="mb-1 block text-[11px] font-semibold text-zinc-600">
                   EPC Landing Page Override (Tier 1 — Highest)
-                </div>
+                </label>
                 <select
+                  id="lp-certificate-landing-page"
+                  name="lpCertCmsDesignId"
                   value={lpCertCmsDesignId}
                   onChange={(e) => setLpCertCmsDesignId(e.target.value)}
                   disabled={cmsDesignsLoading}

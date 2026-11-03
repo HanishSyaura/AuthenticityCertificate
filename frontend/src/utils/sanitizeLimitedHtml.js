@@ -52,7 +52,14 @@ function sanitizeClass(input) {
     .split(/\s+/)
     .map((s) => s.trim())
     .filter(Boolean)
-    .filter((c) => allowed.has(c) || /^ql-indent-[1-8]$/.test(c) || /^ql-font-[a-z0-9-]{1,30}$/i.test(c));
+    .filter((c) =>
+      allowed.has(c) ||
+      c === 'ql-ui' ||
+      /^ql-indent-[1-8]$/.test(c) ||
+      /^ql-font-[a-z0-9-]{1,30}$/i.test(c) ||
+      /^ql-bullet-style-(disc|circle|square|dash|arrow|check)$/.test(c) ||
+      /^ql-number-style-(decimal|lower-alpha|upper-alpha|lower-roman|upper-roman)$/.test(c)
+    );
   return kept.join(' ');
 }
 
@@ -93,23 +100,23 @@ export function sanitizeLimitedHtml(input) {
     A: new Set(['href', 'target', 'rel', 'style', 'class']),
     DIV: new Set(['style', 'class']),
     P: new Set(['style', 'class']),
-    SPAN: new Set(['style', 'class']),
+    SPAN: new Set(['style', 'class', 'contenteditable']),
     H1: new Set(['style', 'class']),
     H2: new Set(['style', 'class']),
     H3: new Set(['style', 'class']),
     BLOCKQUOTE: new Set(['style', 'class']),
     UL: new Set(['style', 'class']),
     OL: new Set(['style', 'class']),
-    LI: new Set(['style', 'class']),
-    B: new Set(['style']),
-    STRONG: new Set(['style']),
-    I: new Set(['style']),
-    EM: new Set(['style']),
-    U: new Set(['style']),
-    S: new Set(['style']),
-    STRIKE: new Set(['style']),
-    SUP: new Set(['style']),
-    SUB: new Set(['style']),
+    LI: new Set(['style', 'class', 'data-list']),
+    B: new Set(['style', 'class']),
+    STRONG: new Set(['style', 'class']),
+    I: new Set(['style', 'class']),
+    EM: new Set(['style', 'class']),
+    U: new Set(['style', 'class']),
+    S: new Set(['style', 'class']),
+    STRIKE: new Set(['style', 'class']),
+    SUP: new Set(['style', 'class']),
+    SUB: new Set(['style', 'class']),
     BR: new Set([])
   };
 
@@ -142,6 +149,22 @@ export function sanitizeLimitedHtml(input) {
           const name = String(a.name || '').toLowerCase();
           if (!keep.has(name)) {
             child.removeAttribute(a.name);
+            continue;
+          }
+          if (name === 'data-list') {
+            const safe = ['bullet', 'ordered', 'checked', 'unchecked'].includes(String(a.value || '').trim())
+              ? String(a.value).trim()
+              : '';
+            if (safe) child.setAttribute('data-list', safe);
+            else child.removeAttribute('data-list');
+            continue;
+          }
+          if (name === 'contenteditable') {
+            if (String(a.value || '').trim().toLowerCase() === 'false') {
+              child.setAttribute('contenteditable', 'false');
+            } else {
+              child.removeAttribute('contenteditable');
+            }
             continue;
           }
           if (name === 'class') {

@@ -30,6 +30,7 @@ function sanitizeUser(u) {
 async function listUsers() {
   const users = await withTimeout(
     prisma.user.findMany({
+      where: { deletedAt: null },
       orderBy: { createdAt: 'desc' },
       include: {
         roles: { select: { role: { select: { id: true, name: true } } } }
@@ -40,6 +41,24 @@ async function listUsers() {
   return users.map(sanitizeUser).filter(Boolean);
 }
 
+
+function isSuperAdminActor({ actorRole, actorRoles }) {
+  const roles = Array.isArray(actorRoles) ? actorRoles : [];
+  return String(actorRole || '').trim() === 'super_admin' ||
+    roles.some((role) => String(role || '').trim() === 'super_admin');
+}
+
+async function countSuperAdmins(tx) {
+  return tx.user.count({
+    where: {
+      deletedAt: null,
+      OR: [
+        { role: 'super_admin' },
+        { roles: { some: { role: { name: 'super_admin' } } } }
+      ]
+    }
+  });
+}
 function parseUserId(id) {
   const uid = Number(id);
   if (!Number.isFinite(uid) || uid <= 0) throw new Error('Invalid user id');
@@ -79,45 +98,88 @@ async function createUser({ name, email, password, role, mustResetPassword }) {
   return sanitizeUser(user);
 }
 
-async function updateUserRole({ id, role }) {
-  const uid = parseUserId(id);
-  const user = await prisma.$transaction(async (tx) => {
-    const updated = await withTimeout(
-      tx.user.update({
-        where: { id: uid },
-        data: { role }
-      }),
-      1500
-    );
 
-    try {
-      await tx.userRole.deleteMany({ where: { userId: uid, role: { isSystem: true } } });
-      const sysRole = await tx.role.findUnique({ where: { name: String(role || '').trim() } });
-      if (sysRole) {
-        await tx.userRole.create({ data: { userId: uid, roleId: sysRole.id } });
-      }
-    } catch {
+
+async function updateUserRole({ id, role, actorRole, actorRoles }) {
+  if (role !== 'super_admin') {
+    throw new Error('Legacy role endpoint only supports super_admin; use custom role assignment instead');
+  }
+
+  const uid = parseUserId(id);
+  const actorIsSuperAdmin = isSuperAdminActor({ actorRole, actorRoles });
+
+  const user = await prisma.$transaction(async (tx) => {
+    const existing = await tx.user.findUnique({
+      where: { id: uid, deletedAt: null },
+      include: { roles: { select: { role: { select: { name: true } } } } }
+    });
+    if (!existing) throw new Error('User not found');
+
+    const currentlySuperAdmin =
+      existing.role === 'super_admin' ||
+      existing.roles.some((ur) => ur?.role?.name === 'super_admin');
+
+    if ((role === 'super_admin' || currentlySuperAdmin) && !actorIsSuperAdmin) {
+      throw new Error('Only a super admin can assign or remove the super_admin role');
     }
 
-    const full = await tx.user.findUnique({
+    if (currentlySuperAdmin && role !== 'super_admin') {
+      if (await countSuperAdmins(tx) <= 1) {
+        throw new Error('The last super admin cannot be demoted or removed');
+      }
+    }
+
+    const systemRole = await tx.role.findUnique({ where: { name: role } });
+    if (!systemRole) throw new Error('Requested system role is not configured');
+
+    await tx.userRole.deleteMany({
+      where: { userId: uid, role: { isSystem: true } }
+    });
+
+    await tx.userRole.create({
+      data: { userId: uid, roleId: systemRole.id }
+    });
+
+    return tx.user.update({
       where: { id: uid },
+      data: { role },
       include: { roles: { select: { role: { select: { id: true, name: true } } } } }
     });
-    return full || updated;
   });
+
   return sanitizeUser(user);
 }
 
-async function deleteUser({ id }) {
+
+async function deleteUser({ id, actorRole, actorRoles }) {
   const uid = parseUserId(id);
+  const actorIsSuperAdmin = isSuperAdminActor({ actorRole, actorRoles });
+
   await prisma.$transaction(async (tx) => {
-    const existing = await withTimeout(tx.user.findUnique({ where: { id: uid }, select: { id: true } }), 1200);
+    const existing = await tx.user.findUnique({
+      where: { id: uid, deletedAt: null },
+      include: { roles: { select: { role: { select: { name: true } } } } }
+    });
     if (!existing) throw new Error('User not found');
-    await tx.auditLog.updateMany({ where: { userId: uid }, data: { userId: null } });
-    await tx.fraudFlag.updateMany({ where: { resolvedByUserId: uid }, data: { resolvedByUserId: null } });
-    await tx.userRole.deleteMany({ where: { userId: uid } });
-    await tx.user.delete({ where: { id: uid } });
+
+    const isTargetSuperAdmin =
+      existing.role === 'super_admin' ||
+      existing.roles.some((ur) => ur?.role?.name === 'super_admin');
+
+    if (isTargetSuperAdmin && !actorIsSuperAdmin) {
+      throw new Error('Only a super admin can delete a super admin account');
+    }
+
+    if (isTargetSuperAdmin && await countSuperAdmins(tx) <= 1) {
+      throw new Error('The last super admin account cannot be deleted');
+    }
+
+    await tx.user.update({
+      where: { id: uid },
+      data: { deletedAt: new Date() }
+    });
   });
+
   return { id: uid, deleted: true };
 }
 
@@ -126,7 +188,7 @@ async function setUserPassword({ id, password, mustResetPassword }) {
   const uid = parseUserId(id);
   const user = await withTimeout(
     prisma.user.update({
-      where: { id: uid },
+      where: { id: uid, deletedAt: null },
       data: { password: hashed, mustResetPassword: typeof mustResetPassword === 'boolean' ? mustResetPassword : undefined }
     }),
     1500
@@ -134,44 +196,92 @@ async function setUserPassword({ id, password, mustResetPassword }) {
   return sanitizeUser(user);
 }
 
-async function setUserRoles({ id, roleIds }) {
+
+
+async function setUserRoles({ id, roleIds, actorRole, actorRoles }) {
   const uid = parseUserId(id);
-  const ids = Array.isArray(roleIds) ? roleIds.map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0) : [];
+  if (!Array.isArray(roleIds)) throw new Error('Role IDs must be an array');
+
+  const ids = roleIds.map(Number);
+  if (ids.some((value) => !Number.isInteger(value) || value <= 0)) {
+    throw new Error('One or more role IDs are invalid');
+  }
+
+  const uniqueIds = Array.from(new Set(ids));
+  const actorIsSuperAdmin = isSuperAdminActor({ actorRole, actorRoles });
 
   const user = await prisma.$transaction(async (tx) => {
-    const existing = await tx.user.findUnique({ where: { id: uid }, select: { role: true } });
+    const existing = await tx.user.findUnique({
+      where: { id: uid, deletedAt: null },
+      include: { roles: { select: { role: { select: { name: true } } } } }
+    });
     if (!existing) return null;
 
-    await tx.userRole.deleteMany({ where: { userId: uid } });
-    for (const rid of Array.from(new Set(ids))) {
-      await tx.userRole.create({ data: { userId: uid, roleId: rid } });
+    const requestedRoles = uniqueIds.length
+      ? await tx.role.findMany({
+          where: { id: { in: uniqueIds } },
+          select: {
+            id: true,
+            name: true,
+            isSystem: true,
+            permissions: {
+              select: {
+                permission: { select: { key: true } }
+              }
+            }
+          }
+        })
+      : [];
+
+    if (requestedRoles.length !== uniqueIds.length) {
+      throw new Error('One or more selected roles do not exist');
     }
+
+    const restrictedKeys = new Set(['*', 'access.manage', 'users.manage']);
+    const requestsRestrictedPermission = requestedRoles.some((role) =>
+      (role.permissions || []).some((rp) =>
+        restrictedKeys.has(rp?.permission?.key)
+      )
+    );
+
+    if (requestsRestrictedPermission && !actorIsSuperAdmin) {
+      throw new Error('Only a super admin can assign roles with restricted permissions');
+    }
+
+    const currentlySuperAdmin =
+      existing.role === 'super_admin' ||
+      existing.roles.some((ur) => ur?.role?.name === 'super_admin');
+
+    const assigningSuperAdmin = requestedRoles.some((role) => role.name === 'super_admin');
+
+    if ((assigningSuperAdmin || currentlySuperAdmin) && !actorIsSuperAdmin) {
+      throw new Error('Only a super admin can assign or remove the super_admin role');
+    }
+
+    if (currentlySuperAdmin && !assigningSuperAdmin && await countSuperAdmins(tx) <= 1) {
+      throw new Error('The last super admin cannot be demoted or removed');
+    }
+
+    const systemNames = new Set(
+      requestedRoles.filter((role) => role.isSystem).map((role) => role.name)
+    );
 
     let nextRole = 'operator';
-    try {
-      const sysRoles = await tx.role.findMany({
-        where: { id: { in: Array.from(new Set(ids)) }, isSystem: true },
-        select: { name: true }
+    if (systemNames.has('super_admin')) nextRole = 'super_admin';
+
+    await tx.userRole.deleteMany({ where: { userId: uid } });
+
+    if (uniqueIds.length) {
+      await tx.userRole.createMany({
+        data: uniqueIds.map((roleId) => ({ userId: uid, roleId }))
       });
-      const sysNames = new Set(
-        (Array.isArray(sysRoles) ? sysRoles : [])
-          .map((r) => String(r?.name || '').trim())
-          .filter(Boolean)
-      );
-      if (sysNames.has('super_admin')) nextRole = 'super_admin';
-      else if (sysNames.has('admin')) nextRole = 'admin';
-      else if (sysNames.has('operator')) nextRole = 'operator';
-      else nextRole = 'operator';
-    } catch {
-      nextRole = String(existing.role || 'operator');
     }
 
-    await tx.user.update({ where: { id: uid }, data: { role: nextRole } });
-    const full = await tx.user.findUnique({
+    return tx.user.update({
       where: { id: uid },
+      data: { role: nextRole },
       include: { roles: { select: { role: { select: { id: true, name: true } } } } }
     });
-    return full;
   });
 
   return sanitizeUser(user);

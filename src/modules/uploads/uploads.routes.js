@@ -8,6 +8,7 @@ const fs = require('fs/promises');
 const sharp = require('sharp');
 const prisma = require('../../config/prisma');
 const jobQueue = require('../../services/jobQueue.service');
+const { generatePosterForAsset } = require('../../services/videoProcessing.service');
 const { verifyToken } = require('../../middleware/auth.middleware');
 const { attachOrganization, requireOrganization } = require('../../middleware/org.middleware');
 const { attachAccessContext, requireAccess } = require('../../middleware/access.middleware');
@@ -190,6 +191,15 @@ function uploadMedia(req, res) {
             where: { id: Number(created.id) },
             data: { processingStatus: 'ready', processingError: null, processedAt: new Date() }
           });
+
+          try {
+            created = await generatePosterForAsset({ mediaAssetId: created.id });
+          } catch (posterError) {
+            console.warn(
+              `[video-poster] Failed for media asset ${created.id}:`,
+              posterError?.message || posterError
+            );
+          }
         }
       }
 

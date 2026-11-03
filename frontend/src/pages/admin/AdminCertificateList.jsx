@@ -11,13 +11,9 @@ import TablePager from '../../components/ui/TablePager';
 import RowActionsMenu from '../../components/ui/RowActionsMenu';
 import { normalizePublicMediaPath } from '../../utils/apiBase';
 import { MAX_UPLOAD_MB } from '../../utils/uploadLimits';
+import { formatDateMY } from '../../utils/dateTime';
 
-function formatDate(input) {
-  if (!input) return '';
-  const d = new Date(input);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toISOString().slice(0, 10);
-}
+const formatDate = formatDateMY;
 
 function normalizeTemplateId(input) {
   const s = String(input ?? '').trim();

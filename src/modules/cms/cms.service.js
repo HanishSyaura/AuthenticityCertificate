@@ -118,6 +118,7 @@ async function createPage(data) {
         organizationId: orgId,
         name: data.name,
         slug: data.slug,
+        description: data.description?.trim() || null,
         kind,
         sortOrder: nextSortOrder,
         designId,
@@ -259,6 +260,41 @@ async function publishPage({ organizationId, pageId }) {
   return { pageId: pid, publishedVersionId: published.id, versionNo: nextNo };
 }
 
+async function renamePage({ organizationId, pageId, name }) {
+  const pid = Number(pageId);
+  const orgId = Number(organizationId);
+  const nextName = String(name ?? '').trim();
+
+  if (!Number.isSafeInteger(pid) || pid < 1) throw new Error('Invalid page ID');
+  if (!Number.isSafeInteger(orgId) || orgId < 1) throw new Error('Invalid organization');
+  if (!nextName || nextName.length > 120) throw new Error('Page name must be between 1 and 120 characters');
+
+  const existing = await withTimeout(
+    prisma.cmsPage.findFirst({
+      where: { id: pid, organizationId: orgId },
+      select: { id: true }
+    }),
+    DEFAULT_TIMEOUT_MS
+  );
+  if (!existing) throw new Error('Page not found');
+
+  const result = await withTimeout(
+    prisma.cmsPage.updateMany({
+      where: { id: pid, organizationId: orgId },
+      data: { name: nextName }
+    }),
+    DEFAULT_TIMEOUT_MS
+  );
+  if (!result.count) throw new Error('Page not found');
+
+  return await withTimeout(
+    prisma.cmsPage.findFirst({
+      where: { id: pid, organizationId: orgId }
+    }),
+    DEFAULT_TIMEOUT_MS
+  );
+}
+
 async function updateMeta({ organizationId, pageId, metaTitle, metaDescription, ogImage }) {
   const pid = parseInt(pageId);
   return await withTimeout(
@@ -334,12 +370,17 @@ async function deletePage({ organizationId, pageId }) {
 }
 
 module.exports = {
+    exportDesign,
+    duplicateDesign,
+    importDesign,
+
   createPage,
   getPageBySlug,
   saveLayout,
   fillEmptyTranslation,
   publishPage,
   updateMeta,
+  renamePage,
   getAllPages,
   reorderPages,
   deletePage,
@@ -398,7 +439,7 @@ async function getDesignById({ organizationId, id }) {
   );
 }
 
-async function updateDesign({ organizationId, id, name, slug, kind, description }) {
+async function updateDesign({ organizationId, id, name, slug, kind, description, logoUrl }) {
   const orgId = Number(organizationId);
   const designId = Number(id);
   const data = {};
@@ -406,6 +447,7 @@ async function updateDesign({ organizationId, id, name, slug, kind, description 
   if (slug !== undefined) data.slug = String(slug).trim();
   if (kind !== undefined) data.kind = String(kind);
   if (description !== undefined) data.description = description ? String(description).trim() : null;
+  if (logoUrl !== undefined) data.logoUrl = logoUrl ? String(logoUrl).trim() : null;
   return await withTimeout(
     prisma.cmsDesign.updateMany({
       where: { id: designId, organizationId: orgId, deletedAt: null },
@@ -517,3 +559,220 @@ async function deleteDesign({ organizationId, id }) {
 
   return { id: designId };
 }
+
+
+// ============================================================================
+// CMS Design transfer: JSON export, duplicate, and import
+// Imported/duplicated designs are always drafts and have no product assignments.
+// ============================================================================
+function cmsSlugBase(value, fallback = 'design') {
+  const slug = String(value || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 120)
+    .replace(/-+$/g, '');
+  return slug || fallback;
+}
+
+async function cmsUniqueSlug(tx, model, organizationId, base) {
+  const root = cmsSlugBase(base);
+  let candidate = root;
+  let suffix = 2;
+
+  while (await tx[model].findFirst({
+    where: { organizationId: Number(organizationId), slug: candidate },
+    select: { id: true }
+  })) {
+    candidate = `${root}-${suffix++}`;
+  }
+  return candidate;
+}
+
+async function exportDesign({ organizationId, id }) {
+  const orgId = Number(organizationId);
+  const designId = Number(id);
+
+  const design = await prisma.cmsDesign.findFirst({
+    where: { id: designId, organizationId: orgId, deletedAt: null },
+    select: { id: true, name: true, slug: true, kind: true, description: true }
+  });
+  if (!design) throw new Error('Design not found');
+
+  const pages = await prisma.cmsPage.findMany({
+    where: { organizationId: orgId, designId, deletedAt: null },
+    include: {
+      draftVersion: true,
+      publishedVersion: true,
+      layout: true,
+      translations: true
+    },
+    orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }]
+  });
+
+  return {
+    format: 'cms-design-export',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    design: {
+      name: design.name,
+      slug: design.slug,
+      kind: design.kind,
+      description: design.description
+    },
+    pages: pages.map((page) => ({
+      name: page.name,
+      slug: page.slug,
+      description: page.description,
+      kind: page.kind,
+      sortOrder: page.sortOrder,
+      metaTitle: page.metaTitle,
+      metaDescription: page.metaDescription,
+      ogImage: page.ogImage,
+      layoutJson:
+        page.draftVersion?.layoutJson ??
+        page.publishedVersion?.layoutJson ??
+        page.layout?.layoutJson ??
+        [],
+      translations: (page.translations || []).map((translation) => ({
+        language: translation.language,
+        contentJson: translation.contentJson
+      }))
+    }))
+  };
+}
+
+async function importDesign({ organizationId, payload, name, slug }) {
+  const orgId = Number(organizationId);
+
+  if (!payload || payload.format !== 'cms-design-export' ||
+      payload.version !== 1 || !payload.design ||
+      !Array.isArray(payload.pages)) {
+    throw new Error('Invalid CMS design JSON format');
+  }
+  if (payload.pages.length > 200) {
+    throw new Error('Design import exceeds the 200-page limit');
+  }
+
+  const sourceDesign = payload.design;
+  const finalName = String(name || sourceDesign.name || 'Imported Design').trim();
+  if (!finalName) throw new Error('Design name is required');
+
+  const result = await prisma.$transaction(async (tx) => {
+    const designSlug = await cmsUniqueSlug(
+      tx, 'cmsDesign', orgId,
+      slug || `${sourceDesign.slug || finalName}-import`
+    );
+
+    const newDesign = await tx.cmsDesign.create({
+      data: {
+        organizationId: orgId,
+        name: finalName,
+        slug: designSlug,
+        kind: String(sourceDesign.kind || 'landing').slice(0, 80),
+        description: sourceDesign.description
+          ? String(sourceDesign.description)
+          : null
+      }
+    });
+
+    for (let index = 0; index < payload.pages.length; index++) {
+      const sourcePage = payload.pages[index] || {};
+      const pageName = String(sourcePage.name || `Page ${index + 1}`).trim();
+      const pageSlug = await cmsUniqueSlug(
+        tx, 'cmsPage', orgId,
+        `${sourcePage.slug || pageName}-import-${newDesign.id}`
+      );
+      const layoutJson = sourcePage.layoutJson == null ? [] : sourcePage.layoutJson;
+
+      const page = await tx.cmsPage.create({
+        data: {
+          organizationId: orgId,
+          designId: newDesign.id,
+          name: pageName || `Page ${index + 1}`,
+          slug: pageSlug,
+          description: sourcePage.description == null ? null : String(sourcePage.description),
+          kind: String(sourcePage.kind || sourceDesign.kind || 'landing').slice(0, 80),
+          sortOrder: Number.isFinite(Number(sourcePage.sortOrder))
+            ? Number(sourcePage.sortOrder)
+            : index,
+          metaTitle: sourcePage.metaTitle == null ? null : String(sourcePage.metaTitle),
+          metaDescription: sourcePage.metaDescription == null ? null : String(sourcePage.metaDescription),
+          ogImage: sourcePage.ogImage == null ? null : String(sourcePage.ogImage)
+        }
+      });
+
+      const version = await tx.cmsVersion.create({
+        data: {
+          organizationId: orgId,
+          pageId: page.id,
+          versionNo: 1,
+          status: 'draft',
+          layoutJson
+        }
+      });
+
+      await tx.cmsPage.update({
+        where: { id: page.id },
+        data: { draftVersionId: version.id, versionNo: 1 }
+      });
+
+      // Keep the legacy layout fallback in sync with the imported draft.
+      await tx.cmsLayout.create({
+        data: {
+          organizationId: orgId,
+          pageId: page.id,
+          layoutJson
+        }
+      });
+
+      const translations = Array.isArray(sourcePage.translations)
+        ? sourcePage.translations
+        : [];
+      const seenLanguages = new Set();
+
+      for (const translation of translations) {
+        if (!translation || typeof translation.language !== 'string') continue;
+        const rawLanguage = translation.language.trim().toLowerCase();
+        if (!['en', 'ms', 'bm', 'zh', 'zh-cn', 'cn'].includes(rawLanguage)) continue;
+        const language = normalizeLang(rawLanguage);
+        if (!language || seenLanguages.has(language) || translation.contentJson == null) continue;
+        seenLanguages.add(language);
+
+        await tx.cmsTranslation.create({
+          data: {
+            organizationId: orgId,
+            pageId: page.id,
+            language,
+            contentJson: translation.contentJson
+          }
+        });
+      }
+    }
+
+    return {
+      id: newDesign.id,
+      name: newDesign.name,
+      slug: newDesign.slug,
+      kind: newDesign.kind,
+      description: newDesign.description,
+      pageCount: payload.pages.length
+    };
+  });
+
+  return result;
+}
+
+async function duplicateDesign({ organizationId, id, name }) {
+  const exported = await exportDesign({ organizationId, id });
+  const originalName = String(exported.design.name || 'Design');
+  return await importDesign({
+    organizationId,
+    payload: exported,
+    name: name || `Copy of ${originalName}`,
+    slug: `${exported.design.slug || originalName}-copy`
+  });
+}
+
