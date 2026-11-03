@@ -532,8 +532,15 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
                       category: true,
                       customer: true,
                       supplier: true,
-                      cmsPage: { select: { id: true } },
-                      cmsCertificatePage: { select: { id: true } },
+                      cmsDesignId: true,
+                      cmsDesign: { select: { id: true, kind: true, logoUrl: true } },
+                      cmsPage: {
+                        select: {
+                          id: true,
+                          designId: true,
+                          design: { select: { id: true, kind: true, logoUrl: true } }
+                        }
+                      },
                       certificateTemplate: true
                     }
                   }
@@ -599,8 +606,15 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
                   category: true,
                   customer: true,
                   supplier: true,
-                  cmsPage: { select: { id: true } },
-                  cmsCertificatePage: { select: { id: true } },
+                  cmsDesignId: true,
+                  cmsDesign: { select: { id: true, kind: true, logoUrl: true } },
+                  cmsPage: {
+                    select: {
+                      id: true,
+                      designId: true,
+                      design: { select: { id: true, kind: true, logoUrl: true } }
+                    }
+                  },
                   certificateTemplate: true
                 }
               }
@@ -640,152 +654,96 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
     let layout = null;
 
     // =========================================================================
-    // NEW 3-TIER DESIGN-ID FALLBACK (bundle = multiple inner pages inside 1 design)
-    //   Tier 1 : Certificate.cmsDesignId            (per-cert override bundle)
-    //   Tier 2 : Product.cmsCertificateDesignId     (cert-only product bundle)
-    //   Tier 3 : Product.cmsDesignId                (main landing product bundle)
-    //
-    // Legacy single-page fallbacks (used as 1-element bundle if no design-id resolved):
-    //   cert.cmsPage → product.cmsCertificatePage → product.cmsPage
-    // =========================================================================
-    const effectiveDesignId = resolveEffectiveCmsDesignId({
-      certCmsDesignId: cert?.cmsDesignId,
-      productCmsCertificateDesignId: resolvedProduct?.cmsCertificateDesignId,
-      productCmsDesignId: resolvedProduct?.cmsDesignId
-    });
-
-    const legacySinglePage = resolveLegacySingleCmsPage({
-      certCmsPage: cert?.cmsPage,
-      productCmsCertificatePage: resolvedProduct?.cmsCertificatePage,
-      productCmsPage: resolvedProduct?.cmsPage
-    });
-    const legacySinglePageDesignIdRaw = legacySinglePage?.designId != null ? Number(legacySinglePage.designId) : NaN;
-    const legacySinglePageDesignId =
-      effectiveDesignId == null && Number.isFinite(legacySinglePageDesignIdRaw) && legacySinglePageDesignIdRaw > 0
-        ? legacySinglePageDesignIdRaw
+    // Landing Page Design comes from the design assigned directly to Certificate.
+    // Product and Certificate Design fallbacks must never determine landing branding.
+    const landingDesign =
+      cert.cmsDesign?.kind === 'landing'
+        ? cert.cmsDesign
         : null;
-    const legacySinglePageId = legacySinglePage && legacySinglePage.id ? Number(legacySinglePage.id) : null;
 
-    const certificateLayout = null;
-    const certificatePageId = null;
+    const effectiveDesignId =
+      landingDesign?.id != null && Number(landingDesign.id) > 0
+        ? Number(landingDesign.id)
+        : null;
 
-    const landingOrgId = resolvedOrgId || Number(req.organization?.id || cert.organizationId || 0) || null;
-    if (landingOrgId) {
+    const landingOrgId =
+      resolvedOrgId || Number(req.organization?.id || cert.organizationId || 0) || null;
+
+    // Only render pages belonging to the exact assigned Landing Page Design.
+    if (landingOrgId && effectiveDesignId != null) {
       try {
-        const pagesWhere = { organizationId: landingOrgId, deletedAt: null };
-        if (effectiveDesignId != null) {
-          // NEW: Strict scoping to the resolved CmsDesign bundle → only pages that
-          // belong to this specific designId bundle get included in the composed layout
-          pagesWhere.designId = Number(effectiveDesignId);
-        } else if (legacySinglePageDesignId != null) {
-          // Migration-safe fallback: if the legacy single page actually lives inside a
-          // design bundle, render the whole bundle instead of just that one page.
-          pagesWhere.designId = Number(legacySinglePageDesignId);
-        } else if (legacySinglePageId != null) {
-          // Backward compat: user linked via old single-page FK → include only that page
-          // plus any pages still in the default (designId = NULL) group that follow it
-          pagesWhere.OR = [
-            { id: Number(legacySinglePageId) },
-            { designId: null }
-          ];
-        } else {
-          // Ultimate fallback → default ungrouped bundle (designId IS NULL)
-          pagesWhere.designId = null;
-        }
+        const pagesWhere = {
+          organizationId: landingOrgId,
+          designId: effectiveDesignId,
+          deletedAt: null
+        };
+
         const pages = await Promise.race([
           prisma.cmsPage.findMany({
             where: pagesWhere,
             orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
             include: { layout: true, publishedVersion: true }
           }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), dbTimeoutShortMs))
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('db_timeout')), dbTimeoutShortMs)
+          )
         ]);
 
-        // Sort priority: if legacy single page id resolved, push that page FIRST
-        const rootId = legacySinglePageId != null ? Number(legacySinglePageId) : null;
-        const sorted = rootId
-          ? [
-              ...pages.filter((p) => Number(p.id) === rootId),
-              ...pages.filter((p) => Number(p.id) !== rootId)
-            ]
-          : pages;
+        const sorted = pages;
 
-        const ids = sorted.map((p) => Number(p.id)).filter((n) => Number.isFinite(n));
+        const ids = sorted
+          .map((p) => Number(p.id))
+          .filter((n) => Number.isFinite(n));
+
         const translations = ids.length
           ? await Promise.race([
-              prisma.cmsTranslation.findMany({ where: { organizationId: landingOrgId, language: lang, pageId: { in: ids } } }),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), dbTimeoutShortMs))
+              prisma.cmsTranslation.findMany({
+                where: {
+                  organizationId: landingOrgId,
+                  language: lang,
+                  pageId: { in: ids }
+                }
+              }),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('db_timeout')), dbTimeoutShortMs)
+              )
             ])
           : [];
-        const tByPageId = new Map((translations || []).map((r) => [Number(r.pageId), r]));
 
-        const effectivePages = sorted.map((p) => {
-          const tRow = tByPageId.get(Number(p.id));
-          const tLayout = Array.isArray(tRow?.contentJson) && tRow.contentJson.length > 0 ? tRow.contentJson : null;
-          const baseLayout = Array.isArray(p?.publishedVersion?.layoutJson)
-            ? p.publishedVersion.layoutJson
-            : Array.isArray(p?.layout?.layoutJson)
-              ? p.layout.layoutJson
+        const tByPageId = new Map(
+          (translations || []).map((r) => [Number(r.pageId), r])
+        );
+
+        const effectivePages = sorted.map((page) => {
+          const tRow = tByPageId.get(Number(page.id));
+          const tLayout =
+            Array.isArray(tRow?.contentJson) && tRow.contentJson.length > 0
+              ? tRow.contentJson
               : null;
-          const effectiveLayout = mergeCmsLayoutBaseWithTranslation(baseLayout, tLayout);
-          return { id: p.id, effectiveLayout };
+          const baseLayout = Array.isArray(page?.publishedVersion?.layoutJson)
+            ? page.publishedVersion.layoutJson
+            : Array.isArray(page?.layout?.layoutJson)
+              ? page.layout.layoutJson
+              : null;
+
+          return {
+            id: page.id,
+            effectiveLayout: mergeCmsLayoutBaseWithTranslation(baseLayout, tLayout)
+          };
         });
 
         const composed = composeLayouts(effectivePages);
-        if (composed.length) {
-          layout = composed;
-        } else if (legacySinglePageId) {
-          const tRow = tByPageId.get(Number(legacySinglePageId));
-          if (Array.isArray(tRow?.contentJson) && tRow.contentJson.length > 0) layout = tRow.contentJson;
-        }
+        if (composed.length) layout = composed;
       } catch (e) {
-        if (shouldTriggerDbGate(e)) dbGate.markDbFailure({ cooldownMs: 10_000, error: e, context: 'respondByCertificateId:cmsPage' });
-      }
-    }
-
-    void certificatePageId;
-    if (!layout) {
-      // NEW: Use cert.cmsPages (pre-resolved enriched list) if it exists + designId already matched
-      if (Array.isArray(cert?.cmsPages) && cert.cmsPages.length) {
-        try {
-          const ids = cert.cmsPages.map((p) => Number(p.id)).filter((n) => Number.isFinite(n));
-          const translations = ids.length
-            ? await Promise.race([
-                prisma.cmsTranslation.findMany({ where: { organizationId: landingOrgId, language: lang, pageId: { in: ids } } }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('db_timeout')), dbTimeoutShortMs))
-              ])
-            : [];
-          const tByPageId = new Map((translations || []).map((r) => [Number(r.pageId), r]));
-          const effectivePages = cert.cmsPages.map((p) => {
-            const tRow = tByPageId.get(Number(p.id));
-            const tLayout = Array.isArray(tRow?.contentJson) && tRow.contentJson.length > 0 ? tRow.contentJson : null;
-            const baseLayout = Array.isArray(p?.publishedVersion?.layoutJson)
-              ? p.publishedVersion.layoutJson
-              : Array.isArray(p?.layout?.layoutJson)
-                ? p.layout.layoutJson
-                : null;
-            return { id: p.id, effectiveLayout: mergeCmsLayoutBaseWithTranslation(baseLayout, tLayout) };
+        if (shouldTriggerDbGate(e)) {
+          dbGate.markDbFailure({
+            cooldownMs: 10_000,
+            error: e,
+            context: 'respondByCertificateId:cmsPage'
           });
-          const composed = composeLayouts(effectivePages);
-          if (composed.length) layout = composed;
-        } catch {
-          /* fall through to legacy fallbacks */
         }
       }
     }
-    if (!layout) {
-      // Fallback 1: direct certificate override cmsPage
-      if (cert?.cmsPage?.layout?.layoutJson) layout = cert.cmsPage.layout.layoutJson;
-      // Fallback 2: product certificate page
-      else if (resolvedProduct?.cmsCertificatePage?.layout?.layoutJson) layout = resolvedProduct.cmsCertificatePage.layout.layoutJson;
-      // Fallback 3: product landing page
-      else if (resolvedProduct?.cmsPage?.layout?.layoutJson) layout = resolvedProduct.cmsPage.layout.layoutJson;
-      // Fallback 4: published versions
-      else if (cert?.cmsPage?.publishedVersion?.layoutJson) layout = cert.cmsPage.publishedVersion.layoutJson;
-      else if (resolvedProduct?.cmsCertificatePage?.publishedVersion?.layoutJson) layout = resolvedProduct.cmsCertificatePage.publishedVersion.layoutJson;
-      else if (resolvedProduct?.cmsPage?.publishedVersion?.layoutJson) layout = resolvedProduct.cmsPage.publishedVersion.layoutJson;
-    }
-    void certificateLayout;
 
     const supportingTemplateIds = getSupportingTemplateIdsFromLayout(layout);
     if (resolvedOrgId && supportingTemplateIds.length) {
@@ -880,6 +838,7 @@ async function respondByCertificateId({ req, res, certificateId, verifiedVia, id
         status,
         statusStored: cert.status,
         verifiedVia,
+        cmsLandingLogoUrl: landingDesign?.logoUrl || null,
         identity: identityFromReq || null,
         assignedEpc: {
           epc: assignedIdentity?.epc || null,
@@ -1044,15 +1003,11 @@ router.get('/loading-brand', async (req, res) => {
       where: { certificateId: resolvedId },
       select: {
         organizationId: true,
-        cmsDesignId: true,
-        batch: {
+        cmsDesign: {
           select: {
-            product: {
-              select: {
-                cmsCertificateDesignId: true,
-                cmsDesignId: true,
-              },
-            },
+            id: true,
+            kind: true,
+            logoUrl: true,
           },
         },
       },
@@ -1060,25 +1015,13 @@ router.get('/loading-brand', async (req, res) => {
 
     if (!cert) return res.success({ logoUrl: null }, 'OK');
 
-    const product = cert.batch?.product;
-    const designId = resolveEffectiveCmsDesignId({
-      certCmsDesignId: cert.cmsDesignId,
-      productCmsCertificateDesignId: product?.cmsCertificateDesignId,
-      productCmsDesignId: product?.cmsDesignId,
-    });
-
-    if (!designId) return res.success({ logoUrl: null }, 'OK');
-
-    const design = await prisma.cmsDesign.findFirst({
-      where: {
-        id: Number(designId),
-        organizationId: cert.organizationId,
-      },
-      select: { logoUrl: true },
-    });
+    const landingDesign =
+      cert.cmsDesign?.kind === 'landing'
+        ? cert.cmsDesign
+        : null;
 
     return res.success(
-      { logoUrl: design?.logoUrl || null },
+      { logoUrl: landingDesign?.logoUrl || null },
       'OK'
     );
   } catch (err) {

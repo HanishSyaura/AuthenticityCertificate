@@ -280,6 +280,15 @@ async function getCertificateDetails(certificateId) {
   const cert = await prisma.certificate.findUnique({
     where: { certificateId },
     include: {
+      // Assigned Landing Page Design (logo source is CmsDesign.logoUrl).
+      cmsDesign: {
+        select: {
+          id: true,
+          name: true,
+          kind: true,
+          logoUrl: true
+        }
+      },
       // LEGACY single-page includes, kept for backward compat
       cmsPage: {
         include: {
@@ -295,6 +304,14 @@ async function getCertificateDetails(certificateId) {
               certificateTemplate: true,
               customer: true,
               supplier: true,
+              cmsDesign: {
+                select: {
+                  id: true,
+                  name: true,
+                  kind: true,
+                  logoUrl: true
+                }
+              },
               // LEGACY single-page includes
               cmsPage: {
                 include: {
@@ -387,6 +404,7 @@ async function getCertificateDetails(certificateId) {
   const enriched = {
     ...cert,
     cmsEffectiveDesignId: resolvedBundleDesignId,
+    cmsLandingLogoUrl: cert.cmsDesign?.kind === 'landing' ? (cert.cmsDesign.logoUrl || null) : null,
     cmsEffectiveSource:
       cert.cmsDesignId != null
         ? 'cert.cmsDesignId'
@@ -507,10 +525,13 @@ async function patchCertificate({ organizationId, certificateId, patch }) {
   if (Object.prototype.hasOwnProperty.call(patch, 'cmsDesignId')) {
     const designId = patch.cmsDesignId == null ? null : Number(patch.cmsDesignId);
     if (designId != null) {
-      const design = await prisma.cmsDesign.findUnique({
-        where: { id: designId, organizationId, deletedAt: null }
+      const design = await prisma.cmsDesign.findFirst({
+        where: { id: designId, organizationId, deletedAt: null },
+        select: { id: true, kind: true }
       });
-      if (!design) throw new Error('CmsDesign not found');
+      if (!design || design.kind !== 'landing') {
+        throw new Error('Selected design must be a Landing Page Design');
+      }
     }
     data.cmsDesignId = designId;
   }
@@ -559,10 +580,15 @@ async function bulkPatchCertificates({ organizationId, certificateIds, certifica
     if (designId != null) {
       if (!Number.isFinite(designId) || designId <= 0) throw new Error('Invalid cmsDesignId');
       const design = await withTimeout(
-        prisma.cmsDesign.findUnique({ where: { id: designId, organizationId: orgId, deletedAt: null }, select: { id: true } }),
+        prisma.cmsDesign.findFirst({
+          where: { id: designId, organizationId: orgId, deletedAt: null },
+          select: { id: true, kind: true }
+        }),
         1500
       );
-      if (!design) throw new Error('Landing Page Design tidak wujud');
+      if (!design || design.kind !== 'landing') {
+        throw new Error('Selected design must be a Landing Page Design');
+      }
     }
     data.cmsDesignId = designId;
   }
